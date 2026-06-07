@@ -1,0 +1,45 @@
+---
+title: Welcome to Docbot
+description: An open-source, multi-tenant documentation platform — a docs.json-compatible docs platform.
+---
+
+Docbot turns a Git repo of **MDX files** and a single **`docs.json`** into a fast,
+beautiful documentation site. This is the **M0 renderer skeleton**: a single-tenant
+happy path proving the rendering core.
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get a docs site running in a couple of minutes.
+  </Card>
+  <Card title="Components" icon="blocks" href="/guides/components">
+    Browse the built-in MDX component library.
+  </Card>
+  <Card title="Markdown" icon="file-text" href="/guides/markdown">
+    See how standard Markdown renders.
+  </Card>
+  <Card title="The Spec" icon="map" href="/">
+    Read SPEC.md for the full architecture.
+  </Card>
+</CardGroup>
+
+## What works in M0
+
+<Steps>
+  <Step title="docs.json parsing">
+    A Zod-validated, docs.json-compatible schema with a recursive navigation tree.
+  </Step>
+  <Step title="MDX rendering">
+    Pages compile with our component set and Shiki syntax highlighting.
+  </Step>
+  <Step title="Navigation + TOC">
+    A recursive sidebar with active states and an on-page table of contents.
+  </Step>
+  <Step title="Theming">
+    Colors from `docs.json` drive CSS variables, with light/dark mode.
+  </Step>
+</Steps>
+
+<Note>
+  Multi-tenancy, Git sync, search, the API playground, and the AI assistant arrive
+  in later milestones (M2–M5).
+</Note>

@@ -1,0 +1,66 @@
+---
+title: Quickstart
+description: Run the Docbot renderer locally and edit your first page.
+---
+
+## Install
+
+<CodeGroup>
+```bash npm
+npm install
+npm run dev
+```
+
+```bash pnpm
+pnpm install
+pnpm dev
+```
+</CodeGroup>
+
+Then open [http://localhost:3000](http://localhost:3000).
+
+## Project layout
+
+Content lives in `./content` — completely separate from the app code:
+
+```
+content/
+├── docs.json        # config + navigation
+├── index.mdx        # home page
+├── quickstart.mdx
+└── guides/
+    ├── markdown.mdx
+    └── components.mdx
+```
+
+## Add a page
+
+<Steps>
+  <Step title="Create the MDX file">
+    Add `content/guides/my-page.mdx` with frontmatter:
+
+    ```mdx
+    ---
+    title: My Page
+    description: Something useful.
+    ---
+
+    Hello world.
+    ```
+  </Step>
+  <Step title="Register it in docs.json">
+    Add the slug to a group's `pages` array:
+
+    ```json
+    { "group": "Writing Docs", "pages": ["guides/my-page"] }
+    ```
+  </Step>
+  <Step title="Refresh">
+    The page appears in the sidebar with its frontmatter title.
+  </Step>
+</Steps>
+
+<Tip>
+  Page titles in the sidebar come from each file's frontmatter `title`, falling
+  back to a title-cased version of the slug.
+</Tip>

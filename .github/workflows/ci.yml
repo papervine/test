@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Smoke test (renderer regressions)
+        run: npm test
+
+  # Real-world gate: the unmodified incumbent starter must render with zero 500s.
+  starter:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Clone papervine/starter
+        run: git clone --depth 1 https://github.com/papervine/starter /tmp/starter
+      - name: Crawl starter (expect 0 × HTTP 500)
+        run: node tests/crawl.mjs /tmp/starter --port=4190

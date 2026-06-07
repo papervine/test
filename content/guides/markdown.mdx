@@ -1,0 +1,45 @@
+---
+title: Markdown
+description: Standard Markdown and GFM features supported out of the box.
+---
+
+Docbot supports GitHub-Flavored Markdown via `remark-gfm`, plus auto-linked headings.
+
+## Text formatting
+
+You can write **bold**, _italic_, ~~strikethrough~~, and `inline code`. Links like
+[the spec](/) are styled with the primary color.
+
+## Lists
+
+- First item
+- Second item
+  - Nested item
+- Third item
+
+1. Step one
+2. Step two
+3. Step three
+
+## Tables
+
+| Feature      | Status | Milestone |
+| ------------ | ------ | --------- |
+| MDX render   | ✅     | M0        |
+| Components   | ✅     | M0        |
+| Search       | ⏳     | M3        |
+| AI assistant | ⏳     | M5        |
+
+## Blockquotes
+
+> Documentation is a love letter that you write to your future self.
+
+## Code with highlighting
+
+```typescript title="example.ts"
+function greet(name: string): string {
+  return `Hello, ${name}!`;
+}
+
+greet("Docbot");
+```

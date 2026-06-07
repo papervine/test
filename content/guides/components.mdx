@@ -1,0 +1,64 @@
+---
+title: Components
+description: The built-in MDX component library shipped with Docbot.
+---
+
+These components are available in every MDX page (SPEC.md §5).
+
+## Callouts
+
+<Note>This is a note — neutral, for incidental information.</Note>
+<Info>This is an info callout.</Info>
+<Tip>This is a tip — a helpful suggestion.</Tip>
+<Warning>This is a warning — proceed carefully.</Warning>
+<Check>This is a success/check callout.</Check>
+
+## Cards
+
+<CardGroup cols={2}>
+  <Card title="With a link" icon="link" href="/">
+    Cards can link somewhere and highlight on hover.
+  </Card>
+  <Card title="Static card" icon="box">
+    Cards without an href are just containers.
+  </Card>
+</CardGroup>
+
+## Tabs
+
+<Tabs>
+  <Tab title="macOS">Install with Homebrew.</Tab>
+  <Tab title="Windows">Install with winget.</Tab>
+  <Tab title="Linux">Install with your package manager.</Tab>
+</Tabs>
+
+## Steps
+
+<Steps>
+  <Step title="Clone">Clone the repository.</Step>
+  <Step title="Install">Install dependencies.</Step>
+  <Step title="Run">Start the dev server.</Step>
+</Steps>
+
+## Accordions
+
+<AccordionGroup>
+  <Accordion title="Is this open source?">
+    Yes — permissively licensed and self-hostable.
+  </Accordion>
+  <Accordion title="Is it docs.json-compatible?">
+    The `docs.json` schema mirrors the incumbent's, so migration is minimal.
+  </Accordion>
+</AccordionGroup>
+
+## Code groups
+
+<CodeGroup>
+```js JavaScript
+console.log("hello");
+```
+
+```python Python
+print("hello")
+```
+</CodeGroup>

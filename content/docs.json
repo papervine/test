@@ -1,0 +1,31 @@
+{
+  "$schema": "https://docbot.app/schema.json",
+  "name": "Docbot",
+  "theme": "mint",
+  "colors": {
+    "primary": "#16A34A",
+    "light": "#4ADE80",
+    "dark": "#15803D"
+  },
+  "navbar": {
+    "links": [{ "label": "GitHub", "href": "https://github.com" }],
+    "primary": { "label": "Get Started", "href": "/quickstart" }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": ["index", "quickstart"]
+          },
+          {
+            "group": "Writing Docs",
+            "pages": ["guides/markdown", "guides/components"]
+          }
+        ]
+      }
+    ]
+  }
+}

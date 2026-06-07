@@ -1,0 +1,100 @@
+#!/usr/bin/env node
+// Docbot CLI — minimal `docbot dev` for previewing any docs repo locally.
+// Mirrors `docs dev`: run it inside a folder of MDX + docs.json and it
+// boots the Docbot renderer pointed at that folder (SPEC.md §10, CLI parity).
+
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { parseArgs } from "node:util";
+
+// The Docbot package root — where next.config / the app live. The renderer
+// always runs from here; only the *content* dir varies per invocation.
+const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function fail(msg) {
+  console.error(`\x1b[31mdocbot:\x1b[0m ${msg}`);
+  process.exit(1);
+}
+
+function printHelp() {
+  console.log(`docbot — open-source docs renderer
+
+Usage:
+  docbot dev [dir]        Preview the docs in [dir] (default: current directory)
+
+Options:
+  -p, --port <port>       Port to serve on (default: 3000)
+  -h, --help              Show this help
+
+Examples:
+  docbot dev              # preview ./ (must contain docs.json)
+  docbot dev ./docs       # preview ./docs
+  docbot dev -p 4000      # preview on port 4000
+`);
+}
+
+function runDev(argv) {
+  const { values, positionals } = parseArgs({
+    args: argv,
+    options: {
+      port: { type: "string", short: "p" },
+      help: { type: "boolean", short: "h" },
+    },
+    allowPositionals: true,
+  });
+
+  if (values.help) {
+    printHelp();
+    return;
+  }
+
+  const contentDir = path.resolve(positionals[0] ?? process.cwd());
+
+  if (!existsSync(contentDir)) {
+    fail(`directory not found: ${contentDir}`);
+  }
+  if (!existsSync(path.join(contentDir, "docs.json"))) {
+    fail(
+      `no docs.json in ${contentDir}\n` +
+        `  A Docbot docs repo needs a docs.json at its root.`,
+    );
+  }
+
+  const nextBin = path.join(
+    PKG_ROOT,
+    "node_modules",
+    ".bin",
+    process.platform === "win32" ? "next.cmd" : "next",
+  );
+  if (!existsSync(nextBin)) {
+    fail(`renderer not installed — run \`npm install\` in ${PKG_ROOT}`);
+  }
+
+  const args = ["dev"];
+  if (values.port) args.push("-p", values.port);
+
+  console.log(`\x1b[32m▲ docbot\x1b[0m serving \x1b[1m${contentDir}\x1b[0m`);
+
+  const child = spawn(nextBin, args, {
+    cwd: PKG_ROOT,
+    stdio: "inherit",
+    env: { ...process.env, DOCBOT_CONTENT: contentDir },
+  });
+
+  const forward = (sig) => () => child.kill(sig);
+  process.on("SIGINT", forward("SIGINT"));
+  process.on("SIGTERM", forward("SIGTERM"));
+  child.on("exit", (code) => process.exit(code ?? 0));
+}
+
+const [, , command, ...rest] = process.argv;
+
+if (!command || command === "-h" || command === "--help" || command === "help") {
+  printHelp();
+} else if (command === "dev") {
+  runDev(rest);
+} else {
+  fail(`unknown command "${command}". Run \`docbot --help\`.`);
+}
