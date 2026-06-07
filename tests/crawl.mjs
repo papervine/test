@@ -48,12 +48,13 @@ function slugsIn(root) {
 async function waitForReady(timeoutMs = 180_000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
+    if (serverExited) throw new Error(`server exited early:\n${serverLog.slice(-2000)}`);
     try {
       if ((await fetch(BASE + "/", { signal: AbortSignal.timeout(15_000) })).status < 500) return;
     } catch {}
     await new Promise((r) => setTimeout(r, 1000));
   }
-  throw new Error("server not ready");
+  throw new Error(`server not ready in ${timeoutMs}ms:\n${serverLog.slice(-2000)}`);
 }
 
 const all = slugsIn(CONTENT);
@@ -63,7 +64,15 @@ console.log(`▶ crawling ${slugs.length}/${all.length} pages from ${CONTENT} on
 const server = spawn(nextBin, ["dev", "-p", String(port)], {
   cwd: PKG_ROOT,
   env: { ...process.env, DOCBOT_CONTENT: CONTENT },
-  stdio: ["ignore", "ignore", "ignore"],
+  stdio: ["ignore", "pipe", "pipe"],
+});
+let serverLog = "";
+let serverExited = false;
+server.stdout.on("data", (d) => (serverLog += d));
+server.stderr.on("data", (d) => (serverLog += d));
+server.on("exit", (code) => {
+  serverExited = true;
+  serverLog += `\n[server process exited with code ${code}]\n`;
 });
 
 let ok = 0,
