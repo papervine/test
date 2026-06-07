@@ -15,7 +15,9 @@ import process from "node:process";
 
 const PKG_ROOT = process.cwd();
 const PORT = Number(process.env.SMOKE_PORT ?? 4178);
-const BASE = `http://localhost:${PORT}`;
+// 127.0.0.1, not localhost: on some CI runners localhost resolves to IPv6 ::1
+// first while `next dev` listens on IPv4, so requests never connect.
+const BASE = `http://127.0.0.1:${PORT}`;
 const FIXTURES = path.resolve(PKG_ROOT, "tests/fixtures");
 const nextBin = path.join(PKG_ROOT, "node_modules", ".bin", "next");
 
@@ -64,7 +66,7 @@ async function waitForReady(timeoutMs = 180_000) {
 
 async function run() {
   log(`▶ booting renderer against ${FIXTURES} on :${PORT}`);
-  const server = spawn(nextBin, ["dev", "-p", String(PORT)], {
+  const server = spawn(nextBin, ["dev", "-H", "0.0.0.0", "-p", String(PORT)], {
     cwd: PKG_ROOT,
     env: { ...process.env, DOCBOT_CONTENT: FIXTURES },
     stdio: ["ignore", "pipe", "pipe"],

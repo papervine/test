@@ -25,7 +25,9 @@ if (!dir) {
 
 const PKG_ROOT = process.cwd();
 const CONTENT = path.resolve(dir);
-const BASE = `http://localhost:${port}`;
+// 127.0.0.1, not localhost: on some CI runners localhost resolves to IPv6 ::1
+// first while `next dev` listens on IPv4, so requests never connect.
+const BASE = `http://127.0.0.1:${port}`;
 const nextBin = path.join(PKG_ROOT, "node_modules", ".bin", "next");
 
 function slugsIn(root) {
@@ -61,7 +63,7 @@ const all = slugsIn(CONTENT);
 const slugs = sample > 0 ? all.filter((_, i) => i % Math.ceil(all.length / sample) === 0) : all;
 console.log(`▶ crawling ${slugs.length}/${all.length} pages from ${CONTENT} on :${port}`);
 
-const server = spawn(nextBin, ["dev", "-p", String(port)], {
+const server = spawn(nextBin, ["dev", "-H", "0.0.0.0", "-p", String(port)], {
   cwd: PKG_ROOT,
   env: { ...process.env, DOCBOT_CONTENT: CONTENT },
   stdio: ["ignore", "pipe", "pipe"],
