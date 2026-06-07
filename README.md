@@ -79,7 +79,11 @@ node tests/crawl.mjs <dir> --sample=120
 malformed frontmatter, unresolved snippet imports, `hidden` pages). The smoke test
 boots the real renderer against it and asserts each page returns 200 — so the
 [GAP-REPORT](./GAP-REPORT.md) fixes can't silently regress. CI (GitHub Actions)
-runs typecheck + build + smoke test, plus a crawl of the unmodified `papervine/starter`.
+runs typecheck + build + smoke test.
+
+`tests/crawl.mjs` is the real-repo probe (run it locally against a cloned
+docs.json repo, e.g. `papervine/starter` or `papervine/docs`); it isn't in CI because
+booting a dev server per run is flaky on hosted runners.
 
 ## Tech
 
