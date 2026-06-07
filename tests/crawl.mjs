@@ -45,7 +45,7 @@ function slugsIn(root) {
   return out;
 }
 
-async function waitForReady(timeoutMs = 90_000) {
+async function waitForReady(timeoutMs = 180_000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {

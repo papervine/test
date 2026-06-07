@@ -37,6 +37,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Warm the Next/SWC build cache so `next dev` cold-starts quickly below.
+      - run: npm run build
       - name: Clone papervine/starter
         run: git clone --depth 1 https://github.com/papervine/starter /tmp/starter
       - name: Crawl starter (expect 0 × HTTP 500)
