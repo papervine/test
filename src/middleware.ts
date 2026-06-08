@@ -22,7 +22,11 @@ export function middleware(req: NextRequest) {
   const tenant = resolveTenantSlug(req.headers.get("host"));
   if (tenant) {
     const url = req.nextUrl.clone();
-    url.pathname = `/sites/${tenant}${pathname === "/" ? "" : pathname}`;
+    // Assets (images/fonts/…) stream from the tenant's synced bucket; everything
+    // else is a docs page.
+    url.pathname = ASSET_RE.test(pathname)
+      ? `/api/tenant-asset/${tenant}${pathname}`
+      : `/sites/${tenant}${pathname === "/" ? "" : pathname}`;
     return NextResponse.rewrite(url);
   }
 

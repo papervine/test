@@ -5,6 +5,7 @@ import { getSession, listOrganizations } from "@/lib/session";
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
 import { site, deployment } from "@/lib/db/app-schema";
+import { ResyncButton } from "@/components/app/ResyncButton";
 
 function timeAgo(date: Date): string {
   const secs = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -88,32 +89,32 @@ export default async function DashboardHome() {
         ) : (
           <ul className="mt-3 grid gap-3">
             {sites.map((s) => (
-              <li key={s.id}>
+              <li
+                key={s.id}
+                className="flex items-center gap-3 rounded-lg border border-neutral-800 px-4 py-3"
+              >
                 <a
                   href={siteUrl(s)}
                   target="_blank"
                   rel="noreferrer"
-                  className="flex items-center justify-between rounded-lg border border-neutral-800 px-4 py-3 hover:border-neutral-600"
+                  className="min-w-0 flex-1 hover:opacity-80"
                 >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium">{s.name}</p>
-                    <p className="truncate text-xs text-neutral-500">
-                      {s.repoOwner}/{s.repoName} ·{" "}
-                      <span className="text-neutral-400 group-hover:text-emerald-400">
-                        {siteHost(s)} ↗
-                      </span>
-                    </p>
-                  </div>
-                  <span
-                    className={`ml-3 shrink-0 rounded-full px-2 py-0.5 text-xs ${
-                      s.status === "live"
-                        ? "bg-emerald-500/15 text-emerald-400"
-                        : "bg-neutral-800 text-neutral-400"
-                    }`}
-                  >
-                    {s.status === "live" ? "Live" : "Draft"}
-                  </span>
+                  <p className="text-sm font-medium">{s.name}</p>
+                  <p className="truncate text-xs text-neutral-500">
+                    {s.repoOwner}/{s.repoName} ·{" "}
+                    <span className="text-neutral-400">{siteHost(s)} ↗</span>
+                  </p>
                 </a>
+                <ResyncButton siteId={s.id} />
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
+                    s.status === "live"
+                      ? "bg-emerald-500/15 text-emerald-400"
+                      : "bg-neutral-800 text-neutral-400"
+                  }`}
+                >
+                  {s.status === "live" ? "Live" : "Draft"}
+                </span>
               </li>
             ))}
           </ul>

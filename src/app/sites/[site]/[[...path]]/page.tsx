@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { getSiteBySlug, resolveTenantSlug } from "@/lib/tenant";
 import { githubSource } from "@/lib/github-source";
+import { s3Source, isSynced } from "@/lib/s3-source";
 import { contentContext, loadConfig, loadPage } from "@/lib/content";
 import { buildNav, findGroupLabel } from "@/lib/nav";
 import { Mdx, extractToc } from "@/lib/mdx";
@@ -38,7 +39,11 @@ export default async function TenantDocsPage({ params }: { params: Promise<Param
   const record = await getSiteBySlug(slug);
   if (!record?.repoOwner || !record.repoName) notFound();
 
-  const src = githubSource(record.repoOwner, record.repoName, record.branch);
+  // Read from object storage (the synced copy); fall back to live GitHub for sites
+  // connected before they were synced (SPEC §3.1 model C, with A as interim fallback).
+  const src = (await isSynced(record.id))
+    ? s3Source(record.id)
+    : githubSource(record.repoOwner, record.repoName, record.branch);
 
   return contentContext.run(src, async () => {
     const config = await loadConfig();

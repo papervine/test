@@ -1,8 +1,7 @@
 # Local dev services for the Docbot control plane.
-# Prod uses Neon (DATABASE_URL swaps); this is the local counterpart.
-# Postgres ships with pgvector so the AI assistant's embeddings (SPEC §8) work
-# against the same DB later. Redis (tenant→host cache) and MinIO (compiled MDX
-# bundles) join here at M2 when the sync pipeline actually needs them.
+# Prod swaps these for managed equivalents (Neon for Postgres, R2 for object
+# storage) — code targets the same interfaces (DATABASE_URL / S3 API), so only
+# env changes. Postgres ships with pgvector for the AI assistant's embeddings.
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -22,5 +21,40 @@ services:
       timeout: 3s
       retries: 10
 
+  # Local S3 (object storage) — prod uses Cloudflare R2; same S3 API (SPEC §3.1, §11).
+  # Compiled/copied tenant content + assets live here. Console at :9001.
+  minio:
+    image: minio/minio:latest
+    container_name: docbot-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: docbot
+      MINIO_ROOT_PASSWORD: docbotsecret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - docbot-miniodata:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # Create the bucket on startup so the app doesn't have to.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 docbot docbotsecret &&
+      mc mb --ignore-existing local/docbot-content &&
+      echo 'bucket ready'
+      "
+
 volumes:
   docbot-pgdata:
+  docbot-miniodata:
