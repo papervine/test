@@ -88,6 +88,11 @@ const CONTROL_PLANE_CHECKS = [
     desc: "unauthenticated /dashboard redirects to /login (middleware gate)",
     redirectTo: "/login",
   },
+  {
+    path: "/dashboard/connect",
+    desc: "unauthenticated /dashboard/connect redirects to /login",
+    redirectTo: "/login",
+  },
   { path: "/login", desc: "login page renders", include: ["Sign in to Docbot"] },
   { path: "/signup", desc: "signup page renders", include: ["Create your Docbot account"] },
 ];

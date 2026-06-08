@@ -1,7 +1,19 @@
-import { eq } from "drizzle-orm";
+import Link from "next/link";
+import { desc, eq } from "drizzle-orm";
 import { getSession, listOrganizations } from "@/lib/session";
 import { db } from "@/lib/db";
-import { site } from "@/lib/db/app-schema";
+import { user } from "@/lib/db/schema";
+import { site, deployment } from "@/lib/db/app-schema";
+
+function timeAgo(date: Date): string {
+  const secs = Math.floor((Date.now() - date.getTime()) / 1000);
+  if (secs < 60) return "just now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
 
 export default async function DashboardHome() {
   const session = await getSession();
@@ -12,6 +24,24 @@ export default async function DashboardHome() {
   if (!session || !activeOrg) return null;
 
   const sites = await db.select().from(site).where(eq(site.organizationId, activeOrg.id));
+
+  const feed = await db
+    .select({
+      id: deployment.id,
+      status: deployment.status,
+      commitMessage: deployment.commitMessage,
+      filesAdded: deployment.filesAdded,
+      filesEdited: deployment.filesEdited,
+      createdAt: deployment.createdAt,
+      actorName: user.name,
+      siteName: site.name,
+    })
+    .from(deployment)
+    .innerJoin(site, eq(deployment.siteId, site.id))
+    .leftJoin(user, eq(deployment.actorUserId, user.id))
+    .where(eq(site.organizationId, activeOrg.id))
+    .orderBy(desc(deployment.createdAt))
+    .limit(20);
 
   const hour = new Date().getHours();
   const partOfDay = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
@@ -24,13 +54,26 @@ export default async function DashboardHome() {
       </h1>
 
       <section className="mt-8">
-        <h2 className="text-sm font-medium text-neutral-400">Your sites</h2>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-medium text-neutral-400">Your sites</h2>
+          {sites.length > 0 && (
+            <Link
+              href="/dashboard/connect"
+              className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-emerald-400"
+            >
+              Connect repo
+            </Link>
+          )}
+        </div>
         {sites.length === 0 ? (
           <div className="mt-3 rounded-lg border border-dashed border-neutral-800 px-6 py-10 text-center">
             <p className="text-sm text-neutral-300">No docs sites yet.</p>
-            <p className="mt-1 text-sm text-neutral-500">
-              Connect a Git repo to publish your first site. (Coming next.)
-            </p>
+            <Link
+              href="/dashboard/connect"
+              className="mt-4 inline-block rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
+            >
+              Connect a repository
+            </Link>
           </div>
         ) : (
           <ul className="mt-3 grid gap-3">
@@ -42,7 +85,7 @@ export default async function DashboardHome() {
                 <div>
                   <p className="text-sm font-medium">{s.name}</p>
                   <p className="text-xs text-neutral-500">
-                    {s.customDomain ?? `${s.slug}.docbot.app`}
+                    {s.repoOwner}/{s.repoName} · {s.customDomain ?? `${s.slug}.docbot.app`}
                   </p>
                 </div>
                 <span
@@ -62,9 +105,43 @@ export default async function DashboardHome() {
 
       <section className="mt-10">
         <h2 className="text-sm font-medium text-neutral-400">Activity</h2>
-        <div className="mt-3 rounded-lg border border-neutral-800 px-6 py-8 text-center text-sm text-neutral-500">
-          No activity yet — syncs will appear here once a repo is connected.
-        </div>
+        {feed.length === 0 ? (
+          <div className="mt-3 rounded-lg border border-neutral-800 px-6 py-8 text-center text-sm text-neutral-500">
+            No activity yet — syncs will appear here once a repo is connected.
+          </div>
+        ) : (
+          <ul className="mt-3 divide-y divide-neutral-800 rounded-lg border border-neutral-800">
+            {feed.map((d) => (
+              <li key={d.id} className="flex items-start justify-between gap-4 px-4 py-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-neutral-200">
+                    {(d.commitMessage || "Sync").split("\n")[0]}
+                  </p>
+                  <p className="mt-0.5 text-xs text-neutral-500">
+                    {d.actorName ?? "Unknown"} · {d.siteName} · {timeAgo(d.createdAt)}
+                    {(d.filesAdded > 0 || d.filesEdited > 0) &&
+                      ` · ${d.filesAdded} added, ${d.filesEdited} edited`}
+                  </p>
+                </div>
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
+                    d.status === "successful"
+                      ? "bg-emerald-500/15 text-emerald-400"
+                      : d.status === "failed"
+                        ? "bg-red-500/15 text-red-400"
+                        : "bg-neutral-800 text-neutral-400"
+                  }`}
+                >
+                  {d.status === "successful"
+                    ? "Successful"
+                    : d.status === "failed"
+                      ? "Failed"
+                      : "Building"}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );
