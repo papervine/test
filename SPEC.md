@@ -100,8 +100,44 @@ path-traversal guard.
 - **Today (local / single-tenant):** streamed straight from `DOCBOT_CONTENT`. Works in
   `docbot dev`; a production `next build` would need the content traced in (a dev-time
   concern only, not the SaaS path).
-- **M2 (multi-tenant):** the same `/img/...` URLs resolve to the tenant's asset bucket
-  (signed-URL redirect or proxy) — the URL shape is unchanged.
+
+**Three serving models** (increasing maturity; the `/img/...` URL shape never changes):
+
+| | Stored in | Served by | Used when |
+|---|---|---|---|
+| **A. Redirect to source** | the Git host | GitHub raw CDN | now — public repos |
+| **B. Authenticated proxy** | the Git host | our server (live fetch + stream) | GitHub App / private repos |
+| **C. Compile-on-sync → object storage** | **our object storage** | **our CDN** | the production target (§3) |
+
+- **A (public, now):** `/dbasset` (or a redirect) resolves the tenant's repo and points the
+  browser at `raw.githubusercontent.com/{owner}/{repo}/{branch}/…`. Zero infra, GitHub's CDN
+  serves. Public repos only.
+- **B (private):** you **cannot** redirect to a private raw URL — it needs an `Authorization`
+  header, and exposing the install token to the browser is a leak. So private assets must be
+  **proxied**: our server fetches from GitHub with the installation token (server-side) and
+  streams the bytes back. Coupled to the GitHub App work, not a separate task.
+- **C (target):** the sync worker (§3) copies content **and** assets into our object storage;
+  the render plane serves from our CDN. GitHub becomes a sync-time input, not a per-request
+  serving dependency — removes rate limits, latency, and the per-request token dance.
+
+> **Current reality (slice):** multi-tenant rendering also live-fetches *content* from
+> `raw.githubusercontent.com` — i.e. model **A applied to content**. A deliberate shortcut to
+> prove multi-tenancy fast.
+
+**Decision (2026-06-08): go straight to C; don't invest in A/B.** Models A and B are
+described for context, but polishing them (e.g. a public-asset redirect) is throwaway work
+once C lands. We build C next. C ships in two steps so it's incremental, not a big bang:
+
+- **C-lite (next):** sync *copies* docs.json + MDX + assets from the repo into object
+  storage; the render plane reads from storage (a new `s3Source` behind the existing
+  `ContentSource` abstraction) and **compiles MDX on request** (reuse today's pipeline).
+  This already removes GitHub-at-request-time, fixes assets, and works for private repos
+  (the worker holds the token). Public repos need no GitHub App; private repos add it.
+- **C-full (later):** also **precompile** MDX → bundles at sync time so the render plane only
+  executes (the §3 perf goal), plus push webhooks for auto-sync. Optimizations on top of C-lite.
+
+The live-`raw` `githubSource` stays only as the interim content reader until C-lite lands,
+then becomes the sync worker's *source* reader (sync-time, not request-time).
 
 ---
 
@@ -334,6 +370,13 @@ tools (Claude, Cursor, Windsurf). Exposes the **same tool layer as the AI Assist
 
 - Indexes published pages + OpenAPI specs; excludes hidden/noindex (per §8.4).
 - Opt-in + configured via `docs.json`; per-tenant rate limits.
+- ✅ **Slice 1 (done):** Streamable HTTP MCP server at `/mcp` (`src/app/mcp/route.ts`, via
+  `mcp-handler`, stateless). Exposes `search_docs`, `read_page`, `list_pages`, and —
+  only when the site has an OpenAPI reference — `search_api`. Tools are the shared
+  `docs-tools.ts` capabilities (one implementation, two transports). Covered by
+  `tests/smoke.mjs` (tools/list + tools/call). Connect Claude/Cursor to `https://<host>/mcp`.
+- ⏳ **Next:** `docs.json` opt-out + per-tenant rate limits; live API execution as MCP tools
+  (depends on the M4 "Try it" auth/proxy slice); index built at sync (M2).
 
 ### 9.2 Authoring MCP (admin / write)
 
@@ -353,8 +396,9 @@ the deploy branch. Tools:
 
 ### Status & sequencing
 
-Both are post-M5. The read MCP is a thin wrapper once the assistant tools exist; the
-authoring MCP follows the Git-sync (§3) + platform-auth (§11) foundations.
+The **read MCP is shipped** (§9.1 Slice 1) — it was a thin wrapper over the assistant tool
+layer. The **authoring MCP is still post-M5**: it follows the Git-sync (§3) + platform-auth
+(§11) foundations.
 
 ---
 
@@ -481,7 +525,7 @@ This forces per-request rendering, which fights compile-on-sync caching — defe
 | Search | **Orama** (Algolia optional) | embeddable, multi-tenant |
 | DB | **Postgres** (+ `pgvector`) — hosted: **Neon** | tenants, config, embeddings; Neon serverless for the Vercel deploy, provisioned via the Stripe Projects CLI (`stripe projects add neon/postgres`) |
 | Cache | **Redis** | domain→tenant map, page cache |
-| Object storage | **S3-compatible** (R2) | compiled bundles, assets |
+| Object storage | **S3 API** — hosted: **Cloudflare R2**, local: **MinIO** | compiled bundles, assets. Code to the S3 API (pluggable `S3_ENDPOINT`); R2 chosen for **zero egress** (docs serving is read-heavy) + built-in CDN; self-hosters point at any S3-compatible store |
 | Queue/workers | **BullMQ** / serverless functions | git sync jobs |
 | AI | **Vercel AI SDK** + `@ai-sdk/anthropic` (Claude); **AI Elements** for chat UI | agentic assistant (§8) |
 | Auth (platform) | **Better Auth** (+ `organization`) | OSS, self-hostable, orgs + RBAC; WorkOS for enterprise SSO later (§11) |
@@ -581,7 +625,7 @@ Org/auth/RBAC, custom domains + TLS, analytics views. Beta-ready.
 1. **Compile-on-sync vs. on-request.** Spec assumes compile-on-sync for perf/predictability. Does that block any dynamic features we care about (e.g. live Twoslash)?
 2. ~~**Build on Fumadocs vs. from scratch.**~~ **DECIDED (2026-06-07): from scratch.** Multi-tenancy and full control over the architecture outweigh the head start. M0 is a single Next.js app; refactor into the monorepo packages at M2 when multi-tenancy lands.
 3. **Versioning & i18n.** docs.json supports versions + languages in the nav tree. In v1 scope or fast-follow?
-4. **Self-host story.** How easy must the OSS self-host path be vs. the hosted SaaS? Affects how much we hardwire to R2/Vercel/etc. **Partially resolved (2026-06-07):** chose Better Auth specifically so platform auth self-hosts with no third-party account (§11.1); object storage / domain plumbing still open.
+4. **Self-host story.** How easy must the OSS self-host path be vs. the hosted SaaS? Affects how much we hardwire to R2/Vercel/etc. **Resolved (2026-06-08):** code to portable interfaces, not vendors — Better Auth owns its schema in Postgres (§11.1), and storage is the **S3 API** (hosted default R2, local MinIO, self-host points `S3_ENDPOINT` anywhere; §3.1). Domain/TLS plumbing still open.
 5. **License & governance.** MIT vs. Apache-2.0; CLA; what (if anything) is SaaS-only (open-core) vs. fully open.
 6. **Pricing/limits** for the hosted version (out of scope for build, but shapes tenancy/metering design).
 7. **Web editor** — defer past v1? The incumbent treats it as a differentiator.
