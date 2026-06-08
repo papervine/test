@@ -25,6 +25,10 @@ npm run dev      # serves ./content at http://localhost:3000
 
 Other scripts: `npm run build`, `npm run start`, `npm run typecheck`.
 
+**AI Assistant (M5):** set `ANTHROPIC_API_KEY` in `.env.local` to enable the "Ask
+Assistant" panel (Claude + agentic docs retrieval). Without it the panel still opens
+but the API returns a graceful 503. Optional: `DOCBOT_AI_MODEL` (default `claude-sonnet-4-6`).
+
 ## CLI — preview any docs repo
 
 `docbot dev` boots the renderer pointed at any folder of MDX + `docs.json`
