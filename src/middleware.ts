@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
+import { resolveTenantSlug } from "./lib/tenant-host";
 
 /**
  * Docs assets (images, fonts, video) are referenced by absolute path from the
@@ -13,6 +14,18 @@ const ASSET_RE =
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+
+  // Multi-tenant host routing (SPEC §2): a tenant subdomain ({slug}.docbot.app,
+  // or {slug}.localhost in dev) serves that tenant's docs. Rewrite the whole host
+  // to /_sites/{slug}/… and let that route resolve the site + fetch its content.
+  // (Per-tenant asset/dashboard handling is apex-only for now.)
+  const tenant = resolveTenantSlug(req.headers.get("host"));
+  if (tenant) {
+    const url = req.nextUrl.clone();
+    url.pathname = `/sites/${tenant}${pathname === "/" ? "" : pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
   if (ASSET_RE.test(pathname)) {
     const url = req.nextUrl.clone();
     url.pathname = `/dbasset${pathname}`;
