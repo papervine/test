@@ -3,7 +3,9 @@ import "./globals.css";
 import { loadConfig } from "@/lib/content";
 import { buildNav } from "@/lib/nav";
 import { Navbar } from "@/components/Navbar";
+import { NavTabs } from "@/components/NavTabs";
 import { Sidebar } from "@/components/Sidebar";
+import { Assistant } from "@/components/assistant/Assistant";
 
 export async function generateMetadata(): Promise<Metadata> {
   const config = await loadConfig();
@@ -12,9 +14,11 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-// Set the theme class before paint to avoid a flash of the wrong theme.
+// Set the theme class before paint to avoid a flash of the wrong theme. Default
+// is light (the incumbent's default appearance); only an explicit stored choice of
+// "dark" opts in — we don't follow the OS preference unless the user toggles.
 const themeScript = `
-(function(){try{var t=localStorage.getItem('theme');var m=window.matchMedia('(prefers-color-scheme: dark)').matches;if(t==='dark'||(!t&&m)){document.documentElement.classList.add('dark');}}catch(e){}})();
+(function(){try{if(localStorage.getItem('theme')==='dark'){document.documentElement.classList.add('dark');}}catch(e){}})();
 `;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
@@ -34,10 +38,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body>
         <Navbar config={config} />
-        <div className="mx-auto flex max-w-7xl">
+        <NavTabs sections={sections} />
+        <div className="mx-auto flex max-w-7xl gap-8 pl-9 pr-6">
           <Sidebar sections={sections} />
           <main className="min-w-0 flex-1">{children}</main>
         </div>
+        <Assistant />
       </body>
     </html>
   );

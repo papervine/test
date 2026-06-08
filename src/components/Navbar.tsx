@@ -1,35 +1,74 @@
 import Link from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
+import { AskAssistantButton } from "./assistant/AskAssistantButton";
+import { SearchButton } from "./SearchDialog";
 import type { DocsConfig } from "@/lib/config";
+
+/**
+ * Render the docs logo from docs.json. `logo` is either a single path or a
+ * `{ light, dark }` pair (incumbent convention — light logo on light backgrounds,
+ * dark on dark). We toggle the pair with CSS so it tracks the theme without JS.
+ * Falls back to the site name as text when no logo is configured.
+ */
+function Logo({ logo, name }: { logo: DocsConfig["logo"]; name: string }) {
+  if (typeof logo === "string") {
+    // eslint-disable-next-line @next/next/no-img-element -- runtime-served content asset, not a build-time import
+    return <img src={logo} alt={name} className="h-7 w-auto" />;
+  }
+  if (logo && (logo.light || logo.dark)) {
+    return (
+      <>
+        {logo.light && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo.light} alt={name} className="h-7 w-auto dark:hidden" />
+        )}
+        {logo.dark && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={logo.dark} alt={name} className="hidden h-7 w-auto dark:block" />
+        )}
+      </>
+    );
+  }
+  return <span>{name}</span>;
+}
 
 export function Navbar({ config }: { config: DocsConfig }) {
   const links = config.navbar?.links ?? [];
   const primary = config.navbar?.primary;
 
   return (
-    <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-zinc-200 bg-white/80 px-6 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
-      <Link href="/" className="text-lg font-bold text-zinc-900 dark:text-zinc-100">
-        {config.name}
-      </Link>
-      <div className="flex items-center gap-1">
-        {links.map((link) => (
-          <Link
-            key={link.href}
-            href={link.href}
-            className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
-          >
-            {link.label}
-          </Link>
-        ))}
-        {primary && (
-          <Link
-            href={primary.href}
-            className="ml-2 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
-          >
-            {primary.label}
-          </Link>
-        )}
-        <ThemeToggle />
+    <header className="sticky top-0 z-40 border-b border-zinc-200 bg-white/80 backdrop-blur dark:border-zinc-800 dark:bg-zinc-950/80">
+      {/* Padding on the max-w-7xl element itself (not a full-width wrapper) so the
+          left edge matches the content row exactly at any viewport width. */}
+      <div className="relative mx-auto flex h-16 max-w-7xl items-center gap-6 pl-9 pr-6">
+        <Link href="/" className="flex shrink-0 items-center text-lg font-bold text-zinc-900 dark:text-zinc-100">
+          <Logo logo={config.logo} name={config.name} />
+        </Link>
+
+        {/* Search palette — absolutely centered so the logo/actions widths don't skew it. */}
+        <SearchButton />
+
+        <div className="ml-auto flex items-center gap-1">
+          <AskAssistantButton />
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className="rounded-md px-3 py-2 text-sm font-medium text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              {link.label}
+            </Link>
+          ))}
+          {primary && (
+            <Link
+              href={primary.href}
+              className="ml-2 rounded-lg bg-primary px-3.5 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+            >
+              {primary.label}
+            </Link>
+          )}
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );

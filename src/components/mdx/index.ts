@@ -6,6 +6,8 @@ import { Frame } from "./Frame";
 import { Tabs, Tab } from "./Tabs";
 import { CodeGroup } from "./CodeGroup";
 import { Accordion, AccordionGroup } from "./Accordion";
+import { ParamField, ResponseField } from "./ApiField";
+import { Expandable } from "./Expandable";
 
 /** The component set available inside every MDX page (SPEC.md §5). */
 export const mdxComponents: MDXComponents = {
@@ -16,6 +18,7 @@ export const mdxComponents: MDXComponents = {
   Check,
   Card,
   CardGroup,
+  Columns: CardGroup, // the incumbent's current name for the card grid; CardGroup is the legacy alias
   Steps,
   Step,
   Frame,
@@ -24,4 +27,7 @@ export const mdxComponents: MDXComponents = {
   CodeGroup,
   Accordion,
   AccordionGroup,
+  ParamField,
+  ResponseField,
+  Expandable,
 };

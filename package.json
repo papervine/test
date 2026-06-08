@@ -16,9 +16,14 @@
     "test": "node tests/smoke.mjs"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "^3.0.81",
+    "@ai-sdk/react": "^3.0.199",
     "@mdx-js/mdx": "^3.1.1",
     "@mintlify/mdx": "^4.0.0",
+    "@orama/orama": "^3.1.18",
     "@radix-ui/react-popover": "^1.1.16",
+    "@scalar/openapi-parser": "^0.28.6",
+    "ai": "^6.0.197",
     "clsx": "2.1.1",
     "eslint-config-next": "^15.5.19",
     "gray-matter": "4.0.3",
@@ -31,7 +36,8 @@
     "rehype-slug": "6.0.0",
     "remark-gfm": "4.0.0",
     "shiki": "1.29.2",
-    "zod": "3.24.1"
+    "streamdown": "^2.5.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/mdx": "2.0.13",

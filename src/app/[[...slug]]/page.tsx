@@ -1,14 +1,19 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { loadPage, listPageSlugs } from "@/lib/content";
+import { loadPage, listPageSlugs, loadConfig } from "@/lib/content";
+import { buildNav, findGroupLabel } from "@/lib/nav";
+import { loadApiCatalog } from "@/lib/openapi";
 import { Mdx, extractToc } from "@/lib/mdx";
 import { TableOfContents } from "@/components/TableOfContents";
+import { EndpointReference } from "@/components/api/EndpointReference";
 
 type Params = { slug?: string[] };
 
 export async function generateStaticParams(): Promise<Params[]> {
   const slugs = await listPageSlugs();
-  return slugs.map((s) => ({ slug: s === "" ? [] : s.split("/") }));
+  const config = await loadConfig();
+  const opSlugs = [...(await loadApiCatalog(config)).keys()];
+  return [...slugs, ...opSlugs].map((s) => ({ slug: s === "" ? [] : s.split("/") }));
 }
 
 export async function generateMetadata({
@@ -17,33 +22,55 @@ export async function generateMetadata({
   params: Promise<Params>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const page = await loadPage((slug ?? []).join("/"));
-  if (!page) return {};
-  return {
-    title: page.frontmatter.title,
-    description: page.frontmatter.description,
-  };
+  const slugStr = (slug ?? []).join("/");
+  const page = await loadPage(slugStr);
+  if (page) {
+    return { title: page.frontmatter.title, description: page.frontmatter.description };
+  }
+  const op = (await loadApiCatalog(await loadConfig())).get(slugStr);
+  if (op) return { title: op.summary ?? `${op.method} ${op.path}`, description: op.description };
+  return {};
 }
 
 export default async function DocsPage({ params }: { params: Promise<Params> }) {
   const { slug } = await params;
-  const page = await loadPage((slug ?? []).join("/"));
-  if (!page) notFound();
+  const slugStr = (slug ?? []).join("/");
+  const config = await loadConfig();
+  const page = await loadPage(slugStr);
 
-  const toc = extractToc(page.body);
+  // MDX page.
+  if (page) {
+    const toc = extractToc(page.body);
+    // Eyebrow: the group this page belongs to (the incumbent shows it above the title).
+    const sections = await buildNav(config);
+    const eyebrow = findGroupLabel(sections, "/" + (slugStr || "index"));
 
-  return (
-    <div className="flex gap-10 px-8 py-10">
-      <article className="prose min-w-0 flex-1">
-        {page.frontmatter.title && <h1>{page.frontmatter.title}</h1>}
-        {page.frontmatter.description && (
-          <p className="!mt-2 text-lg text-zinc-500 dark:text-zinc-400">
-            {page.frontmatter.description}
-          </p>
-        )}
-        <Mdx source={page.body} />
-      </article>
-      <TableOfContents items={toc} />
-    </div>
-  );
+    return (
+      <div className="flex items-start gap-10 px-8 py-10">
+        <article className="prose min-w-0 flex-1">
+          {eyebrow && <div className="mb-2 text-sm font-semibold text-primary">{eyebrow}</div>}
+          {page.frontmatter.title && <h1>{page.frontmatter.title}</h1>}
+          {page.frontmatter.description && (
+            <p className="!mt-2 text-lg text-zinc-500 dark:text-zinc-400">
+              {page.frontmatter.description}
+            </p>
+          )}
+          <Mdx source={page.body} />
+        </article>
+        <TableOfContents items={toc} />
+      </div>
+    );
+  }
+
+  // Auto-generated OpenAPI endpoint page.
+  const op = (await loadApiCatalog(config)).get(slugStr);
+  if (op) {
+    return (
+      <div className="flex items-start gap-10 px-8 py-10">
+        <EndpointReference op={op} baseUrl={op.baseUrl} />
+      </div>
+    );
+  }
+
+  notFound();
 }

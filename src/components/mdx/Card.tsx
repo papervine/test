@@ -1,22 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { icons } from "lucide-react";
 import clsx from "clsx";
-
-// the incumbent's `icon` is usually a Lucide/FontAwesome name, but can also be a JSX
-// node or a URL — render strings as Lucide icons, pass anything else through.
-function LucideIcon({ name, className }: { name?: ReactNode; className?: string }) {
-  if (!name) return null;
-  if (typeof name !== "string") {
-    return <span className={className}>{name}</span>;
-  }
-  const key = name
-    .split(/[-_ ]/)
-    .map((p) => p.charAt(0).toUpperCase() + p.slice(1))
-    .join("") as keyof typeof icons;
-  const Cmp = icons[key];
-  return Cmp ? <Cmp className={className} /> : null;
-}
+import { LucideIcon } from "../LucideIcon";
 
 export function Card({
   title,
@@ -42,7 +27,8 @@ export function Card({
     </div>
   );
   return href ? (
-    <Link href={href} className="no-underline">
+    // `card-link` resets the inherited `.prose a` underline/color (globals.css).
+    <Link href={href} className="card-link">
       {inner}
     </Link>
   ) : (

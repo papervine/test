@@ -32,6 +32,11 @@ const CHECKS = [
   { slug: "guide", desc: ".md files are served", include: ["PLAIN_MD_MARKER"] },
   { slug: "components", desc: "shiki highlighting + code group", include: ["shiki", "console"] },
   {
+    slug: "cards",
+    desc: "standalone + grouped cards render",
+    include: ["CARD_ONE_MARKER", "CARD_TWO_MARKER", "CARD_A_MARKER", "card-link"],
+  },
+  {
     slug: "unknowns",
     desc: "unknown + member-expr components degrade to children",
     include: ["UNKNOWN_CHILD_MARKER", "MEMBER_EXPR_MARKER"],
@@ -44,6 +49,32 @@ const CHECKS = [
     include: ["couldn", "rendered"], // the "couldn’t be fully rendered yet" notice
   },
   { slug: "hidden", desc: "hidden page reachable by URL", include: ["HIDDEN_PAGE_MARKER"] },
+  {
+    slug: "list-users",
+    desc: "OpenAPI: GET endpoint page (params + response schema)",
+    include: ["GET", "/users", "limit", "Max users to return"],
+  },
+  {
+    slug: "create-user",
+    desc: "OpenAPI: POST endpoint page (request body schema)",
+    include: ["POST", "email", "Display name"],
+  },
+  {
+    slug: "get-user",
+    desc: "OpenAPI: path parameter rendered",
+    include: ["The user ID"],
+  },
+];
+
+// Full-text search (SPEC.md §6) via /api/search. Backed by search-fixture.mdx
+// (indexed) and search-noindex.mdx (excluded), which use nonsense terms so the
+// assertions can't collide with other fixture content. We assert on which hrefs
+// come back — not on ranking order or snippet text, which would be brittle.
+const SEARCH_CHECKS = [
+  { q: "zebra", desc: "title match returns the page", expect: "/search-fixture" },
+  { q: "wombat", desc: "body term resolves to the section anchor", expect: "/search-fixture#quokka-section" },
+  { q: "womb", desc: "prefix match works", expect: "/search-fixture#quokka-section" },
+  { q: "platypus", desc: "noindex pages are excluded from the index", expectEmpty: true },
 ];
 
 function log(msg) {
@@ -99,6 +130,52 @@ async function run() {
       }
       log(`  ${failures.length === before ? "✓" : "✗"} /${check.slug}  (${check.desc})`);
     }
+
+    for (const check of SEARCH_CHECKS) {
+      const before = failures.length;
+      const tag = `search "${check.q}"`;
+      try {
+        const res = await fetch(`${BASE}/api/search?q=${encodeURIComponent(check.q)}`, {
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (res.status !== 200) {
+          failures.push(`[${tag}] expected 200, got ${res.status} — ${check.desc}`);
+        } else {
+          const data = await res.json();
+          const hrefs = (data.results ?? []).map((r) => r.href);
+          if (check.expect && !hrefs.includes(check.expect)) {
+            failures.push(`[${tag}] expected href "${check.expect}", got [${hrefs.join(", ")}] — ${check.desc}`);
+          }
+          if (check.expectEmpty && hrefs.length) {
+            failures.push(`[${tag}] expected no results, got [${hrefs.join(", ")}] — ${check.desc}`);
+          }
+        }
+      } catch (e) {
+        failures.push(`[${tag}] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} ${tag}  (${check.desc})`);
+    }
+
+    // Assistant route is wired (SPEC §8): 503 without ANTHROPIC_API_KEY, streams with one.
+    {
+      const before = failures.length;
+      try {
+        const res = await fetch(`${BASE}/api/assistant`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "hi" }] }],
+          }),
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (![200, 503].includes(res.status)) {
+          failures.push(`[assistant] expected 200 or 503, got ${res.status}`);
+        }
+      } catch (e) {
+        failures.push(`[assistant] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} assistant route (200 w/ key, 503 without)`);
+    }
   } catch (e) {
     failures.push(`fatal: ${e.message}\n--- server log tail ---\n${serverLog.slice(-1500)}`);
   } finally {
@@ -110,7 +187,7 @@ async function run() {
     for (const f of failures) log("  - " + f);
     process.exit(1);
   }
-  log(`\n✓ all ${CHECKS.length} fixture pages rendered without errors`);
+  log(`\n✓ all ${CHECKS.length} pages + ${SEARCH_CHECKS.length} search checks passed`);
   process.exit(0);
 }
 

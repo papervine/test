@@ -1,0 +1,167 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { Search } from "lucide-react";
+
+type Hit = {
+  title: string;
+  section: string;
+  heading: string;
+  href: string;
+  snippet: string;
+};
+
+/** The navbar search trigger + the Cmd/Ctrl-K command palette (SPEC.md §6). */
+export function SearchButton() {
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="absolute left-1/2 hidden w-full max-w-xs -translate-x-1/2 items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 md:flex"
+      >
+        <Search className="h-4 w-4" />
+        <span className="flex-1 text-left">Search...</span>
+        <kbd className="rounded border border-zinc-200 px-1.5 text-xs dark:border-zinc-700">⌘K</kbd>
+      </button>
+      {open && <SearchModal onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function SearchModal({ onClose }: { onClose: () => void }) {
+  const router = useRouter();
+  const [q, setQ] = useState("");
+  const [hits, setHits] = useState<Hit[]>([]);
+  const [active, setActive] = useState(0);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // Debounced query.
+  useEffect(() => {
+    if (!q.trim()) {
+      setHits([]);
+      return;
+    }
+    const ctrl = new AbortController();
+    const id = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+        const data = await res.json();
+        setHits(data.results ?? []);
+        setActive(0);
+      } catch {
+        // aborted or failed — leave previous results
+      }
+    }, 160);
+    return () => {
+      clearTimeout(id);
+      ctrl.abort();
+    };
+  }, [q]);
+
+  const go = useCallback(
+    (hit?: Hit) => {
+      if (!hit) return;
+      router.push(hit.href);
+      onClose();
+    },
+    [router, onClose],
+  );
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Escape") onClose();
+    else if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActive((a) => Math.min(a + 1, hits.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActive((a) => Math.max(a - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      go(hits[active]);
+    }
+  };
+
+  // Keep the active item in view.
+  useEffect(() => {
+    listRef.current?.querySelector('[data-active="true"]')?.scrollIntoView({ block: "nearest" });
+  }, [active]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-start justify-center px-4 pt-[12vh]"
+      onClick={onClose}
+    >
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div
+        className="relative w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={onKeyDown}
+      >
+        <div className="flex items-center gap-3 border-b border-zinc-200 px-4 dark:border-zinc-800">
+          <Search className="h-5 w-5 shrink-0 text-zinc-400" />
+          <input
+            autoFocus
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search documentation..."
+            className="w-full bg-transparent py-3.5 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 dark:text-zinc-100"
+          />
+          <kbd className="rounded border border-zinc-200 px-1.5 py-0.5 text-xs text-zinc-400 dark:border-zinc-700">
+            Esc
+          </kbd>
+        </div>
+
+        {q.trim() && hits.length === 0 && (
+          <div className="px-4 py-10 text-center text-sm text-zinc-400">
+            No results for “{q}”
+          </div>
+        )}
+
+        {hits.length > 0 && (
+          <ul ref={listRef} className="max-h-[60vh] overflow-y-auto p-2">
+            {hits.map((hit, i) => (
+              <li key={`${hit.href}-${i}`}>
+                <button
+                  type="button"
+                  data-active={i === active}
+                  onMouseEnter={() => setActive(i)}
+                  onClick={() => go(hit)}
+                  className="block w-full rounded-lg px-3 py-2 text-left transition-colors data-[active=true]:bg-zinc-100 dark:data-[active=true]:bg-white/10"
+                >
+                  <div className="flex items-baseline gap-2">
+                    <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                      {hit.heading || hit.title}
+                    </span>
+                    <span className="shrink-0 truncate text-xs text-zinc-400">
+                      {[hit.section, hit.heading ? hit.title : null].filter(Boolean).join(" › ")}
+                    </span>
+                  </div>
+                  {hit.snippet && (
+                    <p className="mt-0.5 line-clamp-1 text-xs text-zinc-500 dark:text-zinc-400">
+                      {hit.snippet}
+                    </p>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}

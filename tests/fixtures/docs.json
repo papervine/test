@@ -12,9 +12,13 @@
           {
             "tab": "Docs",
             "groups": [
-              { "group": "Start", "pages": ["index", "guide", "components"] },
+              { "group": "Start", "pages": ["index", "guide", "components", "cards"] },
               { "group": "Edge cases", "pages": ["unknowns", "badfrontmatter", "with-snippet"] }
             ]
+          },
+          {
+            "tab": "API",
+            "groups": [{ "group": "Endpoints", "openapi": "openapi.json" }]
           }
         ]
       }

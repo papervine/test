@@ -1,11 +1,17 @@
 import "server-only";
 import type { DocsConfig } from "./config";
 import { loadPage } from "./content";
+import { apiOperations } from "./openapi";
 
 /** Serializable nav tree handed to the client Sidebar. */
 export type NavLeaf = { title: string; href: string };
-export type NavNode = { group: string; items: (NavLeaf | NavNode)[] };
-export type NavSection = { tab?: string; nodes: (NavLeaf | NavNode)[] };
+export type NavNode = { group: string; icon?: string; items: (NavLeaf | NavNode)[] };
+export type NavSection = {
+  tab?: string;
+  href?: string; // landing page for the tab (its first leaf) — what the tab links to
+  hrefs: string[]; // every leaf href under this tab — used to detect the active tab
+  nodes: (NavLeaf | NavNode)[];
+};
 
 type Division = Record<string, unknown>;
 
@@ -41,12 +47,47 @@ function labelOf(div: Division): string | undefined {
   return undefined;
 }
 
+const OP_SELECTOR = /^(get|post|put|patch|delete|head|options)\s+\//i;
+
+/**
+ * A division with an `openapi` property auto-generates a leaf per operation
+ * (incumbent model). `pages`, if present, selects/orders endpoints by "METHOD /path"
+ * (other strings are treated as normal page slugs, so manual pages can mix in).
+ */
+async function openapiLeaves(div: Division): Promise<(NavLeaf | NavNode)[]> {
+  const specPath = div.openapi as string;
+  const ops = await apiOperations(specPath);
+  const bySelector = new Map(ops.map((op) => [`${op.method} ${op.path}`, op]));
+  const leafFor = (op: (typeof ops)[number]): NavLeaf => ({
+    title: op.summary ?? `${op.method} ${op.path}`,
+    href: "/" + op.slug,
+  });
+
+  if (!Array.isArray(div.pages)) return ops.map(leafFor);
+
+  const out: (NavLeaf | NavNode)[] = [];
+  for (const entry of div.pages) {
+    if (typeof entry === "string" && OP_SELECTOR.test(entry)) {
+      const [method, path] = entry.split(/\s+/);
+      const op = bySelector.get(`${method.toUpperCase()} ${path}`);
+      if (op) out.push(leafFor(op));
+    } else {
+      out.push(...(await collectItem(entry)));
+    }
+  }
+  return out;
+}
+
 /** Collect the child nav items of a division (its root + container arrays). */
 async function collectChildren(div: Division): Promise<(NavLeaf | NavNode)[]> {
   const out: (NavLeaf | NavNode)[] = [];
   if (typeof div.root === "string") {
     const leaf = await resolveLeaf(div.root);
     if (leaf) out.push(leaf);
+  }
+  if (typeof div.openapi === "string") {
+    out.push(...(await openapiLeaves(div)));
+    return out; // openapi division: `pages` are operation selectors, handled above
   }
   for (const key of CONTAINER_KEYS) {
     const value = div[key];
@@ -67,10 +108,42 @@ async function collectItem(item: unknown): Promise<(NavLeaf | NavNode)[]> {
     const div = item as Division;
     const children = await collectChildren(div);
     const label = labelOf(div);
-    if (label) return [{ group: label, items: children }];
+    if (label) {
+      const icon = typeof div.icon === "string" ? div.icon : undefined;
+      return [{ group: label, icon, items: children }];
+    }
     return children; // unlabeled wrapper — splice children up a level
   }
   return [];
+}
+
+/** Flatten a node tree to every leaf href it contains. */
+function collectHrefs(nodes: (NavLeaf | NavNode)[]): string[] {
+  const out: string[] = [];
+  for (const node of nodes) {
+    if ("href" in node) out.push(node.href);
+    else out.push(...collectHrefs(node.items));
+  }
+  return out;
+}
+
+/**
+ * The label of the deepest group containing `href` — the incumbent shows this as an
+ * "eyebrow" above the page title (e.g. "Introduction" over "Pixwel Platform").
+ */
+export function findGroupLabel(sections: NavSection[], href: string): string | undefined {
+  let found: string | undefined;
+  function walk(nodes: (NavLeaf | NavNode)[], group: string | undefined) {
+    for (const node of nodes) {
+      if ("href" in node) {
+        if (node.href === href) found = group;
+      } else {
+        walk(node.items, node.group);
+      }
+    }
+  }
+  for (const section of sections) walk(section.nodes, undefined);
+  return found;
 }
 
 /**
@@ -92,13 +165,18 @@ export async function buildNav(config: DocsConfig): Promise<NavSection[]> {
 
   if (Array.isArray(nav.tabs) && nav.tabs.length) {
     for (const tab of nav.tabs as Division[]) {
+      const nodes = await collectChildren(tab);
+      const hrefs = collectHrefs(nodes);
       sections.push({
         tab: typeof tab.tab === "string" ? tab.tab : undefined,
-        nodes: await collectChildren(tab),
+        href: hrefs[0],
+        hrefs,
+        nodes,
       });
     }
   } else {
-    sections.push({ nodes: await collectChildren(nav) });
+    const nodes = await collectChildren(nav);
+    sections.push({ hrefs: collectHrefs(nodes), nodes });
   }
 
   return sections;
