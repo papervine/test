@@ -30,6 +30,15 @@ export function middleware(req: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
+  // SaaS apex front door: serve the marketing landing at / (SPEC §2). In single-repo
+  // preview mode (DOCBOT_CONTENT set — `docbot dev` / tests) the apex keeps serving the
+  // previewed repo's home instead.
+  if (pathname === "/" && !process.env.DOCBOT_CONTENT) {
+    const url = req.nextUrl.clone();
+    url.pathname = "/home";
+    return NextResponse.rewrite(url);
+  }
+
   if (ASSET_RE.test(pathname)) {
     const url = req.nextUrl.clone();
     url.pathname = `/dbasset${pathname}`;
