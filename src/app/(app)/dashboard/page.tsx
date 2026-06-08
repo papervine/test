@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { desc, eq } from "drizzle-orm";
 import { getSession, listOrganizations } from "@/lib/session";
 import { db } from "@/lib/db";
@@ -24,6 +25,15 @@ export default async function DashboardHome() {
   if (!session || !activeOrg) return null;
 
   const sites = await db.select().from(site).where(eq(site.organizationId, activeOrg.id));
+
+  // Build each site's live docs URL from the current host so it's right in dev
+  // ({slug}.localhost:3100) and prod ({slug}.docbot.app), or its custom domain.
+  const host = (await headers()).get("host") ?? "";
+  const proto = host.includes("localhost") ? "http" : "https";
+  const apexBase = host.replace(/^(app|www)\./, "");
+  const siteHost = (s: (typeof sites)[number]) => s.customDomain ?? `${s.slug}.${apexBase}`;
+  const siteUrl = (s: (typeof sites)[number]) =>
+    s.customDomain ? `https://${s.customDomain}` : `${proto}://${s.slug}.${apexBase}`;
 
   const feed = await db
     .select({
@@ -78,25 +88,32 @@ export default async function DashboardHome() {
         ) : (
           <ul className="mt-3 grid gap-3">
             {sites.map((s) => (
-              <li
-                key={s.id}
-                className="flex items-center justify-between rounded-lg border border-neutral-800 px-4 py-3"
-              >
-                <div>
-                  <p className="text-sm font-medium">{s.name}</p>
-                  <p className="text-xs text-neutral-500">
-                    {s.repoOwner}/{s.repoName} · {s.customDomain ?? `${s.slug}.docbot.app`}
-                  </p>
-                </div>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-xs ${
-                    s.status === "live"
-                      ? "bg-emerald-500/15 text-emerald-400"
-                      : "bg-neutral-800 text-neutral-400"
-                  }`}
+              <li key={s.id}>
+                <a
+                  href={siteUrl(s)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center justify-between rounded-lg border border-neutral-800 px-4 py-3 hover:border-neutral-600"
                 >
-                  {s.status === "live" ? "Live" : "Draft"}
-                </span>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium">{s.name}</p>
+                    <p className="truncate text-xs text-neutral-500">
+                      {s.repoOwner}/{s.repoName} ·{" "}
+                      <span className="text-neutral-400 group-hover:text-emerald-400">
+                        {siteHost(s)} ↗
+                      </span>
+                    </p>
+                  </div>
+                  <span
+                    className={`ml-3 shrink-0 rounded-full px-2 py-0.5 text-xs ${
+                      s.status === "live"
+                        ? "bg-emerald-500/15 text-emerald-400"
+                        : "bg-neutral-800 text-neutral-400"
+                    }`}
+                  >
+                    {s.status === "live" ? "Live" : "Draft"}
+                  </span>
+                </a>
               </li>
             ))}
           </ul>
