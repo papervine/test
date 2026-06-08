@@ -13,29 +13,44 @@ A feature/fix is not done until **all** of these pass:
 
 1. `npm run typecheck` — clean.
 2. `npm test` — the fixtures smoke test (boots the real renderer, asserts no page 500s).
-3. **A regression test exists for what you changed** — see "Always write tests" below.
+3. **A regression test exists for what you changed, at the right layer** — see "Always
+   write tests" below (unit / smoke / e2e).
 4. **Verified in a real browser** — screenshot the affected page (`agent-browser`, light
    AND dark mode if visual). Don't claim a UI change works from the DOM alone; layout
    bugs (e.g. the card `h-full` height bug) only show visually.
 5. For renderer/config/nav changes: **crawl a representative docs repo** and confirm no
    regressions — `node tests/crawl.mjs <cloned-incumbent-repo>` (expect 0 × HTTP 500).
+6. For control-plane / authed changes: `npm run test:e2e` green (needs docker
+   Postgres + MinIO up).
 
 State plainly what you ran and what passed. If something is unverified, say so.
 
 ## Always write tests
 
-Regression protection is a hard requirement, not optional.
+Regression protection is a hard requirement, not optional. Three layers — put the test
+where the logic lives:
 
-- Tests live in `tests/`. The core gate is `tests/smoke.mjs` (zero-dep, fetch-based):
-  it serves `tests/fixtures/` and asserts each page renders without a 500.
-- **To cover a new case, add a fixture** under `tests/fixtures/` that exercises it
-  (and register it in `tests/fixtures/docs.json` nav), then add a check to the
-  `CHECKS` array in `tests/smoke.mjs`. Prefer this over mocks — it tests the real
-  pipeline end to end.
-- Fixtures should reproduce the *actual failure shape* you're fixing. Every fixture
-  page maps to a bug we found (object favicon, `languages` nav, `.md`, unknown/
-  member-expr components, bad frontmatter, snippet imports, hidden pages, card height).
-- CI (`.github/workflows/ci.yml`) runs typecheck + build + smoke test. Keep it green.
+1. **Unit (Vitest) — `tests/unit/`, `npm run test:unit`.** Pure functions, no DB/browser:
+   `resolveTenantSlug`, `parseRepoInput`, `slugify`, config parsing. Fast; runs anywhere.
+   If you add a pure helper, unit-test it (and keep it pure — `"use server"` files can't
+   export sync helpers, so extract them, e.g. `src/lib/slug.ts`).
+2. **Smoke (zero-dep) — `tests/smoke.mjs`, `npm test`.** The renderer + control-plane
+   **gate**, no Postgres so it runs in CI everywhere. **To cover a new renderer case, add
+   a fixture** under `tests/fixtures/` (register it in `tests/fixtures/docs.json` nav) and
+   a check to `CHECKS`. Fixtures reproduce the *actual failure shape* (object favicon,
+   `languages` nav, `.md`, unknown/member-expr components, bad frontmatter, snippet
+   imports, hidden pages, card height). DB-free control-plane checks (gate redirects, auth
+   pages render) live in `CONTROL_PLANE_CHECKS`.
+3. **E2E (Playwright) — `tests/e2e/`, `npm run test:e2e`.** Authed journeys against real
+   Postgres (`docbot_test`) + MinIO: signup → onboarding → connect → dashboard. `globalSetup`
+   creates/migrates/truncates the test DB; `auth.setup.ts` logs in once and saves the
+   session (storageState) so specs start authenticated. Tag specs that hit the network
+   (e.g. the GitHub connect flow) `@external` so CI can `--grep-invert @external` and stay
+   deterministic.
+
+CI (`.github/workflows/ci.yml`): `verify` job runs typecheck + unit + build + smoke
+(no services); `e2e` job runs Playwright against a Postgres service (skipping `@external`).
+Keep both green.
 
 ## How the renderer works (don't break this)
 
@@ -77,10 +92,13 @@ Core principles, in priority order:
 ## Commands
 
 ```bash
-npm run dev                 # serve ./content
+docker compose up -d        # local Postgres (+pgvector) + MinIO (S3) for the control plane
+npm run dev                 # serve the app (apex = landing in SaaS mode; docs via DOCBOT_CONTENT)
 npm run build               # production build
 npm run typecheck           # tsc --noEmit
-npm test                    # fixtures smoke test (the regression gate)
+npm test                    # smoke: renderer + control-plane gate (zero-dep, no DB)
+npm run test:unit           # vitest — pure-logic unit tests
+npm run test:e2e            # playwright — authed journeys (needs docker Postgres + MinIO)
 node bin/docbot.mjs dev <dir>     # preview any docs repo (docs dev analogue)
 node tests/crawl.mjs <dir>        # crawl a real repo, report rendered/degraded/500
 ```

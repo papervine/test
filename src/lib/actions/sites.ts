@@ -9,16 +9,9 @@ import { site, deployment } from "@/lib/db/app-schema";
 import { getSession, listOrganizations } from "@/lib/session";
 import { fetchRepo, hasDocsConfig, fetchLatestCommit, parseRepoInput } from "@/lib/github";
 import { syncSite, type SyncResult } from "@/lib/sync";
+import { slugify } from "@/lib/slug";
 
 export type ConnectState = { error?: string };
-
-function slugify(v: string): string {
-  return v
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "");
-}
 
 // Globally-unique site slug (it's the *.docbot.app subdomain). Append -2, -3… on collision.
 async function uniqueSlug(base: string): Promise<string> {

@@ -21,11 +21,54 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Unit tests (pure logic)
+        run: npm run test:unit
+
       - name: Build
         run: npm run build
 
-      - name: Smoke test (renderer regressions)
+      - name: Smoke test (renderer + control-plane gate, no DB)
         run: npm test
+
+  # Authed control-plane journeys (Playwright + real Postgres). The @external connect
+  # spec hits the GitHub API, so it's skipped here to keep CI deterministic; run it
+  # locally with `npm run test:e2e`.
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: docbot
+          POSTGRES_PASSWORD: docbot
+          POSTGRES_DB: docbot
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U docbot" --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E (deterministic — skips @external)
+        run: npm run test:e2e -- --grep-invert @external
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
 
 # Real-repo validation (crawling papervine/starter or papervine/docs) lives in
 # tests/crawl.mjs and is run locally — see README → Testing. It's intentionally
