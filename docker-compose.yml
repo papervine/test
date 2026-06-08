@@ -1,0 +1,26 @@
+# Local dev services for the Docbot control plane.
+# Prod uses Neon (DATABASE_URL swaps); this is the local counterpart.
+# Postgres ships with pgvector so the AI assistant's embeddings (SPEC §8) work
+# against the same DB later. Redis (tenant→host cache) and MinIO (compiled MDX
+# bundles) join here at M2 when the sync pipeline actually needs them.
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: docbot-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: docbot
+      POSTGRES_PASSWORD: docbot
+      POSTGRES_DB: docbot
+    ports:
+      - "5432:5432"
+    volumes:
+      - docbot-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docbot -d docbot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  docbot-pgdata:

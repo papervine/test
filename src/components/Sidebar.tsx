@@ -23,7 +23,7 @@ function Leaf({ node }: { node: NavLeaf }) {
     <Link
       href={node.href}
       className={clsx(
-        "block rounded-lg px-3 py-1.5 text-sm transition-colors",
+        "block rounded-[var(--db-radius)] px-3 py-1.5 text-sm transition-colors",
         active
           ? "bg-zinc-100 font-medium text-primary dark:bg-white/10"
           : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200",
@@ -56,7 +56,7 @@ function SubGroup({ node, depth }: { node: NavNode; depth: number }) {
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
+        className="flex w-full items-center justify-between rounded-[var(--db-radius)] px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
       >
         <span>{node.group}</span>
         <ChevronRight className={clsx("h-4 w-4 text-zinc-400 transition-transform", open && "rotate-90")} />

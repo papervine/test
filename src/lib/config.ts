@@ -21,7 +21,15 @@ const stringOrLightDark = z
 export const docsConfigSchema = z
   .object({
     name: z.string().catch("Docs"),
-    theme: z.string().optional().catch(undefined),
+    theme: z.string().optional().catch(undefined), // named preset — see src/lib/theme.ts
+    appearance: z
+      .object({
+        default: z.enum(["light", "dark", "system"]).optional(),
+        strict: z.boolean().optional(),
+      })
+      .passthrough()
+      .optional()
+      .catch(undefined),
     logo: stringOrLightDark.catch(undefined),
     favicon: stringOrLightDark.catch(undefined), // string OR { light, dark } — GAP-REPORT §1.1
     colors: z
@@ -49,7 +57,7 @@ export type DocsConfig = z.infer<typeof docsConfigSchema>;
 
 /** Top-level keys Docbot actively understands; others are passed through but flagged. */
 const KNOWN_KEYS = new Set([
-  "$schema", "name", "theme", "logo", "favicon", "colors",
+  "$schema", "name", "theme", "appearance", "logo", "favicon", "colors",
   "navigation", "navbar", "footer",
 ]);
 

@@ -17,7 +17,7 @@ export function Card({
   const inner = (
     <div
       className={clsx(
-        "group h-full rounded-xl border border-zinc-200 bg-white p-5 transition-colors dark:border-zinc-800 dark:bg-zinc-900",
+        "group h-full rounded-[var(--db-radius-lg)] border border-zinc-200 bg-white p-5 transition-colors dark:border-zinc-800 dark:bg-zinc-900",
         href && "hover:border-primary hover:shadow-sm",
       )}
     >

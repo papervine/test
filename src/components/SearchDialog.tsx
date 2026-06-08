@@ -32,7 +32,7 @@ export function SearchButton() {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="absolute left-1/2 hidden w-full max-w-xs -translate-x-1/2 items-center gap-2 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 md:flex"
+        className="absolute left-1/2 hidden w-full max-w-xs -translate-x-1/2 items-center gap-2 rounded-[var(--db-radius)] border border-zinc-200 bg-zinc-50 px-3 py-1.5 text-sm text-zinc-400 transition-colors hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-zinc-700 md:flex"
       >
         <Search className="h-4 w-4" />
         <span className="flex-1 text-left">Search...</span>
@@ -108,7 +108,7 @@ function SearchModal({ onClose }: { onClose: () => void }) {
     >
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
       <div
-        className="relative w-full max-w-xl overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
+        className="relative w-full max-w-xl overflow-hidden rounded-[var(--db-radius-lg)] border border-zinc-200 bg-white shadow-2xl dark:border-zinc-800 dark:bg-zinc-900"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={onKeyDown}
       >
@@ -141,7 +141,7 @@ function SearchModal({ onClose }: { onClose: () => void }) {
                   data-active={i === active}
                   onMouseEnter={() => setActive(i)}
                   onClick={() => go(hit)}
-                  className="block w-full rounded-lg px-3 py-2 text-left transition-colors data-[active=true]:bg-zinc-100 dark:data-[active=true]:bg-white/10"
+                  className="block w-full rounded-[var(--db-radius)] px-3 py-2 text-left transition-colors data-[active=true]:bg-zinc-100 dark:data-[active=true]:bg-white/10"
                 >
                   <div className="flex items-baseline gap-2">
                     <span className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">

@@ -3,7 +3,7 @@
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Streamdown } from "streamdown";
 import { Sparkles, X, Maximize2, Minimize2, ArrowUp, Paperclip } from "lucide-react";
 import clsx from "clsx";
@@ -162,6 +162,24 @@ export function Assistant() {
   );
 }
 
+// Citation/link styling for assistant answers: keep the body text color (white in the
+// dark panel, dark in light) with a blue underline — links read as text, not blue text.
+const streamdownComponents = {
+  a: ({ href, children, ...props }: { href?: string; children?: ReactNode }) => {
+    const external = !!href && /^https?:\/\//.test(href);
+    return (
+      <a
+        href={href}
+        {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+        className="text-inherit underline decoration-blue-500 underline-offset-2 hover:decoration-blue-400"
+        {...props}
+      >
+        {children}
+      </a>
+    );
+  },
+};
+
 type Part = { type: string; text?: string; state?: string };
 
 function Message({ role, parts }: { role: string; parts: Part[] }) {
@@ -179,7 +197,7 @@ function Message({ role, parts }: { role: string; parts: Part[] }) {
       {parts.map((part, i) => {
         if (part.type === "text" && part.text) {
           return (
-            <Streamdown key={i} className="prose-assistant">
+            <Streamdown key={i} className="prose-assistant" components={streamdownComponents}>
               {part.text}
             </Streamdown>
           );

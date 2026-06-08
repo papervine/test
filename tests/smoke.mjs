@@ -26,7 +26,8 @@ const CHECKS = [
   {
     slug: "",
     desc: "home renders (object favicon + languages nav + lenient config)",
-    include: ["Fixtures Home", "Components &amp; Code", "Guide (md)"],
+    // theme tokens wired: no `theme` in fixtures → default "mint", token vars injected.
+    include: ["Fixtures Home", "Components &amp; Code", "Guide (md)", 'data-theme="mint"', "--db-radius"],
     exclude: ["Hidden Page"], // hidden:true → not in sidebar
   },
   { slug: "guide", desc: ".md files are served", include: ["PLAIN_MD_MARKER"] },
@@ -75,6 +76,20 @@ const SEARCH_CHECKS = [
   { q: "wombat", desc: "body term resolves to the section anchor", expect: "/search-fixture#quokka-section" },
   { q: "womb", desc: "prefix match works", expect: "/search-fixture#quokka-section" },
   { q: "platypus", desc: "noindex pages are excluded from the index", expectEmpty: true },
+];
+
+// Control plane (SPEC §10, Layer-1 auth). Deliberately DB-free so it runs in CI
+// with no Postgres: the middleware gate redirects before any DB query, and the
+// auth pages are client-rendered. Guards the (docs)/(auth)/(app) route-group
+// split and the /dashboard session gate from regressing.
+const CONTROL_PLANE_CHECKS = [
+  {
+    path: "/dashboard",
+    desc: "unauthenticated /dashboard redirects to /login (middleware gate)",
+    redirectTo: "/login",
+  },
+  { path: "/login", desc: "login page renders", include: ["Sign in to Docbot"] },
+  { path: "/signup", desc: "signup page renders", include: ["Create your Docbot account"] },
 ];
 
 function log(msg) {
@@ -176,6 +191,35 @@ async function run() {
       }
       log(`  ${failures.length === before ? "✓" : "✗"} assistant route (200 w/ key, 503 without)`);
     }
+
+    for (const check of CONTROL_PLANE_CHECKS) {
+      const before = failures.length;
+      const tag = `control-plane ${check.path}`;
+      try {
+        const res = await fetch(`${BASE}${check.path}`, {
+          redirect: "manual",
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (check.redirectTo) {
+          const loc = res.headers.get("location") ?? "";
+          if (![301, 302, 303, 307, 308].includes(res.status) || !loc.includes(check.redirectTo)) {
+            failures.push(`[${tag}] expected redirect to ${check.redirectTo}, got ${res.status} → "${loc}" — ${check.desc}`);
+          }
+        } else {
+          const body = await res.text();
+          if (res.status !== 200) {
+            failures.push(`[${tag}] expected 200, got ${res.status} — ${check.desc}`);
+          } else {
+            for (const needle of check.include ?? []) {
+              if (!body.includes(needle)) failures.push(`[${tag}] missing "${needle}" — ${check.desc}`);
+            }
+          }
+        }
+      } catch (e) {
+        failures.push(`[${tag}] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} ${tag}  (${check.desc})`);
+    }
   } catch (e) {
     failures.push(`fatal: ${e.message}\n--- server log tail ---\n${serverLog.slice(-1500)}`);
   } finally {
@@ -187,7 +231,9 @@ async function run() {
     for (const f of failures) log("  - " + f);
     process.exit(1);
   }
-  log(`\n✓ all ${CHECKS.length} pages + ${SEARCH_CHECKS.length} search checks passed`);
+  log(
+    `\n✓ all ${CHECKS.length} pages + ${SEARCH_CHECKS.length} search + ${CONTROL_PLANE_CHECKS.length} control-plane checks passed`,
+  );
   process.exit(0);
 }
 

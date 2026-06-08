@@ -6,6 +6,13 @@
   --color-primary: #16a34a;
   --color-primary-light: #4ade80;
   --color-primary-dark: #15803d;
+
+  /* Theme tokens — overridden per docs.json `theme` by layout.tsx (src/lib/theme.ts).
+     These are the fallbacks if no theme is injected. */
+  --db-font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --db-font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --db-radius: 0.5rem;
+  --db-radius-lg: 0.75rem;
 }
 
 html {
@@ -14,6 +21,7 @@ html {
 }
 
 body {
+  font-family: var(--db-font-sans);
   @apply bg-white text-zinc-800 antialiased dark:bg-zinc-950 dark:text-zinc-200;
 }
 
@@ -71,12 +79,15 @@ body {
 
 /* Inline code */
 .prose :not(pre) > code {
+  font-family: var(--db-font-mono);
   @apply rounded bg-zinc-100 px-1.5 py-0.5 text-[0.85em] font-medium text-pink-600 before:content-[''] after:content-[''] dark:bg-zinc-800 dark:text-pink-400;
 }
 
 /* Code blocks (@mintlify/mdx Shiki output: <pre class="shiki" ...>) */
 .prose pre {
-  @apply my-4 overflow-x-auto rounded-xl border border-zinc-200 p-4 text-sm dark:border-zinc-800;
+  font-family: var(--db-font-mono);
+  border-radius: var(--db-radius-lg);
+  @apply my-4 overflow-x-auto border border-zinc-200 p-4 text-sm dark:border-zinc-800;
 }
 .prose pre code {
   @apply grid; /* per-line layout */

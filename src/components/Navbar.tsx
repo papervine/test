@@ -62,7 +62,7 @@ export function Navbar({ config }: { config: DocsConfig }) {
           {primary && (
             <Link
               href={primary.href}
-              className="ml-2 rounded-lg bg-primary px-3.5 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+              className="ml-2 rounded-[var(--db-radius)] bg-primary px-3.5 py-1.5 text-sm font-semibold text-white hover:opacity-90"
             >
               {primary.label}
             </Link>

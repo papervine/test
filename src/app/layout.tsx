@@ -1,11 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { loadConfig } from "@/lib/content";
-import { buildNav } from "@/lib/nav";
-import { Navbar } from "@/components/Navbar";
-import { NavTabs } from "@/components/NavTabs";
-import { Sidebar } from "@/components/Sidebar";
-import { Assistant } from "@/components/assistant/Assistant";
+import { resolveTheme, themeCssVars } from "@/lib/theme";
 
 export async function generateMetadata(): Promise<Metadata> {
   const config = await loadConfig();
@@ -14,37 +10,30 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-// Set the theme class before paint to avoid a flash of the wrong theme. Default
-// is light (the incumbent's default appearance); only an explicit stored choice of
-// "dark" opts in — we don't follow the OS preference unless the user toggles.
-const themeScript = `
-(function(){try{if(localStorage.getItem('theme')==='dark'){document.documentElement.classList.add('dark');}}catch(e){}})();
-`;
+// Set the dark class before paint to avoid a flash of the wrong appearance. A
+// stored user choice wins; otherwise we honor docs.json `appearance.default`
+// (light | dark | system) — `system` follows the OS preference.
+function buildThemeScript(defaultAppearance: "light" | "dark" | "system") {
+  return `(function(){try{var d=${JSON.stringify(defaultAppearance)};var s=localStorage.getItem('theme');var m=window.matchMedia('(prefers-color-scheme: dark)').matches;if(s?s==='dark':(d==='dark'||(d==='system'&&m)))document.documentElement.classList.add('dark');}catch(e){}})();`;
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const config = await loadConfig();
-  const sections = await buildNav(config);
 
+  const theme = resolveTheme(config.theme);
   const colors = config.colors;
   const themeVars = `:root{--color-primary:${colors.primary};--color-primary-light:${
     colors.light ?? colors.primary
-  };--color-primary-dark:${colors.dark ?? colors.primary};}`;
+  };--color-primary-dark:${colors.dark ?? colors.primary};${themeCssVars(theme.tokens)};}`;
+  const themeScript = buildThemeScript(config.appearance?.default ?? "light");
 
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="en" data-theme={theme.name} suppressHydrationWarning>
       <head>
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>
-        <Navbar config={config} />
-        <NavTabs sections={sections} />
-        <div className="mx-auto flex max-w-7xl gap-8 pl-9 pr-6">
-          <Sidebar sections={sections} />
-          <main className="min-w-0 flex-1">{children}</main>
-        </div>
-        <Assistant />
-      </body>
+      <body>{children}</body>
     </html>
   );
 }

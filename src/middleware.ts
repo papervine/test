@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { getSessionCookie } from "better-auth/cookies";
 
 /**
  * Docs assets (images, fonts, video) are referenced by absolute path from the
@@ -17,6 +18,17 @@ export function middleware(req: NextRequest) {
     url.pathname = `/dbasset${pathname}`;
     return NextResponse.rewrite(url);
   }
+
+  // Control-plane gate: cheap edge cookie check (no DB) — the (app) layout does
+  // the authoritative session validation and the org/onboarding redirects.
+  if (pathname.startsWith("/dashboard")) {
+    if (!getSessionCookie(req)) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+  }
+
   return NextResponse.next();
 }
 
