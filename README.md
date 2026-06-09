@@ -25,6 +25,13 @@ npm run dev      # serves ./content at http://localhost:3000
 
 Other scripts: `npm run build`, `npm run start`, `npm run typecheck`.
 
+**Seed a dev account:** `npm run db:seed` (needs the docker Postgres up) creates a known
+login — `dev@docbot.local` / `dev-password-123` — with an org, a connected site
+(`papervine/starter`), an activity feed, and analytics data, so you can sign in at `/login`
+and see a populated dashboard without walking signup → onboarding → connect. Idempotent and
+**refuses any non-local `DATABASE_URL`** (a known password must never reach a real DB). Run
+dev on the port `BETTER_AUTH_URL` points at (`:3000`) so sign-in's origin check passes.
+
 **AI Assistant (M5):** set `ANTHROPIC_API_KEY` in `.env.local` to enable the "Ask
 Assistant" panel (Claude + agentic docs retrieval). Without it the panel still opens
 but the API returns a graceful 503. Optional: `DOCBOT_AI_MODEL` (default `claude-sonnet-4-6`).
