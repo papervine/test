@@ -25,6 +25,12 @@ body {
   @apply bg-white text-zinc-800 antialiased dark:bg-zinc-950 dark:text-zinc-200;
 }
 
+/* Papervine brand wordmark face (next/font → --font-brand). Falls back to the
+   sans stack until the web font loads. */
+.font-brand {
+  font-family: var(--font-brand), var(--db-font-sans);
+}
+
 /* --- Article prose (lightweight, no typography plugin) --- */
 .prose {
   @apply text-[0.95rem] leading-7 text-zinc-700 dark:text-zinc-300;

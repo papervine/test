@@ -1,7 +1,17 @@
 import type { Metadata } from "next";
+import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { loadConfig } from "@/lib/content";
 import { resolveTheme, themeCssVars } from "@/lib/theme";
+
+// Modern geometric display face for the Papervine wordmark (see <Wordmark>).
+// Exposed as the `--font-brand` CSS var, consumed by the `.font-brand` utility.
+const brandFont = Space_Grotesk({
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
+  variable: "--font-brand",
+  display: "swap",
+});
 
 export async function generateMetadata(): Promise<Metadata> {
   const config = await loadConfig();
@@ -33,7 +43,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body>{children}</body>
+      <body className={brandFont.variable}>{children}</body>
     </html>
   );
 }

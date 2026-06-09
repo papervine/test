@@ -11,6 +11,7 @@ import {
   MessagesSquare,
 } from "lucide-react";
 import { PlatformShell } from "@/components/platform/PlatformShell";
+import { Wordmark } from "@/components/Wordmark";
 
 // Marketing landing for the SaaS apex (SPEC §2). Reached via the middleware rewrite
 // of `/` when not in single-repo preview mode (no PAPERVINE_CONTENT).
@@ -71,14 +72,8 @@ export default function LandingPage() {
       {/* Header */}
       <header className="db-glass sticky top-0 z-30 border-b border-white/[0.06]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2 font-semibold tracking-tight"
-          >
-            <span className="grid h-6 w-6 place-items-center rounded-md bg-gradient-to-br from-[var(--blue)] to-[var(--violet)] text-[13px] font-bold text-white">
-              D
-            </span>
-            Papervine
+          <Link href="/" className="flex items-center">
+            <Wordmark className="text-lg" />
           </Link>
           <nav className="flex items-center gap-1 text-sm">
             <a
@@ -298,11 +293,9 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-white/[0.06]">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 text-sm text-[var(--muted)] sm:flex-row">
-          <span className="flex items-center gap-2">
-            <span className="grid h-5 w-5 place-items-center rounded bg-gradient-to-br from-[var(--blue)] to-[var(--violet)] text-[11px] font-bold text-white">
-              D
-            </span>
-            Papervine — open source
+          <span className="flex items-center gap-1.5">
+            <Wordmark className="text-sm" />
+            <span>— open source</span>
           </span>
           <div className="flex gap-5">
             <a
