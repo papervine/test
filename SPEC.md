@@ -662,6 +662,12 @@ Three layers; the test lives where the logic does:
   against representative docs repos; reports rendered / degraded / 500, non-zero exit on any 500.
 - **CI** (`.github/workflows/ci.yml`): `verify` job = typecheck + unit + build + smoke (no
   services); `e2e` job = Playwright against a Postgres service (skipping `@external`).
+- **Migrations are GitOps** (versioned, not `push`): schema changes are committed SQL
+  (`drizzle/`, via `npm run db:generate`), reviewed like code, and applied by
+  `drizzle-kit migrate` — locally (`db:migrate`), in CI's e2e (rebuilds `docbot_test` from
+  the same files), and in **prod on deploy** (`vercel.json` runs `migrate` before
+  `next build`; each preview migrates its own Neon branch). Pushing a migration *is*
+  shipping it; no manual prod step. See `AGENTS.md` → Database migrations.
 - **Compatibility findings** vs. representative docs repos are tracked in `GAP-REPORT.md`.
 
 ---

@@ -99,9 +99,31 @@ npm run typecheck           # tsc --noEmit
 npm test                    # smoke: renderer + control-plane gate (zero-dep, no DB)
 npm run test:unit           # vitest — pure-logic unit tests
 npm run test:e2e            # playwright — authed journeys (needs docker Postgres + MinIO)
+npm run db:generate         # generate a versioned SQL migration from schema changes
+npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
 node bin/docbot.mjs dev <dir>     # preview any docs repo (docs dev analogue)
 node tests/crawl.mjs <dir>        # crawl a real repo, report rendered/degraded/500
 ```
+
+## Database migrations (GitOps — schema changes ship as commits)
+
+The schema is **versioned**: every change is a committed SQL migration, never a live
+`push`. Flow:
+
+1. Edit the Drizzle schema (`src/lib/db/schema.ts` = Better Auth, regeneratable;
+   `src/lib/db/app-schema.ts` = our tables).
+2. `npm run db:generate` → writes `drizzle/NNNN_*.sql` (+ `meta/`). **Commit it** and
+   review the SQL like any code.
+3. `npm run db:migrate` applies it locally. CI's e2e rebuilds `docbot_test` from these
+   same files (`tests/e2e/global-setup.ts`), so a broken migration fails CI.
+4. **Prod applies on deploy**: `vercel.json`'s build command runs `drizzle-kit migrate`
+   before `next build`, so pushing the migration *is* shipping it (and each Vercel
+   preview migrates its own Neon branch). No manual prod steps, no `push --force`.
+
+drizzle's journal lives in a separate `drizzle` schema — a full reset is
+`DROP SCHEMA public CASCADE; DROP SCHEMA drizzle CASCADE; CREATE SCHEMA public;` then
+migrate. Destructive changes (drop/rename) need care: generate, **read the SQL**, and
+prefer expand-then-contract.
 
 ## Conventions
 
