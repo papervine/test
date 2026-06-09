@@ -64,6 +64,17 @@ An open-source, multi-tenant documentation platform — a faithful clone of [the
 
 They can be the same Next.js codebase (different route groups) or split later for scaling. **v1: single Next.js monorepo app, split when needed.**
 
+**Platform theme.** Every Control-Plane surface (landing, auth, dashboard) shares one
+dark, luminous design language — palette + Geist + atmosphere — codified in
+`src/styles/platform.css` (scoped under `.db`) and applied via
+`<PlatformShell variant="full" | "lite">` (`src/components/platform/`). `full` = glow +
+grid + grain (marketing/auth); `lite` = glow only (the data-dense app, so the grid/grain
+never sit behind tables). Brand accent is the blue→violet gradient; status colors
+(green = live/success, red = failed) stay semantic. Pages compose the shared `Button`
+and `Field` primitives — they don't redefine the look. This theme is deliberately
+**separate from the docs renderer**, which is light-first and themed per tenant from
+`docs.json` (`src/lib/theme.ts`, `globals.css`); the two must never leak into each other.
+
 ### Tenant resolution
 Next.js **middleware** inspects the `Host` header:
 - `*.docbot.app` subdomain → look up tenant by slug
@@ -349,10 +360,38 @@ and may contain mistakes." Themed via our CSS variables (matches the docs site).
   `list_pages` / `search_api` are exactly the tools a generated read-MCP would expose, so
   the in-docs assistant and the MCP server become one implementation, two transports.
 
-### 8.6 Analytics
+### 8.6 Control-plane page: Assistant settings
 
-Log queries, which tools/pages were retrieved, citations, and **unanswered questions**
-→ surface "content gaps" in the dashboard (the incumbent does this; high product value).
+The dashboard page where a docs owner manages the assistant (the incumbent: **Automate →
+Assistant**). Top of page shows three **overview cards** — *Total questions*, *Answered
+properly*, *Not answered* — each with a month-over-month delta, plus a "Get insights into
+your Assistant usage → View more" card linking to the **Analytics** page (§10.1).
+
+Settings, grouped as the incumbent groups them:
+
+- **Status & control** — an *Assistant Status* enable/disable toggle (Active/Inactive
+  badge). This is an **operational kill switch** (DB state, not `docs.json`) so it takes
+  effect instantly without a Git commit.
+- **Response handling — Deflection** — when the assistant can't answer, point the user at
+  a **support email** (input) and optionally render a **"Contact support" help button** in
+  the in-docs widget ("Show help button on AI chat"). Drives the §8.1 low-confidence
+  guardrail. *Save Changes* per group.
+- **Search domains** — enable + manage a list of **extra domains** to include as retrieval
+  context beyond the tenant's own docs (e.g. a marketing site). Add/remove with validation.
+- **Bot protection** — an **invisible CAPTCHA** (hCaptcha) toggle on the public
+  `/api/assistant` endpoint to limit automated abuse and runaway token cost.
+- **Starter questions** — up to **3** suggested questions shown in the in-docs chat empty
+  state (renders via AI Elements `Suggestions`, §8.2). Toggle + editable list ("0/3").
+- **Plan / credits** — trial banner (free-credit % remaining, expiry date, *Upgrade plan*);
+  per-tenant **credit metering + rate limits** (§8.1). Some controls are **plan-gated**
+  (the incumbent shows "available for enterprise plans / Contact Sales"); gating is config, not
+  hardcoded, so self-hosters get everything.
+
+**Where each setting lives.** Published-behavior config (starter questions, deflection
+email + help button, search domains) is **version-controlled in `docs.json`'s `assistant`
+block** — the dashboard edits it through the authoring layer (§9.2) so it stays in Git.
+Operational/metering state (enable toggle, CAPTCHA, credits, plan) lives in our **DB** for
+instant effect. Self-host reads it all from `docs.json` + env, no dashboard required.
 
 ---
 
@@ -406,11 +445,53 @@ layer. The **authoring MCP is still post-M5**: it follows the Git-sync (§3) + p
 
 Minimum to operate the SaaS:
 - **Auth:** org + user accounts via **Better Auth** (see §11). RBAC: owner/admin/editor/viewer.
+- **Workspace / site switcher:** an org may own several sites (§2), so the dashboard's
+  **top-left switcher** selects the **active site** that per-site pages (Analytics, Editor,
+  Settings) scope to — mirrors the incumbent's top-left switcher. Lists the sites the user can
+  access + a **New site** action. *(Status 2026-06-08: not built — the AppRail shows the org
+  name only, and per-site pages default to the org's first site. See §10.1.)*
 - **Projects:** connect Git repo, pick branch, manual sync, view sync logs/errors.
 - **Domains:** assign `*.docbot.app` subdomain; add custom domain (DNS verification + auto TLS via the host platform / `caddy` / ACME).
-- **Analytics:** page views, top pages, search terms with no results, AI unanswered questions. PostHog or a lightweight first-party events table.
+- **Assistant:** the AI assistant management page (enable/disable, deflection, search domains, bot protection, starter questions, credits) — specified in **§8.6**; its usage analytics live on the Analytics page (§10.1).
+- **MCP:** manage the per-docs read MCP and authoring MCP (enable, opt-in, tokens) — see **§9**.
+- **Analytics:** page views, top pages, search terms with no results, AI unanswered questions, plus the assistant deep-dive — expanded in **§10.1**. PostHog or a lightweight first-party events table.
 - **Billing (later):** Stripe; usage tiers (seats, AI tokens, page views).
 - **Web editor / live preview (later):** the incumbent has one; defer past v1.
+
+### 10.1 Analytics
+
+The control-plane **Analytics** page (the incumbent: *Analytics*) — scoped to the **active site**
+(the §10 switcher), with a **Humans vs Agents** toggle (human visitors vs agent/MCP traffic,
+§9.1) and a **date-range** picker. The Assistant page (§8.6) links here via its "Get insights
+→ View more" card.
+
+> **Status (2026-06-08):** built — first-party `analytics_event` table + instrumentation
+> (human page-view beacon, search + assistant logging; agent-source logging via MCP is
+> deferred until `/mcp` is tenant-routed), Humans/Agents toggle, date-range picker, metric
+> cards, visitors chart, top-pages + referrals. **Known gap:** with no site switcher yet, the
+> page defaults to the org's **first site**; multi-site orgs can't choose which. The assistant
+> deep-dive (usage chart, Claude-clustered categories + content-gap engine, chat history, CSV
+> export) is also not yet built.
+
+- **Metric cards** (each with a vs-previous delta): **Visitors**, **Views**, **Assistant**
+  (queries), **Searches**, **Feedback** (👍/👎).
+- **Assistant Usage chart** — daily **Answered vs Unanswered** over the period, with the
+  split (e.g. "Answered 5 (100%) · Unanswered 0 (0%)").
+- Two tabs over the assistant conversation log, each with **Export to CSV**:
+  - **Categories** — questions auto-clustered into labeled categories (e.g. "Understanding
+    roles", "File download timing") with an **Occurrence** count + **last-asked** date; rows
+    **expand** to the underlying questions. The **content-gap engine**: high-occurrence +
+    unanswered = the docs to write next. Clustering/labeling by Claude on a scheduled job.
+  - **Chat history** — every conversation as **Query** + timestamp + **Chat length** (turns);
+    a row **expands** to the full transcript (question, answer, citations, feedback).
+    Browsable and searchable.
+- Plus the standard docs analytics: page views, top pages, and search terms with no results.
+
+**Data model.** Every assistant turn logs `{ tenant, ts, question, toolsUsed, retrievedPages,
+answer, status: answered | deflected | unanswered, feedback, source: human | agent, sessionId }`.
+The Assistant page's overview cards (§8.6), the usage chart, the categories, and "content
+gaps" all derive from this. Backed by PostHog or a first-party events table; respect
+`noindex`/privacy and per-tenant retention.
 
 ---
 
@@ -560,15 +641,27 @@ docbot/
 ## 14. Quality & Testing
 
 Regression protection is a hard requirement (enforced — see `AGENTS.md` → Definition of Done).
+Three layers; the test lives where the logic does:
 
+- **Unit** (`tests/unit/`, `npm run test:unit`, Vitest): pure logic, no infra —
+  `resolveTenantSlug`, `parseRepoInput`, `slugify`, lenient config parsing. Helpers are
+  kept pure (extracted out of `"use server"` files) so they're directly testable.
 - **Fixtures smoke test** (`tests/smoke.mjs`, `npm test`): boots the real renderer against
   `tests/fixtures/` — a docs repo reproducing every fixed bug (object favicon, `languages`
   nav, `.md`, unknown/member-expression components, malformed frontmatter, snippet imports,
   hidden pages, standalone cards, OpenAPI endpoints, search, assistant route) — and asserts
-  each page returns 200 (never 500) with the expected content.
+  each page returns 200 (never 500) with the expected content. **Zero-dep, no Postgres**, so
+  it runs in CI everywhere; DB-free control-plane checks (gate redirects, auth pages render
+  in the platform theme) live in `CONTROL_PLANE_CHECKS`.
+- **E2E** (`tests/e2e/`, `npm run test:e2e`, Playwright): authed control-plane journeys
+  against a dedicated `docbot_test` Postgres + MinIO — signup → onboarding → connect repo →
+  dashboard, plus the logged-out gate. `globalSetup` creates/migrates/truncates the test DB;
+  `auth.setup.ts` logs in once and reuses the session (storageState). Network-dependent specs
+  (the GitHub connect flow) are tagged `@external` so CI skips them for determinism.
 - **Real-repo crawl** (`tests/crawl.mjs <dir>`): the `docbot dev` analogue used to validate
   against representative docs repos; reports rendered / degraded / 500, non-zero exit on any 500.
-- **CI** (`.github/workflows/ci.yml`): typecheck + build + smoke test on every push / PR.
+- **CI** (`.github/workflows/ci.yml`): `verify` job = typecheck + unit + build + smoke (no
+  services); `e2e` job = Playwright against a Postgres service (skipping `@external`).
 - **Compatibility findings** vs. representative docs repos are tracked in `GAP-REPORT.md`.
 
 ---

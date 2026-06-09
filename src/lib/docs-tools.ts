@@ -1,0 +1,66 @@
+import "server-only";
+import { runSearch } from "./search";
+import { loadPage, loadConfig } from "./content";
+import { buildNav, type NavLeaf, type NavNode } from "./nav";
+import { loadApiCatalog } from "./openapi";
+import type { DocsConfig } from "./config";
+
+/**
+ * Docs retrieval capabilities — the single implementation behind two transports
+ * (SPEC §8.5): the in-app AI assistant wraps these as Vercel AI SDK tools
+ * (`assistant-tools.ts`), and the generated MCP server exposes them to external
+ * clients (`src/app/api/[transport]/route.ts`). Keep the behavior here so both
+ * stay in lockstep.
+ */
+
+export async function searchDocs(query: string) {
+  const hits = await runSearch(query);
+  return hits.slice(0, 8).map((h) => ({
+    title: h.title,
+    heading: h.heading,
+    href: h.href,
+    snippet: h.snippet,
+  }));
+}
+
+export async function readPage(slug: string) {
+  const clean = slug.replace(/^\//, "");
+  const page = await loadPage(clean);
+  if (!page) return { error: `No page found for slug "${slug}".` };
+  return {
+    title: page.frontmatter.title,
+    description: page.frontmatter.description,
+    href: "/" + clean,
+    body: page.body.slice(0, 8000),
+  };
+}
+
+export async function listPages() {
+  const sections = await buildNav(await loadConfig());
+  const out: { title: string; href: string }[] = [];
+  const walk = (nodes: (NavLeaf | NavNode)[]) => {
+    for (const n of nodes) {
+      if ("href" in n) out.push({ title: n.title, href: n.href });
+      else walk(n.items);
+    }
+  };
+  for (const s of sections) walk(s.nodes);
+  return out;
+}
+
+export async function searchApi(query: string) {
+  const catalog = await loadApiCatalog(await loadConfig());
+  const q = query.toLowerCase();
+  return [...catalog.values()]
+    .filter((op) =>
+      `${op.method} ${op.path} ${op.summary ?? ""} ${op.description ?? ""}`.toLowerCase().includes(q),
+    )
+    .slice(0, 10)
+    .map((op) => ({ method: op.method, path: op.path, summary: op.summary, href: "/" + op.slug }));
+}
+
+/** Whether this docs site has any OpenAPI-backed API reference (gates the API tools). */
+export async function apiEnabled(config?: DocsConfig): Promise<boolean> {
+  const catalog = await loadApiCatalog(config ?? (await loadConfig()));
+  return catalog.size > 0;
+}

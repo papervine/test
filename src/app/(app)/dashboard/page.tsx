@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
 import { site, deployment } from "@/lib/db/app-schema";
 import { ResyncButton } from "@/components/app/ResyncButton";
+import { ButtonLink } from "@/components/platform/Button";
 
 function timeAgo(date: Date): string {
   const secs = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -25,16 +26,22 @@ export default async function DashboardHome() {
   // concurrently with the layout in the RSC tree — guard so it never throws first.
   if (!session || !activeOrg) return null;
 
-  const sites = await db.select().from(site).where(eq(site.organizationId, activeOrg.id));
+  const sites = await db
+    .select()
+    .from(site)
+    .where(eq(site.organizationId, activeOrg.id));
 
   // Build each site's live docs URL from the current host so it's right in dev
   // ({slug}.localhost:3100) and prod ({slug}.docbot.app), or its custom domain.
   const host = (await headers()).get("host") ?? "";
   const proto = host.includes("localhost") ? "http" : "https";
   const apexBase = host.replace(/^(app|www)\./, "");
-  const siteHost = (s: (typeof sites)[number]) => s.customDomain ?? `${s.slug}.${apexBase}`;
+  const siteHost = (s: (typeof sites)[number]) =>
+    s.customDomain ?? `${s.slug}.${apexBase}`;
   const siteUrl = (s: (typeof sites)[number]) =>
-    s.customDomain ? `https://${s.customDomain}` : `${proto}://${s.slug}.${apexBase}`;
+    s.customDomain
+      ? `https://${s.customDomain}`
+      : `${proto}://${s.slug}.${apexBase}`;
 
   const feed = await db
     .select({
@@ -66,32 +73,28 @@ export default async function DashboardHome() {
 
       <section className="mt-8">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-medium text-neutral-400">Your sites</h2>
+          <h2 className="text-sm font-medium text-[var(--muted)]">
+            Your sites
+          </h2>
           {sites.length > 0 && (
-            <Link
-              href="/dashboard/connect"
-              className="rounded-md bg-emerald-500 px-3 py-1.5 text-xs font-medium text-neutral-950 hover:bg-emerald-400"
-            >
+            <ButtonLink href="/dashboard/connect" size="sm">
               Connect repo
-            </Link>
+            </ButtonLink>
           )}
         </div>
         {sites.length === 0 ? (
-          <div className="mt-3 rounded-lg border border-dashed border-neutral-800 px-6 py-10 text-center">
-            <p className="text-sm text-neutral-300">No docs sites yet.</p>
-            <Link
-              href="/dashboard/connect"
-              className="mt-4 inline-block rounded-md bg-emerald-500 px-4 py-2 text-sm font-medium text-neutral-950 hover:bg-emerald-400"
-            >
+          <div className="mt-3 rounded-xl border border-dashed border-white/[0.1] px-6 py-10 text-center">
+            <p className="text-sm text-[var(--muted)]">No docs sites yet.</p>
+            <ButtonLink href="/dashboard/connect" className="mt-4">
               Connect a repository
-            </Link>
+            </ButtonLink>
           </div>
         ) : (
           <ul className="mt-3 grid gap-3">
             {sites.map((s) => (
               <li
                 key={s.id}
-                className="flex items-center gap-3 rounded-lg border border-neutral-800 px-4 py-3"
+                className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3"
               >
                 <a
                   href={siteUrl(s)}
@@ -100,9 +103,9 @@ export default async function DashboardHome() {
                   className="min-w-0 flex-1 hover:opacity-80"
                 >
                   <p className="text-sm font-medium">{s.name}</p>
-                  <p className="truncate text-xs text-neutral-500">
+                  <p className="truncate text-xs text-[var(--muted)]">
                     {s.repoOwner}/{s.repoName} ·{" "}
-                    <span className="text-neutral-400">{siteHost(s)} ↗</span>
+                    <span className="text-[var(--fg)]/70">{siteHost(s)} ↗</span>
                   </p>
                 </a>
                 <ResyncButton siteId={s.id} />
@@ -110,7 +113,7 @@ export default async function DashboardHome() {
                   className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
                     s.status === "live"
                       ? "bg-emerald-500/15 text-emerald-400"
-                      : "bg-neutral-800 text-neutral-400"
+                      : "bg-white/[0.06] text-[var(--muted)]"
                   }`}
                 >
                   {s.status === "live" ? "Live" : "Draft"}
@@ -122,21 +125,25 @@ export default async function DashboardHome() {
       </section>
 
       <section className="mt-10">
-        <h2 className="text-sm font-medium text-neutral-400">Activity</h2>
+        <h2 className="text-sm font-medium text-[var(--muted)]">Activity</h2>
         {feed.length === 0 ? (
-          <div className="mt-3 rounded-lg border border-neutral-800 px-6 py-8 text-center text-sm text-neutral-500">
+          <div className="mt-3 rounded-xl border border-white/[0.06] px-6 py-8 text-center text-sm text-[var(--muted)]">
             No activity yet — syncs will appear here once a repo is connected.
           </div>
         ) : (
-          <ul className="mt-3 divide-y divide-neutral-800 rounded-lg border border-neutral-800">
+          <ul className="mt-3 divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-white/[0.02]">
             {feed.map((d) => (
-              <li key={d.id} className="flex items-start justify-between gap-4 px-4 py-3">
+              <li
+                key={d.id}
+                className="flex items-start justify-between gap-4 px-4 py-3"
+              >
                 <div className="min-w-0">
-                  <p className="truncate text-sm text-neutral-200">
+                  <p className="truncate text-sm text-[var(--fg)]">
                     {(d.commitMessage || "Sync").split("\n")[0]}
                   </p>
-                  <p className="mt-0.5 text-xs text-neutral-500">
-                    {d.actorName ?? "Unknown"} · {d.siteName} · {timeAgo(d.createdAt)}
+                  <p className="mt-0.5 text-xs text-[var(--muted)]">
+                    {d.actorName ?? "Unknown"} · {d.siteName} ·{" "}
+                    {timeAgo(d.createdAt)}
                     {(d.filesAdded > 0 || d.filesEdited > 0) &&
                       ` · ${d.filesAdded} added, ${d.filesEdited} edited`}
                   </p>
@@ -147,7 +154,7 @@ export default async function DashboardHome() {
                       ? "bg-emerald-500/15 text-emerald-400"
                       : d.status === "failed"
                         ? "bg-red-500/15 text-red-400"
-                        : "bg-neutral-800 text-neutral-400"
+                        : "bg-white/[0.06] text-[var(--muted)]"
                   }`}
                 >
                   {d.status === "successful"

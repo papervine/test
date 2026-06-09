@@ -11,7 +11,7 @@ export function ResyncButton({ siteId }: { siteId: string }) {
     <button
       onClick={() => start(() => resyncSite(siteId))}
       disabled={pending}
-      className="shrink-0 rounded-md border border-neutral-700 px-2.5 py-1 text-xs text-neutral-300 hover:bg-neutral-800 disabled:opacity-50"
+      className="db-ring shrink-0 rounded-md px-2.5 py-1 text-xs text-[var(--muted)] hover:text-[var(--fg)] disabled:opacity-50"
     >
       {pending ? "Syncing…" : "Re-sync"}
     </button>

@@ -7,8 +7,8 @@ test("dashboard greets the user and shows the org", async ({ page }) => {
   await expect(
     page.getByRole("heading", { name: new RegExp(`Good (morning|afternoon|evening), ${TEST_USER.name.split(" ")[0]}`) }),
   ).toBeVisible();
-  // The org rail.
+  // The org rail. (No site-count assertion — the suite shares one DB and the
+  // connect spec may have added a site; keep this spec order-independent.)
   await expect(page.getByText(TEST_USER.org)).toBeVisible();
-  // Empty state until a repo is connected.
-  await expect(page.getByText("No docs sites yet.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your sites" })).toBeVisible();
 });

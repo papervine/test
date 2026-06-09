@@ -93,8 +93,23 @@ const CONTROL_PLANE_CHECKS = [
     desc: "unauthenticated /dashboard/connect redirects to /login",
     redirectTo: "/login",
   },
-  { path: "/login", desc: "login page renders", include: ["Sign in to Docbot"] },
-  { path: "/signup", desc: "signup page renders", include: ["Create your Docbot account"] },
+  {
+    path: "/dashboard/analytics",
+    desc: "unauthenticated /dashboard/analytics redirects to /login",
+    redirectTo: "/login",
+  },
+  {
+    path: "/login",
+    desc: "login page renders in the platform theme (shell + gradient CTA)",
+    // `db-glow` proves PlatformShell wraps it; `db-cta` proves the shared Button is used.
+    // Guards the platform theme from regressing back to the old emerald/system look.
+    include: ["Sign in to Docbot", "db-glow", "db-cta"],
+  },
+  {
+    path: "/signup",
+    desc: "signup page renders in the platform theme (shell + gradient CTA)",
+    include: ["Create your Docbot account", "db-glow", "db-cta"],
+  },
 ];
 
 function log(msg) {
@@ -195,6 +210,42 @@ async function run() {
         failures.push(`[assistant] request failed: ${e.message}`);
       }
       log(`  ${failures.length === before ? "✓" : "✗"} assistant route (200 w/ key, 503 without)`);
+    }
+
+    // Generated MCP server (SPEC §8.5). Streamable HTTP at /mcp. We assert the
+    // tools are listed and a tools/call returns real docs — body substrings only,
+    // so SSE-vs-JSON framing and tool ordering don't make this brittle. Fixtures
+    // include an OpenAPI spec, so search_api must also be present.
+    const mcpPost = (body) =>
+      fetch(`${BASE}/mcp`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000),
+      });
+    {
+      const before = failures.length;
+      try {
+        const listRes = await mcpPost({ jsonrpc: "2.0", id: 1, method: "tools/list", params: {} });
+        const listBody = await listRes.text();
+        if (listRes.status !== 200) failures.push(`[mcp] tools/list expected 200, got ${listRes.status}`);
+        for (const tool of ["search_docs", "read_page", "list_pages", "search_api"]) {
+          if (!listBody.includes(`"${tool}"`)) failures.push(`[mcp] tools/list missing tool "${tool}"`);
+        }
+        const callRes = await mcpPost({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "tools/call",
+          params: { name: "search_docs", arguments: { query: "zebra" } },
+        });
+        const callBody = await callRes.text();
+        if (!callBody.includes("/search-fixture")) {
+          failures.push(`[mcp] search_docs("zebra") should return /search-fixture`);
+        }
+      } catch (e) {
+        failures.push(`[mcp] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} mcp server (/mcp tools/list + tools/call)`);
     }
 
     for (const check of CONTROL_PLANE_CHECKS) {

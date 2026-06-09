@@ -2,6 +2,18 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
 import { assistantTools } from "@/lib/assistant-tools";
 import { loadConfig, loadPage } from "@/lib/content";
+import { getSiteByHost } from "@/lib/tenant";
+import { logEvent } from "@/lib/track";
+
+/** Pull the user's question text out of a UIMessage (its text parts). */
+function questionText(m: UIMessage | undefined): string {
+  if (!m) return "";
+  return (m.parts ?? [])
+    .filter((p): p is { type: "text"; text: string } => p.type === "text")
+    .map((p) => p.text)
+    .join(" ")
+    .trim();
+}
 
 /**
  * AI Assistant endpoint (SPEC §8). Agentic retrieval: Claude calls the docs tools
@@ -21,6 +33,15 @@ export async function POST(req: Request) {
   };
 
   const config = await loadConfig();
+
+  // Log the assistant query for analytics (SPEC §10.1). Status (answered/unanswered)
+  // is a follow-up once the stream resolves; the foundation just counts queries.
+  const site = await getSiteByHost(req.headers.get("host"));
+  if (site) {
+    const q = questionText(messages[messages.length - 1]);
+    if (q)
+      await logEvent({ siteId: site.id, type: "assistant", source: "human", query: q });
+  }
 
   // Current-page context: ground answers in what the reader is looking at (SPEC §8.1).
   let pageContext = "";

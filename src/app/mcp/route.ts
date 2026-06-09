@@ -1,0 +1,54 @@
+import { createMcpHandler } from "mcp-handler";
+import { z } from "zod";
+import { searchDocs, readPage, listPages, searchApi, apiEnabled } from "@/lib/docs-tools";
+
+/**
+ * Generated MCP server for this docs site (SPEC §8.5) — the incumbent "MCP for your
+ * docs" feature. Exposes the docs as Model Context Protocol tools so external AI
+ * clients (Claude, Cursor, …) can search and read the docs live. Same capabilities
+ * as the in-app assistant (`docs-tools.ts`), a second transport.
+ *
+ * Streamable HTTP, stateless (no Redis). Connect a client to `https://<docs-host>/mcp`.
+ */
+const json = (data: unknown) => ({
+  content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+});
+
+const handler = createMcpHandler(
+  async (server) => {
+    server.tool(
+      "search_docs",
+      "Full-text search this documentation. Returns the most relevant page sections with titles, hrefs (with #anchors), and snippets. Call this first for most questions.",
+      { query: z.string().describe("Keywords to search for in the docs.") },
+      async ({ query }) => json(await searchDocs(query)),
+    );
+
+    server.tool(
+      "read_page",
+      "Read the full Markdown content of a documentation page by slug (e.g. 'guides/intro'). Use after search_docs when a snippet isn't enough.",
+      { slug: z.string().describe("Page slug, with or without leading slash.") },
+      async ({ slug }) => json(await readPage(slug)),
+    );
+
+    server.tool(
+      "list_pages",
+      "List every documentation page (title + href) to understand what topics exist.",
+      {},
+      async () => json(await listPages()),
+    );
+
+    // Only expose the API tool when the site has an OpenAPI-backed reference.
+    if (await apiEnabled()) {
+      server.tool(
+        "search_api",
+        "Search the API reference (OpenAPI operations) by keyword. Returns method, path, summary, and the endpoint page href.",
+        { query: z.string().describe("Keywords, e.g. 'create user' or 'auth'.") },
+        async ({ query }) => json(await searchApi(query)),
+      );
+    }
+  },
+  { serverInfo: { name: "Docbot Docs", version: "0.1.0" } },
+  { basePath: "" },
+);
+
+export { handler as GET, handler as POST, handler as DELETE };

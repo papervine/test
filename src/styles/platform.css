@@ -1,0 +1,184 @@
+/*
+ * Platform theme — the dark, luminous design language of the SaaS shell
+ * (landing, auth, dashboard). SPEC §2. Everything is scoped under `.db`, applied
+ * by PlatformShell, so NONE of it leaks into the docs renderer (globals.css), which
+ * is light-first and themed per tenant. Keep this the single source of truth for the
+ * platform palette + atmosphere — pages compose these classes, they don't redefine them.
+ */
+.db {
+  --bg: #060609;
+  --fg: #ececf1;
+  --muted: #8a8a99;
+  --blue: #5b8cff;
+  --violet: #a974ff;
+  --line: rgba(255, 255, 255, 0.07);
+  --card: rgba(255, 255, 255, 0.025);
+  font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  position: relative;
+  min-height: 100vh;
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+}
+.db code,
+.db .mono {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* Atmosphere — glow always; grid + grain only on the "full" variant (marketing/auth).
+   The data-dense app uses the glow alone so the grid/grain never sit behind tables. */
+.db-glow {
+  position: absolute;
+  inset: -20% -10% auto -10%;
+  height: 720px;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(
+      46% 60% at 32% 0%,
+      rgba(91, 140, 255, 0.3),
+      transparent 70%
+    ),
+    radial-gradient(
+      40% 56% at 70% 8%,
+      rgba(169, 116, 255, 0.26),
+      transparent 72%
+    );
+  filter: blur(8px);
+}
+.db-grid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, var(--line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--line) 1px, transparent 1px);
+  background-size: 56px 56px;
+  -webkit-mask-image: radial-gradient(
+    120% 70% at 50% 0%,
+    #000 35%,
+    transparent 75%
+  );
+  mask-image: radial-gradient(120% 70% at 50% 0%, #000 35%, transparent 75%);
+}
+.db-grain {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+}
+.db-content {
+  position: relative;
+  z-index: 2;
+}
+
+/* Orchestrated staggered entrance (callers set `animation-delay` inline). */
+.db-rise {
+  opacity: 0;
+  transform: translateY(18px);
+  animation: db-rise 0.85s cubic-bezier(0.22, 0.68, 0.2, 1) forwards;
+}
+@keyframes db-rise {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Brand gradient as text fill. */
+.db-grad {
+  background: linear-gradient(110deg, var(--blue), var(--violet) 70%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Primary action — the blue→violet gradient with an inset hairline + lift on hover. */
+.db-cta {
+  background: linear-gradient(110deg, var(--blue), var(--violet));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+    0 10px 30px -8px rgba(120, 120, 255, 0.55);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.db-cta:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.16) inset,
+    0 14px 40px -8px rgba(120, 120, 255, 0.7);
+}
+.db-cta:disabled {
+  transform: none;
+  opacity: 0.5;
+}
+
+/* Secondary action / quiet outline. */
+.db-ring {
+  box-shadow: 0 0 0 1px var(--line);
+  transition:
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+.db-ring:hover {
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+/* Feature / content card with a violet halo on hover. */
+.db-feature {
+  background: var(--card);
+  box-shadow: 0 0 0 1px var(--line);
+  transition:
+    box-shadow 0.25s ease,
+    transform 0.25s ease,
+    background 0.25s ease;
+}
+.db-feature:hover {
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow:
+    0 0 0 1px rgba(140, 140, 255, 0.3),
+    0 20px 50px -24px rgba(120, 120, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+/* Glass surface for sticky chrome (header, app rail). */
+.db-glass {
+  background: rgba(10, 10, 16, 0.6);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Form input — quiet fill that lights up violet on focus. */
+.db-input {
+  background: rgba(255, 255, 255, 0.03);
+  box-shadow: 0 0 0 1px var(--line);
+  color: var(--fg);
+  transition:
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+.db-input::placeholder {
+  color: var(--muted);
+}
+.db-input:focus {
+  outline: none;
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow:
+    0 0 0 1px var(--blue),
+    0 0 0 4px rgba(91, 140, 255, 0.18);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .db-rise {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

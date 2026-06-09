@@ -21,6 +21,10 @@ export function middleware(req: NextRequest) {
   // (Per-tenant asset/dashboard handling is apex-only for now.)
   const tenant = resolveTenantSlug(req.headers.get("host"));
   if (tenant) {
+    // API routes (search, assistant, events beacon) serve directly on the tenant
+    // host — they resolve the site from the Host header. Rewriting them under
+    // /sites/{slug} would 404. Everything else is docs.
+    if (pathname.startsWith("/api/")) return NextResponse.next();
     const url = req.nextUrl.clone();
     // Assets (images/fonts/…) stream from the tenant's synced bucket; everything
     // else is a docs page.

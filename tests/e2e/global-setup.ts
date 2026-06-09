@@ -20,6 +20,7 @@ const TABLES = [
   "invitation",
   "site",
   "deployment",
+  "analytics_event",
 ];
 
 export default async function globalSetup() {

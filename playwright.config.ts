@@ -9,6 +9,10 @@ export default defineConfig({
   testDir: "tests/e2e",
   globalSetup: "./tests/e2e/global-setup.ts",
   fullyParallel: false,
+  // Serialize: every spec shares one Postgres + one seeded org/user, so parallel
+  // workers race on that state (a spec that adds a site would break another's
+  // "no sites" assertion). One worker keeps DB state deterministic.
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "list" : "line",

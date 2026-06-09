@@ -51,12 +51,56 @@ export const deployment = pgTable(
   (table) => [index("deployment_siteId_idx").on(table.siteId)],
 );
 
+// One row per tracked interaction — the first-party events table backing the
+// Analytics page (SPEC §10.1). Deliberately denormalized/append-only: every source
+// (page views, search, assistant) writes the same shape, aggregation reads it.
+// `source` splits the Humans vs Agents toggle (browser beacon = human; MCP/raw
+// markdown = agent, §9.1). Nullable columns are per-`type`: page_view fills
+// path+referrer+sessionId; search/assistant fill query; feedback fills status.
+export const analyticsEvent = pgTable(
+  "analytics_event",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    // 'page_view' | 'search' | 'assistant' | 'feedback'
+    type: text("type").notNull(),
+    // 'human' | 'agent'
+    source: text("source").default("human").notNull(),
+    // page_view: the docs path ('/guides/intro'). null for other types.
+    path: text("path"),
+    // page_view: referring host, or '$direct'. null for other types.
+    referrer: text("referrer"),
+    // search: the query; assistant: the question. null for page_view/feedback.
+    query: text("query"),
+    // assistant: 'answered' | 'deflected' | 'unanswered'; feedback: 'up' | 'down'.
+    status: text("status"),
+    // Coarse visitor identity for distinct-visitor counts (a per-browser id, not a
+    // login). Same id across a session's page views; null for server-only events.
+    sessionId: text("session_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("analyticsEvent_site_createdAt_idx").on(
+      table.siteId,
+      table.createdAt,
+    ),
+    index("analyticsEvent_site_type_idx").on(table.siteId, table.type),
+  ],
+);
+
 export const siteRelations = relations(site, ({ one, many }) => ({
   organization: one(organization, {
     fields: [site.organizationId],
     references: [organization.id],
   }),
   deployments: many(deployment),
+  events: many(analyticsEvent),
+}));
+
+export const analyticsEventRelations = relations(analyticsEvent, ({ one }) => ({
+  site: one(site, { fields: [analyticsEvent.siteId], references: [site.id] }),
 }));
 
 export const deploymentRelations = relations(deployment, ({ one }) => ({

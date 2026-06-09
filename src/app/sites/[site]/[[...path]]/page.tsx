@@ -12,6 +12,7 @@ import { Navbar } from "@/components/Navbar";
 import { NavTabs } from "@/components/NavTabs";
 import { Sidebar } from "@/components/Sidebar";
 import { TableOfContents } from "@/components/TableOfContents";
+import { PageViewBeacon } from "@/components/analytics/PageViewBeacon";
 
 // Tenant docs render dynamically — content lives in the tenant's repo, fetched per
 // request (cached briefly). Reached via the middleware host rewrite to /sites/{slug}.
@@ -65,6 +66,7 @@ export default async function TenantDocsPage({ params }: { params: Promise<Param
     return (
       <>
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
+        <PageViewBeacon />
         <Navbar config={config} />
         <NavTabs sections={sections} />
         <div className="mx-auto flex max-w-7xl gap-8 pl-9 pr-6">
