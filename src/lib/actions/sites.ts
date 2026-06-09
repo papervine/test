@@ -10,6 +10,7 @@ import { getSession, listOrganizations } from "@/lib/session";
 import { fetchRepo, hasDocsConfig, fetchLatestCommit, parseRepoInput } from "@/lib/github";
 import { syncSite, type SyncResult } from "@/lib/sync";
 import { slugify } from "@/lib/slug";
+import { syncErrorDetail } from "@/lib/sync-error";
 
 export type ConnectState = { error?: string };
 
@@ -68,10 +69,12 @@ export async function connectRepo(
   // not GitHub (SPEC §3.1 model C). A failed sync shouldn't lose the connection —
   // record it as failed and let the user re-sync.
   let result: SyncResult | null = null;
+  let error: string | null = null;
   try {
     result = await syncSite({ id: siteId, repoOwner: parsed.owner, repoName: parsed.name, branch });
   } catch (e) {
     console.error("initial sync failed", e);
+    error = syncErrorDetail(e);
   }
 
   await db.insert(deployment).values({
@@ -81,6 +84,7 @@ export async function connectRepo(
     target: "live",
     commitSha: commit?.sha ?? null,
     commitMessage: commit?.message ?? "Connected repository",
+    error,
     filesAdded: result?.files ?? 0,
     actorUserId: session.user.id,
   });
@@ -100,10 +104,12 @@ export async function resyncSite(siteId: string): Promise<void> {
   if (!s || s.organizationId !== org.id || !s.repoOwner || !s.repoName) return;
 
   let result: SyncResult | null = null;
+  let error: string | null = null;
   try {
     result = await syncSite({ id: s.id, repoOwner: s.repoOwner, repoName: s.repoName, branch: s.branch });
   } catch (e) {
     console.error("resync failed", e);
+    error = syncErrorDetail(e);
   }
 
   await db.insert(deployment).values({
@@ -112,6 +118,7 @@ export async function resyncSite(siteId: string): Promise<void> {
     status: result ? "successful" : "failed",
     target: "live",
     commitMessage: result ? `Re-synced ${result.files} files` : "Re-sync failed",
+    error,
     filesEdited: result?.files ?? 0,
     actorUserId: session.user.id,
   });

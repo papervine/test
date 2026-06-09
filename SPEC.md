@@ -451,6 +451,11 @@ Minimum to operate the SaaS:
   access + a **New site** action. *(Status 2026-06-08: not built — the AppRail shows the org
   name only, and per-site pages default to the org's first site. See §10.1.)*
 - **Projects:** connect Git repo, pick branch, manual sync, view sync logs/errors.
+  *(Status 2026-06-08: failed syncs now persist their error+stack on the `deployment`
+  row and the dashboard Activity feed surfaces it under a "Why it failed" disclosure —
+  previously the reason was `console.error`'d only, lost to serverless logs the tenant
+  can't reach. Operator-facing error tracking (Sentry) is a fast-follow: it complements,
+  not replaces, the persisted per-deployment error, which is what the tenant sees.)*
 - **Domains:** assign `*.docbot.app` subdomain; add custom domain (DNS verification + auto TLS via the host platform / `caddy` / ACME).
 - **Assistant:** the AI assistant management page (enable/disable, deflection, search domains, bot protection, starter questions, credits) — specified in **§8.6**; its usage analytics live on the Analytics page (§10.1).
 - **MCP:** manage the per-docs read MCP and authoring MCP (enable, opt-in, tokens) — see **§9**.

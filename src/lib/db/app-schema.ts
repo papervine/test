@@ -41,6 +41,10 @@ export const deployment = pgTable(
     target: text("target").default("live").notNull(),
     commitSha: text("commit_sha"),
     commitMessage: text("commit_message"),
+    // On a failed sync, the captured failure (message + trimmed stack). Without
+    // it the *why* is lost to serverless logs the user can't reach — see the
+    // dashboard Activity feed, which surfaces this on failed rows.
+    error: text("error"),
     filesAdded: integer("files_added").default(0).notNull(),
     filesEdited: integer("files_edited").default(0).notNull(),
     actorUserId: text("actor_user_id").references(() => user.id, {

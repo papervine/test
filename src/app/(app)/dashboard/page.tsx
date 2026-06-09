@@ -48,6 +48,7 @@ export default async function DashboardHome() {
       id: deployment.id,
       status: deployment.status,
       commitMessage: deployment.commitMessage,
+      error: deployment.error,
       filesAdded: deployment.filesAdded,
       filesEdited: deployment.filesEdited,
       createdAt: deployment.createdAt,
@@ -147,6 +148,16 @@ export default async function DashboardHome() {
                     {(d.filesAdded > 0 || d.filesEdited > 0) &&
                       ` · ${d.filesAdded} added, ${d.filesEdited} edited`}
                   </p>
+                  {d.status === "failed" && d.error && (
+                    <details className="mt-1.5 max-w-full">
+                      <summary className="cursor-pointer select-none text-xs text-red-400/80 hover:text-red-400">
+                        Why it failed
+                      </summary>
+                      <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-[var(--muted)]">
+                        {d.error}
+                      </pre>
+                    </details>
+                  )}
                 </div>
                 <span
                   className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
