@@ -2,7 +2,7 @@
 // without Playwright's "test file should not import test file" guard.
 export const TEST_USER = {
   name: "Test User",
-  email: "test@docbot.test",
+  email: "test@papervine.test",
   password: "e2e-password-123",
   org: "Test Org",
 };

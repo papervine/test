@@ -8,7 +8,7 @@ const ASSET_EXT = /\.(png|jpe?g|gif|svg|webp|avif|ico|bmp|mp4|webm|pdf|woff2?)$/
 export type SyncResult = { files: number };
 
 function ghHeaders(): HeadersInit {
-  const h: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "docbot" };
+  const h: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "papervine" };
   if (process.env.GITHUB_TOKEN) h.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   return h;
 }

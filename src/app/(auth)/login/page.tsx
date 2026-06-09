@@ -29,7 +29,7 @@ export default function LoginPage() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <h1 className="text-xl font-semibold">Sign in to Docbot</h1>
+      <h1 className="text-xl font-semibold">Sign in to Papervine</h1>
       <Field
         label="Email"
         type="email"

@@ -1,7 +1,7 @@
 /**
  * Tenant URL base-prefixing — the one rule that makes path-based tenant serving work.
  *
- * Docs normally render at the tenant's own host (`acme.docbot.app/foo`), where every
+ * Docs normally render at the tenant's own host (`acme.papervine.io/foo`), where every
  * internal link and asset is root-absolute (`/foo`, `/img/x.png`) and Just Works.
  * When there's no custom/subdomain available (e.g. a bare Vercel `*.vercel.app`
  * deploy, where nested-subdomain TLS isn't issued), we instead serve the same docs

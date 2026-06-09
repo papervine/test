@@ -64,7 +64,7 @@ export async function POST(req: Request) {
     pageContext;
 
   const result = streamText({
-    model: anthropic(process.env.DOCBOT_AI_MODEL ?? "claude-sonnet-4-6"),
+    model: anthropic(process.env.PAPERVINE_AI_MODEL ?? "claude-sonnet-4-6"),
     system,
     messages: await convertToModelMessages(messages),
     tools: assistantTools,

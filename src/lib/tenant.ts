@@ -13,8 +13,8 @@ export const getSiteBySlug = cache(async (slug: string) => {
 
 /**
  * Resolve the site a request is for from its Host header — the tenant subdomain
- * ({slug}.docbot.app / {slug}.localhost). Returns null on the apex/preview host
- * (DOCBOT_CONTENT single-repo mode), so callers (analytics instrumentation) can
+ * ({slug}.papervine.io / {slug}.localhost). Returns null on the apex/preview host
+ * (PAPERVINE_CONTENT single-repo mode), so callers (analytics instrumentation) can
  * safely no-op when there's no tenant.
  */
 export async function getSiteByHost(host: string | null) {

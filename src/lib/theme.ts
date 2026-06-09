@@ -40,7 +40,7 @@ const MONO =
 export const DEFAULT_THEME: ThemeName = "mint";
 
 export const themes: Record<ThemeName, ThemeTokens> = {
-  // Classic, time-tested layout — Docbot's baseline look.
+  // Classic, time-tested layout — Papervine's baseline look.
   mint: { fontSans: SANS, fontMono: MONO, radius: "0.5rem", radiusLg: "0.75rem" },
   // Modern, clean SaaS — rounder.
   maple: { fontSans: SANS, fontMono: MONO, radius: "0.625rem", radiusLg: "1rem" },

@@ -1,19 +1,19 @@
 import { execSync } from "node:child_process";
 import postgres from "postgres";
 
-// E2E runs against a dedicated `docbot_test` database, rebuilt from the **committed
+// E2E runs against a dedicated `papervine_test` database, rebuilt from the **committed
 // migrations** (drizzle/) on every run — so the suite is deterministic AND the
 // migrations themselves are exercised (a broken migration fails e2e). Pure DB/CLI
 // ops, no app imports.
 const HOST = "127.0.0.1:5432";
-const ADMIN_URL = `postgres://docbot:docbot@${HOST}/postgres`;
-export const TEST_DB_URL = `postgres://docbot:docbot@${HOST}/docbot_test`;
+const ADMIN_URL = `postgres://papervine:papervine@${HOST}/postgres`;
+export const TEST_DB_URL = `postgres://papervine:papervine@${HOST}/papervine_test`;
 
 export default async function globalSetup() {
   // 1. Create the test database if it doesn't exist.
   const admin = postgres(ADMIN_URL, { max: 1 });
-  const exists = await admin`SELECT 1 FROM pg_database WHERE datname = 'docbot_test'`;
-  if (exists.length === 0) await admin`CREATE DATABASE docbot_test`;
+  const exists = await admin`SELECT 1 FROM pg_database WHERE datname = 'papervine_test'`;
+  if (exists.length === 0) await admin`CREATE DATABASE papervine_test`;
   await admin.end();
 
   // 2. Clean slate — drop the tables AND drizzle's migration journal, which lives in

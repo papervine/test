@@ -54,7 +54,7 @@ export function parsePage(slug: string, raw: string): Page {
   return { slug: slug === "/" ? "" : slug, frontmatter: data as PageFrontmatter, body: content };
 }
 
-/** Local-folder content source (default). Defaults to ./content; DOCBOT_CONTENT overrides. */
+/** Local-folder content source (default). Defaults to ./content; PAPERVINE_CONTENT overrides. */
 export function fsSource(dir: string): ContentSource {
   const CONTENT_DIR = path.resolve(dir);
 
@@ -105,7 +105,7 @@ export function fsSource(dir: string): ContentSource {
   };
 }
 
-const defaultSource = fsSource(process.env.DOCBOT_CONTENT ?? path.join(process.cwd(), "content"));
+const defaultSource = fsSource(process.env.PAPERVINE_CONTENT ?? path.join(process.cwd(), "content"));
 
 /** The active source: a tenant source if one is in scope, else the local default. */
 function source(): ContentSource {

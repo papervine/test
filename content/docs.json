@@ -1,6 +1,6 @@
 {
-  "$schema": "https://docbot.app/schema.json",
-  "name": "Docbot",
+  "$schema": "https://papervine.io/schema.json",
+  "name": "Papervine",
   "theme": "mint",
   "colors": {
     "primary": "#16A34A",

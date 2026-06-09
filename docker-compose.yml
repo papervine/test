@@ -1,22 +1,23 @@
-# Local dev services for the Docbot control plane.
+# Local dev services for the Papervine control plane.
 # Prod swaps these for managed equivalents (Neon for Postgres, R2 for object
 # storage) — code targets the same interfaces (DATABASE_URL / S3 API), so only
 # env changes. Postgres ships with pgvector for the AI assistant's embeddings.
+name: papervine
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: docbot-postgres
+    container_name: papervine-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: docbot
-      POSTGRES_PASSWORD: docbot
-      POSTGRES_DB: docbot
+      POSTGRES_USER: papervine
+      POSTGRES_PASSWORD: papervine
+      POSTGRES_DB: papervine
     ports:
       - "5432:5432"
     volumes:
-      - docbot-pgdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U docbot -d docbot"]
+      test: ["CMD-SHELL", "pg_isready -U papervine -d papervine"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -25,17 +26,17 @@ services:
   # Compiled/copied tenant content + assets live here. Console at :9001.
   minio:
     image: minio/minio:latest
-    container_name: docbot-minio
+    container_name: papervine-minio
     restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: docbot
-      MINIO_ROOT_PASSWORD: docbotsecret
+      MINIO_ROOT_USER: papervine
+      MINIO_ROOT_PASSWORD: papervinesecret
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - docbot-miniodata:/data
+      - miniodata:/data
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 5s
@@ -50,11 +51,11 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 docbot docbotsecret &&
-      mc mb --ignore-existing local/docbot-content &&
+      mc alias set local http://minio:9000 papervine papervinesecret &&
+      mc mb --ignore-existing local/papervine-content &&
       echo 'bucket ready'
       "
 
 volumes:
-  docbot-pgdata:
-  docbot-miniodata:
+  pgdata:
+  miniodata:

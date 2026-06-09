@@ -65,7 +65,7 @@ console.log(`▶ crawling ${slugs.length}/${all.length} pages from ${CONTENT} on
 
 const server = spawn(nextBin, ["dev", "-H", "0.0.0.0", "-p", String(port)], {
   cwd: PKG_ROOT,
-  env: { ...process.env, DOCBOT_CONTENT: CONTENT },
+  env: { ...process.env, PAPERVINE_CONTENT: CONTENT },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let serverLog = "";

@@ -13,14 +13,14 @@ import {
 import { PlatformShell } from "@/components/platform/PlatformShell";
 
 // Marketing landing for the SaaS apex (SPEC §2). Reached via the middleware rewrite
-// of `/` when not in single-repo preview mode (no DOCBOT_CONTENT).
+// of `/` when not in single-repo preview mode (no PAPERVINE_CONTENT).
 export const metadata: Metadata = {
-  title: "Docbot — the intelligent documentation platform",
+  title: "Papervine — the intelligent documentation platform",
   description:
     "Open-source, self-hostable documentation built for humans and AI. Create and maintain world-class docs from a Git repo — with an API playground, instant search, and an AI assistant.",
 };
 
-const GITHUB = "https://github.com/phishy/docbot";
+const GITHUB = "https://github.com/phishy/papervine";
 
 // The "intelligence" story (top section).
 const PILLARS = [
@@ -46,7 +46,7 @@ const FEATURES = [
   {
     icon: FileJson2,
     title: "docs.json-native",
-    body: "The config schema you already know. Point Docbot at an existing repo and it renders unchanged — migration is a DNS switch.",
+    body: "The config schema you already know. Point Papervine at an existing repo and it renders unchanged — migration is a DNS switch.",
   },
   {
     icon: Boxes,
@@ -78,7 +78,7 @@ export default function LandingPage() {
             <span className="grid h-6 w-6 place-items-center rounded-md bg-gradient-to-br from-[var(--blue)] to-[var(--violet)] text-[13px] font-bold text-white">
               D
             </span>
-            Docbot
+            Papervine
           </Link>
           <nav className="flex items-center gap-1 text-sm">
             <a
@@ -281,7 +281,7 @@ export default function LandingPage() {
               Make your docs a competitive advantage
             </h2>
             <p className="relative max-w-md text-[var(--muted)]">
-              Point Docbot at a repo and ship documentation your users — and
+              Point Papervine at a repo and ship documentation your users — and
               their agents — actually use. Future-proof it today.
             </p>
             <Link
@@ -302,7 +302,7 @@ export default function LandingPage() {
             <span className="grid h-5 w-5 place-items-center rounded bg-gradient-to-br from-[var(--blue)] to-[var(--violet)] text-[11px] font-bold text-white">
               D
             </span>
-            Docbot — open source
+            Papervine — open source
           </span>
           <div className="flex gap-5">
             <a

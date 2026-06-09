@@ -47,7 +47,7 @@ const handler = createMcpHandler(
       );
     }
   },
-  { serverInfo: { name: "Docbot Docs", version: "0.1.0" } },
+  { serverInfo: { name: "Papervine Docs", version: "0.1.0" } },
   { basePath: "" },
 );
 

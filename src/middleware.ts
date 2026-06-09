@@ -7,7 +7,7 @@ import { resolveTenantSlug } from "./lib/tenant-host";
  * repo root — e.g. `/img/hero.png`, `/logo/dark.svg`. Without this, those
  * requests fall through to the `[[...slug]]` page route, find no MDX file, and
  * 404 (broken images). We rewrite any request that ends in a static-asset
- * extension to the `dbasset` handler, which streams it from DOCBOT_CONTENT.
+ * extension to the `dbasset` handler, which streams it from PAPERVINE_CONTENT.
  */
 const ASSET_RE =
   /\.(png|jpe?g|gif|svg|webp|avif|ico|bmp|mp4|webm|pdf|woff2?)$/i;
@@ -15,7 +15,7 @@ const ASSET_RE =
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Multi-tenant host routing (SPEC §2): a tenant subdomain ({slug}.docbot.app,
+  // Multi-tenant host routing (SPEC §2): a tenant subdomain ({slug}.papervine.io,
   // or {slug}.localhost in dev) serves that tenant's docs. Rewrite the whole host
   // to /_sites/{slug}/… and let that route resolve the site + fetch its content.
   // (Per-tenant asset/dashboard handling is apex-only for now.)
@@ -35,15 +35,15 @@ export function middleware(req: NextRequest) {
   }
 
   // SaaS apex front door: serve the marketing landing at / (SPEC §2). In single-repo
-  // preview mode (DOCBOT_CONTENT set — `docbot dev` / tests) the apex keeps serving the
+  // preview mode (PAPERVINE_CONTENT set — `papervine dev` / tests) the apex keeps serving the
   // previewed repo's home instead.
-  if (pathname === "/" && !process.env.DOCBOT_CONTENT) {
+  if (pathname === "/" && !process.env.PAPERVINE_CONTENT) {
     const url = req.nextUrl.clone();
     url.pathname = "/home";
     return NextResponse.rewrite(url);
   }
 
-  // Apex static assets stream from DOCBOT_CONTENT — but not `/api/…`, which includes
+  // Apex static assets stream from PAPERVINE_CONTENT — but not `/api/…`, which includes
   // path-mode tenant assets (`/api/tenant-asset/{slug}/img.png`) that must reach their
   // route handler, not the dbasset reader.
   if (ASSET_RE.test(pathname) && !pathname.startsWith("/api/")) {

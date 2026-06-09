@@ -1,17 +1,17 @@
-# Docbot — Open-Source Docs Platform
+# Papervine — Open-Source Docs Platform
 
 **Status:** Draft v0.1
 **Date:** 2026-06-07
 **Owner:** jeff@loiselles.com
 
-An open-source, multi-tenant documentation platform — a faithful clone of [the incumbent](https://example.com/). Users connect a Git repo containing MDX files + a `docs.json` config; Docbot renders a fast, beautiful, searchable docs site with an interactive API playground and an AI assistant. One deployment serves many tenants.
+An open-source, multi-tenant documentation platform — a faithful clone of [the incumbent](https://example.com/). Users connect a Git repo containing MDX files + a `docs.json` config; Papervine renders a fast, beautiful, searchable docs site with an interactive API playground and an AI assistant. One deployment serves many tenants.
 
 ---
 
 ## 1. Vision & Principles
 
 - **Docs-as-code.** Source of truth is MDX + `docs.json` in the user's Git repo. The platform is a renderer + control plane, never the source of truth.
-- **Multi-tenant from day one.** A single app instance serves all customer doc sites, addressable by subdomain (`acme.docbot.app`) and custom domain (`docs.acme.com`).
+- **Multi-tenant from day one.** A single app instance serves all customer doc sites, addressable by subdomain (`acme.papervine.io`) and custom domain (`docs.acme.com`).
 - **`docs.json`-compatible.** Adopt the incumbent's `docs.json` schema so existing docs.json projects migrate with minimal changes. This is our primary adoption hook.
 - **Runtime rendering, no content at build time.** Like the incumbent, the deployed app has no tenant content baked in. Content is fetched + rendered on demand (with aggressive caching). New deploys don't require rebuilding every tenant.
 - **Fast by default.** React Server Components, edge caching, minimal client JS.
@@ -77,7 +77,7 @@ and `Field` primitives — they don't redefine the look. This theme is deliberat
 
 ### Tenant resolution
 Next.js **middleware** inspects the `Host` header:
-- `*.docbot.app` subdomain → look up tenant by slug
+- `*.papervine.io` subdomain → look up tenant by slug
 - custom domain → look up tenant by domain (cached map in Redis)
 - rewrites internally to `/_sites/[tenant]/[...slug]`
 
@@ -122,8 +122,8 @@ request ending in a static-asset extension to `/dbasset/[...path]`, a route hand
 streams the file from the content dir with the correct `Content-Type` and a
 path-traversal guard.
 
-- **Today (local / single-tenant):** streamed straight from `DOCBOT_CONTENT`. Works in
-  `docbot dev`; a production `next build` would need the content traced in (a dev-time
+- **Today (local / single-tenant):** streamed straight from `PAPERVINE_CONTENT`. Works in
+  `papervine dev`; a production `next build` would need the content traced in (a dev-time
   concern only, not the SaaS path).
 
 **Three serving models** (increasing maturity; the `/img/...` URL shape never changes):
@@ -172,7 +172,7 @@ Single config file at repo root. Mirror the incumbent's schema so migration is t
 
 ```jsonc
 {
-  "$schema": "https://docbot.app/schema.json",
+  "$schema": "https://papervine.io/schema.json",
   "name": "Acme Docs",
   "theme": "mint",                    // built-in layout/theme preset
   "logo": { "light": "/logo-light.svg", "dark": "/logo-dark.svg" },
@@ -278,7 +278,7 @@ Ship a styled component set resolved at compile time. Parity targets with the in
   - response schemas + examples (`<ResponseField>`)
   - **interactive "Try it"** panel: fill params/headers/body, send request, see response
 - **Auth methods:** API key, Bearer, Basic, OAuth2 (config-driven).
-- **CORS/proxy:** requests can route through a Docbot proxy endpoint to avoid CORS and to inject secrets safely (optional per tenant).
+- **CORS/proxy:** requests can route through a Papervine proxy endpoint to avoid CORS and to inject secrets safely (optional per tenant).
 - **Code samples:** auto-generate curl/JS/Python/etc. snippets per endpoint.
 - Libraries to evaluate: `openapi-types`, `@scalar/*` (open-source API reference, worth studying/reusing), `openapi-sampler`.
 
@@ -411,7 +411,7 @@ instant effect. Self-host reads it all from `docs.json` + env, no dashboard requ
 
 ## 9. MCP Servers
 
-Docbot exposes Model Context Protocol servers so AI tools can both **read** a docs site
+Papervine exposes Model Context Protocol servers so AI tools can both **read** a docs site
 and **edit** it — mirroring the incumbent, which ships two distinct MCP servers.
 
 ### 9.1 Generated read MCP (per docs site)
@@ -441,7 +441,7 @@ the deploy branch. Tools:
 - **Structure:** `create_node` / `move_node` / `update_node` / `delete_node` / `list_nodes`
   — pages, groups, tabs, anchors, versions — operating on our recursive `navigation` (§4)
 - **Config:** `update_config` (edit `docs.json`)
-- **Git:** `checkout` (first call — opens a `docbot-mcp/<slug>` branch), `diff`,
+- **Git:** `checkout` (first call — opens a `papervine-mcp/<slug>` branch), `diff`,
   `save` (`mode: "pr" | "commit"`), `discard_session`
 - **Auth:** a platform-auth (Layer 1, §11) token scoped to the org/repo; RBAC ≥ editor.
 - This is the agent-native counterpart to the web editor (§10) and embodies AGENTS.md's
@@ -470,7 +470,7 @@ Minimum to operate the SaaS:
   previously the reason was `console.error`'d only, lost to serverless logs the tenant
   can't reach. Operator-facing error tracking (Sentry) is a fast-follow: it complements,
   not replaces, the persisted per-deployment error, which is what the tenant sees.)*
-- **Domains:** assign `*.docbot.app` subdomain; add custom domain (DNS verification + auto TLS via the host platform / `caddy` / ACME).
+- **Domains:** assign `*.papervine.io` subdomain; add custom domain (DNS verification + auto TLS via the host platform / `caddy` / ACME).
 - **Assistant:** the AI assistant management page (enable/disable, deflection, search domains, bot protection, starter questions, credits) — specified in **§8.6**; its usage analytics live on the Analytics page (§10.1).
 - **MCP:** manage the per-docs read MCP and authoring MCP (enable, opt-in, tokens) — see **§9**.
 - **Analytics:** page views, top pages, search terms with no results, AI unanswered questions, plus the assistant deep-dive — expanded in **§10.1**. PostHog or a lightweight first-party events table.
@@ -516,14 +516,14 @@ gaps" all derive from this. Backed by PostHog or a first-party events table; res
 
 ## 11. Authentication & Access Control
 
-Docbot has **two completely separate auth systems**. They have different users,
+Papervine has **two completely separate auth systems**. They have different users,
 different urgency, and different security surfaces. Conflating them is the most common
 way to over-build this, so the spec keeps them apart.
 
 | | **Layer 1 — Platform auth** | **Layer 2 — Reader auth** |
 |---|---|---|
 | Who logs in | Our customers (docs owners + their team) | Our customers' *readers* (their end users) |
-| Protects | The Docbot dashboard / control plane | Published docs *pages* (private/internal/gated docs) |
+| Protects | The Papervine dashboard / control plane | Published docs *pages* (private/internal/gated docs) |
 | Who owns identity | **We do** (we are the IdP) | **The customer does** (we only *verify* an assertion) |
 | Needed by | Every tenant — prerequisite for multi-tenancy | Only some tenants (enterprise) |
 | Maps to the incumbent | Their dashboard account | Their "Authentication & Personalization" |
@@ -620,7 +620,7 @@ This forces per-request rendering, which fights compile-on-sync caching — defe
 | MDX | **hybrid**: `@mintlify/mdx` `serialize` + `@mdx-js/mdx` `run` (see §3) | the incumbent-fidelity highlighting/snippets + catchable, never-500 render |
 | Syntax highlight | **Shiki** (via `@mintlify/mdx`) | fast, accurate, dual light/dark themes |
 | API reference | `@scalar/openapi-parser` (parse/dereference) + our native renderer | incumbent model: in-nav endpoint pages, not a foreign embed (§7) |
-| CLI | `docbot dev <dir>` (`bin/docbot.mjs`) | preview any MDX + docs.json repo locally — the `docs dev` analogue; `tests/crawl.mjs` reuses it |
+| CLI | `papervine dev <dir>` (`bin/papervine.mjs`) | preview any MDX + docs.json repo locally — the `docs dev` analogue; `tests/crawl.mjs` reuses it |
 | Styling | **Tailwind CSS** + CSS variables | theme tokens from docs.json |
 | Search | **Orama** (Algolia optional) | embeddable, multi-tenant |
 | DB | **Postgres** (+ `pgvector`) — hosted: **Neon** | tenants, config, embeddings; Neon serverless for the Vercel deploy, provisioned via the Stripe Projects CLI (`stripe projects add neon/postgres`) |
@@ -639,7 +639,7 @@ This forces per-request rendering, which fights compile-on-sync caching — defe
 ## 13. Proposed Monorepo Layout
 
 ```
-docbot/
+papervine/
 ├── apps/
 │   ├── render/          # public docs site (multi-tenant Next.js)
 │   └── dashboard/       # control plane UI + API
@@ -673,17 +673,17 @@ Three layers; the test lives where the logic does:
   it runs in CI everywhere; DB-free control-plane checks (gate redirects, auth pages render
   in the platform theme) live in `CONTROL_PLANE_CHECKS`.
 - **E2E** (`tests/e2e/`, `npm run test:e2e`, Playwright): authed control-plane journeys
-  against a dedicated `docbot_test` Postgres + MinIO — signup → onboarding → connect repo →
+  against a dedicated `papervine_test` Postgres + MinIO — signup → onboarding → connect repo →
   dashboard, plus the logged-out gate. `globalSetup` creates/migrates/truncates the test DB;
   `auth.setup.ts` logs in once and reuses the session (storageState). Network-dependent specs
   (the GitHub connect flow) are tagged `@external` so CI skips them for determinism.
-- **Real-repo crawl** (`tests/crawl.mjs <dir>`): the `docbot dev` analogue used to validate
+- **Real-repo crawl** (`tests/crawl.mjs <dir>`): the `papervine dev` analogue used to validate
   against representative docs repos; reports rendered / degraded / 500, non-zero exit on any 500.
 - **CI** (`.github/workflows/ci.yml`): `verify` job = typecheck + unit + build + smoke (no
   services); `e2e` job = Playwright against a Postgres service (skipping `@external`).
 - **Migrations are GitOps** (versioned, not `push`): schema changes are committed SQL
   (`drizzle/`, via `npm run db:generate`), reviewed like code, and applied by
-  `drizzle-kit migrate` — locally (`db:migrate`), in CI's e2e (rebuilds `docbot_test` from
+  `drizzle-kit migrate` — locally (`db:migrate`), in CI's e2e (rebuilds `papervine_test` from
   the same files), and in **prod on deploy** (`vercel.json` runs `migrate` before
   `next build`; each preview migrates its own Neon branch). Pushing a migration *is*
   shipping it; no manual prod step. See `AGENTS.md` → Database migrations.
@@ -708,7 +708,7 @@ Orama index at sync, Cmd-K palette, `/api/search`.
   jump to the right `#anchor`), with prefix/typo tolerance, the `⌘K` command palette, and
   the `/api/search` endpoint. Engine: Orama (`src/lib/search.ts`, `src/components/SearchDialog.tsx`);
   `hidden`/`noindex` pages are excluded; covered by `tests/smoke.mjs`. The index is built
-  **per request (memoized)**, not at sync, so it stays fresh in `docbot dev`.
+  **per request (memoized)**, not at sync, so it stays fresh in `papervine dev`.
 - ⏳ **Next:** build the index **at sync time** per tenant (depends on M2) instead of per
   request; an "Ask AI" toggle in the palette (shares the M5 assistant); recent/suggested terms.
 

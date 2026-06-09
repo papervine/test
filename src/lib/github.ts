@@ -17,7 +17,7 @@ export function parseRepoInput(input: string): { owner: string; name: string } |
 function ghHeaders(): HeadersInit {
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
-    "user-agent": "docbot",
+    "user-agent": "papervine",
   };
   if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   return headers;
@@ -32,7 +32,7 @@ export async function fetchRepo(owner: string, name: string): Promise<RepoMeta |
   return { fullName: data.full_name, defaultBranch: data.default_branch };
 }
 
-// True if the repo has a Docbot/docs.json config at its root on the given ref.
+// True if the repo has a Papervine/docs.json config at its root on the given ref.
 export async function hasDocsConfig(owner: string, name: string, ref: string): Promise<boolean> {
   for (const file of ["docs.json", "mint.json"]) {
     const res = await fetch(`${API}/repos/${owner}/${name}/contents/${file}?ref=${ref}`, {

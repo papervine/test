@@ -1,14 +1,14 @@
-# Compatibility Gap Report — Docbot vs. representative docs repos
+# Compatibility Gap Report — Papervine vs. representative docs repos
 
 **Date:** 2026-06-07
-**Method:** Ran the M0 renderer (`docbot dev`) against two unmodified docs repos, plus static analysis of every `.md(x)` file and `docs.json`.
+**Method:** Ran the M0 renderer (`papervine dev`) against two unmodified docs repos, plus static analysis of every `.md(x)` file and `docs.json`.
 
 | Repo | Size | Result |
 |---|---|---|
 | [`papervine/starter`](https://github.com/papervine/starter) | 2 doc pages | ✅ **Renders fully** — both pages HTTP 200, no errors |
 | [`papervine/docs`](https://github.com/papervine/docs) (the incumbent's own production docs) | 877 `.mdx` + 28 `.md`, 12 snippets | ❌ **Fails to load** — `docs.json` rejected, 500 on every page |
 
-**Headline:** a real starter-kit repo works in Docbot today. The incumbent's *production* docs expose the M1 backlog — and the first blocker is a single over-strict schema field that takes down the whole site.
+**Headline:** a real starter-kit repo works in Papervine today. The incumbent's *production* docs expose the M1 backlog — and the first blocker is a single over-strict schema field that takes down the whole site.
 
 ---
 

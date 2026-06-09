@@ -9,7 +9,7 @@ import { Sparkles, X, Maximize2, Minimize2, ArrowUp, Paperclip } from "lucide-re
 import clsx from "clsx";
 
 /** Custom event other components dispatch to open the assistant (optionally with a query). */
-export const OPEN_EVENT = "docbot:open-assistant";
+export const OPEN_EVENT = "papervine:open-assistant";
 export function openAssistant(query?: string) {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: { query } }));
 }

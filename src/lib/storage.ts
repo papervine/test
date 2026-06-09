@@ -9,7 +9,7 @@ import {
 // Object storage over the S3 API. Local = MinIO, prod = Cloudflare R2 — same code,
 // only env changes (SPEC §3.1, §11). forcePathStyle is required by MinIO and fine
 // for R2. Stores per-tenant content + assets written by the sync job (SPEC §3).
-const BUCKET = process.env.S3_BUCKET ?? "docbot-content";
+const BUCKET = process.env.S3_BUCKET ?? "papervine-content";
 
 const s3 = new S3Client({
   region: process.env.S3_REGION ?? "auto",

@@ -34,7 +34,7 @@ export default async function TenantDocsPage({ params }: { params: Promise<Param
   const { site: slug, path } = await params;
 
   // Two ways to reach a tenant's docs:
-  //  • Host mode (subdomain): `acme.docbot.app/…`, rewritten here by middleware. The
+  //  • Host mode (subdomain): `acme.papervine.io/…`, rewritten here by middleware. The
   //    host resolves to this slug; links/assets stay root-absolute (base empty).
   //  • Path mode (apex): `apex/sites/acme/…` directly — the interim for deploys
   //    without a wildcard domain (e.g. Vercel `*.vercel.app`, which won't issue TLS

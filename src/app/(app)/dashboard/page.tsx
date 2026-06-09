@@ -33,7 +33,7 @@ export default async function DashboardHome() {
     .where(eq(site.organizationId, activeOrg.id));
 
   // Build each site's live docs URL from the current host so it's right in dev
-  // ({slug}.localhost:3100) and prod ({slug}.docbot.app), or its custom domain.
+  // ({slug}.localhost:3100) and prod ({slug}.papervine.io), or its custom domain.
   // On a host without wildcard-subdomain support (e.g. a bare *.vercel.app, which
   // can't get nested-subdomain TLS), fall back to the path form (/sites/{slug}) — the
   // interim that actually resolves there (SPEC §2 "Interim path-based serving").

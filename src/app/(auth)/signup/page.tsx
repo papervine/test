@@ -30,7 +30,7 @@ export default function SignupPage() {
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <h1 className="text-xl font-semibold">Create your Docbot account</h1>
+      <h1 className="text-xl font-semibold">Create your Papervine account</h1>
       <Field
         label="Name"
         type="text"

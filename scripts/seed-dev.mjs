@@ -14,7 +14,7 @@ import postgres from "postgres";
 import { hashPassword } from "better-auth/crypto";
 
 const DEV = {
-  user: { name: "Dev User", email: "dev@docbot.local", password: "dev-password-123" },
+  user: { name: "Dev User", email: "dev@papervine.local", password: "dev-password-123" },
   org: { name: "Dev Org", slug: "dev-org" },
   site: { name: "Starter Docs", slug: "starter", repoOwner: "papervine", repoName: "starter", branch: "main" },
 };

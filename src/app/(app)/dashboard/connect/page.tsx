@@ -21,7 +21,7 @@ export default function ConnectRepoPage() {
       </Link>
       <h1 className="mt-4 text-2xl font-semibold">Connect a repository</h1>
       <p className="mt-2 text-sm text-[var(--muted)]">
-        Point Docbot at a public GitHub repo with a <code>docs.json</code> at
+        Point Papervine at a public GitHub repo with a <code>docs.json</code> at
         its root.
       </p>
 

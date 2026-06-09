@@ -11,7 +11,7 @@ import type { DocsConfig } from "./config";
  * We use Scalar's MIT parser to load + dereference the spec; rendering is ours.
  */
 const CONTENT_DIR = path.resolve(
-  process.env.DOCBOT_CONTENT ?? path.join(process.cwd(), "content"),
+  process.env.PAPERVINE_CONTENT ?? path.join(process.cwd(), "content"),
 );
 
 // Minimal shapes we read off the dereferenced spec (it's fully resolved JSON).

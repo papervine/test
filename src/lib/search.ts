@@ -10,7 +10,7 @@ import { buildNav, findGroupLabel } from "./nav";
  *
  * The index is built from the same content source the renderer reads, so at M2
  * this builder runs once at sync time per tenant; today it's memoized per request
- * (React `cache`) so it stays fresh as you edit docs in `docbot dev`.
+ * (React `cache`) so it stays fresh as you edit docs in `papervine dev`.
  */
 const schema = {
   title: "string",

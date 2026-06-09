@@ -1,13 +1,13 @@
 {
-  "name": "docbot",
+  "name": "papervine",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "bin": {
-    "docbot": "bin/docbot.mjs"
+    "papervine": "bin/papervine.mjs"
   },
   "scripts": {
-    "docbot": "node bin/docbot.mjs",
+    "papervine": "node bin/papervine.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
