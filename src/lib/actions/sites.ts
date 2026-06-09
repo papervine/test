@@ -14,7 +14,7 @@ import { syncErrorDetail } from "@/lib/sync-error";
 
 export type ConnectState = { error?: string };
 
-// Globally-unique site slug (it's the *.docbot.app subdomain). Append -2, -3… on collision.
+// Globally-unique site slug (it's the *.papervine.io subdomain). Append -2, -3… on collision.
 async function uniqueSlug(base: string): Promise<string> {
   const root = slugify(base) || "site";
   const taken = new Set(

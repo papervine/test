@@ -1,5 +1,5 @@
 {
-  "$schema": "https://docbot.app/schema.json",
+  "$schema": "https://papervine.io/schema.json",
   "name": "Fixtures",
   "favicon": { "light": "/favicon.ico", "dark": "/favicon.ico" },
   "colors": { "primary": "#7C3AED", "light": "#A78BFA", "dark": "#5B21B6" },

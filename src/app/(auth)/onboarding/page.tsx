@@ -8,7 +8,7 @@ import { Button } from "@/components/platform/Button";
 import { Field } from "@/components/platform/Field";
 
 // First-run: create the organization (tenant) the user will own. Slug doubles as
-// the *.docbot.app subdomain, so it must be URL-safe.
+// the *.papervine.io subdomain, so it must be URL-safe.
 export default function OnboardingPage() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -48,7 +48,7 @@ export default function OnboardingPage() {
         hint={
           name && (
             <span className="mt-1 block text-xs text-[var(--muted)]">
-              {slugify(name) || "—"}.docbot.app
+              {slugify(name) || "—"}.papervine.io
             </span>
           )
         }

@@ -1,4 +1,4 @@
-# Docbot
+# Papervine
 
 An open-source, multi-tenant documentation platform — a clone of [the incumbent](https://example.com/). Point it at a folder of **MDX** + a single **`docs.json`** and get a fast, themeable docs site.
 
@@ -26,7 +26,7 @@ npm run dev      # serves ./content at http://localhost:3000
 Other scripts: `npm run build`, `npm run start`, `npm run typecheck`.
 
 **Seed a dev account:** `npm run db:seed` (needs the docker Postgres up) creates a known
-login — `dev@docbot.local` / `dev-password-123` — with an org, a connected site
+login — `dev@papervine.local` / `dev-password-123` — with an org, a connected site
 (`papervine/starter`), an activity feed, and analytics data, so you can sign in at `/login`
 and see a populated dashboard without walking signup → onboarding → connect. Idempotent and
 **refuses any non-local `DATABASE_URL`** (a known password must never reach a real DB). Run
@@ -34,29 +34,29 @@ dev on the port `BETTER_AUTH_URL` points at (`:3000`) so sign-in's origin check 
 
 **AI Assistant (M5):** set `ANTHROPIC_API_KEY` in `.env.local` to enable the "Ask
 Assistant" panel (Claude + agentic docs retrieval). Without it the panel still opens
-but the API returns a graceful 503. Optional: `DOCBOT_AI_MODEL` (default `claude-sonnet-4-6`).
+but the API returns a graceful 503. Optional: `PAPERVINE_AI_MODEL` (default `claude-sonnet-4-6`).
 
 ## CLI — preview any docs repo
 
-`docbot dev` boots the renderer pointed at any folder of MDX + `docs.json`
+`papervine dev` boots the renderer pointed at any folder of MDX + `docs.json`
 (the analogue of `docs dev`):
 
 ```bash
-docbot dev              # preview the current directory
-docbot dev ./docs       # preview ./docs
-docbot dev -p 4000      # custom port
+papervine dev              # preview the current directory
+papervine dev ./docs       # preview ./docs
+papervine dev -p 4000      # custom port
 ```
 
 Run it inside a docs repo and it renders that repo — no copying into `./content`.
-Under the hood it sets `DOCBOT_CONTENT` to the target folder and runs the renderer
-from the Docbot package, so the same env var works directly too:
+Under the hood it sets `PAPERVINE_CONTENT` to the target folder and runs the renderer
+from the Papervine package, so the same env var works directly too:
 
 ```bash
-DOCBOT_CONTENT=/path/to/docs-repo npm run dev
+PAPERVINE_CONTENT=/path/to/docs-repo npm run dev
 ```
 
-Pre-release, invoke the CLI via `npm run docbot -- dev ./docs` or `./bin/docbot.mjs
-dev ./docs`. Once published it's `npx docbot dev`.
+Pre-release, invoke the CLI via `npm run papervine -- dev ./docs` or `./bin/papervine.mjs
+dev ./docs`. Once published it's `npx papervine dev`.
 
 ## Content
 
@@ -79,7 +79,7 @@ in `docs.json`.
 
 ## Hosting tenant docs (subdomain vs. path)
 
-Each connected site is served at its own host — `{slug}.docbot.app` in prod,
+Each connected site is served at its own host — `{slug}.papervine.io` in prod,
 `{slug}.localhost:3100` in dev — or a custom domain. **Subdomain serving needs a
 wildcard domain you own + wildcard TLS.** A bare deploy that can't provide that — e.g.
 a free `*.vercel.app`, where the platform won't issue TLS for nested

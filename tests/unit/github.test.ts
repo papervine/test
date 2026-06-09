@@ -6,15 +6,15 @@ describe("parseRepoInput", () => {
     expect(parseRepoInput("papervine/starter")).toEqual({ owner: "papervine", name: "starter" });
   });
   it("parses a github.com URL", () => {
-    expect(parseRepoInput("https://github.com/phishy/docbot")).toEqual({
+    expect(parseRepoInput("https://github.com/phishy/papervine")).toEqual({
       owner: "phishy",
-      name: "docbot",
+      name: "papervine",
     });
   });
   it("strips a trailing .git", () => {
-    expect(parseRepoInput("git@github.com:phishy/docbot.git")).toEqual({
+    expect(parseRepoInput("git@github.com:phishy/papervine.git")).toEqual({
       owner: "phishy",
-      name: "docbot",
+      name: "papervine",
     });
   });
   it("rejects garbage", () => {

@@ -1,7 +1,7 @@
 import { defineConfig, devices } from "@playwright/test";
 import { TEST_DB_URL } from "./tests/e2e/global-setup";
 
-// E2E for the authed control plane (SPEC §10): real browser, real Postgres (docbot_test),
+// E2E for the authed control plane (SPEC §10): real browser, real Postgres (papervine_test),
 // real MinIO. The renderer/gate smoke gate (no DB) stays tests/smoke.mjs; pure logic is Vitest.
 const PORT = 3210;
 
@@ -41,9 +41,9 @@ export default defineConfig({
       BETTER_AUTH_URL: `http://127.0.0.1:${PORT}`,
       S3_ENDPOINT: "http://127.0.0.1:9000",
       S3_REGION: "auto",
-      S3_ACCESS_KEY_ID: "docbot",
-      S3_SECRET_ACCESS_KEY: "docbotsecret",
-      S3_BUCKET: "docbot-content",
+      S3_ACCESS_KEY_ID: "papervine",
+      S3_SECRET_ACCESS_KEY: "papervinesecret",
+      S3_BUCKET: "papervine-content",
     },
   },
 });

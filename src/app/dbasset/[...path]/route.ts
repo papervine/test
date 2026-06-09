@@ -4,8 +4,8 @@ import type { NextRequest } from "next/server";
 
 /**
  * Static-asset handler for the docs repo. Images (and other assets) in a
- * the incumbent/Docbot repo are referenced by absolute path from the repo root —
- * e.g. `![](/img/hero.png)`. Those files live under DOCBOT_CONTENT, outside the
+ * the incumbent/Papervine repo are referenced by absolute path from the repo root —
+ * e.g. `![](/img/hero.png)`. Those files live under PAPERVINE_CONTENT, outside the
  * app, so Next won't serve them from `public/`. This route streams them from the
  * content dir; `middleware.ts` rewrites asset requests here.
  *
@@ -13,7 +13,7 @@ import type { NextRequest } from "next/server";
  * to the tenant's asset bucket, but the URL shape (/img/...) stays the same.
  */
 const CONTENT_DIR = path.resolve(
-  process.env.DOCBOT_CONTENT ?? path.join(process.cwd(), "content"),
+  process.env.PAPERVINE_CONTENT ?? path.join(process.cwd(), "content"),
 );
 
 const CONTENT_TYPES: Record<string, string> = {

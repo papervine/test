@@ -55,7 +55,7 @@ export const docsConfigSchema = z
 
 export type DocsConfig = z.infer<typeof docsConfigSchema>;
 
-/** Top-level keys Docbot actively understands; others are passed through but flagged. */
+/** Top-level keys Papervine actively understands; others are passed through but flagged. */
 const KNOWN_KEYS = new Set([
   "$schema", "name", "theme", "appearance", "logo", "favicon", "colors",
   "navigation", "navbar", "footer",

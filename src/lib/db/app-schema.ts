@@ -1,11 +1,11 @@
-// DOMAIN SCHEMA — Docbot's own control-plane tables (SPEC §2, §9). Kept separate
+// DOMAIN SCHEMA — Papervine's own control-plane tables (SPEC §2, §9). Kept separate
 // from the Better Auth generated schema.ts so `better-auth generate` never wipes them.
 import { relations } from "drizzle-orm";
 import { pgTable, text, integer, timestamp, index } from "drizzle-orm/pg-core";
 import { organization, user } from "./schema";
 
 // A tenant's docs site. One organization can own several. `slug` is the
-// *.docbot.app subdomain; `customDomain` is the optional vanity host (docs.acme.com).
+// *.papervine.io subdomain; `customDomain` is the optional vanity host (docs.acme.com).
 export const site = pgTable(
   "site",
   {

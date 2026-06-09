@@ -4,7 +4,7 @@
  *
  * Boots the real renderer against tests/fixtures (a docs repo that exercises every
  * M1 fix) and crawls each page, asserting it renders without a 500. This is the
- * automated version of the manual `docbot dev` crawl we used to validate against
+ * automated version of the manual `papervine dev` crawl we used to validate against
  * representative docs repos — it guards the GAP-REPORT fixes from regressing.
  *
  * No test framework: pure Node + fetch. Run with `npm test`.
@@ -103,12 +103,12 @@ const CONTROL_PLANE_CHECKS = [
     desc: "login page renders in the platform theme (shell + gradient CTA)",
     // `db-glow` proves PlatformShell wraps it; `db-cta` proves the shared Button is used.
     // Guards the platform theme from regressing back to the old emerald/system look.
-    include: ["Sign in to Docbot", "db-glow", "db-cta"],
+    include: ["Sign in to Papervine", "db-glow", "db-cta"],
   },
   {
     path: "/signup",
     desc: "signup page renders in the platform theme (shell + gradient CTA)",
-    include: ["Create your Docbot account", "db-glow", "db-cta"],
+    include: ["Create your Papervine account", "db-glow", "db-cta"],
   },
 ];
 
@@ -134,7 +134,7 @@ async function run() {
   log(`▶ booting renderer against ${FIXTURES} on :${PORT}`);
   const server = spawn(nextBin, ["dev", "-H", "0.0.0.0", "-p", String(PORT)], {
     cwd: PKG_ROOT,
-    env: { ...process.env, DOCBOT_CONTENT: FIXTURES },
+    env: { ...process.env, PAPERVINE_CONTENT: FIXTURES },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let serverLog = "";
