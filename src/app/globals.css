@@ -31,6 +31,55 @@ body {
   font-family: var(--font-brand), var(--db-font-sans);
 }
 
+/* Legal pages (privacy/terms/refund). Lives inside the .db (PlatformShell) scope,
+   so --fg/--muted/--blue resolve from there. */
+.legal-prose {
+  color: var(--muted);
+  line-height: 1.7;
+  font-size: 0.95rem;
+}
+.legal-prose h1 {
+  color: var(--fg);
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+.legal-prose h2 {
+  color: var(--fg);
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 2rem 0 0.75rem;
+}
+.legal-prose h3 {
+  color: var(--fg);
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 1.5rem 0 0.5rem;
+}
+.legal-prose p,
+.legal-prose li {
+  margin: 0.6rem 0;
+}
+.legal-prose ul {
+  list-style: disc;
+  padding-left: 1.4rem;
+}
+.legal-prose a {
+  color: var(--blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.legal-prose strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.legal-prose .lede {
+  font-size: 0.85rem;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
 /* --- Article prose (lightweight, no typography plugin) --- */
 .prose {
   @apply text-[0.95rem] leading-7 text-zinc-700 dark:text-zinc-300;

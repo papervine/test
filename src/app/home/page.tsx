@@ -316,6 +316,18 @@ export default function LandingPage() {
             >
               Sign up
             </Link>
+            <Link
+              href="/privacy"
+              className="transition-colors hover:text-[var(--fg)]"
+            >
+              Privacy
+            </Link>
+            <Link
+              href="/terms"
+              className="transition-colors hover:text-[var(--fg)]"
+            >
+              Terms
+            </Link>
           </div>
         </div>
       </footer>
