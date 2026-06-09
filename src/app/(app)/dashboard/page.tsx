@@ -2,6 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { desc, eq } from "drizzle-orm";
 import { getSession, listOrganizations } from "@/lib/session";
+import { supportsSubdomainTenants } from "@/lib/tenant-host";
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
 import { site, deployment } from "@/lib/db/app-schema";
@@ -33,15 +34,19 @@ export default async function DashboardHome() {
 
   // Build each site's live docs URL from the current host so it's right in dev
   // ({slug}.localhost:3100) and prod ({slug}.docbot.app), or its custom domain.
+  // On a host without wildcard-subdomain support (e.g. a bare *.vercel.app, which
+  // can't get nested-subdomain TLS), fall back to the path form (/sites/{slug}) — the
+  // interim that actually resolves there (SPEC §2 "Interim path-based serving").
   const host = (await headers()).get("host") ?? "";
   const proto = host.includes("localhost") ? "http" : "https";
   const apexBase = host.replace(/^(app|www)\./, "");
+  const subdomains = supportsSubdomainTenants(apexBase);
   const siteHost = (s: (typeof sites)[number]) =>
-    s.customDomain ?? `${s.slug}.${apexBase}`;
+    s.customDomain ?? (subdomains ? `${s.slug}.${apexBase}` : `${apexBase}/sites/${s.slug}`);
   const siteUrl = (s: (typeof sites)[number]) =>
     s.customDomain
       ? `https://${s.customDomain}`
-      : `${proto}://${s.slug}.${apexBase}`;
+      : `${proto}://${siteHost(s)}`;
 
   const feed = await db
     .select({

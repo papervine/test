@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import type { MDXComponents } from "mdx/types";
 import { serialize } from "@mintlify/mdx/server";
 import { run } from "@mdx-js/mdx";
@@ -8,6 +8,7 @@ import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import { mdxComponents } from "@/components/mdx";
+import { withBase } from "@/lib/url-base";
 
 /**
  * MDX rendering — HYBRID: compile with @mintlify/mdx's `serialize` (the incumbent's own
@@ -92,7 +93,56 @@ const syntaxHighlightingOptions = {
   codeStyling: "system",
 } as const;
 
-export async function Mdx({ source }: { source: string }) {
+/**
+ * Rewrite root-absolute links/images inside MDX to the tenant base — only for
+ * path-based serving (`/sites/{slug}`). In host mode both bases are empty and we
+ * return the components untouched, so the rendered output is byte-identical to before.
+ *
+ * Two emission points: raw markdown links/images (intrinsic `a`/`img`), and `href`/`src`
+ * props passed to real components (e.g. `<Card href="/quickstart">`, which renders its
+ * own anchor). We override the intrinsics and wrap each real component's href/src props.
+ * Fallback proxies are left alone so member-expression components still degrade.
+ */
+function applyTenantUrls(
+  components: MDXComponents,
+  linkBase: string,
+  assetBase: string,
+): MDXComponents {
+  if (!linkBase && !assetBase) return components;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const rewrite = (props: any) => {
+    if (typeof props?.href !== "string" && typeof props?.src !== "string") return props;
+    const next = { ...props };
+    if (typeof props.href === "string") next.href = withBase(props.href, linkBase);
+    if (typeof props.src === "string") next.src = withBase(props.src, assetBase);
+    return next;
+  };
+  const out: MDXComponents = { ...components };
+  // Wrap only the real (named) components — not the unknown-component Fallback proxies.
+  for (const name of Object.keys(mdxComponents)) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Comp = out[name] as any;
+    if (!Comp) continue;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    out[name] = (props: any) => <Comp {...rewrite(props)} />;
+  }
+  out.a = ({ href, ...rest }: ComponentProps<"a">) => <a href={withBase(href, linkBase)} {...rest} />;
+  out.img = ({ src, alt, ...rest }: ComponentProps<"img">) => (
+    // eslint-disable-next-line @next/next/no-img-element -- runtime-served content asset, not a build-time import
+    <img src={withBase(typeof src === "string" ? src : undefined, assetBase) ?? src} alt={alt} {...rest} />
+  );
+  return out;
+}
+
+export async function Mdx({
+  source,
+  linkBase = "",
+  assetBase = "",
+}: {
+  source: string;
+  linkBase?: string;
+  assetBase?: string;
+}) {
   try {
     const result = await serialize({
       source,
@@ -105,7 +155,11 @@ export async function Mdx({ source }: { source: string }) {
       throw (result as { error?: unknown }).error ?? new Error("MDX serialize failed");
     }
 
-    const components = componentsForCompiled(result.compiledSource);
+    const components = applyTenantUrls(
+      componentsForCompiled(result.compiledSource),
+      linkBase,
+      assetBase,
+    );
     const runtime = development ? devRuntime : prodRuntime;
     const { default: Content } = await run(result.compiledSource, {
       ...(runtime as Parameters<typeof run>[1]),

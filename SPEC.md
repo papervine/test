@@ -81,6 +81,20 @@ Next.js **middleware** inspects the `Host` header:
 - custom domain → look up tenant by domain (cached map in Redis)
 - rewrites internally to `/_sites/[tenant]/[...slug]`
 
+**Interim path-based serving (no wildcard domain).** Subdomain serving needs a wildcard
+domain you own + wildcard TLS. A bare Vercel deploy (`*.vercel.app`) can't get either —
+Vercel won't issue TLS for nested `acme.proj.vercel.app` subdomains, so the host route is
+unreachable there. As a fallback, the same tenant docs are reachable by **path** on the
+platform apex: `apex/sites/{slug}/…` (`src/app/sites/[site]`). The route detects the mode
+(`resolveTenantSlug(host)` → null on the apex) and threads a tenant **base** through nav,
+MDX links/images, and the navbar so root-absolute URLs (`/quickstart`, `/img/x.png`) are
+prefixed (`withBase`, `src/lib/url-base.ts`) instead of escaping to the apex. Base is empty
+in host mode → output is byte-identical. This is **additive**: when a real domain is added,
+subdomain serving lights up through the unchanged resolver; the only follow-up is an optional
+canonical redirect from the path form. The path form also stays useful as the no-custom-domain
+/ self-host story (§13 portability). Search/assistant remain host-resolved (analytics only)
+and are unchanged by this.
+
 ---
 
 ## 3. Content Pipeline (Git Sync)

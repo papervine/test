@@ -32,10 +32,19 @@ export async function generateMetadata({
 
 export default async function TenantDocsPage({ params }: { params: Promise<Params> }) {
   const { site: slug, path } = await params;
-  // This route is internal — only reachable via the middleware tenant-host rewrite.
-  // Block direct apex access (/sites/… on the platform host) so it can't be used to
-  // view a tenant under the wrong URL.
-  if (!resolveTenantSlug((await headers()).get("host"))) notFound();
+
+  // Two ways to reach a tenant's docs:
+  //  • Host mode (subdomain): `acme.docbot.app/…`, rewritten here by middleware. The
+  //    host resolves to this slug; links/assets stay root-absolute (base empty).
+  //  • Path mode (apex): `apex/sites/acme/…` directly — the interim for deploys
+  //    without a wildcard domain (e.g. Vercel `*.vercel.app`, which won't issue TLS
+  //    for nested subdomains). Links/assets get prefixed with the tenant base so they
+  //    don't escape to the platform apex.
+  // A subdomain host must only ever address its own slug (defense against cross-tenant URLs).
+  const hostSlug = resolveTenantSlug((await headers()).get("host"));
+  if (hostSlug && hostSlug !== slug) notFound();
+  const base = hostSlug ? "" : `/sites/${slug}`;
+  const assetBase = hostSlug ? "" : `/api/tenant-asset/${slug}`;
 
   const record = await getSiteBySlug(slug);
   if (!record?.repoOwner || !record.repoName) notFound();
@@ -48,13 +57,13 @@ export default async function TenantDocsPage({ params }: { params: Promise<Param
 
   return contentContext.run(src, async () => {
     const config = await loadConfig();
-    const sections = await buildNav(config);
+    const sections = await buildNav(config, base);
     const slugStr = (path ?? []).join("/");
     const page = await loadPage(slugStr);
     if (!page) notFound();
 
     const toc = extractToc(page.body);
-    const eyebrow = findGroupLabel(sections, "/" + (slugStr || "index"));
+    const eyebrow = findGroupLabel(sections, base + "/" + (slugStr || "index"));
 
     // Override the apex theme vars with this tenant's brand colors.
     const theme = resolveTheme(config.theme);
@@ -67,7 +76,7 @@ export default async function TenantDocsPage({ params }: { params: Promise<Param
       <>
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
         <PageViewBeacon />
-        <Navbar config={config} />
+        <Navbar config={config} base={base} assetBase={assetBase} />
         <NavTabs sections={sections} />
         <div className="mx-auto flex max-w-7xl gap-8 pl-9 pr-6">
           <Sidebar sections={sections} />
@@ -83,7 +92,7 @@ export default async function TenantDocsPage({ params }: { params: Promise<Param
                     {page.frontmatter.description}
                   </p>
                 )}
-                <Mdx source={page.body} />
+                <Mdx source={page.body} linkBase={base} assetBase={assetBase} />
               </article>
               <TableOfContents items={toc} />
             </div>

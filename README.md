@@ -70,6 +70,24 @@ A page's sidebar label comes from its frontmatter `title` (falling back to a
 title-cased slug). Register pages by adding their slug to a group's `pages` array
 in `docs.json`.
 
+## Hosting tenant docs (subdomain vs. path)
+
+Each connected site is served at its own host — `{slug}.docbot.app` in prod,
+`{slug}.localhost:3100` in dev — or a custom domain. **Subdomain serving needs a
+wildcard domain you own + wildcard TLS.** A bare deploy that can't provide that — e.g.
+a free `*.vercel.app`, where the platform won't issue TLS for nested
+`{slug}.your-proj.vercel.app` subdomains — falls back to a **path form** on the apex:
+
+```
+https://your-proj.vercel.app/sites/{slug}
+```
+
+Same renderer, links/assets prefixed so they don't escape the apex (`src/lib/url-base.ts`).
+The dashboard's "live docs" link picks the right form automatically based on the deploy
+host (`supportsSubdomainTenants`). To switch to subdomains later: own a domain, add a
+wildcard `*.your-domain` DNS record pointed at the host + the apex to the project, and
+make `resolveTenantSlug` recognize its suffix — no other code changes. See SPEC.md §2.
+
 ## Testing
 
 ```bash

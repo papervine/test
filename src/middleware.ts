@@ -43,7 +43,10 @@ export function middleware(req: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
-  if (ASSET_RE.test(pathname)) {
+  // Apex static assets stream from DOCBOT_CONTENT — but not `/api/…`, which includes
+  // path-mode tenant assets (`/api/tenant-asset/{slug}/img.png`) that must reach their
+  // route handler, not the dbasset reader.
+  if (ASSET_RE.test(pathname) && !pathname.startsWith("/api/")) {
     const url = req.nextUrl.clone();
     url.pathname = `/dbasset${pathname}`;
     return NextResponse.rewrite(url);

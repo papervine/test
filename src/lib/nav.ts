@@ -2,6 +2,7 @@ import "server-only";
 import type { DocsConfig } from "./config";
 import { loadPage } from "./content";
 import { apiOperations } from "./openapi";
+import { withBase } from "./url-base";
 
 /** Serializable nav tree handed to the client Sidebar. */
 export type NavLeaf = { title: string; href: string };
@@ -146,11 +147,30 @@ export function findGroupLabel(sections: NavSection[], href: string): string | u
   return found;
 }
 
+/** Deep-prefix every leaf href in the nav with a tenant base (path-based serving). */
+function prefixSections(sections: NavSection[], base: string): NavSection[] {
+  const prefixNodes = (nodes: (NavLeaf | NavNode)[]): (NavLeaf | NavNode)[] =>
+    nodes.map((n) =>
+      "href" in n
+        ? { ...n, href: withBase(n.href, base)! }
+        : { ...n, items: prefixNodes(n.items) },
+    );
+  return sections.map((s) => ({
+    ...s,
+    href: withBase(s.href, base),
+    hrefs: s.hrefs.map((h) => withBase(h, base)!),
+    nodes: prefixNodes(s.nodes),
+  }));
+}
+
 /**
  * Build the sidebar from docs.json. Unwraps the default language/version (M1
  * renders one; a switcher comes later), then renders tabs as sections.
+ *
+ * `base` prefixes every href for path-based tenant serving (`/sites/{slug}`); it's
+ * empty in host mode (subdomain), where this is a no-op.
  */
-export async function buildNav(config: DocsConfig): Promise<NavSection[]> {
+export async function buildNav(config: DocsConfig, base = ""): Promise<NavSection[]> {
   let nav = config.navigation as Division;
 
   // Descend through localization/version wrappers to the default (first) entry.
@@ -179,5 +199,5 @@ export async function buildNav(config: DocsConfig): Promise<NavSection[]> {
     sections.push({ hrefs: collectHrefs(nodes), nodes });
   }
 
-  return sections;
+  return base ? prefixSections(sections, base) : sections;
 }
