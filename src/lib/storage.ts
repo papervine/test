@@ -15,6 +15,13 @@ const s3 = new S3Client({
   region: process.env.S3_REGION ?? "auto",
   endpoint: process.env.S3_ENDPOINT,
   forcePathStyle: true,
+  // AWS SDK v3 >=3.729 defaults requestChecksumCalculation to "WHEN_SUPPORTED",
+  // which adds a CRC32 trailer (STREAMING-UNSIGNED-PAYLOAD-TRAILER). R2 signs that
+  // canonical request differently than the SDK and rejects PutObject with
+  // SignatureDoesNotMatch (MinIO tolerates it, so local works and prod doesn't).
+  // "WHEN_REQUIRED" restores pre-3.729 behavior. See SPEC §3.1.
+  requestChecksumCalculation: "WHEN_REQUIRED",
+  responseChecksumValidation: "WHEN_REQUIRED",
   credentials: {
     accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "",
     secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "",
