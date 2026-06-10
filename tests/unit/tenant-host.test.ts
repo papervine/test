@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { resolveTenantSlug, supportsSubdomainTenants } from "@/lib/tenant-host";
+import {
+  resolveTenantSlug,
+  supportsSubdomainTenants,
+  isPlatformHost,
+} from "@/lib/tenant-host";
 
 describe("resolveTenantSlug", () => {
   it("maps a tenant subdomain to its slug", () => {
@@ -19,6 +23,22 @@ describe("resolveTenantSlug", () => {
   it("is case-insensitive and null-safe", () => {
     expect(resolveTenantSlug("ACME.papervine.io")).toBe("acme");
     expect(resolveTenantSlug(null)).toBeNull();
+  });
+});
+
+describe("isPlatformHost", () => {
+  it("is true for hosts Papervine answers on (apex, subdomains, previews, dev)", () => {
+    expect(isPlatformHost("papervine.io")).toBe(true);
+    expect(isPlatformHost("acme.papervine.io")).toBe(true);
+    expect(isPlatformHost("acme.localhost:3100")).toBe(true);
+    expect(isPlatformHost("localhost")).toBe(true);
+    expect(isPlatformHost("127.0.0.1:3100")).toBe(true);
+    expect(isPlatformHost("papervine-two.vercel.app")).toBe(true);
+    expect(isPlatformHost(null)).toBe(true);
+  });
+  it("is false for tenant vanity domains (custom-domain candidates)", () => {
+    expect(isPlatformHost("docs.acme.com")).toBe(false);
+    expect(isPlatformHost("help.example.io")).toBe(false);
   });
 });
 

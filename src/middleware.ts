@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
-import { resolveTenantSlug } from "./lib/tenant-host";
+import { resolveTenantSlug, isPlatformHost } from "./lib/tenant-host";
 
 /**
  * Docs assets (images, fonts, video) are referenced by absolute path from the
@@ -23,6 +23,17 @@ function withSite(req: NextRequest, slug: string) {
   return { request: { headers: requestHeaders } };
 }
 
+/**
+ * Custom domains resolve to a site by a DB lookup, which can't run in the edge
+ * middleware — so instead of resolving the slug here, we forward the raw Host and let
+ * the node `/_domain` route (and the by-host asset/identity handlers) do the lookup.
+ */
+function withHost(req: NextRequest, host: string) {
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-papervine-host", host);
+  return { request: { headers: requestHeaders } };
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -36,6 +47,18 @@ export function middleware(req: NextRequest) {
     // host — they resolve the site from the Host header. Rewriting them under
     // /sites/{slug} would 404. Everything else is docs.
     if (pathname.startsWith("/api/")) return NextResponse.next();
+
+    // Agent surfaces (SPEC §9.1/§10.1) also serve directly on the tenant host: the
+    // /mcp server and the llms.txt index resolve the tenant from the host (and the
+    // x-papervine-site header), and they log agent analytics. Stamp the slug so they
+    // read the right content source, but don't rewrite them under /sites/{slug}.
+    if (
+      pathname === "/mcp" ||
+      pathname === "/llms.txt" ||
+      pathname === "/llms-full.txt"
+    ) {
+      return NextResponse.next(withSite(req, tenant));
+    }
     const url = req.nextUrl.clone();
     // Assets (images/fonts/…) stream from the tenant's synced bucket; everything
     // else is a docs page.
@@ -52,6 +75,28 @@ export function middleware(req: NextRequest) {
   // requestContentSource() for the full why.
   const pathSite = pathname.match(/^\/sites\/([^/]+)(?:\/|$)/)?.[1];
   if (pathSite) return NextResponse.next(withSite(req, pathSite));
+
+  // Custom (vanity) domains (SPEC §2): any host that isn't one of ours is a candidate
+  // domain a tenant pointed at us. We can't DB-resolve the slug at the edge, so forward
+  // the Host and route by it on the node side — docs → /custom-domain, assets → the
+  // by-host asset handler, and the agent/API surfaces resolve the site from the Host
+  // themselves. An unknown host (no matching site) simply 404s in those node handlers.
+  const host = req.headers.get("host");
+  if (host && !isPlatformHost(host) && !process.env.PAPERVINE_CONTENT) {
+    if (pathname.startsWith("/api/")) return NextResponse.next(withHost(req, host));
+    if (
+      pathname === "/mcp" ||
+      pathname === "/llms.txt" ||
+      pathname === "/llms-full.txt"
+    ) {
+      return NextResponse.next(withHost(req, host));
+    }
+    const url = req.nextUrl.clone();
+    url.pathname = ASSET_RE.test(pathname)
+      ? `/api/tenant-asset-by-host${pathname}`
+      : `/custom-domain${pathname === "/" ? "" : pathname}`;
+    return NextResponse.rewrite(url, withHost(req, host));
+  }
 
   // SaaS apex front door: serve the marketing landing at / (SPEC §2). In single-repo
   // preview mode (PAPERVINE_CONTENT set — `papervine dev` / tests) the apex keeps serving the

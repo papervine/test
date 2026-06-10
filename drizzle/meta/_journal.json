@@ -15,6 +15,20 @@
       "when": 1780978617475,
       "tag": "0001_lowly_blazing_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781062083861,
+      "tag": "0002_glamorous_naoko",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1781067975483,
+      "tag": "0003_tired_shinobi_shaw",
+      "breakpoints": true
     }
   ]
 }

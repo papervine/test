@@ -22,6 +22,27 @@ export function resolveTenantSlug(host: string | null): string | null {
   return null;
 }
 
+// Hosts Papervine itself answers on — the apex marketing/control plane and every
+// preview/dev surface — as opposed to a tenant's own vanity domain (docs.acme.com).
+const PLATFORM_APEXES = new Set(["papervine.io"]);
+const PLATFORM_SUFFIXES = [".localhost", ".papervine.io", ".vercel.app"];
+
+/**
+ * Is this Host one Papervine owns (apex, a tenant subdomain, a preview, a dev/test
+ * runner) rather than a tenant's custom domain? The middleware uses it to decide
+ * whether to attempt custom-domain resolution: everything that is NOT a platform host
+ * is treated as a candidate vanity domain (resolved against `site.customDomain`). Pure
+ * + import-free so it stays safe in the edge middleware, like `resolveTenantSlug`.
+ */
+export function isPlatformHost(host: string | null): boolean {
+  if (!host) return true;
+  const name = host.split(":")[0].toLowerCase();
+  if (!name.includes(".")) return true; // bare label (localhost, app) — never a vanity domain
+  if (/^[0-9.]+$/.test(name)) return true; // raw IPv4 (127.0.0.1, CI test runners)
+  if (PLATFORM_APEXES.has(name)) return true;
+  return PLATFORM_SUFFIXES.some((s) => name.endsWith(s));
+}
+
 /**
  * Can tenants be served as `{slug}.{apexBase}` subdomains on this apex host? True only
  * for hosts the resolver actually recognizes (`papervine.io`, `localhost`) — NOT a bare

@@ -1,7 +1,14 @@
 // DOMAIN SCHEMA — Papervine's own control-plane tables (SPEC §2, §9). Kept separate
 // from the Better Auth generated schema.ts so `better-auth generate` never wipes them.
 import { relations } from "drizzle-orm";
-import { pgTable, text, integer, timestamp, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  integer,
+  boolean,
+  timestamp,
+  index,
+} from "drizzle-orm/pg-core";
 import { organization, user } from "./schema";
 
 // A tenant's docs site. One organization can own several. `slug` is the
@@ -19,6 +26,14 @@ export const site = pgTable(
     repoName: text("repo_name"),
     branch: text("branch").default("main").notNull(),
     customDomain: text("custom_domain").unique(),
+    // "Host at /docs": serve the docs under {customDomain}/docs instead of at its
+    // root, so the customer can keep their own site on the apex (incumbent parity).
+    customDomainSubpath: boolean("custom_domain_subpath")
+      .default(false)
+      .notNull(),
+    // Set once a live check (GET {domain}/api/site-identity) confirms the domain
+    // actually resolves to this site; null = pending DNS. Drives the dashboard badge.
+    customDomainVerifiedAt: timestamp("custom_domain_verified_at"),
     // 'draft' until the first successful sync, then 'live'.
     status: text("status").default("draft").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -72,6 +87,10 @@ export const analyticsEvent = pgTable(
     type: text("type").notNull(),
     // 'human' | 'agent'
     source: text("source").default("human").notNull(),
+    // For source='agent', the friendly agent name ('Claude' | 'ChatGPT' | 'Other',
+    // from UA detection — src/lib/ua-detect.ts). Backs the Agents tab "Top agents"
+    // breakdown. null for human events.
+    agent: text("agent"),
     // page_view: the docs path ('/guides/intro'). null for other types.
     path: text("path"),
     // page_view: referring host, or '$direct'. null for other types.

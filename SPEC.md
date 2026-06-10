@@ -92,13 +92,18 @@ docs renderer. A `<EnvBadge>` (top-right, non-prod only — `local`/`preview`, h
 Next.js **middleware** (`src/middleware.ts`) inspects the `Host` header and rewrites
 internally to `/sites/[tenant]/[...slug]`:
 - `*.papervine.io` subdomain → tenant by **slug** (`resolveTenantSlug`, `src/lib/tenant-host.ts`) — **shipped**.
-- custom domain (`docs.acme.com`) → tenant by **host** (`site.customDomain`, unique) — **not yet wired**. The column exists; the resolver/lookup/provisioning don't (see "Custom domains" below).
+- custom domain (`docs.acme.com`) → tenant by **host** (`site.customDomain`, unique) — **shipped**. Owners connect/remove a domain and pick root vs `/docs` hosting at Settings → Domain setup (`customDomainSubpath`); a live check (`GET {domain}/api/site-identity`) flips the badge to Connected and stamps `customDomainVerifiedAt`.
 - apex / `www` / reserved labels → the platform landing + control plane, never a tenant.
 
-Keep the DB **out of edge middleware**: middleware classifies by suffix only. A host that's
-neither apex nor `*.papervine.io` is rewritten to `/sites` and the RSC page (Node runtime,
-has DB) resolves it via `getSiteByCustomDomain(host)` and `notFound()`s if unmatched. Promote
-to a cached host→slug map (Edge Config / Redis, §12) only if edge resolution is later needed.
+Keep the DB **out of edge middleware**: middleware classifies by suffix only (`isPlatformHost`).
+A host that's neither apex nor `*.papervine.io` nor a preview/dev host is a custom-domain
+candidate — middleware forwards the raw Host (`x-papervine-host`) and rewrites docs to the
+dedicated `/custom-domain/[[...path]]` route (assets → `/api/tenant-asset-by-host`), *not* to
+`/sites`, since the slug isn't known at the edge. That RSC route (Node runtime, has DB)
+resolves the site via `getSiteByCustomDomain(host)` and `notFound()`s if unmatched; both
+serving paths share `renderTenantDocs()` so they can't drift. In `/docs` mode the route owns
+only the `/docs/*` subtree (404s elsewhere, so the owner keeps their apex). Promote to a
+cached host→slug map (Edge Config / Redis, §12) only if edge resolution is later needed.
 
 **Interim path-based serving (no wildcard domain).** Subdomain serving needs a wildcard
 domain you own + wildcard TLS. A bare Vercel deploy (`*.vercel.app`) can't get either —
