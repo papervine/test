@@ -176,3 +176,118 @@ export async function getAnalytics(
     })),
   };
 }
+
+// ── Agents tab (SPEC §10.1) ────────────────────────────────────────────────────
+// The Agents toggle is a distinct view, not the human dashboard re-filtered: AI
+// clients hit different surfaces (the /mcp server, the llms.txt index, raw pages),
+// so the metrics that matter are different. Two cards — Agent Visitors and MCP
+// Searches (agent-source `search` events come only from /mcp's search_docs, so an
+// agent search IS an MCP search) — plus Top pages and a Top *agents* breakdown
+// (Claude/ChatGPT/…), keyed off the `agent` column.
+
+export interface AgentAnalyticsData {
+  agentVisitors: MetricCard;
+  mcpSearches: MetricCard;
+  visitors: Array<DayBucket & { count: number }>;
+  topPages: Array<{ path: string; views: number }>;
+  topAgents: Array<{ agent: string; visits: number }>;
+}
+
+// One distinct-visitor (agent page_view sessions) + MCP-search count for a window —
+// mirrors metricsForWindow() but scoped to the two agent metrics, so deltas reuse
+// the same prev-window machinery.
+async function agentMetricsForWindow(
+  siteId: string,
+  start: Date,
+  end: Date,
+): Promise<{ agentVisitors: number; mcpSearches: number }> {
+  const where = windowWhere(siteId, "agent", start, end);
+  const [[{ agentVisitors } = { agentVisitors: 0 }], [{ mcpSearches } = { mcpSearches: 0 }]] =
+    await Promise.all([
+      db
+        .select({
+          agentVisitors: sql<number>`count(distinct ${analyticsEvent.sessionId})::int`,
+        })
+        .from(analyticsEvent)
+        .where(and(where, eq(analyticsEvent.type, "page_view"))),
+      db
+        .select({ mcpSearches: sql<number>`count(*)::int` })
+        .from(analyticsEvent)
+        .where(and(where, eq(analyticsEvent.type, "search"))),
+    ]);
+  return { agentVisitors: agentVisitors ?? 0, mcpSearches: mcpSearches ?? 0 };
+}
+
+export async function getAgentAnalytics(
+  siteId: string,
+  range: ResolvedRange,
+): Promise<AgentAnalyticsData> {
+  const [current, previous, visitorRows, topPages, topAgents] = await Promise.all([
+    agentMetricsForWindow(siteId, range.start, range.end),
+    agentMetricsForWindow(siteId, range.prevStart, range.prevEnd),
+    // Distinct agent visitors per day for the chart.
+    db
+      .select({
+        day: dayExpr(),
+        count: sql<number>`count(distinct ${analyticsEvent.sessionId})::int`,
+      })
+      .from(analyticsEvent)
+      .where(
+        and(
+          windowWhere(siteId, "agent", range.start, range.end),
+          eq(analyticsEvent.type, "page_view"),
+        ),
+      )
+      .groupBy(dayExpr()),
+    // Top pages by agent views.
+    db
+      .select({ path: analyticsEvent.path, views: sql<number>`count(*)::int` })
+      .from(analyticsEvent)
+      .where(
+        and(
+          windowWhere(siteId, "agent", range.start, range.end),
+          eq(analyticsEvent.type, "page_view"),
+          isNotNull(analyticsEvent.path),
+        ),
+      )
+      .groupBy(analyticsEvent.path)
+      .orderBy(desc(sql`count(*)`))
+      .limit(15),
+    // Top agents by distinct visits (sessions), across all agent event types.
+    db
+      .select({
+        agent: analyticsEvent.agent,
+        visits: sql<number>`count(distinct ${analyticsEvent.sessionId})::int`,
+      })
+      .from(analyticsEvent)
+      .where(
+        and(
+          windowWhere(siteId, "agent", range.start, range.end),
+          isNotNull(analyticsEvent.agent),
+        ),
+      )
+      .groupBy(analyticsEvent.agent)
+      .orderBy(desc(sql`count(distinct ${analyticsEvent.sessionId})`))
+      .limit(15),
+  ]);
+
+  const counts = new Map(visitorRows.map((r) => [r.day, r.count]));
+
+  return {
+    agentVisitors: {
+      key: "visitors",
+      label: "Agent Visitors",
+      value: current.agentVisitors,
+      delta: computeDelta(current.agentVisitors, previous.agentVisitors),
+    },
+    mcpSearches: {
+      key: "searches",
+      label: "MCP Searches",
+      value: current.mcpSearches,
+      delta: computeDelta(current.mcpSearches, previous.mcpSearches),
+    },
+    visitors: fillSeries(dayBuckets(range), counts),
+    topPages: topPages.map((r) => ({ path: r.path ?? "/", views: r.views })),
+    topAgents: topAgents.map((r) => ({ agent: r.agent ?? "Other", visits: r.visits })),
+  };
+}

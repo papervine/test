@@ -10,6 +10,8 @@ export interface EventInput {
   siteId: string;
   type: EventType;
   source?: EventSource;
+  /** For agent events: the detected agent name ('Claude' | 'ChatGPT' | 'Other'). */
+  agent?: string | null;
   path?: string | null;
   referrer?: string | null;
   query?: string | null;
@@ -29,6 +31,7 @@ export async function logEvent(e: EventInput): Promise<void> {
       siteId: e.siteId,
       type: e.type,
       source: e.source ?? "human",
+      agent: e.agent ?? null,
       path: e.path ?? null,
       referrer: e.referrer ?? null,
       query: e.query ?? null,

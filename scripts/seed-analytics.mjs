@@ -81,6 +81,7 @@ function row(siteId, e) {
     site_id: siteId,
     type: e.type,
     source: e.source ?? "human",
+    agent: e.agent ?? null,
     path: e.path ?? null,
     referrer: e.referrer ?? null,
     query: e.query ?? null,
@@ -89,6 +90,25 @@ function row(siteId, e) {
     created_at: e.createdAt,
   };
 }
+
+// Agent surfaces (the Agents tab): the llms.txt index dominates, plus a few pages AI
+// clients read via the MCP server. → drives Top pages + Agent Visitors.
+const AGENT_PAGES = [
+  ["/llms.txt", 38],
+  ["/llms-full.txt", 11],
+  ["/", 9],
+  ["/guides/getting-started", 7],
+  ["/features/overview", 5],
+  ["/api-reference/introduction", 4],
+];
+
+// Which agents show up, weighted (Claude + ChatGPT lead) → Top agents breakdown.
+const AGENT_NAMES = [
+  "Claude", "Claude", "Claude", "Claude",
+  "ChatGPT", "ChatGPT", "ChatGPT",
+  "Perplexity",
+  "Gemini",
+];
 
 function buildEvents(siteId) {
   const rows = [];
@@ -138,27 +158,36 @@ function buildEvents(siteId) {
     );
   }
 
-  // Agent traffic (the Agents toggle) — MCP/crawler reads, smaller volume.
-  const agents = makeVisitors(8);
-  for (let i = 0; i < 90; i++) {
-    const v = pick(agents);
-    rows.push(
-      row(siteId, {
-        type: "page_view",
-        source: "agent",
-        path: pick(PAGES)[0],
-        referrer: "$direct",
-        sessionId: v.id,
-        createdAt: timeOnDay(v.day),
-      }),
-    );
+  // Agent traffic (the Agents tab) — llms.txt fetches + MCP reads/searches, smaller
+  // volume. Each visitor is one agent (stable name), so Top agents looks organic.
+  const agents = makeVisitors(8).map((v) => ({ ...v, name: pick(AGENT_NAMES) }));
+
+  // Agent page views, weighted by AGENT_PAGES (llms.txt index dominates).
+  for (const [path, count] of AGENT_PAGES) {
+    for (let i = 0; i < count; i++) {
+      const v = pick(agents);
+      rows.push(
+        row(siteId, {
+          type: "page_view",
+          source: "agent",
+          agent: v.name,
+          path,
+          referrer: "$direct",
+          sessionId: v.id,
+          createdAt: timeOnDay(v.day),
+        }),
+      );
+    }
   }
+
+  // MCP searches (agent-source `search` events come only from /mcp's search_docs).
   for (let i = 0; i < 22; i++) {
     const v = pick(agents);
     rows.push(
       row(siteId, {
         type: "search",
         source: "agent",
+        agent: v.name,
         query: pick(SEARCHES),
         sessionId: v.id,
         createdAt: timeOnDay(v.day),

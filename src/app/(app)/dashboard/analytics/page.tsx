@@ -12,6 +12,7 @@ import {
 } from "@/lib/analytics-range";
 import {
   getAnalytics,
+  getAgentAnalytics,
   type AnalyticsSource,
   type MetricCard as Card,
 } from "@/lib/analytics";
@@ -65,6 +66,13 @@ export default async function AnalyticsPage({
             Connect a repository
           </ButtonLink>
         </div>
+      ) : tab === "agents" ? (
+        <AgentDashboard
+          siteId={activeSite.id}
+          tab={tab}
+          rangeKey={rangeKey}
+          range={range}
+        />
       ) : (
         <Dashboard
           siteId={activeSite.id}
@@ -134,6 +142,61 @@ async function Dashboard({
   );
 }
 
+// The Agents tab (SPEC §10.1) — a distinct layout, not the human dashboard refiltered.
+// Two agent-specific cards, the visitors chart, and a Top *agents* breakdown
+// (Claude/ChatGPT/…) beside Top pages.
+async function AgentDashboard({
+  siteId,
+  tab,
+  rangeKey,
+  range,
+}: {
+  siteId: string;
+  tab: "humans" | "agents";
+  rangeKey: RangeKey;
+  range: ReturnType<typeof resolveRange>;
+}) {
+  const data = await getAgentAnalytics(siteId, range);
+
+  return (
+    <>
+      <div className="mt-6">
+        <AnalyticsControls tab={tab} range={rangeKey} rangeLabel={range.label} />
+      </div>
+
+      <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <MetricCard card={data.agentVisitors} />
+        <MetricCard card={data.mcpSearches} />
+      </div>
+
+      <section className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
+        <h2 className="text-sm font-medium">Agent Visitors Over Time</h2>
+        <p className="text-xs text-[var(--muted)]">
+          Daily agent visitors count for the selected date range
+        </p>
+        <div className="mt-6">
+          <VisitorsChart data={data.visitors} />
+        </div>
+      </section>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <RankTable
+          title="Top pages"
+          rows={data.topPages.map((r) => ({ label: r.path, value: r.views }))}
+          empty="No agent page views yet"
+        />
+        <RankTable
+          title="Top agents"
+          valueLabel="Visits"
+          mono={false}
+          rows={data.topAgents.map((r) => ({ label: r.agent, value: r.visits }))}
+          empty="No agents yet"
+        />
+      </div>
+    </>
+  );
+}
+
 function MetricCard({ card }: { card: Card }) {
   const d = card.delta;
   return (
@@ -174,16 +237,20 @@ function RankTable({
   title,
   rows,
   empty,
+  valueLabel = "Views",
+  mono = true,
 }: {
   title: string;
   rows: Array<{ label: string; value: number }>;
   empty: string;
+  valueLabel?: string;
+  mono?: boolean;
 }) {
   return (
     <section className="overflow-hidden rounded-xl border border-white/[0.06] bg-white/[0.02]">
       <div className="flex items-center justify-between border-b border-white/[0.06] px-4 py-3">
         <h2 className="text-sm font-medium">{title}</h2>
-        <span className="text-xs text-[var(--muted)]">Views</span>
+        <span className="text-xs text-[var(--muted)]">{valueLabel}</span>
       </div>
       {rows.length === 0 ? (
         <p className="px-4 py-8 text-center text-sm text-[var(--muted)]">
@@ -196,7 +263,11 @@ function RankTable({
               key={r.label}
               className="flex items-center justify-between gap-4 px-4 py-2.5"
             >
-              <span className="truncate font-mono text-sm text-[var(--fg)]/90">
+              <span
+                className={`truncate text-sm text-[var(--fg)]/90 ${
+                  mono ? "font-mono" : ""
+                }`}
+              >
                 {r.label}
               </span>
               <span className="shrink-0 tabular-nums text-sm text-[var(--muted)]">

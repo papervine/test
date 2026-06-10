@@ -271,6 +271,26 @@ async function run() {
       log(`  ${failures.length === before ? "✓" : "✗"} mcp server (/mcp tools/list + tools/call)`);
     }
 
+    // llms.txt index (SPEC §9.1). Generated from the in-scope content source — here the
+    // fixtures repo (DB-free, so the agent-analytics logging just no-ops). Assert it's
+    // plain text listing real pages, so the generator can't regress to empty/HTML.
+    {
+      const before = failures.length;
+      try {
+        const res = await fetch(`${BASE}/llms.txt`, { signal: AbortSignal.timeout(30_000) });
+        const body = await res.text();
+        const ct = res.headers.get("content-type") ?? "";
+        if (res.status !== 200) failures.push(`[llms.txt] expected 200, got ${res.status}`);
+        if (!ct.includes("text/plain")) failures.push(`[llms.txt] expected text/plain, got "${ct}"`);
+        for (const needle of ["# ", "## Docs", "(http", "/components"]) {
+          if (!body.includes(needle)) failures.push(`[llms.txt] missing "${needle}"`);
+        }
+      } catch (e) {
+        failures.push(`[llms.txt] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} llms.txt index (200 text/plain + page links)`);
+    }
+
     for (const check of CONTROL_PLANE_CHECKS) {
       const before = failures.length;
       const tag = `control-plane ${check.path}`;
