@@ -10,6 +10,7 @@ import { site, deployment } from "@/lib/db/app-schema";
 import { getSession, listOrganizations } from "@/lib/session";
 import { fetchRepo, hasDocsConfig, fetchLatestCommit, parseRepoInput } from "@/lib/github";
 import { syncSite, type SyncResult } from "@/lib/sync";
+import { revalidateSite } from "@/lib/s3-source";
 import { slugify } from "@/lib/slug";
 import { syncErrorDetail } from "@/lib/sync-error";
 import { ACTIVE_SITE_COOKIE } from "@/lib/active-site";
@@ -95,6 +96,7 @@ export async function connectRepo(
   let error: string | null = null;
   try {
     result = await syncSite({ id: siteId, repoOwner: parsed.owner, repoName: parsed.name, branch });
+    revalidateSite(siteId); // drop any stale Data Cache entries for this site's content
   } catch (e) {
     console.error("initial sync failed", e);
     error = syncErrorDetail(e);
@@ -130,6 +132,7 @@ export async function resyncSite(siteId: string): Promise<void> {
   let error: string | null = null;
   try {
     result = await syncSite({ id: s.id, repoOwner: s.repoOwner, repoName: s.repoName, branch: s.branch });
+    revalidateSite(s.id); // serve the fresh content immediately, not the cached pre-sync copy
   } catch (e) {
     console.error("resync failed", e);
     error = syncErrorDetail(e);

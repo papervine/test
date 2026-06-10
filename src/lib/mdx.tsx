@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 import type { MDXComponents } from "mdx/types";
+import { unstable_cache } from "next/cache";
 import { serialize } from "@mintlify/mdx/server";
 import { run } from "@mdx-js/mdx";
 import * as prodRuntime from "react/jsx-runtime";
@@ -94,6 +95,40 @@ const syntaxHighlightingOptions = {
 } as const;
 
 /**
+ * Compile MDX → compiled-source string, cached in the Data Cache. The compile (Shiki
+ * dual-theme highlighting) is the page render's CPU cost; its output depends only on
+ * the source text + the dev/prod flag (the tenant `base` rewriting happens later, on
+ * the components), so it's content-addressed — a changed page body is a new key. No
+ * tag/TTL needed: the key changes when the content does. Returns a discriminated result
+ * (errors aren't thrown across the cache boundary) so the caller keeps its try/catch.
+ */
+const compileMdx = unstable_cache(
+  async (
+    source: string,
+    dev: boolean,
+  ): Promise<{ compiledSource: string } | { error: string }> => {
+    try {
+      const result = await serialize({
+        source,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        mdxOptions: { ...mdxOptions, development: dev } as any,
+        syntaxHighlightingOptions,
+        parseFrontmatter: false,
+      });
+      if (!("compiledSource" in result) || !result.compiledSource) {
+        const err = (result as { error?: unknown }).error;
+        return { error: err instanceof Error ? err.message : String(err ?? "MDX serialize failed") };
+      }
+      return { compiledSource: result.compiledSource };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  },
+  ["mdx-compile-v1"],
+  { revalidate: 86400 },
+);
+
+/**
  * Rewrite root-absolute links/images inside MDX to the tenant base — only for
  * path-based serving (`/sites/{slug}`). In host mode both bases are empty and we
  * return the components untouched, so the rendered output is byte-identical to before.
@@ -144,16 +179,8 @@ export async function Mdx({
   assetBase?: string;
 }) {
   try {
-    const result = await serialize({
-      source,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      mdxOptions: mdxOptions as any,
-      syntaxHighlightingOptions,
-      parseFrontmatter: false,
-    });
-    if (!("compiledSource" in result) || !result.compiledSource) {
-      throw (result as { error?: unknown }).error ?? new Error("MDX serialize failed");
-    }
+    const result = await compileMdx(source, development);
+    if ("error" in result) throw new Error(result.error);
 
     const components = applyTenantUrls(
       componentsForCompiled(result.compiledSource),
