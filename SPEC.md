@@ -723,11 +723,15 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
   - *Plumbing.* Needs a Slack OAuth app + per-org install (bot token), the
     `channels:read`/`chat:write` scopes, a channel allowlist, and an events endpoint for
     `app_mention`. None of this is built — the page is UI only.
-- **Assistant** — the **same in-docs AI assistant specified in §8 / §8.6**, surfaced under
-  Automate for its setup/try-it flow. Not a fourth system: this page is the management +
-  onboarding entry point (try a starter question, then configure deflection, starter
-  questions, search domains, bot protection, credits per §8.6); its analytics live in
-  §10.1. Keep the two cross-linked rather than duplicated.
+- **Assistant** — the management page for the **same in-docs AI assistant specified in
+  §8 / §8.6**, surfaced under Automate. Not a fourth system; this is the settings surface
+  §8.6 calls for. Layout (per the reference): a **usage overview** strip (Total questions
+  / Answered properly / Not Answered, each with a vs-last-month delta, plus a "Get
+  insights → View more" card linking to the §10.1 Analytics deep-dive), then labeled
+  setting rows — **Status and control** (enable/disable), **Response handling**
+  (deflection to a support email + "show help button", with **Search Domains** gated
+  behind an *enterprise plan* upsell), **Bot protection** (invisible hCaptcha), and
+  **Starter questions** (0/3). Keep the overview cross-linked to §10.1, not duplicated.
 
 **Why one section.** Workflows, Agent, and Assistant all run Claude over the tenant's
 content with tools, and all three write through the single authoring backend. The long
