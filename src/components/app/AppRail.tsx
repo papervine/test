@@ -8,6 +8,9 @@ import {
   Settings,
   FileEdit,
   Plug,
+  Workflow,
+  Bot,
+  MessageCircle,
   type LucideIcon,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
@@ -20,15 +23,37 @@ type RailItem = {
   soon?: boolean;
 };
 
-// Grouped rail IA, mirroring the incumbent's sidebar: a lead group, then an "Admin" section
-// header (MCP + Settings). Deferred surfaces (Editor) render disabled with a "Soon"
-// pill so the IA matches the product target without pretending they work yet.
+// Grouped rail IA, mirroring the incumbent's sidebar: a lead group, an "Automate" section
+// (Workflows · Agent · Assistant — SPEC §10.2), then an "Admin" section header
+// (MCP + Settings). Deferred surfaces (Editor) render disabled with a "Soon" pill;
+// the Automate surfaces are scaffolded UI only — they navigate but nothing they show
+// is wired up yet.
 const NAV_SECTIONS: { heading?: string; items: RailItem[] }[] = [
   {
     items: [
       { href: "/dashboard", label: "Home", icon: Home },
-      { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
       { label: "Editor", icon: FileEdit, soon: true },
+      { href: "/dashboard/analytics", label: "Analytics", icon: BarChart3 },
+    ],
+  },
+  {
+    heading: "Automate",
+    items: [
+      {
+        href: "/dashboard/automate/workflows",
+        label: "Workflows",
+        icon: Workflow,
+      },
+      {
+        href: "/dashboard/automate/agent",
+        label: "Agent",
+        icon: Bot,
+      },
+      {
+        href: "/dashboard/automate/assistant",
+        label: "Assistant",
+        icon: MessageCircle,
+      },
     ],
   },
   {
