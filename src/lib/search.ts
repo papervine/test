@@ -86,7 +86,18 @@ const buildIndex = cache(async () => {
   const db = await create({ schema });
   const config = await loadConfig();
   const nav = await buildNav(config);
-  const slugs = await listPageSlugs();
+
+  // Enumerate pages from the content source AND the nav. `listPageSlugs` is empty for
+  // the live-GitHub source (it doesn't pre-walk the repo over the network), so without
+  // the nav fallback search would index nothing for any not-yet-synced tenant. Union +
+  // dedupe so synced sources (which list real files) also keep nav-only pages. Nav also
+  // yields OpenAPI operation hrefs, but `loadPage` returns null for those and they're
+  // skipped below.
+  const navSlugs = nav
+    .flatMap((s) => s.hrefs)
+    .map((h) => h.replace(/^\//, ""))
+    .map((s) => (s === "index" ? "" : s));
+  const slugs = Array.from(new Set([...(await listPageSlugs()), ...navSlugs]));
 
   const docs: Array<Record<string, string>> = [];
   for (const slug of slugs) {

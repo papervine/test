@@ -13,7 +13,7 @@ type Hit = {
 };
 
 /** The navbar search trigger + the Cmd/Ctrl-K command palette (SPEC.md §6). */
-export function SearchButton() {
+export function SearchButton({ site }: { site?: string }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -38,12 +38,12 @@ export function SearchButton() {
         <span className="flex-1 text-left">Search...</span>
         <kbd className="rounded border border-zinc-200 px-1.5 text-xs dark:border-zinc-700">⌘K</kbd>
       </button>
-      {open && <SearchModal onClose={() => setOpen(false)} />}
+      {open && <SearchModal onClose={() => setOpen(false)} site={site} />}
     </>
   );
 }
 
-function SearchModal({ onClose }: { onClose: () => void }) {
+function SearchModal({ onClose, site }: { onClose: () => void; site?: string }) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
@@ -59,7 +59,11 @@ function SearchModal({ onClose }: { onClose: () => void }) {
     const ctrl = new AbortController();
     const id = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, { signal: ctrl.signal });
+        // Pass the tenant slug explicitly: in path mode (apex `/sites/{slug}`) this
+        // request hits the apex host, so the route can't infer the tenant from the
+        // Host header the way subdomain mode does. See requestContentSource().
+        const siteParam = site ? `&site=${encodeURIComponent(site)}` : "";
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}${siteParam}`, { signal: ctrl.signal });
         const data = await res.json();
         setHits(data.results ?? []);
         setActive(0);
@@ -71,7 +75,7 @@ function SearchModal({ onClose }: { onClose: () => void }) {
       clearTimeout(id);
       ctrl.abort();
     };
-  }, [q]);
+  }, [q, site]);
 
   const go = useCallback(
     (hit?: Hit) => {

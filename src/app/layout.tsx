@@ -1,8 +1,18 @@
 import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
-import { loadConfig } from "@/lib/content";
+import { contentContext, loadConfig } from "@/lib/content";
+import { requestContentSource } from "@/lib/request-source";
 import { resolveTheme, themeCssVars } from "@/lib/theme";
+
+// The root layout renders for every host, including tenant docs. Read config within
+// the request's tenant content source (if any) so the title/theme — and, crucially,
+// the per-request React `cache()` entry for loadConfig — come from the same source the
+// page will read, not the default content/ repo. See requestContentSource().
+async function loadRequestConfig() {
+  const src = await requestContentSource();
+  return src ? contentContext.run(src, () => loadConfig()) : loadConfig();
+}
 
 // Modern geometric display face for the Papervine wordmark (see <Wordmark>).
 // Exposed as the `--font-brand` CSS var, consumed by the `.font-brand` utility.
@@ -14,7 +24,7 @@ const brandFont = Space_Grotesk({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const config = await loadConfig();
+  const config = await loadRequestConfig();
   return {
     title: { default: config.name, template: `%s · ${config.name}` },
   };
@@ -28,7 +38,7 @@ function buildThemeScript(defaultAppearance: "light" | "dark" | "system") {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const config = await loadConfig();
+  const config = await loadRequestConfig();
 
   const theme = resolveTheme(config.theme);
   const colors = config.colors;

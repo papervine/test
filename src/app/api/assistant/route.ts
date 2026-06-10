@@ -1,7 +1,8 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
 import { assistantTools } from "@/lib/assistant-tools";
-import { loadConfig, loadPage } from "@/lib/content";
+import { contentContext, loadConfig, loadPage } from "@/lib/content";
+import { requestContentSource } from "@/lib/request-source";
 import { getSiteByHost } from "@/lib/tenant";
 import { logEvent } from "@/lib/track";
 
@@ -27,49 +28,63 @@ export async function POST(req: Request) {
     );
   }
 
-  const { messages, pageSlug } = (await req.json()) as {
+  const { messages, pageSlug, site } = (await req.json()) as {
     messages: UIMessage[];
     pageSlug?: string;
+    site?: string;
   };
 
-  const config = await loadConfig();
+  // Scope every content read — config, current page, and the streaming tool calls
+  // (searchDocs / readPage / searchApi) — to the requesting tenant. Without this the
+  // route falls back to the default fsSource and answers about the apex Papervine docs
+  // instead of the site the reader is on (same per-request content-source trap the root
+  // layout and tenant page solve via `contentContext.run`; see request-source.ts).
+  // `site` (sent by the client in path mode) wins; otherwise fall back to the Host
+  // header (subdomain mode), since middleware doesn't rewrite `/api/*`.
+  const src = await requestContentSource(site);
+  const run = <T,>(fn: () => Promise<T> | T): Promise<T> | T =>
+    src ? contentContext.run(src, fn) : fn();
 
-  // Log the assistant query for analytics (SPEC §10.1). Status (answered/unanswered)
-  // is a follow-up once the stream resolves; the foundation just counts queries.
-  const site = await getSiteByHost(req.headers.get("host"));
-  if (site) {
-    const q = questionText(messages[messages.length - 1]);
-    if (q)
-      await logEvent({ siteId: site.id, type: "assistant", source: "human", query: q });
-  }
+  return run(async () => {
+    const config = await loadConfig();
 
-  // Current-page context: ground answers in what the reader is looking at (SPEC §8.1).
-  let pageContext = "";
-  if (pageSlug) {
-    const page = await loadPage(pageSlug.replace(/^\//, ""));
-    if (page) {
-      pageContext = ` The user is currently on the page "${
-        page.frontmatter.title ?? pageSlug
-      }" (${pageSlug}); prefer it when the question is about "this".`;
+    // Log the assistant query for analytics (SPEC §10.1). Status (answered/unanswered)
+    // is a follow-up once the stream resolves; the foundation just counts queries.
+    const site = await getSiteByHost(req.headers.get("host"));
+    if (site) {
+      const q = questionText(messages[messages.length - 1]);
+      if (q)
+        await logEvent({ siteId: site.id, type: "assistant", source: "human", query: q });
     }
-  }
 
-  const system =
-    `You are the documentation assistant for "${config.name}". ` +
-    `Answer using ONLY the documentation, which you retrieve with your tools. ` +
-    `Always call searchDocs (and readPage / searchApi as needed) before answering. ` +
-    `Cite every claim as an inline Markdown link to the page you used, e.g. [Quickstart](/quickstart). ` +
-    `If the documentation does not contain the answer, say so plainly rather than guessing. ` +
-    `Be concise and use Markdown.` +
-    pageContext;
+    // Current-page context: ground answers in what the reader is looking at (SPEC §8.1).
+    let pageContext = "";
+    if (pageSlug) {
+      const page = await loadPage(pageSlug.replace(/^\//, ""));
+      if (page) {
+        pageContext = ` The user is currently on the page "${
+          page.frontmatter.title ?? pageSlug
+        }" (${pageSlug}); prefer it when the question is about "this".`;
+      }
+    }
 
-  const result = streamText({
-    model: anthropic(process.env.PAPERVINE_AI_MODEL ?? "claude-sonnet-4-6"),
-    system,
-    messages: await convertToModelMessages(messages),
-    tools: assistantTools,
-    stopWhen: stepCountIs(8),
+    const system =
+      `You are the documentation assistant for "${config.name}". ` +
+      `Answer using ONLY the documentation, which you retrieve with your tools. ` +
+      `Always call searchDocs (and readPage / searchApi as needed) before answering. ` +
+      `Cite every claim as an inline Markdown link to the page you used, e.g. [Quickstart](/quickstart). ` +
+      `If the documentation does not contain the answer, say so plainly rather than guessing. ` +
+      `Be concise and use Markdown.` +
+      pageContext;
+
+    const result = streamText({
+      model: anthropic(process.env.PAPERVINE_AI_MODEL ?? "claude-sonnet-4-6"),
+      system,
+      messages: await convertToModelMessages(messages),
+      tools: assistantTools,
+      stopWhen: stepCountIs(8),
+    });
+
+    return result.toUIMessageStreamResponse();
   });
-
-  return result.toUIMessageStreamResponse();
 }

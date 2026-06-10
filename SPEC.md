@@ -76,10 +76,16 @@ and `Field` primitives — they don't redefine the look. This theme is deliberat
 `docs.json` (`src/lib/theme.ts`, `globals.css`); the two must never leak into each other.
 
 ### Tenant resolution
-Next.js **middleware** inspects the `Host` header:
-- `*.papervine.io` subdomain → look up tenant by slug
-- custom domain → look up tenant by domain (cached map in Redis)
-- rewrites internally to `/_sites/[tenant]/[...slug]`
+Next.js **middleware** (`src/middleware.ts`) inspects the `Host` header and rewrites
+internally to `/sites/[tenant]/[...slug]`:
+- `*.papervine.io` subdomain → tenant by **slug** (`resolveTenantSlug`, `src/lib/tenant-host.ts`) — **shipped**.
+- custom domain (`docs.acme.com`) → tenant by **host** (`site.customDomain`, unique) — **not yet wired**. The column exists; the resolver/lookup/provisioning don't (see "Custom domains" below).
+- apex / `www` / reserved labels → the platform landing + control plane, never a tenant.
+
+Keep the DB **out of edge middleware**: middleware classifies by suffix only. A host that's
+neither apex nor `*.papervine.io` is rewritten to `/sites` and the RSC page (Node runtime,
+has DB) resolves it via `getSiteByCustomDomain(host)` and `notFound()`s if unmatched. Promote
+to a cached host→slug map (Edge Config / Redis, §12) only if edge resolution is later needed.
 
 **Interim path-based serving (no wildcard domain).** Subdomain serving needs a wildcard
 domain you own + wildcard TLS. A bare Vercel deploy (`*.vercel.app`) can't get either —
@@ -94,6 +100,84 @@ subdomain serving lights up through the unchanged resolver; the only follow-up i
 canonical redirect from the path form. The path form also stays useful as the no-custom-domain
 / self-host story (§13 portability). Search/assistant remain host-resolved (analytics only)
 and are unchanged by this.
+
+**Per-request content source — resolve it before the root layout reads, not just in the
+page (fixed 2026-06-09).** A **memoization ordering bug**, not anything cross-request:
+`contentContext` is request-scoped (`AsyncLocalStorage`) and `loadConfig`/`loadPage` are
+memoized per-request with React `cache()`. The catch is that `loadConfig`'s cache key omits
+the active source — it takes no args, so the first call's result is reused for the whole
+render regardless of which `contentContext` source is in scope. The tenant page sets the
+source via `contentContext.run(src, …)` around its own subtree, but the **root layout
+renders first** and calls `loadConfig()` outside any context → the default `content/`
+source fills the memo. The tenant page's later `loadConfig()` then gets that cached
+*default* config (so the sidebar was built from `content/docs.json`) while `loadPage` ran
+in-context and read the tenant's real content — so every page that existed only in
+`content/` (e.g. the starter's `guides/markdown`) rendered as a phantom sidebar link that
+404'd. Fix: a single `requestContentSource()` (`src/lib/request-source.ts`) resolves the
+tenant source from the `x-papervine-site` header (stamped by middleware for both subdomain
+rewrites and apex path-mode) or the host; the **root layout and the page both** read config
+inside `contentContext.run(src)`, so the one memoized `loadConfig` is computed under the
+correct source and config + pages stay on the same source. (The alternative — key the cache
+on a source id, `loadConfig(sourceId)` — would thread an id through every call site; the
+in-context read matches the existing `contentContext` design.) Regression guard:
+`tests/e2e/tenant-render.spec.ts` (seeds a tenant in Postgres+MinIO, asserts the sidebar is
+the tenant's, not the platform's).
+
+**Same trap on the API routes — `/api/search` and `/api/assistant` (fixed 2026-06-09).**
+Middleware deliberately does **not** rewrite `/api/*` (line ~38), so those handlers never
+ran inside `contentContext` and their `runSearch`/`loadConfig`/tool calls fell back to the
+default `content/` source — the tenant's Cmd-K and the AI assistant answered about *our*
+docs (e.g. "Papervine documentation does not cover hidden pages" while reading
+large-docs). Both routes now resolve the source via `requestContentSource(site)` and run
+their whole body inside `contentContext.run(src, …)` — for the assistant this also scopes
+the *streaming* tool executions, which inherit the AsyncLocalStorage store from the
+`streamText()` call site. In subdomain mode the source resolves from the Host header; in
+apex **path mode** the request hits the apex host with no tenant in the Host header, so the
+client (`SearchDialog`, `Assistant`) passes the active slug explicitly (`?site=` / body
+`site`), threaded from the tenant page → `Navbar`/`Assistant`. Separately, `buildIndex`
+(`src/lib/search.ts`) now enumerates pages from the **nav** as well as `listPageSlugs()`,
+so a source that can't cheaply enumerate every key still gets its nav pages indexed —
+without it, search would index nothing for such a source. Regression guards:
+`tests/unit/search-nav-fallback.test.ts` (nav fallback) and a search-scoping case in
+`tests/e2e/tenant-render.spec.ts`.
+
+### Custom domains (BYO `docs.acme.com`)
+
+Two **independent** domain systems — don't conflate them:
+
+1. **`*.papervine.io` (our domain).** One wildcard TLS cert, auto-issued by the host
+   platform because **we control the DNS**. Setup (done 2026-06-09): point `papervine.io`
+   nameservers at Vercel (`ns1/ns2.vercel-dns.com`) so Vercel can DNS-01 the wildcard cert;
+   add `*.papervine.io` as a project domain. *Caveat that bit us:* a wildcard CNAME at the
+   registrar is **not** enough — without Vercel-controlled DNS the wildcard cert never
+   issues, every subdomain fails the TLS handshake (looks like a DNS bug, is actually a
+   cert bug). Moving nameservers requires re-creating non-platform records in Vercel DNS —
+   notably Namecheap email-forwarding **MX + SPF** — or inbound mail breaks.
+
+2. **`docs.acme.com` (customer's domain).** Lives under the **customer's** nameservers,
+   which we never control, so the wildcard trick can't apply — each custom domain needs its
+   **own** cert. Customer adds a `CNAME docs.acme.com → cname.vercel-dns.com` (apex → `A`,
+   can't CNAME); we attach the domain to the project; the platform issues a per-host cert via
+   HTTP-01 (no nameserver change from the customer); we poll until verified; our middleware
+   maps host → site.
+
+**The cap, and the escape (decided 2026-06-09).** Attaching each customer domain to the
+Vercel project hits Vercel's per-project domain cap (~50 on Pro) → an Enterprise upsell.
+We **don't** get trapped, because our tenant resolution already keys off the host header, so
+the platform never needs to know individual customer domains:
+
+- **Phase 1 (first customers):** use Vercel's domains **API** to attach/verify/remove each
+  custom domain. Free up to the cap, zero extra infra. Build: `getSiteByCustomDomain`,
+  middleware third branch, a small Vercel-domains client, dashboard add/verify UI.
+- **Phase 2 (trigger: ~40–50 custom domains):** front custom-domain traffic with a
+  purpose-built SaaS-domains proxy that issues a cert per hostname and forwards to **one**
+  origin we already serve (e.g. `origin.papervine.io`, under our wildcard), passing the real
+  host in **`X-Forwarded-Host`**. Vercel then sees a single domain → cap is moot. Candidates:
+  **Approximated** (drop-in, purpose-built, API), **Cloudflare for SaaS / Custom Hostnames**
+  (cheapest at scale, more config), or self-hosted **Caddy on-demand-TLS** (cheapest, we
+  operate it). Migration is front-door-only: DNS + reading `X-Forwarded-Host` (trusted-proxy
+  gated) in `resolveTenantSlug` — the renderer doesn't move. Build the proxy only when the
+  cap is in sight, not before.
 
 ---
 
@@ -153,16 +237,41 @@ path-traversal guard.
 described for context, but polishing them (e.g. a public-asset redirect) is throwaway work
 once C lands. We build C next. C ships in two steps so it's incremental, not a big bang:
 
-- **C-lite (next):** sync *copies* docs.json + MDX + assets from the repo into object
-  storage; the render plane reads from storage (a new `s3Source` behind the existing
-  `ContentSource` abstraction) and **compiles MDX on request** (reuse today's pipeline).
-  This already removes GitHub-at-request-time, fixes assets, and works for private repos
-  (the worker holds the token). Public repos need no GitHub App; private repos add it.
+- **C-lite (landed 2026-06-09):** sync *copies* docs.json + MDX + assets from the repo into
+  object storage; the render plane reads **only** from storage (`s3Source` behind the existing
+  `ContentSource` abstraction) and **compiles MDX on request** (reuse today's pipeline). This
+  removes GitHub-at-request-time entirely, fixes assets (root-absolute logo/image paths now
+  resolve through `/api/tenant-asset/{slug}/…` against the synced bucket), and works for
+  private repos (the worker holds the token). Public repos need no GitHub App; private add it.
 - **C-full (later):** also **precompile** MDX → bundles at sync time so the render plane only
   executes (the §3 perf goal), plus push webhooks for auto-sync. Optimizations on top of C-lite.
 
-The live-`raw` `githubSource` stays only as the interim content reader until C-lite lands,
-then becomes the sync worker's *source* reader (sync-time, not request-time).
+The request-time GitHub fallback (`githubSource`) is **removed** — `requestContentSource`
+serves a site only once it's synced (`isSynced` → `s3Source`), else 404; an unsynced site has
+nothing to show rather than reaching back to the repo live. GitHub is touched only at *sync
+time* (`src/lib/sync.ts`, via `raw.githubusercontent.com`). The dev seed (`scripts/seed-dev.mjs`)
+syncs its sites into object storage too, so local docs render exactly like production.
+
+**Asset serving within C — proxy now, direct-from-R2 later.** Model C as built
+*proxies* asset bytes: `src/middleware.ts` rewrites `{slug}.papervine.io/img/x.png` →
+`/api/tenant-asset/{slug}/…`, whose handler reads the object from R2 **server-side**
+(S3 token, private bucket) and streams it back. The response carries
+`cache-control: public, max-age=300`, so the host CDN (Vercel) edge-caches it — we
+already get most of the CDN win, and the bucket stays **private with no CORS**.
+
+- **Why this works on custom domains:** the page's hostname and the asset's hostname
+  are independent. Today both are our app's origin (same-origin `/img/…`), so it works
+  transparently whether the docs are on `{slug}.papervine.io` or a tenant's own
+  `docs.acme.com` — no CORS ever.
+- **Scale-up (deferred, 2026-06-09):** when Vercel function invocations / egress on
+  assets show up as cost, serve assets **directly from R2** via a dedicated asset host
+  — `assets.papervine.io`, a *Cloudflare custom domain bound to the bucket* (DNS →
+  Cloudflare/R2, **not** Vercel). Rewrite asset URLs at render/sync time from `/img/…`
+  to `https://assets.papervine.io/sites/{id}/…`. One shared asset host serves every
+  tenant on any page domain. This is the only reason we'd touch **public access** (or
+  presigned URLs) and **CORS**: cross-origin `<img>`/video needs neither, but **fonts**
+  (and `fetch()`/`crossorigin` loads) require a CORS rule allowing `https://*.papervine.io`
+  + tenant custom domains. Not worth it at launch given the proxy already CDN-caches.
 
 ---
 
@@ -441,11 +550,26 @@ the deploy branch. Tools:
 - **Structure:** `create_node` / `move_node` / `update_node` / `delete_node` / `list_nodes`
   — pages, groups, tabs, anchors, versions — operating on our recursive `navigation` (§4)
 - **Config:** `update_config` (edit `docs.json`)
-- **Git:** `checkout` (first call — opens a `papervine-mcp/<slug>` branch), `diff`,
-  `save` (`mode: "pr" | "commit"`), `discard_session`
+- **Git:** `checkout` (**must be the first call** — opens a `papervine-mcp/<slug>-<sha>`
+  branch off the deploy branch, or attaches to a named existing branch; returns an
+  `editorUrl`, see below), `diff`, `save` (`mode: "pr" | "commit"`), `discard_session`
 - **Auth:** a platform-auth (Layer 1, §11) token scoped to the org/repo; RBAC ≥ editor.
 - This is the agent-native counterpart to the web editor (§10) and embodies AGENTS.md's
   "any action a user can take, an agent can too."
+
+**One backend, two front-ends (verified against the incumbent, 2026-06-09).** The authoring MCP
+and the web editor (§10) are *not* separate write paths — they operate on the **same session
+branch and the same server-side draft buffer**. In the incumbent, `checkout`'s response includes
+an `editorUrl` you open to "follow along" in the dashboard editor on that same branch; edits
+"buffer on the session branch in real time," persisted server-side across tabs/devices, and
+only reach the deploy branch on `save`/publish (direct commit if on the deploy branch, else a
+PR with a returned link). **Build implication:** build the authoring layer (GitHub-App write
+creds → session-branch + draft buffer → `save` as commit-or-PR) **once**, then put both the
+MCP and the web editor on top of it. The draft buffer is real persistent state, not a
+commit-on-save shortcut. *(Mechanics confirmed from the incumbent's [Admin MCP](https://example.com/docs/ai/incumbent-mcp)
++ [editor branching/publishing](https://example.com/docs/editor/branching-and-publishing)
+docs; the "any action a user can take, an agent can too" framing is **ours** (AGENTS.md), but
+it matches their actual architecture.)*
 
 ### Status & sequencing
 
@@ -462,20 +586,31 @@ Minimum to operate the SaaS:
 - **Workspace / site switcher:** an org may own several sites (§2), so the dashboard's
   **top-left switcher** selects the **active site** that per-site pages (Analytics, Editor,
   Settings) scope to — mirrors the incumbent's top-left switcher. Lists the sites the user can
-  access + a **New site** action. *(Status 2026-06-08: not built — the AppRail shows the org
-  name only, and per-site pages default to the org's first site. See §10.1.)*
+  access + a **New site** action. *(Status 2026-06-09: built — `SiteSwitcher` replaces the
+  AppRail's org chip; the active site is a cookie (`pv_site`), resolved by the pure
+  `resolveActiveSite` (cookie slug if the user owns it, else the org's first site) so the
+  layout and per-site pages agree. `setActiveSite` validates ownership before writing the
+  cookie. Analytics scopes to it; Editor/Settings will when built. Selecting refreshes
+  in place. Tests: `tests/unit/active-site.test.ts`, `tests/e2e/site-switcher.spec.ts`.)*
 - **Projects:** connect Git repo, pick branch, manual sync, view sync logs/errors.
   *(Status 2026-06-08: failed syncs now persist their error+stack on the `deployment`
   row and the dashboard Activity feed surfaces it under a "Why it failed" disclosure —
   previously the reason was `console.error`'d only, lost to serverless logs the tenant
   can't reach. Operator-facing error tracking (Sentry) is a fast-follow: it complements,
   not replaces, the persisted per-deployment error, which is what the tenant sees.)*
-- **Domains:** assign `*.papervine.io` subdomain; add custom domain (DNS verification + auto TLS via the host platform / `caddy` / ACME).
+- **Domains:** assign `*.papervine.io` subdomain (shipped); add custom domain — show the CNAME to set, attach via the host-platform domains API, poll until verified + TLS issued. Architecture, the per-project domain cap, and the proxy escape hatch are in **§2 → Custom domains**.
 - **Assistant:** the AI assistant management page (enable/disable, deflection, search domains, bot protection, starter questions, credits) — specified in **§8.6**; its usage analytics live on the Analytics page (§10.1).
 - **MCP:** manage the per-docs read MCP and authoring MCP (enable, opt-in, tokens) — see **§9**.
 - **Analytics:** page views, top pages, search terms with no results, AI unanswered questions, plus the assistant deep-dive — expanded in **§10.1**. PostHog or a lightweight first-party events table.
 - **Billing (later):** Stripe; usage tiers (seats, AI tokens, page views).
-- **Web editor / live preview (later):** the incumbent has one; defer past v1.
+- **Web editor / live preview (later):** the incumbent has one; defer past v1. It is **the same
+  capability as the authoring MCP (§9.2), not a parallel one** — both write to one shared
+  session-branch + server-side draft buffer; the MCP's `checkout` even hands off an
+  `editorUrl` into this editor. So the long pole is the **shared authoring backend**
+  (GitHub-App write creds → session branch → draft buffer → `save` as commit-or-PR), not the
+  editor UI. The incumbent also auto-deploys a **per-branch preview** so reviewers see changes
+  before merging the PR — live preview of unsaved drafts needs compile-on-request (§3.1
+  "C-full"), still deferred.
 
 ### 10.1 Analytics
 
@@ -487,10 +622,10 @@ The control-plane **Analytics** page (the incumbent: *Analytics*) — scoped to 
 > **Status (2026-06-08):** built — first-party `analytics_event` table + instrumentation
 > (human page-view beacon, search + assistant logging; agent-source logging via MCP is
 > deferred until `/mcp` is tenant-routed), Humans/Agents toggle, date-range picker, metric
-> cards, visitors chart, top-pages + referrals. **Known gap:** with no site switcher yet, the
-> page defaults to the org's **first site**; multi-site orgs can't choose which. The assistant
+> cards, visitors chart, top-pages + referrals. Scopes to the **active site** chosen by the
+> top-left switcher (§10, built 2026-06-09; defaults to the org's first site). The assistant
 > deep-dive (usage chart, Claude-clustered categories + content-gap engine, chat history, CSV
-> export) is also not yet built.
+> export) is not yet built.
 
 - **Metric cards** (each with a vs-previous delta): **Visitors**, **Views**, **Assistant**
   (queries), **Searches**, **Feedback** (👍/👎).
@@ -743,7 +878,7 @@ Org/auth/RBAC, custom domains + TLS, analytics views. Beta-ready.
 1. **Compile-on-sync vs. on-request.** Spec assumes compile-on-sync for perf/predictability. Does that block any dynamic features we care about (e.g. live Twoslash)?
 2. ~~**Build on Fumadocs vs. from scratch.**~~ **DECIDED (2026-06-07): from scratch.** Multi-tenancy and full control over the architecture outweigh the head start. M0 is a single Next.js app; refactor into the monorepo packages at M2 when multi-tenancy lands.
 3. **Versioning & i18n.** docs.json supports versions + languages in the nav tree. In v1 scope or fast-follow?
-4. **Self-host story.** How easy must the OSS self-host path be vs. the hosted SaaS? Affects how much we hardwire to R2/Vercel/etc. **Resolved (2026-06-08):** code to portable interfaces, not vendors — Better Auth owns its schema in Postgres (§11.1), and storage is the **S3 API** (hosted default R2, local MinIO, self-host points `S3_ENDPOINT` anywhere; §3.1). Domain/TLS plumbing still open.
+4. **Self-host story.** How easy must the OSS self-host path be vs. the hosted SaaS? Affects how much we hardwire to R2/Vercel/etc. **Resolved (2026-06-08):** code to portable interfaces, not vendors — Better Auth owns its schema in Postgres (§11.1), and storage is the **S3 API** (hosted default R2, local MinIO, self-host points `S3_ENDPOINT` anywhere; §3.1). Domain/TLS: **resolved (2026-06-09)** — `*.papervine.io` via host-platform wildcard cert; custom domains via the host-platform domains API, escaping the per-project cap with a SaaS-domains proxy (Approximated / Cloudflare-for-SaaS / Caddy) + `X-Forwarded-Host` when it nears (§2 → Custom domains). Self-host swaps the proxy or uses Caddy on-demand-TLS directly.
 5. **License & governance.** MIT vs. Apache-2.0; CLA; what (if anything) is SaaS-only (open-core) vs. fully open.
 6. **Pricing/limits** for the hosted version (out of scope for build, but shapes tenancy/metering design).
 7. **Web editor** — defer past v1? The incumbent treats it as a differentiator.

@@ -58,8 +58,11 @@ test.afterAll(async () => {
 test("analytics renders human metrics and the Top pages table", async ({ page }) => {
   await page.goto("/dashboard/analytics");
 
-  await expect(page.getByRole("heading", { name: "Analytics" })).toBeVisible();
-  await expect(page.getByText("E2E Docs")).toBeVisible();
+  const heading = page.getByRole("heading", { name: "Analytics" });
+  await expect(heading).toBeVisible();
+  // The active-site label sits next to the heading (the switcher also shows the name now,
+  // so scope to the header to avoid a strict-mode double match).
+  await expect(heading.locator("xpath=following-sibling::*[1]")).toHaveText("E2E Docs");
 
   // Humans is the default tab: 2 visitors, 3 views.
   await expect(page.getByTestId("metric-visitors")).toContainText("2");

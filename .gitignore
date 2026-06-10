@@ -13,3 +13,14 @@ next-env.d.ts
 /playwright-report
 /playwright/.cache
 /tests/e2e/.auth
+
+.projects/cache
+.projects/vault
+.projects/state.test.json
+.projects/state.local.test.json
+.env
+.env.*
+!.env.example
+
+# Transient agent browser-automation artifacts
+.playwright-cli/

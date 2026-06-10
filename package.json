@@ -8,7 +8,8 @@
   },
   "scripts": {
     "papervine": "node bin/papervine.mjs",
-    "dev": "next dev",
+    "dev": "node scripts/dev.mjs",
+    "dev:fresh": "node scripts/dev-fresh.mjs",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",

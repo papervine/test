@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Home, BarChart3, Settings, FileEdit } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
+import { SiteSwitcher } from "./SiteSwitcher";
 
 const NAV = [
   { href: "/dashboard", label: "Home", icon: Home },
@@ -16,10 +17,12 @@ const NAV = [
 const SOON = [{ label: "Editor", icon: FileEdit }];
 
 export function AppRail({
-  orgName,
+  sites,
+  activeSlug,
   userName,
 }: {
-  orgName: string;
+  sites: { slug: string; name: string }[];
+  activeSlug: string | null;
   userName: string;
 }) {
   const pathname = usePathname();
@@ -32,16 +35,16 @@ export function AppRail({
 
   return (
     <aside className="db-glass flex w-60 shrink-0 flex-col border-r border-white/[0.06] px-3 py-4">
-      <div className="flex items-center gap-2 px-2 pb-4">
-        <span className="grid h-6 w-6 place-items-center rounded bg-gradient-to-br from-[var(--blue)] to-[var(--violet)] text-xs font-bold text-white">
-          {orgName.charAt(0).toUpperCase()}
-        </span>
-        <span className="truncate text-sm font-medium">{orgName}</span>
-      </div>
+      <SiteSwitcher sites={sites} activeSlug={activeSlug} />
 
       <nav className="flex flex-col gap-1">
         {NAV.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href;
+          // "/dashboard" is exact-only (else it'd match every sub-route); the rest also
+          // light up on their sub-routes (e.g. Settings on /dashboard/settings/domain).
+          const active =
+            href === "/dashboard"
+              ? pathname === href
+              : pathname === href || pathname.startsWith(href + "/");
           return (
             <Link
               key={href}

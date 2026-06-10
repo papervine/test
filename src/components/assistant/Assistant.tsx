@@ -14,12 +14,13 @@ export function openAssistant(query?: string) {
   window.dispatchEvent(new CustomEvent(OPEN_EVENT, { detail: { query } }));
 }
 
-export function Assistant() {
+export function Assistant({ site }: { site?: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [input, setInput] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const { messages, sendMessage, status, stop } = useChat({
     transport: new DefaultChatTransport({ api: "/api/assistant" }),
@@ -29,10 +30,12 @@ export function Assistant() {
     (text: string) => {
       const trimmed = text.trim();
       if (!trimmed) return;
-      sendMessage({ text: trimmed }, { body: { pageSlug: pathname } });
+      // `site` scopes retrieval to this tenant in path mode (apex `/sites/{slug}`),
+      // where the request can't carry the tenant in its Host header. See route.ts.
+      sendMessage({ text: trimmed }, { body: { pageSlug: pathname, site } });
       setInput("");
     },
-    [sendMessage, pathname],
+    [sendMessage, pathname, site],
   );
 
   // Open triggers: navbar button / Cmd-I / ?assistant= deep link.
@@ -67,6 +70,11 @@ export function Assistant() {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight });
   }, [messages]);
+
+  // Focus the composer when the panel opens so the user can type straight away.
+  useEffect(() => {
+    if (open) inputRef.current?.focus();
+  }, [open]);
 
   if (!open) return null;
 
@@ -136,6 +144,8 @@ export function Assistant() {
             <Paperclip className="h-4 w-4" />
           </button>
           <textarea
+            ref={inputRef}
+            autoFocus
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => {

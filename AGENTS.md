@@ -52,6 +52,23 @@ CI (`.github/workflows/ci.yml`): `verify` job runs typecheck + unit + build + sm
 (no services); `e2e` job runs Playwright against a Postgres service (skipping `@external`).
 Keep both green.
 
+## Driving the app to test it (seeded login + browser)
+
+When a change needs hands-on verification (DoD #4, or the user says "go test this"), don't
+hand-walk signup → onboarding. Seed a known account and drive a real browser:
+
+- `npm run db:seed` (`scripts/seed-dev.mjs`) creates a known login **`dev@papervine.local` /
+  `dev-password-123`**, an org, and a connected site `starter` (→ `papervine/starter`) with
+  activity + analytics data. Idempotent (re-run to refresh the password); **prod-guarded**
+  (refuses any non-localhost `DATABASE_URL`). Needs `docker compose up` (Postgres + MinIO).
+- Log in at `http://localhost:3000/login`. Connect a repo at `/dashboard/connect`. Tenant
+  docs render at **`{slug}.localhost:3000`** (subdomain mode) or **`/sites/{slug}`** (apex
+  path mode) — `resolveTenantSlug` picks the mode off the Host header.
+- Drive it with **`agent-browser`** (the repo standard — `open` / `snapshot -i` / `click @eN`
+  / `fill` / `screenshot`; it navigates `{slug}.localhost` fine) or Playwright. This is the
+  same loop that found the per-request content-source bug (SPEC §2): connect a repo, open its
+  docs, confirm the sidebar/pages are the tenant's, not the platform's.
+
 ## How the renderer works (don't break this)
 
 MDX rendering is a **hybrid** (`src/lib/mdx.tsx`): compile with `@mintlify/mdx`'s
@@ -93,7 +110,8 @@ Core principles, in priority order:
 
 ```bash
 docker compose up -d        # local Postgres (+pgvector) + MinIO (S3) for the control plane
-npm run dev                 # serve the app (apex = landing in SaaS mode; docs via PAPERVINE_CONTENT)
+npm run dev                 # serve the app (singleton: reuses a running server, so parallel agents can't corrupt .next)
+npm run dev:fresh           # kill the dev server, wipe .next, restart clean (use when chunks/manifests are already corrupted)
 npm run build               # production build
 npm run typecheck           # tsc --noEmit
 npm test                    # smoke: renderer + control-plane gate (zero-dep, no DB)

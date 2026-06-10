@@ -12,6 +12,17 @@ import { resolveTenantSlug } from "./lib/tenant-host";
 const ASSET_RE =
   /\.(png|jpe?g|gif|svg|webp|avif|ico|bmp|mp4|webm|pdf|woff2?)$/i;
 
+/**
+ * Forward the resolved tenant slug to the render as a request header, so server
+ * components (the root layout especially) can pick the right content source without
+ * re-resolving the host. Returns the option bag NextResponse.rewrite/next accept.
+ */
+function withSite(req: NextRequest, slug: string) {
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-papervine-site", slug);
+  return { request: { headers: requestHeaders } };
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -31,8 +42,16 @@ export function middleware(req: NextRequest) {
     url.pathname = ASSET_RE.test(pathname)
       ? `/api/tenant-asset/${tenant}${pathname}`
       : `/sites/${tenant}${pathname === "/" ? "" : pathname}`;
-    return NextResponse.rewrite(url);
+    return NextResponse.rewrite(url, withSite(req, tenant));
   }
+
+  // Apex path-mode docs (`/sites/{slug}/…`, the interim for hosts without a wildcard
+  // domain). Stamp the tenant slug so the root layout — which renders before the route
+  // sets contentContext — resolves the same content source the page will, instead of
+  // priming React's per-request cache with the default content/ config. See
+  // requestContentSource() for the full why.
+  const pathSite = pathname.match(/^\/sites\/([^/]+)(?:\/|$)/)?.[1];
+  if (pathSite) return NextResponse.next(withSite(req, pathSite));
 
   // SaaS apex front door: serve the marketing landing at / (SPEC §2). In single-repo
   // preview mode (PAPERVINE_CONTENT set — `papervine dev` / tests) the apex keeps serving the

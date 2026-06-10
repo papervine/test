@@ -1,9 +1,10 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { eq, like } from "drizzle-orm";
+import { and, eq, like } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { site, deployment } from "@/lib/db/app-schema";
 import { getSession, listOrganizations } from "@/lib/session";
@@ -11,8 +12,30 @@ import { fetchRepo, hasDocsConfig, fetchLatestCommit, parseRepoInput } from "@/l
 import { syncSite, type SyncResult } from "@/lib/sync";
 import { slugify } from "@/lib/slug";
 import { syncErrorDetail } from "@/lib/sync-error";
+import { ACTIVE_SITE_COOKIE } from "@/lib/active-site";
 
 export type ConnectState = { error?: string };
+
+// Persist the dashboard's active site (the top-left switcher, SPEC §10). Only stores a
+// slug the caller actually owns, so a tampered/stale cookie can't scope another org's
+// site — resolveActiveSite falls back to the first site if the cookie ever drifts anyway.
+export async function setActiveSite(slug: string): Promise<void> {
+  const org = (await listOrganizations())?.[0];
+  if (!org) return;
+  const [owned] = await db
+    .select({ slug: site.slug })
+    .from(site)
+    .where(and(eq(site.organizationId, org.id), eq(site.slug, slug)))
+    .limit(1);
+  if (!owned) return;
+
+  (await cookies()).set(ACTIVE_SITE_COOKIE, slug, {
+    path: "/",
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 365,
+  });
+  revalidatePath("/dashboard", "layout");
+}
 
 // Globally-unique site slug (it's the *.papervine.io subdomain). Append -2, -3… on collision.
 async function uniqueSlug(base: string): Promise<string> {

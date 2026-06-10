@@ -41,10 +41,12 @@ export function Navbar({
   config,
   base = "",
   assetBase = "",
+  site,
 }: {
   config: DocsConfig;
   base?: string;
   assetBase?: string;
+  site?: string;
 }) {
   const links = config.navbar?.links ?? [];
   const primary = config.navbar?.primary;
@@ -59,7 +61,7 @@ export function Navbar({
         </Link>
 
         {/* Search palette — absolutely centered so the logo/actions widths don't skew it. */}
-        <SearchButton />
+        <SearchButton site={site} />
 
         <div className="ml-auto flex items-center gap-1">
           <AskAssistantButton />

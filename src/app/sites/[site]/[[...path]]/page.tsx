@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import { getSiteBySlug, resolveTenantSlug } from "@/lib/tenant";
-import { githubSource } from "@/lib/github-source";
-import { s3Source, isSynced } from "@/lib/s3-source";
+import { requestContentSource } from "@/lib/request-source";
 import { contentContext, loadConfig, loadPage } from "@/lib/content";
 import { buildNav, findGroupLabel } from "@/lib/nav";
 import { Mdx, extractToc } from "@/lib/mdx";
@@ -13,6 +12,7 @@ import { NavTabs } from "@/components/NavTabs";
 import { Sidebar } from "@/components/Sidebar";
 import { TableOfContents } from "@/components/TableOfContents";
 import { PageViewBeacon } from "@/components/analytics/PageViewBeacon";
+import { Assistant } from "@/components/assistant/Assistant";
 
 // Tenant docs render dynamically — content lives in the tenant's repo, fetched per
 // request (cached briefly). Reached via the middleware host rewrite to /sites/{slug}.
@@ -46,14 +46,10 @@ export default async function TenantDocsPage({ params }: { params: Promise<Param
   const base = hostSlug ? "" : `/sites/${slug}`;
   const assetBase = hostSlug ? "" : `/api/tenant-asset/${slug}`;
 
-  const record = await getSiteBySlug(slug);
-  if (!record?.repoOwner || !record.repoName) notFound();
-
-  // Read from object storage (the synced copy); fall back to live GitHub for sites
-  // connected before they were synced (SPEC §3.1 model C, with A as interim fallback).
-  const src = (await isSynced(record.id))
-    ? s3Source(record.id)
-    : githubSource(record.repoOwner, record.repoName, record.branch);
+  // Resolve the tenant's content source from its slug — the same resolver the root
+  // layout uses, so config + pages read from one source in a single render.
+  const src = await requestContentSource(slug);
+  if (!src) notFound();
 
   return contentContext.run(src, async () => {
     const config = await loadConfig();
@@ -76,7 +72,7 @@ export default async function TenantDocsPage({ params }: { params: Promise<Param
       <>
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
         <PageViewBeacon />
-        <Navbar config={config} base={base} assetBase={assetBase} />
+        <Navbar config={config} base={base} assetBase={assetBase} site={slug} />
         <NavTabs sections={sections} />
         <div className="mx-auto flex max-w-7xl gap-8 pl-9 pr-6">
           <Sidebar sections={sections} />
@@ -98,6 +94,10 @@ export default async function TenantDocsPage({ params }: { params: Promise<Param
             </div>
           </main>
         </div>
+        {/* The navbar's "Ask Assistant" button (and Cmd-I) dispatch an event this
+            component listens for. The (docs)-group layout mounts it for apex docs;
+            tenant pages render outside that group, so mount it here too. */}
+        <Assistant site={slug} />
       </>
     );
   });

@@ -1,8 +1,10 @@
+import { cookies } from "next/headers";
 import { asc, eq } from "drizzle-orm";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { getSession, listOrganizations } from "@/lib/session";
 import { db } from "@/lib/db";
 import { site } from "@/lib/db/app-schema";
+import { ACTIVE_SITE_COOKIE, resolveActiveSite } from "@/lib/active-site";
 import {
   parseRangeKey,
   resolveRange,
@@ -29,14 +31,15 @@ export default async function AnalyticsPage({
   const activeOrg = orgs?.[0];
   if (!session || !activeOrg) return null;
 
-  // Analytics is per-site; default to the org's first site until the workspace/site
-  // switcher exists (SPEC §10 "Workspace / site switcher" + §10.1 status note).
+  // Analytics is per-site, scoped to the active site picked by the top-left switcher
+  // (SPEC §10) — the cookie's site if it's one of this org's, else the first.
   const sites = await db
     .select()
     .from(site)
     .where(eq(site.organizationId, activeOrg.id))
     .orderBy(asc(site.createdAt));
-  const activeSite = sites[0];
+  const cookieSlug = (await cookies()).get(ACTIVE_SITE_COOKIE)?.value;
+  const activeSite = resolveActiveSite(sites, cookieSlug);
 
   const sp = await searchParams;
   const tab: "humans" | "agents" = sp.tab === "agents" ? "agents" : "humans";
