@@ -4,6 +4,7 @@ import "./globals.css";
 import { contentContext, loadConfig } from "@/lib/content";
 import { requestContentSource } from "@/lib/request-source";
 import { resolveTheme, themeCssVars } from "@/lib/theme";
+import { EnvBadge } from "@/components/platform/EnvBadge";
 
 // The root layout renders for every host, including tenant docs. Read config within
 // the request's tenant content source (if any) so the title/theme — and, crucially,
@@ -53,7 +54,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
       </head>
-      <body className={brandFont.variable}>{children}</body>
+      <body className={brandFont.variable}>
+        {children}
+        <EnvBadge />
+      </body>
     </html>
   );
 }

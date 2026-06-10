@@ -75,6 +75,19 @@ and `Field` primitives — they don't redefine the look. This theme is deliberat
 **separate from the docs renderer**, which is light-first and themed per tenant from
 `docs.json` (`src/lib/theme.ts`, `globals.css`); the two must never leak into each other.
 
+**UI primitives: shadcn/ui, mapped onto `.db` tokens.** The Control-Plane uses
+[shadcn/ui](https://ui.shadcn.com) for its component primitives (`src/components/ui/`,
+`cn()` in `src/lib/utils.ts`, `components.json`) — the same choice
+[the incumbent made for their dashboard](https://app.example.com) (verified: `data-slot="button"`
++ the shadcn token constellation + Radix primitives in their shipped HTML/CSS). We follow
+their pattern: keep the shadcn **skeleton** (cva variants, `data-slot`, Radix), but point
+the variants at our `.db` palette rather than stock shadcn vars — so `Button`'s `primary`
+is the brand CTA, not `bg-primary` (which stays bound to the tenant docs theme). The
+neutral tokens (`border`/`ring`/`muted`/`accent`) are mapped to the `.db` CSS vars in
+`tailwind.config.ts` and only resolve inside the `.db` scope, so they can't leak into the
+docs renderer. A `<EnvBadge>` (top-right, non-prod only — `local`/`preview`, hidden when
+`VERCEL_ENV=production`) is the first such primitive, mounted globally in the root layout.
+
 ### Tenant resolution
 Next.js **middleware** (`src/middleware.ts`) inspects the `Host` header and rewrites
 internally to `/sites/[tenant]/[...slug]`:
@@ -537,6 +550,13 @@ tools (Claude, Cursor, Windsurf). Exposes the **same tool layer as the AI Assist
   only when the site has an OpenAPI reference — `search_api`. Tools are the shared
   `docs-tools.ts` capabilities (one implementation, two transports). Covered by
   `tests/smoke.mjs` (tools/list + tools/call). Connect Claude/Cursor to `https://<host>/mcp`.
+- ✅ **Slice 2 (done, 2026-06-09):** tenant-routed + instrumented. Middleware lets `/mcp`
+  serve on the tenant host (resolves the right content source per connection), and each
+  connection logs agent analytics — `search_docs` → an MCP-search event, `read_page` → an
+  agent page view (`source:"agent"`, named via UA, §10.1). This unblocks the Agents tab.
+- ✅ **llms.txt (done, 2026-06-09):** `/llms.txt` + `/llms-full.txt` (`src/app/llms.txt/`,
+  shared `src/lib/llms.ts`) — the llmstxt.org index of every page (full variant inlines page
+  bodies), generated from the in-scope content source. Logged as agent traffic. Smoke-covered.
 - ⏳ **Next:** `docs.json` opt-out + per-tenant rate limits; live API execution as MCP tools
   (depends on the M4 "Try it" auth/proxy slice); index built at sync (M2).
 
@@ -619,11 +639,15 @@ The control-plane **Analytics** page (the incumbent: *Analytics*) — scoped to 
 §9.1) and a **date-range** picker. The Assistant page (§8.6) links here via its "Get insights
 → View more" card.
 
-> **Status (2026-06-08):** built — first-party `analytics_event` table + instrumentation
-> (human page-view beacon, search + assistant logging; agent-source logging via MCP is
-> deferred until `/mcp` is tenant-routed), Humans/Agents toggle, date-range picker, metric
-> cards, visitors chart, top-pages + referrals. Scopes to the **active site** chosen by the
-> top-left switcher (§10, built 2026-06-09; defaults to the org's first site). The assistant
+> **Status (2026-06-09):** built — first-party `analytics_event` table (incl. an `agent`
+> name column) + instrumentation (human page-view beacon, search + assistant logging). The
+> **Humans** tab shows metric cards, visitors chart, top-pages + referrals. The **Agents** tab
+> is now a distinct layout (built 2026-06-09): **Agent Visitors** + **MCP Searches** cards, an
+> Agent-Visitors-Over-Time chart, and **Top pages** + **Top agents** (Claude/ChatGPT/…, keyed
+> off the `agent` column). Agent traffic is logged live now that `/mcp` is tenant-routed (§9.1)
+> and `/llms.txt` exists: UA detection (`src/lib/ua-detect.ts`) names the agent; `read_page`
+> /llms.txt fetches → agent page views, `search_docs` → MCP searches. Scopes to the **active
+> site** chosen by the top-left switcher (§10; defaults to the org's first site). The assistant
 > deep-dive (usage chart, Claude-clustered categories + content-gap engine, chat history, CSV
 > export) is not yet built.
 
