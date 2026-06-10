@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { asc, eq } from "drizzle-orm";
-import { getSession, listOrganizations } from "@/lib/session";
+import { getMemberRole, getSession, listOrganizations } from "@/lib/session";
 import { db } from "@/lib/db";
 import { site } from "@/lib/db/app-schema";
 import { ACTIVE_SITE_COOKIE, resolveActiveSite } from "@/lib/active-site";
@@ -32,12 +32,15 @@ export default async function AppLayout({
   const cookieSlug = (await cookies()).get(ACTIVE_SITE_COOKIE)?.value;
   const activeSite = resolveActiveSite(sites, cookieSlug);
 
+  // The viewer's role in the active org gates admin-only nav surfaces (src/lib/features.ts).
+  const role = await getMemberRole(activeOrg.id, session.user.id);
+
   // "lite" atmosphere: the soft top glow carries the brand, but no grid/grain behind
   // the data-dense dashboard tables and forms.
   return (
     <PlatformShell variant="lite">
       <div className="flex min-h-screen">
-        <AppRail sites={sites} activeSlug={activeSite?.slug ?? null} userName={session.user.name} />
+        <AppRail sites={sites} activeSlug={activeSite?.slug ?? null} userName={session.user.name} role={role} />
         <div className="flex-1 overflow-auto">{children}</div>
       </div>
     </PlatformShell>

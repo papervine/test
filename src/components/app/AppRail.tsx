@@ -14,6 +14,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
+import { canSeeFeature, type FeatureKey } from "@/lib/features";
 import { SiteSwitcher } from "./SiteSwitcher";
 
 type RailItem = {
@@ -21,6 +22,9 @@ type RailItem = {
   label: string;
   icon: LucideIcon;
   soon?: boolean;
+  // When set, the item only renders for roles that can see this feature
+  // (src/lib/features.ts). Absent → visible to everyone.
+  feature?: FeatureKey;
 };
 
 // Grouped rail IA, mirroring the incumbent's sidebar: a lead group, an "Automate" section
@@ -43,16 +47,19 @@ const NAV_SECTIONS: { heading?: string; items: RailItem[] }[] = [
         href: "/dashboard/automate/workflows",
         label: "Workflows",
         icon: Workflow,
+        feature: "automate.workflows",
       },
       {
         href: "/dashboard/automate/agent",
         label: "Agent",
         icon: Bot,
+        feature: "automate.agent",
       },
       {
         href: "/dashboard/automate/assistant",
         label: "Assistant",
         icon: MessageCircle,
+        feature: "automate.assistant",
       },
     ],
   },
@@ -69,10 +76,12 @@ export function AppRail({
   sites,
   activeSlug,
   userName,
+  role,
 }: {
   sites: { slug: string; name: string }[];
   activeSlug: string | null;
   userName: string;
+  role: string | null;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -82,12 +91,21 @@ export function AppRail({
     router.push("/login");
   }
 
+  // Drop feature-gated items the viewer can't see, then drop any section left empty
+  // (so an admin-only section's heading vanishes too for non-admins).
+  const sections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter(
+      (item) => !item.feature || canSeeFeature(item.feature, role),
+    ),
+  })).filter((section) => section.items.length > 0);
+
   return (
     <aside className="db-glass flex w-60 shrink-0 flex-col border-r border-white/[0.06] px-3 py-4">
       <SiteSwitcher sites={sites} activeSlug={activeSlug} />
 
       <nav className="flex flex-col gap-4">
-        {NAV_SECTIONS.map((section, i) => (
+        {sections.map((section, i) => (
           <div key={section.heading ?? i} className="flex flex-col gap-1">
             {section.heading && (
               <h3 className="px-2 pb-0.5 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]/60">
