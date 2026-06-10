@@ -1,6 +1,11 @@
 import { headers } from "next/headers";
 import { ChevronRight } from "lucide-react";
 import { requireActiveSite } from "@/lib/require-active-site";
+import {
+  getDomainStatus,
+  vercelDomainsConfigured,
+  VERCEL_CNAME_TARGET,
+} from "@/lib/vercel-domains";
 import { DomainSetupForm } from "./DomainSetupForm";
 
 // Concrete Domain setup surface — overrides the settings/[section] placeholder for the
@@ -9,6 +14,20 @@ import { DomainSetupForm } from "./DomainSetupForm";
 export default async function DomainSettingsPage() {
   const site = await requireActiveSite();
   const apexBase = ((await headers()).get("host") ?? "").replace(/^(app|www)\./, "");
+
+  // What the customer CNAMEs to: when Vercel manages the domain, the host points at
+  // Vercel's edge (cname.vercel-dns.com), not our apex — that's what gets the per-host
+  // cert issued (SPEC §2). With no Vercel token (local/self-host) we fall back to the
+  // apex, the path/self-host story.
+  const cnameTarget = vercelDomainsConfigured() ? VERCEL_CNAME_TARGET : apexBase;
+
+  // While a connected domain is still pending, surface Vercel's exact ownership records
+  // (a TXT challenge only appears when the host/apex is already used elsewhere). Skipped
+  // once verified, and a no-op (null) when Vercel isn't configured.
+  const status =
+    site?.customDomain && site.customDomainVerifiedAt === null
+      ? await getDomainStatus(site.customDomain)
+      : null;
 
   return (
     <div className="px-8 py-6">
@@ -32,7 +51,8 @@ export default async function DomainSettingsPage() {
           initialDomain={site.customDomain ?? ""}
           initialSubpath={site.customDomainSubpath}
           verified={site.customDomainVerifiedAt !== null}
-          cnameTarget={apexBase}
+          cnameTarget={cnameTarget}
+          verificationRecords={status?.verification ?? []}
         />
       )}
     </div>

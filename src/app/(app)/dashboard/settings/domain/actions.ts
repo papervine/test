@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { site } from "@/lib/db/app-schema";
 import { requireActiveSite } from "@/lib/require-active-site";
 import { parseCustomDomain } from "@/lib/custom-domain";
+import { addProjectDomain, removeProjectDomain } from "@/lib/vercel-domains";
 
 export type DomainActionState = { ok?: boolean; error?: string };
 
@@ -51,6 +52,14 @@ export async function setCustomDomain(input: {
   const parsed = parseCustomDomain(input.domain);
   if (!parsed.ok) return { error: parsed.error };
 
+  // Attach to the Vercel project FIRST — this is what makes the platform issue the
+  // per-host TLS cert and route the host to us; DNS alone never completes the handshake
+  // (SPEC §2). Do it before the DB write so a hard failure (e.g. the host is owned by
+  // another project) is surfaced without leaving an unservable domain saved. No-op when
+  // Vercel isn't configured (local/CI) — the DNS-only path below still applies.
+  const attached = await addProjectDomain(parsed.domain);
+  if (!attached.ok) return { error: attached.error };
+
   try {
     await db
       .update(site)
@@ -69,6 +78,11 @@ export async function setCustomDomain(input: {
     throw e;
   }
 
+  // If the owner pointed the site at a *different* host, free the old one's project slot.
+  if (active.customDomain && active.customDomain !== parsed.domain) {
+    await removeProjectDomain(active.customDomain);
+  }
+
   // Try once now so a domain whose DNS is already pointed shows "Connected" immediately.
   await liveCheck(parsed.domain, active.slug, active.id);
   revalidatePath(DOMAIN_PATH);
@@ -78,6 +92,10 @@ export async function setCustomDomain(input: {
 export async function removeCustomDomain(): Promise<DomainActionState> {
   const active = await requireActiveSite();
   if (!active) return { error: "No active site." };
+
+  // Detach from the Vercel project (best-effort) before clearing it locally, so the
+  // project-domain slot is freed (SPEC §2 — the per-project cap is finite).
+  if (active.customDomain) await removeProjectDomain(active.customDomain);
 
   await db
     .update(site)

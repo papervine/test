@@ -8,17 +8,20 @@ import {
   verifyCustomDomain,
   type DomainActionState,
 } from "./actions";
+import type { DomainVerification } from "@/lib/vercel-domains";
 
 export function DomainSetupForm({
   initialDomain,
   initialSubpath,
   verified,
   cnameTarget,
+  verificationRecords,
 }: {
   initialDomain: string;
   initialSubpath: boolean;
   verified: boolean;
   cnameTarget: string;
+  verificationRecords: DomainVerification[];
 }) {
   const [domain, setDomain] = useState(initialDomain);
   const [subpath, setSubpath] = useState(initialSubpath);
@@ -143,6 +146,29 @@ export function DomainSetupForm({
             <code className="text-[var(--fg)]">{cnameTarget}</code>. Once it
             propagates, this flips to <span className="text-emerald-400">Connected</span>.
           </p>
+
+          {/* Vercel only demands an ownership challenge when the host (or its apex) is
+              already in use elsewhere on the platform — so this block is usually empty. */}
+          {verificationRecords.length > 0 && (
+            <div className="mt-3 border-t border-white/[0.08] pt-3">
+              <div className="font-medium text-[var(--fg)]">
+                Also add {verificationRecords.length === 1 ? "this record" : "these records"} to
+                verify ownership
+              </div>
+              <div className="mt-2 space-y-2">
+                {verificationRecords.map((r, i) => (
+                  <div key={i} className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+                    <span className="text-xs uppercase text-[var(--muted)]/70">Type</span>
+                    <code className="text-[var(--fg)]">{r.type}</code>
+                    <span className="text-xs uppercase text-[var(--muted)]/70">Name</span>
+                    <code className="break-all text-[var(--fg)]">{r.domain}</code>
+                    <span className="text-xs uppercase text-[var(--muted)]/70">Value</span>
+                    <code className="break-all text-[var(--fg)]">{r.value}</code>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

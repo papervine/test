@@ -97,7 +97,7 @@ docs renderer. A `<EnvBadge>` (top-right, non-prod only — `local`/`preview`, h
 Next.js **middleware** (`src/middleware.ts`) inspects the `Host` header and rewrites
 internally to `/sites/[tenant]/[...slug]`:
 - `*.papervine.io` subdomain → tenant by **slug** (`resolveTenantSlug`, `src/lib/tenant-host.ts`) — **shipped**.
-- custom domain (`docs.acme.com`) → tenant by **host** (`site.customDomain`, unique) — **shipped**. Owners connect/remove a domain and pick root vs `/docs` hosting at Settings → Domain setup (`customDomainSubpath`); a live check (`GET {domain}/api/site-identity`) flips the badge to Connected and stamps `customDomainVerifiedAt`.
+- custom domain (`docs.acme.com`) → tenant by **host** (`site.customDomain`, unique) — **shipped**. Owners connect/remove a domain and pick root vs `/docs` hosting at Settings → Domain setup (`customDomainSubpath`); connecting attaches the host to the Vercel project so its per-host cert issues (`vercel-domains.ts`, env-gated — see §2 → Custom domains), and a live check (`GET {domain}/api/site-identity`) flips the badge to Connected and stamps `customDomainVerifiedAt`.
 - apex / `www` / reserved labels → the platform landing + control plane, never a tenant.
 
 Keep the DB **out of edge middleware**: middleware classifies by suffix only (`isPlatformHost`).
@@ -189,9 +189,21 @@ Vercel project hits Vercel's per-project domain cap (~50 on Pro) → an Enterpri
 We **don't** get trapped, because our tenant resolution already keys off the host header, so
 the platform never needs to know individual customer domains:
 
-- **Phase 1 (first customers):** use Vercel's domains **API** to attach/verify/remove each
-  custom domain. Free up to the cap, zero extra infra. Build: `getSiteByCustomDomain`,
-  middleware third branch, a small Vercel-domains client, dashboard add/verify UI.
+- **Phase 1 (first customers) — built:** use Vercel's domains **API** to attach/verify/remove
+  each custom domain. Free up to the cap, zero extra infra. All four pieces exist:
+  `getSiteByCustomDomain`, the middleware third branch, the **Vercel-domains client**
+  (`src/lib/vercel-domains.ts` — `addProjectDomain`/`removeProjectDomain`/`getDomainStatus`),
+  and the dashboard add/verify UI (`settings/domain`). Connecting a domain attaches it to the
+  project (so the per-host cert issues — DNS alone never completes the TLS handshake);
+  removing or re-pointing it detaches the old host (frees the project-domain slot). The client
+  is **env-gated** on `VERCEL_TOKEN`/`VERCEL_PROJECT_ID`(/`VERCEL_TEAM_ID`): unset locally/CI,
+  where it's a no-op and the form degrades to the DNS-only live check (`/api/site-identity`).
+  "Connected" stays gated on that end-to-end live check (strictly stronger than Vercel's
+  `verified` flag — it can only pass once the cert issued *and* our middleware maps the host to
+  the right slug); Vercel's `verification` records surface in the form only when the host's apex
+  is already in use elsewhere and an ownership challenge is required. Customer CNAMEs to
+  `cname.vercel-dns.com` when Vercel-managed, the apex otherwise (the self-host path form).
+  Pure `parseDomainStatus` + env-gating unit-tested (`tests/unit/vercel-domains.test.ts`).
 - **Phase 2 (trigger: ~40–50 custom domains):** front custom-domain traffic with a
   purpose-built SaaS-domains proxy that issues a cert per hostname and forwards to **one**
   origin we already serve (e.g. `origin.papervine.io`, under our wildcard), passing the real
@@ -630,7 +642,7 @@ Minimum to operate the SaaS:
   previously the reason was `console.error`'d only, lost to serverless logs the tenant
   can't reach. Operator-facing error tracking (Sentry) is a fast-follow: it complements,
   not replaces, the persisted per-deployment error, which is what the tenant sees.)*
-- **Domains:** assign `*.papervine.io` subdomain (shipped); add custom domain — show the CNAME to set, attach via the host-platform domains API, poll until verified + TLS issued. Architecture, the per-project domain cap, and the proxy escape hatch are in **§2 → Custom domains**.
+- **Domains:** assign `*.papervine.io` subdomain (shipped); add custom domain — show the CNAME to set, attach via the host-platform domains API, poll until verified + TLS issued (**built** — `settings/domain` + `vercel-domains.ts`; see **§2 → Custom domains, Phase 1**). Architecture, the per-project domain cap, and the proxy escape hatch are in **§2 → Custom domains**.
 - **Assistant:** the AI assistant management page (enable/disable, deflection, search domains, bot protection, starter questions, credits) — specified in **§8.6**; its usage analytics live on the Analytics page (§10.1).
 - **MCP:** manage the per-docs read MCP and authoring MCP (enable, opt-in, tokens) — see **§9**.
 - **Analytics:** page views, top pages, search terms with no results, AI unanswered questions, plus the assistant deep-dive — expanded in **§10.1**. PostHog or a lightweight first-party events table.
