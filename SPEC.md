@@ -75,6 +75,11 @@ and `Field` primitives — they don't redefine the look. This theme is deliberat
 **separate from the docs renderer**, which is light-first and themed per tenant from
 `docs.json` (`src/lib/theme.ts`, `globals.css`); the two must never leak into each other.
 
+**Apex nav is session-aware.** The marketing landing (`src/app/home/page.tsx`) reads the
+session: a signed-in visitor gets a single **Dashboard** link instead of **Log in / Sign
+up** (which would dead-end them re-signing up). Reading the session opts the page into
+dynamic rendering — acceptable for the apex. Smoke covers the logged-out shape (`/home`).
+
 **UI primitives: shadcn/ui, mapped onto `.db` tokens.** The Control-Plane uses
 [shadcn/ui](https://ui.shadcn.com) for its component primitives (`src/components/ui/`,
 `cn()` in `src/lib/utils.ts`, `components.json`) — the same choice

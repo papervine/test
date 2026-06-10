@@ -110,6 +110,14 @@ const CONTROL_PLANE_CHECKS = [
     desc: "signup page renders in the platform theme (shell + gradient CTA)",
     include: ["Create your Papervine account", "db-glow", "db-cta"],
   },
+  {
+    path: "/home",
+    desc: "logged-out marketing apex shows Log in / Sign up, not Dashboard (session-aware nav, SPEC §2)",
+    include: ['href="/login"', 'href="/signup"'],
+    // Guards the session-aware swap: a signed-out visitor must never see the
+    // Dashboard link (which only renders when getSession() resolves).
+    exclude: ['href="/dashboard"'],
+  },
 ];
 
 function log(msg) {
@@ -268,6 +276,9 @@ async function run() {
           } else {
             for (const needle of check.include ?? []) {
               if (!body.includes(needle)) failures.push(`[${tag}] missing "${needle}" — ${check.desc}`);
+            }
+            for (const needle of check.exclude ?? []) {
+              if (body.includes(needle)) failures.push(`[${tag}] should NOT contain "${needle}" — ${check.desc}`);
             }
           }
         }

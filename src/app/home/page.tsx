@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Wordmark } from "@/components/Wordmark";
+import { getSession } from "@/lib/session";
 
 // Marketing landing for the SaaS apex (SPEC §2). Reached via the middleware rewrite
 // of `/` when not in single-repo preview mode (no PAPERVINE_CONTENT).
@@ -66,7 +67,12 @@ const FEATURES = [
   },
 ];
 
-export default function LandingPage() {
+export default async function LandingPage() {
+  // Apex nav is session-aware: a signed-in visitor gets a single Dashboard link
+  // instead of Log in / Sign up (which would dead-end them). Reading the session
+  // opts this page into dynamic rendering — fine for the marketing apex.
+  const signedIn = Boolean(await getSession());
+
   return (
     <PlatformShell variant="full">
       {/* Header */}
@@ -82,18 +88,29 @@ export default function LandingPage() {
             >
               GitHub
             </a>
-            <Link
-              href="/login"
-              className="rounded-lg px-3 py-1.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/signup"
-              className="db-cta ml-1 rounded-lg px-4 py-1.5 font-medium text-white"
-            >
-              Sign up
-            </Link>
+            {signedIn ? (
+              <Link
+                href="/dashboard"
+                className="db-cta ml-1 rounded-lg px-4 py-1.5 font-medium text-white"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="rounded-lg px-3 py-1.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/signup"
+                  className="db-cta ml-1 rounded-lg px-4 py-1.5 font-medium text-white"
+                >
+                  Sign up
+                </Link>
+              </>
+            )}
           </nav>
         </div>
       </header>
@@ -304,18 +321,29 @@ export default function LandingPage() {
             >
               GitHub
             </a>
-            <Link
-              href="/login"
-              className="transition-colors hover:text-[var(--fg)]"
-            >
-              Log in
-            </Link>
-            <Link
-              href="/signup"
-              className="transition-colors hover:text-[var(--fg)]"
-            >
-              Sign up
-            </Link>
+            {signedIn ? (
+              <Link
+                href="/dashboard"
+                className="transition-colors hover:text-[var(--fg)]"
+              >
+                Dashboard
+              </Link>
+            ) : (
+              <>
+                <Link
+                  href="/login"
+                  className="transition-colors hover:text-[var(--fg)]"
+                >
+                  Log in
+                </Link>
+                <Link
+                  href="/signup"
+                  className="transition-colors hover:text-[var(--fg)]"
+                >
+                  Sign up
+                </Link>
+              </>
+            )}
             <Link
               href="/privacy"
               className="transition-colors hover:text-[var(--fg)]"
