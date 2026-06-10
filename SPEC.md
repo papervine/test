@@ -681,6 +681,60 @@ The Assistant page's overview cards (§8.6), the usage chart, the categories, an
 gaps" all derive from this. Backed by PostHog or a first-party events table; respect
 `noindex`/privacy and per-tenant retention.
 
+### 10.2 Automate — Workflows · Agent · Assistant (speculative)
+
+The **Automate** rail section groups the three surfaces where Papervine *acts on* the
+docs instead of just rendering them. All three mirror the incumbent's "Automate" area and are
+gated behind a per-org **Trialing** entitlement (the rail/page badge). **Status
+(2026-06-10): UI scaffolded, nothing wired.** The pages render the catalog, onboarding,
+and empty states (`/dashboard/automate/{workflows,agent,assistant}`); none of the
+toggles, prompts, or inputs post anywhere yet. This section is the speculative target the
+scaffold is shaped toward — record decisions here as we build, don't treat it as built.
+
+- **Workflows** — a catalog of scheduled/triggered jobs that open content changes as
+  PRs. Two built-in families plus custom:
+  - *Self-updating content* — `Update from code changes` (watch a source repo; when
+    APIs/features change, draft doc updates), `Draft changelog`, `Draft improvements from
+    assistant conversations` (feed the §10.1 content-gap engine into PRs), `Draft
+    improvements from user feedback`.
+  - *Maintenance* — `Translate content` (keep configured locales in sync), `Fix broken
+    links`, `Audit SEO metadata`, `Fix grammar & typos`, `Apply style guide`.
+  - *Custom* — user-defined `{ trigger, prompt, action }`.
+  - Each workflow is `{ enabled, trigger (event | cron), config }`; runs land as
+    **commits or PRs through the shared authoring backend (§9.2 / §10 web-editor)** — the
+    same session-branch + draft-buffer pipeline, never a parallel write path. A
+    `Workflows` vs `Configure` tab split: Configure is the catalog (this scaffold), the
+    Workflows tab is the run history/log (not yet designed). Output quality and
+    audit-ability of agent-authored PRs is the open risk.
+- **Agent** — an interactive agent reachable from chat. **The surface is Slack-centric**
+  (matching the incumbent, which built Agent as a Slack app first): you invoke it with
+  `@papervine <prompt>` in a channel, and the onboarding's "Send your first message"
+  posts a starter prompt to a **Slack channel** you pick. The channel selector is a
+  dropdown populated from the connected workspace (`conversations.list`); in the scaffold
+  it's a static list defaulting to `#general`. Steady state is a connected Slack app that
+  answers questions and opens doc changes on request. Shares the authoring backend with
+  Workflows; the distinction is **interactive (Agent) vs scheduled/triggered
+  (Workflows)**, same underlying tools.
+  - *Why Slack.* The reference product treats Agent as "your docs teammate in Slack" —
+    it lives where the team already works rather than as a separate console, and
+    threads/channels give it conversational context and an audit trail for the PRs it
+    opens. Open question: whether to also offer non-Slack transports (Teams, Discord, a
+    web console) or keep Slack the canonical home.
+  - *Plumbing.* Needs a Slack OAuth app + per-org install (bot token), the
+    `channels:read`/`chat:write` scopes, a channel allowlist, and an events endpoint for
+    `app_mention`. None of this is built — the page is UI only.
+- **Assistant** — the **same in-docs AI assistant specified in §8 / §8.6**, surfaced under
+  Automate for its setup/try-it flow. Not a fourth system: this page is the management +
+  onboarding entry point (try a starter question, then configure deflection, starter
+  questions, search domains, bot protection, credits per §8.6); its analytics live in
+  §10.1. Keep the two cross-linked rather than duplicated.
+
+**Why one section.** Workflows, Agent, and Assistant all run Claude over the tenant's
+content with tools, and all three write through the single authoring backend. The long
+pole is therefore shared (§9.2): GitHub-App write creds → session branch → draft buffer →
+`save` as commit-or-PR. Building that once unblocks all three; until it exists these
+remain scaffolds.
+
 ---
 
 ## 11. Authentication & Access Control

@@ -99,6 +99,21 @@ const CONTROL_PLANE_CHECKS = [
     redirectTo: "/login",
   },
   {
+    path: "/dashboard/automate/workflows",
+    desc: "unauthenticated /dashboard/automate/workflows redirects to /login (SPEC §10.2)",
+    redirectTo: "/login",
+  },
+  {
+    path: "/dashboard/automate/agent",
+    desc: "unauthenticated /dashboard/automate/agent redirects to /login (SPEC §10.2)",
+    redirectTo: "/login",
+  },
+  {
+    path: "/dashboard/automate/assistant",
+    desc: "unauthenticated /dashboard/automate/assistant redirects to /login (SPEC §10.2)",
+    redirectTo: "/login",
+  },
+  {
     path: "/login",
     desc: "login page renders in the platform theme (shell + gradient CTA)",
     // `db-glow` proves PlatformShell wraps it; `db-cta` proves the shared Button is used.
