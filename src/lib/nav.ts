@@ -66,37 +66,46 @@ async function openapiLeaves(div: Division): Promise<(NavLeaf | NavNode)[]> {
 
   if (!Array.isArray(div.pages)) return ops.map(leafFor);
 
-  const out: (NavLeaf | NavNode)[] = [];
-  for (const entry of div.pages) {
-    if (typeof entry === "string" && OP_SELECTOR.test(entry)) {
-      const [method, path] = entry.split(/\s+/);
-      const op = bySelector.get(`${method.toUpperCase()} ${path}`);
-      if (op) out.push(leafFor(op));
-    } else {
-      out.push(...(await collectItem(entry)));
-    }
-  }
-  return out;
+  // Resolve entries concurrently (manual page entries hit loadPage — one S3 round-trip
+  // each); Promise.all preserves nav order. See collectChildren for why this matters.
+  const parts = await Promise.all(
+    div.pages.map((entry) => {
+      if (typeof entry === "string" && OP_SELECTOR.test(entry)) {
+        const [method, path] = entry.split(/\s+/);
+        const op = bySelector.get(`${method.toUpperCase()} ${path}`);
+        return Promise.resolve(op ? [leafFor(op)] : []);
+      }
+      return collectItem(entry);
+    }),
+  );
+  return parts.flat();
 }
 
-/** Collect the child nav items of a division (its root + container arrays). */
+/**
+ * Collect the child nav items of a division (its root + container arrays).
+ *
+ * Every branch is resolved CONCURRENTLY. A leaf's title comes from its page's
+ * frontmatter, so each leaf is one `loadPage` — a network round-trip against the
+ * tenant's object storage (R2). Resolving them serially made building the sidebar
+ * O(pages) round-trips (6–20s on large repos); Promise.all collapses that to a
+ * handful of batches (bounded by the S3 client's socket pool) while preserving order.
+ */
 async function collectChildren(div: Division): Promise<(NavLeaf | NavNode)[]> {
-  const out: (NavLeaf | NavNode)[] = [];
+  const branches: Promise<(NavLeaf | NavNode)[]>[] = [];
   if (typeof div.root === "string") {
-    const leaf = await resolveLeaf(div.root);
-    if (leaf) out.push(leaf);
+    branches.push(resolveLeaf(div.root).then((leaf) => (leaf ? [leaf] : [])));
   }
   if (typeof div.openapi === "string") {
-    out.push(...(await openapiLeaves(div)));
-    return out; // openapi division: `pages` are operation selectors, handled above
+    branches.push(openapiLeaves(div));
+    return (await Promise.all(branches)).flat(); // openapi division: `pages` are operation selectors
   }
   for (const key of CONTAINER_KEYS) {
     const value = div[key];
     if (Array.isArray(value)) {
-      for (const item of value) out.push(...(await collectItem(item)));
+      branches.push(Promise.all(value.map(collectItem)).then((r) => r.flat()));
     }
   }
-  return out;
+  return (await Promise.all(branches)).flat();
 }
 
 /** Turn a single nav entry (slug string or division object) into nav items. */
@@ -184,16 +193,20 @@ export async function buildNav(config: DocsConfig, base = ""): Promise<NavSectio
   const sections: NavSection[] = [];
 
   if (Array.isArray(nav.tabs) && nav.tabs.length) {
-    for (const tab of nav.tabs as Division[]) {
-      const nodes = await collectChildren(tab);
-      const hrefs = collectHrefs(nodes);
-      sections.push({
-        tab: typeof tab.tab === "string" ? tab.tab : undefined,
-        href: hrefs[0],
-        hrefs,
-        nodes,
-      });
-    }
+    // Resolve tabs concurrently — each descends into its own loadPage fan-out.
+    const tabSections = await Promise.all(
+      (nav.tabs as Division[]).map(async (tab) => {
+        const nodes = await collectChildren(tab);
+        const hrefs = collectHrefs(nodes);
+        return {
+          tab: typeof tab.tab === "string" ? tab.tab : undefined,
+          href: hrefs[0],
+          hrefs,
+          nodes,
+        };
+      }),
+    );
+    sections.push(...tabSections);
   } else {
     const nodes = await collectChildren(nav);
     sections.push({ hrefs: collectHrefs(nodes), nodes });
