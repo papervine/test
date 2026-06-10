@@ -622,6 +622,8 @@ Minimum to operate the SaaS:
   layout and per-site pages agree. `setActiveSite` validates ownership before writing the
   cookie. Analytics scopes to it; Editor/Settings will when built. Selecting refreshes
   in place. Tests: `tests/unit/active-site.test.ts`, `tests/e2e/site-switcher.spec.ts`.)*
+- **Overview (home):** the per-site landing page — greeting, live preview, status/identity,
+  quick actions, and the deployment **Activity** feed. Expanded in **§10.3**.
 - **Projects:** connect Git repo, pick branch, manual sync, view sync logs/errors.
   *(Status 2026-06-08: failed syncs now persist their error+stack on the `deployment`
   row and the dashboard Activity feed surfaces it under a "Why it failed" disclosure —
@@ -738,6 +740,47 @@ content with tools, and all three write through the single authoring backend. Th
 pole is therefore shared (§9.2): GitHub-App write creds → session branch → draft buffer →
 `save` as commit-or-PR. Building that once unblocks all three; until it exists these
 remain scaffolds.
+
+### 10.3 Site Overview (home)
+
+The **per-site landing page** — what you see on entering a connected site (the incumbent's
+`app.example.com/{org}/{site}`). Scoped to the **active site** (§10 switcher); it's the
+default `/dashboard` destination once a site exists. It's a *consolidation* surface — every
+panel is a window onto a system specified elsewhere (sync/§3, editor/§10 web-editor,
+domains/§2, workflows/§10.2), not new capability. Layout, top to bottom:
+
+- **Greeting** — time-of-day + the user's first name ("Good afternoon, Jeff"). Cosmetic.
+- **Live preview** — a thumbnail of the rendered docs site (a real screenshot/iframe of the
+  tenant's home page), so the operator sees their live site at a glance.
+- **Status & identity panel** — site name, a **Live** status pill (green dot when the last
+  deploy succeeded; degraded/failed states reuse the §10 deployment status), **Last updated
+  {relative} by {avatar} {name}** (from the latest `deployment`), and quick actions:
+  **Sync** (trigger a manual sync — same path as §10 Projects "manual sync") and **Open
+  editor** (→ §10 web-editor / §9.2 shared authoring backend). Below: **Domain**
+  (`docs.acme.com ↗`, §2 custom domains), the **repo** (`org/repo ↗`), and the **branch**.
+- **Workflow upsell banner** — a dismissible CTA ("Keep your site up to date, automatically
+  · Set up your first Workflow in minutes" → **Start setup**) linking into **Automate ›
+  Workflows (§10.2)**. Shows until the org has configured a workflow.
+- **Activity feed** — the deployment/sync history with a **Live / Previews** toggle (live
+  deploys vs per-branch preview builds, §10 web-editor). Each row: **actor** (avatar + name,
+  or a system actor like *Manual Update* / *Creating your site*), **relative time**,
+  **Status** (Successful / failed — failures expand to the persisted "Why it failed"
+  reason+stack, the §10 Projects 2026-06-08 note), and a **Changes** summary (commit
+  message + file counts: "11 files added, 27 files edited"). Rows expand for detail. This is
+  the same `deployment`-backed feed the dashboard already renders; the Overview is its home.
+
+> **Status (2026-06-10):** built — `/dashboard` is now the per-site Overview, scoped to the
+> active site (§10 switcher). Greeting + a **live-preview iframe** (scaled render of the
+> tenant's home page) + the status/identity panel (Live pill off `site.status`, "Last updated
+> {ago} by {avatar} {name}" from the latest live `deployment`, Re-sync + a disabled *Open
+> editor*, Domain/Repo/branch), the dismissible **WorkflowUpsellBanner** (localStorage dismiss →
+> Automate › Workflows), and the **Activity feed** with a **Live / Previews** toggle (URL
+> `?feed=previews` → `deployment.target`), avatars, status pills, and the "Why it failed"
+> disclosure. Pure bits (`partOfDay`, `parseFeedTarget`) extracted to `src/lib/overview.ts` and
+> unit-tested (`tests/unit/overview.test.ts`); seed now includes `preview`-target deploys.
+> Verified in-browser (the control plane is dark-only — `.db` shell — so there's no light
+> variant). Not yet wired: *Open editor* (the §10 web-editor is still a "soon" surface), and
+> "suppress the banner once a workflow is configured" (Workflows aren't built, §10.2).
 
 ---
 

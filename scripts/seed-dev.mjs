@@ -145,16 +145,20 @@ if (!member[0]) {
 //        cleared+rebuilt so re-runs don't pile up.
 const mins = (m) => new Date(now.getTime() - m * 60_000);
 const feed = [
-  { status: "successful", msg: "docs: expand quickstart with prerequisites", added: 1, edited: 3, at: mins(12), err: null },
-  { status: "successful", msg: "feat: add API reference section", added: 6, edited: 1, at: mins(180), err: null },
+  { status: "successful", target: "live", msg: "docs: expand quickstart with prerequisites", added: 1, edited: 3, at: mins(12), err: null },
+  { status: "successful", target: "live", msg: "feat: add API reference section", added: 6, edited: 1, at: mins(180), err: null },
   {
     status: "failed",
+    target: "live",
     msg: "chore: bump deps",
     added: 0,
     edited: 0,
     at: mins(300),
     err: "docs.json: Unexpected token } in JSON at position 412\n  at JSON.parse (<anonymous>)",
   },
+  // Per-branch preview builds — the Overview Activity feed's Previews tab (SPEC §10.3).
+  { status: "successful", target: "preview", msg: "preview: draft new onboarding flow (branch: onboarding-v2)", added: 4, edited: 2, at: mins(45), err: null },
+  { status: "successful", target: "preview", msg: "preview: restructure guides nav (branch: nav-cleanup)", added: 0, edited: 7, at: mins(220), err: null },
 ];
 
 for (const s of DEV.sites) {
@@ -189,7 +193,7 @@ for (const s of DEV.sites) {
   await sql`delete from deployment where site_id = ${siteId}`;
   for (const d of feed) {
     await sql`insert into deployment (id, site_id, status, target, commit_sha, commit_message, error, files_added, files_edited, actor_user_id, created_at)
-              values (${randomUUID()}, ${siteId}, ${d.status}, 'live', ${randomUUID().slice(0, 7)}, ${d.msg},
+              values (${randomUUID()}, ${siteId}, ${d.status}, ${d.target}, ${randomUUID().slice(0, 7)}, ${d.msg},
                       ${d.err}, ${d.added}, ${d.edited}, ${userId}, ${d.at})`;
   }
 }
