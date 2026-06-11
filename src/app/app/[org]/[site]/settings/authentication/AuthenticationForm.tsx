@@ -24,14 +24,17 @@ import {
   saveAuthConfig,
   regenerateJwtSecret,
   type AuthActionState,
+  type SiteRef,
 } from "./actions";
 
 export function AuthenticationForm({
+  siteRef,
   enabled,
   method,
   config,
   secret,
 }: {
+  siteRef: SiteRef;
   enabled: boolean;
   method: AuthMethod;
   config: ReaderAuthConfig;
@@ -100,7 +103,7 @@ export function AuthenticationForm({
         </div>
         <Switch
           checked={enabled}
-          onCheckedChange={() => run(() => setAuthEnabled(!enabled))}
+          onCheckedChange={() => run(() => setAuthEnabled(siteRef, !enabled))}
           disabled={pending}
           aria-label="Enable authentication"
           className="mt-0.5"
@@ -126,7 +129,7 @@ export function AuthenticationForm({
                   type="button"
                   disabled={pending}
                   onClick={() => {
-                    if (m !== method) run(() => setAuthMethod(m));
+                    if (m !== method) run(() => setAuthMethod(siteRef, m));
                   }}
                   className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
                     activeM
@@ -191,7 +194,7 @@ export function AuthenticationForm({
                     <button
                       type="button"
                       disabled={pending}
-                      onClick={() => run(regenerateJwtSecret)}
+                      onClick={() => run(() => regenerateJwtSecret(siteRef))}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] px-3 py-2.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)] disabled:opacity-50"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
@@ -265,7 +268,7 @@ export function AuthenticationForm({
               onClick={() =>
                 run(
                   () =>
-                    saveAuthConfig({
+                    saveAuthConfig(siteRef, {
                       method,
                       loginUrl,
                       authorizationUrl,

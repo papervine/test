@@ -17,7 +17,11 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "list" : "line",
   use: {
-    baseURL: `http://127.0.0.1:${PORT}`,
+    // The control plane lives on the app host (SPEC §10) at bare /:org/:site — point the
+    // suite there so its relative paths are the real dashboard URLs. `app.localhost`
+    // resolves to loopback (where the webServer listens). Tenant-docs specs address the
+    // apex absolutely (APEX_ORIGIN in constants).
+    baseURL: `http://app.localhost:${PORT}`,
     trace: "on-first-retry",
   },
   projects: [
@@ -38,7 +42,9 @@ export default defineConfig({
     env: {
       DATABASE_URL: TEST_DB_URL,
       BETTER_AUTH_SECRET: "e2e-only-deterministic-secret-do-not-use-in-production-0123456789",
-      BETTER_AUTH_URL: `http://127.0.0.1:${PORT}`,
+      // Auth happens on the app host — trust that origin (Better Auth's CSRF check reads
+      // BETTER_AUTH_URL into trustedOrigins).
+      BETTER_AUTH_URL: `http://app.localhost:${PORT}`,
       S3_ENDPOINT: "http://127.0.0.1:9000",
       S3_REGION: "auto",
       S3_ACCESS_KEY_ID: "papervine",

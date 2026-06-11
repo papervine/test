@@ -28,8 +28,10 @@ describe("settings nav config", () => {
     expect(settingsLabel(FIRST_SETTINGS_SLUG)).toBe("Domain setup");
   });
 
-  it("builds hrefs under /dashboard/settings", () => {
-    expect(settingsHref("api-keys")).toBe("/dashboard/settings/api-keys");
+  it("builds bare hrefs under the URL-scoped site (/:org/:site/settings)", () => {
+    expect(settingsHref("acme", "docs", "api-keys")).toBe(
+      "/acme/docs/settings/api-keys",
+    );
   });
 
   it("resolves labels for every slug, undefined for unknown", () => {

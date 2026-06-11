@@ -4,13 +4,22 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { site } from "@/lib/db/app-schema";
-import { requireActiveSite } from "@/lib/require-active-site";
+import { findSite } from "@/lib/dashboard-context";
+import { siteRoute } from "@/lib/dashboard-nav";
 import { parseCustomDomain } from "@/lib/custom-domain";
 import { addProjectDomain, removeProjectDomain } from "@/lib/vercel-domains";
 
 export type DomainActionState = { ok?: boolean; error?: string };
 
-const DOMAIN_PATH = "/dashboard/settings/domain";
+// The site these actions mutate, carried from the URL-scoped page (/:org/:site) since a
+// server action has no params of its own. findSite re-authorizes it server-side, so the
+// client can't target a site the user doesn't own.
+export type SiteRef = { org: string; site: string };
+
+// Internal route to revalidate (Next keys the cache by the real /app mount, not the
+// rewritten-away public URL).
+const domainPath = (ref: SiteRef) =>
+  siteRoute(ref.org, ref.site, "settings/domain");
 
 // Postgres unique-violation — another site already claimed this domain.
 function isUniqueViolation(e: unknown): boolean {
@@ -42,11 +51,14 @@ async function liveCheck(domain: string, slug: string, siteId: string): Promise<
   return true;
 }
 
-export async function setCustomDomain(input: {
-  domain: string;
-  subpath: boolean;
-}): Promise<DomainActionState> {
-  const active = await requireActiveSite();
+export async function setCustomDomain(
+  ref: SiteRef,
+  input: {
+    domain: string;
+    subpath: boolean;
+  },
+): Promise<DomainActionState> {
+  const active = await findSite(ref.org, ref.site);
   if (!active) return { error: "No active site." };
 
   const parsed = parseCustomDomain(input.domain);
@@ -85,12 +97,12 @@ export async function setCustomDomain(input: {
 
   // Try once now so a domain whose DNS is already pointed shows "Connected" immediately.
   await liveCheck(parsed.domain, active.slug, active.id);
-  revalidatePath(DOMAIN_PATH);
+  revalidatePath(domainPath(ref));
   return { ok: true };
 }
 
-export async function removeCustomDomain(): Promise<DomainActionState> {
-  const active = await requireActiveSite();
+export async function removeCustomDomain(ref: SiteRef): Promise<DomainActionState> {
+  const active = await findSite(ref.org, ref.site);
   if (!active) return { error: "No active site." };
 
   // Detach from the Vercel project (best-effort) before clearing it locally, so the
@@ -106,16 +118,16 @@ export async function removeCustomDomain(): Promise<DomainActionState> {
       updatedAt: new Date(),
     })
     .where(eq(site.id, active.id));
-  revalidatePath(DOMAIN_PATH);
+  revalidatePath(domainPath(ref));
   return { ok: true };
 }
 
-export async function verifyCustomDomain(): Promise<DomainActionState> {
-  const active = await requireActiveSite();
+export async function verifyCustomDomain(ref: SiteRef): Promise<DomainActionState> {
+  const active = await findSite(ref.org, ref.site);
   if (!active?.customDomain) return { error: "No domain to verify." };
 
   const ok = await liveCheck(active.customDomain, active.slug, active.id);
-  revalidatePath(DOMAIN_PATH);
+  revalidatePath(domainPath(ref));
   return ok
     ? { ok: true }
     : { error: "Not reachable yet — point your DNS here, then check again." };

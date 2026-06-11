@@ -21,7 +21,12 @@ const METRICS = [
   { label: "Not Answered", value: "0", delta: null },
 ];
 
-export default function AssistantPage() {
+export default async function AssistantPage({
+  params,
+}: {
+  params: Promise<{ org: string; site: string }>;
+}) {
+  const { org, site } = await params;
   return (
     <div className="mx-auto max-w-5xl px-8 py-10">
       <AutomateHeader page="Assistant" />
@@ -50,7 +55,7 @@ export default function AssistantPage() {
             Get insights into your Assistant usage
           </p>
           <a
-            href="/dashboard/analytics?tab=agents"
+            href={`/${org}/${site}/analytics?tab=agents`}
             className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-lg bg-white/[0.06] px-3 py-1.5 text-xs font-medium hover:bg-white/[0.1]"
           >
             View more <ArrowRight className="h-3.5 w-3.5" />

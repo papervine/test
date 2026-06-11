@@ -1,17 +1,16 @@
 import Link from "next/link";
-import { cookies, headers } from "next/headers";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { headers } from "next/headers";
+import { and, desc, eq } from "drizzle-orm";
 import { ExternalLink, GitBranch, PenLine } from "lucide-react";
-import { getSession, listOrganizations } from "@/lib/session";
 import { supportsSubdomainTenants } from "@/lib/tenant-host";
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
-import { site, deployment } from "@/lib/db/app-schema";
-import { ACTIVE_SITE_COOKIE, resolveActiveSite } from "@/lib/active-site";
+import { deployment } from "@/lib/db/app-schema";
+import { requireSite } from "@/lib/dashboard-context";
+import { siteBase } from "@/lib/dashboard-nav";
 import { parseFeedTarget } from "@/lib/overview";
 import { Greeting } from "@/components/app/Greeting";
 import { ResyncButton } from "@/components/app/ResyncButton";
-import { ButtonLink } from "@/components/platform/Button";
 
 function timeAgo(date: Date): string {
   const secs = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -23,49 +22,21 @@ function timeAgo(date: Date): string {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
+type Params = { org: string; site: string };
 type Search = { feed?: string };
 
-export default async function DashboardHome({
+// The per-site Overview (SPEC §10.3), scoped to the site in the URL (/:org/:site).
+export default async function SiteOverview({
+  params,
   searchParams,
 }: {
+  params: Promise<Params>;
   searchParams: Promise<Search>;
 }) {
-  const session = await getSession();
-  const orgs = await listOrganizations();
-  const activeOrg = orgs?.[0];
-  // The (app) layout redirects org-less users to /onboarding, but the page renders
-  // concurrently with the layout in the RSC tree — guard so it never throws first.
-  if (!session || !activeOrg) return null;
-
+  const { org: orgSlug, site: siteSlug } = await params;
+  const { session, site: activeSite } = await requireSite(orgSlug, siteSlug);
   const firstName = session.user.name.split(" ")[0];
-
-  // The Overview is per-site, scoped to the active site picked by the top-left switcher
-  // (SPEC §10) — the cookie's site if it's one of this org's, else the first.
-  const sites = await db
-    .select()
-    .from(site)
-    .where(eq(site.organizationId, activeOrg.id))
-    .orderBy(asc(site.createdAt));
-  const cookieSlug = (await cookies()).get(ACTIVE_SITE_COOKIE)?.value;
-  const activeSite = resolveActiveSite(sites, cookieSlug);
-
-  if (!activeSite) {
-    return (
-      <div className="mx-auto max-w-5xl px-8 py-10">
-        <h1 className="text-2xl font-semibold">
-        <Greeting firstName={firstName} />
-      </h1>
-        <div className="mt-8 rounded-xl border border-dashed border-white/[0.1] px-6 py-12 text-center">
-          <p className="text-sm text-[var(--muted)]">
-            No docs site yet — connect a repository to get started.
-          </p>
-          <ButtonLink href="/dashboard/connect" className="mt-4">
-            Connect a repository
-          </ButtonLink>
-        </div>
-      </div>
-    );
-  }
+  const base = siteBase(orgSlug, siteSlug);
 
   // Build the site's live docs URL from the current host so it's right in dev
   // ({slug}.localhost:3100) and prod ({slug}.papervine.io), or its custom domain. On a
@@ -75,14 +46,14 @@ export default async function DashboardHome({
   const proto = host.includes("localhost") ? "http" : "https";
   const apexBase = host.replace(/^(app|www)\./, "");
   const subdomains = supportsSubdomainTenants(apexBase);
-  const siteHost =
+  const siteHostUrl =
     activeSite.customDomain ??
     (subdomains
       ? `${activeSite.slug}.${apexBase}`
       : `${apexBase}/sites/${activeSite.slug}`);
   const siteUrl = activeSite.customDomain
     ? `https://${activeSite.customDomain}`
-    : `${proto}://${siteHost}`;
+    : `${proto}://${siteHostUrl}`;
   const repoUrl =
     activeSite.repoOwner && activeSite.repoName
       ? `https://github.com/${activeSite.repoOwner}/${activeSite.repoName}`
@@ -217,7 +188,7 @@ export default async function DashboardHome({
                   rel="noreferrer"
                   className="inline-flex items-center gap-1 hover:opacity-80"
                 >
-                  {siteHost} <ExternalLink className="size-3 text-[var(--muted)]" />
+                  {siteHostUrl} <ExternalLink className="size-3 text-[var(--muted)]" />
                 </a>
               </dd>
             </div>
@@ -251,7 +222,7 @@ export default async function DashboardHome({
           {/* Live / Previews toggle → deployment.target (SPEC §10.3). */}
           <div className="inline-flex rounded-lg border border-white/[0.08] p-0.5 text-xs">
             <Link
-              href="/dashboard"
+              href={base}
               scroll={false}
               className={`rounded-md px-3 py-1 ${
                 feedTarget === "live"
@@ -262,7 +233,7 @@ export default async function DashboardHome({
               Live
             </Link>
             <Link
-              href="/dashboard?feed=previews"
+              href={`${base}?feed=previews`}
               scroll={false}
               className={`rounded-md px-3 py-1 ${
                 feedTarget === "preview"

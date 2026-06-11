@@ -1,5 +1,5 @@
 import { ChevronRight } from "lucide-react";
-import { requireActiveSite } from "@/lib/require-active-site";
+import { requireSite } from "@/lib/dashboard-context";
 import { decryptSecret } from "@/lib/crypto";
 import { isAuthMethod, type AuthMethod, type ReaderAuthConfig } from "@/lib/reader-auth";
 import { AuthenticationForm } from "./AuthenticationForm";
@@ -9,14 +9,19 @@ import { AuthenticationForm } from "./AuthenticationForm";
 // docs behind the customer's own login. The secret is decrypted here (server-only) and
 // handed to the form so the site's own owner can read it back, the way the incumbent reveals
 // its signing secret. Enforcement (the middleware handshake) is the v2 follow-up.
-export default async function AuthenticationSettingsPage() {
-  const site = await requireActiveSite();
+export default async function AuthenticationSettingsPage({
+  params,
+}: {
+  params: Promise<{ org: string; site: string }>;
+}) {
+  const { org: orgSlug, site: siteSlug } = await params;
+  const { site } = await requireSite(orgSlug, siteSlug);
 
   // The stored secret is the org owner's own JWT signing secret / OAuth client secret /
   // shared password — safe to reveal on this org-scoped page. Best-effort: if the key is
   // unset (local without PAPERVINE_ENCRYPTION_KEY) we just show it blank rather than 500.
   let secret = "";
-  if (site?.authSecretEnc) {
+  if (site.authSecretEnc) {
     try {
       secret = decryptSecret(site.authSecretEnc);
     } catch {
@@ -24,7 +29,7 @@ export default async function AuthenticationSettingsPage() {
     }
   }
 
-  const method: AuthMethod = isAuthMethod(site?.authMethod) ? site.authMethod : "jwt";
+  const method: AuthMethod = isAuthMethod(site.authMethod) ? site.authMethod : "jwt";
 
   return (
     <div className="px-8 py-6">
@@ -39,18 +44,13 @@ export default async function AuthenticationSettingsPage() {
         Require readers to authenticate before accessing your documentation.
       </p>
 
-      {!site ? (
-        <p className="mt-8 text-sm text-[var(--muted)]">
-          Connect a site first to set up authentication.
-        </p>
-      ) : (
-        <AuthenticationForm
-          enabled={site.authEnabled}
-          method={method}
-          config={(site.authConfig as ReaderAuthConfig | null) ?? {}}
-          secret={secret}
-        />
-      )}
+      <AuthenticationForm
+        siteRef={{ org: orgSlug, site: siteSlug }}
+        enabled={site.authEnabled}
+        method={method}
+        config={(site.authConfig as ReaderAuthConfig | null) ?? {}}
+        secret={secret}
+      />
     </div>
   );
 }

@@ -1,10 +1,8 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { and, eq, like } from "drizzle-orm";
+import { eq, like } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { site, deployment } from "@/lib/db/app-schema";
 import { getSession, listOrganizations } from "@/lib/session";
@@ -20,32 +18,19 @@ import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { revalidateSite } from "@/lib/s3-source";
 import { slugify } from "@/lib/slug";
 import { syncErrorDetail } from "@/lib/sync-error";
-import { ACTIVE_SITE_COOKIE } from "@/lib/active-site";
+import { siteBase, siteRoute } from "@/lib/dashboard-nav";
 
-export type ConnectState = { error?: string };
+// `redirectTo` is the new site's bare URL; the client does the navigation. A server
+// redirect() here would be followed as a soft RSC nav that skips the app-host Host
+// rewrite (the documented tenant-URL gotcha), landing on the apex instead of the site.
+export type ConnectState = { error?: string; redirectTo?: string };
 
-// Persist the dashboard's active site (the top-left switcher, SPEC §10). Only stores a
-// slug the caller actually owns, so a tampered/stale cookie can't scope another org's
-// site — resolveActiveSite falls back to the first site if the cookie ever drifts anyway.
-export async function setActiveSite(slug: string): Promise<void> {
-  const org = (await listOrganizations())?.[0];
-  if (!org) return;
-  const [owned] = await db
-    .select({ slug: site.slug })
-    .from(site)
-    .where(and(eq(site.organizationId, org.id), eq(site.slug, slug)))
-    .limit(1);
-  if (!owned) return;
+// Site slugs sit beside the org-level `connect` route (/:org/:site vs /:org/connect), so
+// a site slugged "connect" would be shadowed by that page — reserve it.
+const RESERVED_SITE_SLUGS = new Set(["connect"]);
 
-  (await cookies()).set(ACTIVE_SITE_COOKIE, slug, {
-    path: "/",
-    sameSite: "lax",
-    maxAge: 60 * 60 * 24 * 365,
-  });
-  revalidatePath("/dashboard", "layout");
-}
-
-// Globally-unique site slug (it's the *.papervine.io subdomain). Append -2, -3… on collision.
+// Globally-unique site slug (it's the *.papervine.io subdomain). Append -2, -3… on
+// collision, and treat a reserved slug as taken so it falls through to "<root>-2".
 async function uniqueSlug(base: string): Promise<string> {
   const root = slugify(base) || "site";
   const taken = new Set(
@@ -53,7 +38,7 @@ async function uniqueSlug(base: string): Promise<string> {
       (r) => r.slug,
     ),
   );
-  if (!taken.has(root)) return root;
+  if (!taken.has(root) && !RESERVED_SITE_SLUGS.has(root)) return root;
   for (let i = 2; ; i++) if (!taken.has(`${root}-${i}`)) return `${root}-${i}`;
 }
 
@@ -137,8 +122,7 @@ export async function connectRepo(
     actorUserId: session.user.id,
   });
 
-  revalidatePath("/dashboard");
-  redirect("/dashboard");
+  return { redirectTo: siteBase(org.slug, slug) };
 }
 
 // Re-pull a site's repo into object storage (manual sync; webhooks come in C-full).
@@ -175,5 +159,9 @@ export async function resyncSite(siteId: string): Promise<void> {
     actorUserId: session.user.id,
   });
 
-  revalidatePath("/dashboard");
+  // Refresh the site's Overview so the new deployment shows in its Activity feed. The
+  // ResyncButton sits on the site's page; revalidate its INTERNAL route (Next keys the
+  // cache by the real /app mount, not the rewritten-away public URL). s.organizationId
+  // === org.id here, so org.slug is the right org for this site.
+  revalidatePath(siteRoute(org.slug, s.slug));
 }

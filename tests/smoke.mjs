@@ -10,6 +10,7 @@
  * No test framework: pure Node + fetch. Run with `npm test`.
  */
 import { spawn } from "node:child_process";
+import http from "node:http";
 import path from "node:path";
 import process from "node:process";
 
@@ -78,39 +79,42 @@ const SEARCH_CHECKS = [
   { q: "platypus", desc: "noindex pages are excluded from the index", expectEmpty: true },
 ];
 
-// Control plane (SPEC §10, Layer-1 auth). Deliberately DB-free so it runs in CI
-// with no Postgres: the middleware gate redirects before any DB query, and the
-// auth pages are client-rendered. Guards the (docs)/(auth)/(app) route-group
-// split and the /dashboard session gate from regressing.
+// Control plane (SPEC §10, Layer-1 auth). Deliberately DB-free so it runs in CI with no
+// Postgres: the app-host edge gate redirects before any DB query, and the auth pages are
+// client-rendered. The control plane is URL-scoped and lives on the `app.` host at bare
+// /:org/:site (rewritten onto the invisible /app mount). We exercise the gate by sending
+// `Host: app.localhost`, which proves both the edge gate AND that bare /:org/:site never
+// 500s/leaks docs to a signed-out visitor. Guards the (docs)/(auth) route split and the
+// app-host routing from regressing.
 const CONTROL_PLANE_CHECKS = [
   {
-    path: "/dashboard",
-    desc: "unauthenticated /dashboard redirects to /login (middleware gate)",
+    host: "app.localhost",
+    path: "/",
+    desc: "unauthenticated app host / redirects to /login (edge gate)",
     redirectTo: "/login",
   },
   {
-    path: "/dashboard/connect",
-    desc: "unauthenticated /dashboard/connect redirects to /login",
+    host: "app.localhost",
+    path: "/acme/docs",
+    desc: "unauthenticated app host /:org/:site redirects to /login",
     redirectTo: "/login",
   },
   {
-    path: "/dashboard/analytics",
-    desc: "unauthenticated /dashboard/analytics redirects to /login",
+    host: "app.localhost",
+    path: "/acme/connect",
+    desc: "unauthenticated app host /:org/connect redirects to /login",
     redirectTo: "/login",
   },
   {
-    path: "/dashboard/automate/workflows",
-    desc: "unauthenticated /dashboard/automate/workflows redirects to /login (SPEC §10.2)",
+    host: "app.localhost",
+    path: "/acme/docs/analytics",
+    desc: "unauthenticated app host analytics redirects to /login",
     redirectTo: "/login",
   },
   {
-    path: "/dashboard/automate/agent",
-    desc: "unauthenticated /dashboard/automate/agent redirects to /login (SPEC §10.2)",
-    redirectTo: "/login",
-  },
-  {
-    path: "/dashboard/automate/assistant",
-    desc: "unauthenticated /dashboard/automate/assistant redirects to /login (SPEC §10.2)",
+    host: "app.localhost",
+    path: "/acme/docs/automate/workflows",
+    desc: "unauthenticated app host automate redirects to /login (SPEC §10.2)",
     redirectTo: "/login",
   },
   {
@@ -137,6 +141,37 @@ const CONTROL_PLANE_CHECKS = [
 
 function log(msg) {
   process.stdout.write(msg + "\n");
+}
+
+// Raw GET that honors a custom Host header — undici's fetch silently drops `Host` (a
+// forbidden header), so we can't use it to address the `app.` control-plane host. Manual
+// redirect (no follow), so we can assert the gate's 30x → /login.
+function rawGet(pathname, hostHeader) {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        host: "127.0.0.1",
+        port: PORT,
+        path: pathname,
+        method: "GET",
+        headers: hostHeader ? { host: hostHeader } : {},
+      },
+      (res) => {
+        let body = "";
+        res.on("data", (d) => (body += d));
+        res.on("end", () =>
+          resolve({
+            status: res.statusCode,
+            location: res.headers.location ?? "",
+            body,
+          }),
+        );
+      },
+    );
+    req.on("error", reject);
+    req.setTimeout(30_000, () => req.destroy(new Error("timeout")));
+    req.end();
+  });
 }
 
 async function waitForReady(timeoutMs = 180_000) {
@@ -293,27 +328,23 @@ async function run() {
 
     for (const check of CONTROL_PLANE_CHECKS) {
       const before = failures.length;
-      const tag = `control-plane ${check.path}`;
+      const tag = `control-plane ${check.host ? `${check.host}` : ""}${check.path}`;
       try {
-        const res = await fetch(`${BASE}${check.path}`, {
-          redirect: "manual",
-          signal: AbortSignal.timeout(30_000),
-        });
+        // rawGet (not fetch) so a check can address the `app.` host via a real Host header.
+        const res = await rawGet(check.path, check.host);
         if (check.redirectTo) {
-          const loc = res.headers.get("location") ?? "";
-          if (![301, 302, 303, 307, 308].includes(res.status) || !loc.includes(check.redirectTo)) {
-            failures.push(`[${tag}] expected redirect to ${check.redirectTo}, got ${res.status} → "${loc}" — ${check.desc}`);
+          if (![301, 302, 303, 307, 308].includes(res.status) || !res.location.includes(check.redirectTo)) {
+            failures.push(`[${tag}] expected redirect to ${check.redirectTo}, got ${res.status} → "${res.location}" — ${check.desc}`);
           }
         } else {
-          const body = await res.text();
           if (res.status !== 200) {
             failures.push(`[${tag}] expected 200, got ${res.status} — ${check.desc}`);
           } else {
             for (const needle of check.include ?? []) {
-              if (!body.includes(needle)) failures.push(`[${tag}] missing "${needle}" — ${check.desc}`);
+              if (!res.body.includes(needle)) failures.push(`[${tag}] missing "${needle}" — ${check.desc}`);
             }
             for (const needle of check.exclude ?? []) {
-              if (body.includes(needle)) failures.push(`[${tag}] should NOT contain "${needle}" — ${check.desc}`);
+              if (res.body.includes(needle)) failures.push(`[${tag}] should NOT contain "${needle}" — ${check.desc}`);
             }
           }
         }

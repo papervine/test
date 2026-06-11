@@ -2,13 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { signUp } from "@/lib/auth-client";
 import { Button } from "@/components/platform/Button";
 import { Field } from "@/components/platform/Field";
 
 export default function SignupPage() {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -25,7 +23,9 @@ export default function SignupPage() {
       setError(error.message ?? "Sign up failed");
       return;
     }
-    router.push("/dashboard");
+    // Hard nav to the app-host root resolver (forwards to onboarding for a brand-new
+    // account with no org yet). A soft push would skip the app-host Host rewrite.
+    window.location.assign("/");
   }
 
   return (

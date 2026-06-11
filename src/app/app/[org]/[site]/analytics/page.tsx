@@ -1,10 +1,5 @@
-import { cookies } from "next/headers";
-import { asc, eq } from "drizzle-orm";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { getSession, listOrganizations } from "@/lib/session";
-import { db } from "@/lib/db";
-import { site } from "@/lib/db/app-schema";
-import { ACTIVE_SITE_COOKIE, resolveActiveSite } from "@/lib/active-site";
+import { requireSite } from "@/lib/dashboard-context";
 import {
   parseRangeKey,
   resolveRange,
@@ -16,31 +11,22 @@ import {
   type AnalyticsSource,
   type MetricCard as Card,
 } from "@/lib/analytics";
-import { ButtonLink } from "@/components/platform/Button";
 import { AnalyticsControls } from "@/components/analytics/AnalyticsControls";
 import { VisitorsChart } from "@/components/analytics/VisitorsChart";
 
+type Params = { org: string; site: string };
 type Search = { tab?: string; range?: string };
 
 export default async function AnalyticsPage({
+  params,
   searchParams,
 }: {
+  params: Promise<Params>;
   searchParams: Promise<Search>;
 }) {
-  const session = await getSession();
-  const orgs = await listOrganizations();
-  const activeOrg = orgs?.[0];
-  if (!session || !activeOrg) return null;
-
-  // Analytics is per-site, scoped to the active site picked by the top-left switcher
-  // (SPEC §10) — the cookie's site if it's one of this org's, else the first.
-  const sites = await db
-    .select()
-    .from(site)
-    .where(eq(site.organizationId, activeOrg.id))
-    .orderBy(asc(site.createdAt));
-  const cookieSlug = (await cookies()).get(ACTIVE_SITE_COOKIE)?.value;
-  const activeSite = resolveActiveSite(sites, cookieSlug);
+  // Analytics is per-site, scoped to the site in the URL (/:org/:site/analytics, SPEC §10).
+  const { org: orgSlug, site: siteSlug } = await params;
+  const { site: activeSite } = await requireSite(orgSlug, siteSlug);
 
   const sp = await searchParams;
   const tab: "humans" | "agents" = sp.tab === "agents" ? "agents" : "humans";
@@ -52,21 +38,10 @@ export default async function AnalyticsPage({
     <div className="mx-auto max-w-6xl px-8 py-10">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-semibold">Analytics</h1>
-        {activeSite && (
-          <span className="text-sm text-[var(--muted)]">{activeSite.name}</span>
-        )}
+        <span className="text-sm text-[var(--muted)]">{activeSite.name}</span>
       </div>
 
-      {!activeSite ? (
-        <div className="mt-8 rounded-xl border border-dashed border-white/[0.1] px-6 py-12 text-center">
-          <p className="text-sm text-[var(--muted)]">
-            No site yet — connect a repository to start collecting analytics.
-          </p>
-          <ButtonLink href="/dashboard/connect" className="mt-4">
-            Connect a repository
-          </ButtonLink>
-        </div>
-      ) : tab === "agents" ? (
+      {tab === "agents" ? (
         <AgentDashboard
           siteId={activeSite.id}
           tab={tab}

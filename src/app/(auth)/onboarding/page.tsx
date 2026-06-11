@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { slugify } from "@/lib/slug";
 import { Button } from "@/components/platform/Button";
@@ -10,7 +9,6 @@ import { Field } from "@/components/platform/Field";
 // First-run: create the organization (tenant) the user will own. Slug doubles as
 // the *.papervine.io subdomain, so it must be URL-safe.
 export default function OnboardingPage() {
-  const router = useRouter();
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -28,7 +26,9 @@ export default function OnboardingPage() {
       setError(error.message ?? "Could not create organization");
       return;
     }
-    router.push("/dashboard");
+    // Hard nav to the app-host root resolver — it forwards to the new org's connect form.
+    // A soft push would skip the app-host Host rewrite.
+    window.location.assign("/");
   }
 
   return (

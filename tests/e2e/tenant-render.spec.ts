@@ -3,6 +3,11 @@ import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { TEST_DB_URL } from "./global-setup";
+import { APEX_ORIGIN } from "./constants";
+
+// Tenant docs serve on the apex (path mode), but baseURL is the app host (SPEC §10), so
+// address them absolutely.
+const docsUrl = (p: string) => `${APEX_ORIGIN}${p}`;
 
 // Regression: a tenant's docs must render from ITS content, not the platform's default
 // content/ repo. The root layout reads config before any route sets contentContext;
@@ -73,7 +78,7 @@ test.describe("tenant docs render from the tenant's own content @external", () =
   });
 
   test("sidebar comes from the tenant repo, not the platform default", async ({ page }) => {
-    await page.goto(`/sites/${SLUG}`);
+    await page.goto(docsUrl(`/sites/${SLUG}`));
 
     // The tenant's own group/page renders…
     await expect(page.getByText("TENANT_HOME_MARKER")).toBeVisible();
@@ -88,7 +93,7 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     // Regression: docs.json declares a root-absolute logo (`/logo.svg`). On a live-GitHub
     // site that path 404'd because the tenant-asset route only reads object storage. Now
     // everything is synced to us, so the logo must resolve through /api/tenant-asset/{slug}.
-    await page.goto(`/sites/${SLUG}`);
+    await page.goto(docsUrl(`/sites/${SLUG}`));
     const logo = page.getByAltText("Regression Tenant");
     await expect(logo).toHaveCount(1);
     await expect(logo).toHaveAttribute("src", `/api/tenant-asset/${SLUG}/logo.svg`);
@@ -103,7 +108,7 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     // the <Assistant /> listener lives in the (docs)-group layout, which does NOT wrap the
     // /sites/{slug} route. Without mounting it on the tenant page, the button dispatched an
     // event nobody listened for — clicking did nothing.
-    await page.goto(`/sites/${SLUG}`);
+    await page.goto(docsUrl(`/sites/${SLUG}`));
     await page.getByRole("button", { name: "Ask Assistant" }).click();
     await expect(
       page.getByText("Responses are generated using AI and may contain mistakes."),
@@ -127,13 +132,13 @@ test.describe("tenant docs render from the tenant's own content @external", () =
   });
 
   test("tenant pages resolve; platform-only pages 404 (no phantom links)", async ({ page }) => {
-    const ok = await page.goto(`/sites/${SLUG}/tenant-page`);
+    const ok = await page.goto(docsUrl(`/sites/${SLUG}/tenant-page`));
     expect(ok?.status()).toBe(200);
     await expect(page.getByText("TENANT_PAGE_MARKER")).toBeVisible();
 
     // content/guides/markdown exists in the platform repo but not this tenant's — must 404,
     // and (per the sidebar assertion above) must never have been linked.
-    const phantom = await page.goto(`/sites/${SLUG}/guides/markdown`);
+    const phantom = await page.goto(docsUrl(`/sites/${SLUG}/guides/markdown`));
     expect(phantom?.status()).toBe(404);
   });
 });

@@ -1,6 +1,21 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
-import { resolveTenantSlug, isPlatformHost } from "./lib/tenant-host";
+import {
+  resolveTenantSlug,
+  isPlatformHost,
+  isAppHost,
+  appHostFor,
+} from "./lib/tenant-host";
+
+// Bare control-plane paths that keep their own URL on the app host (real routes, not
+// rewritten onto /app): the auth pages.
+function isAuthPath(pathname: string): boolean {
+  return (
+    pathname === "/login" ||
+    pathname === "/signup" ||
+    pathname === "/onboarding"
+  );
+}
 
 /**
  * Docs assets (images, fonts, video) are referenced by absolute path from the
@@ -36,6 +51,54 @@ function withHost(req: NextRequest, host: string) {
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const reqHost = req.headers.get("host");
+
+  // Control-plane host (SPEC §10): the authenticated app lives on app.{apex} at bare
+  // /:org/:site, so the apex/tenant namespace stays free for docs. The route files live
+  // under an invisible /app mount (no bare [org] at the root, which would shadow the docs
+  // catch-all), so we rewrite bare → /app here — the same Host-rewrite trick tenant docs
+  // use (→ /sites/{slug}). Auth pages, API, and assets keep their real paths.
+  if (isAppHost(reqHost)) {
+    if (
+      pathname.startsWith("/api/") ||
+      pathname.startsWith("/app/") || // already internal (defensive; links are bare)
+      pathname === "/app" ||
+      ASSET_RE.test(pathname)
+    ) {
+      return NextResponse.next();
+    }
+    if (isAuthPath(pathname)) return NextResponse.next();
+
+    // Cheap edge cookie gate — the [org] layout does the authoritative session check.
+    if (!getSessionCookie(req)) {
+      const url = req.nextUrl.clone();
+      url.pathname = "/login";
+      return NextResponse.redirect(url);
+    }
+
+    // Bare → invisible /app mount. `/` → the resolver, which forwards to the first site.
+    const url = req.nextUrl.clone();
+    url.pathname = pathname === "/" ? "/app" : `/app${pathname}`;
+    return NextResponse.rewrite(url);
+  }
+
+  // The control plane only answers on the app host: if its paths are hit on the apex
+  // (an old link, or /app typed directly), bounce to the app host so the session cookie
+  // is set there, not on the marketing apex. Skipped in single-repo preview mode, which
+  // has no control plane. Public URLs are bare, so strip the internal /app prefix.
+  if (
+    isPlatformHost(reqHost) &&
+    !process.env.PAPERVINE_CONTENT &&
+    (isAuthPath(pathname) || pathname === "/app" || pathname.startsWith("/app/"))
+  ) {
+    const url = req.nextUrl.clone();
+    url.host = appHostFor(reqHost!);
+    url.pathname =
+      pathname === "/app" ? "/" : pathname.startsWith("/app/")
+        ? pathname.slice("/app".length)
+        : pathname;
+    return NextResponse.redirect(url);
+  }
 
   // Multi-tenant host routing (SPEC §2): a tenant subdomain ({slug}.papervine.io,
   // or {slug}.localhost in dev) serves that tenant's docs. Rewrite the whole host
@@ -116,16 +179,8 @@ export function middleware(req: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
-  // Control-plane gate: cheap edge cookie check (no DB) — the (app) layout does
-  // the authoritative session validation and the org/onboarding redirects.
-  if (pathname.startsWith("/dashboard")) {
-    if (!getSessionCookie(req)) {
-      const url = req.nextUrl.clone();
-      url.pathname = "/login";
-      return NextResponse.redirect(url);
-    }
-  }
-
+  // (The control plane is gated on the app host above; the apex only serves marketing +
+  // docs.)
   return NextResponse.next();
 }
 

@@ -2,13 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
 import { Button } from "@/components/platform/Button";
 import { Field } from "@/components/platform/Field";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -24,7 +22,9 @@ export default function LoginPage() {
       setError(error.message ?? "Sign in failed");
       return;
     }
-    router.push("/dashboard");
+    // Hard nav to the app-host root resolver — it forwards to the user's first site. A
+    // soft router.push into the Host-rewritten /app mount would skip the rewrite.
+    window.location.assign("/");
   }
 
   return (

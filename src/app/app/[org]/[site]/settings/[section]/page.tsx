@@ -8,7 +8,7 @@ import { SETTINGS_SLUGS, settingsLabel } from "@/lib/settings-nav";
 export default async function SettingsSectionPage({
   params,
 }: {
-  params: Promise<{ section: string }>;
+  params: Promise<{ org: string; site: string; section: string }>;
 }) {
   const { section } = await params;
   if (!SETTINGS_SLUGS.includes(section)) notFound();

@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
+import { siteHref } from "@/lib/dashboard-nav";
 
 export type SettingsNavItem = { slug: string; label: string; icon: LucideIcon };
 export type SettingsNavSection = { heading: string; items: SettingsNavItem[] };
@@ -63,10 +64,15 @@ export const SETTINGS_NAV: SettingsNavSection[] = [
   },
 ];
 
-export const SETTINGS_BASE = "/dashboard/settings";
-
-export function settingsHref(slug: string): string {
-  return `${SETTINGS_BASE}/${slug}`;
+// Settings lives under the URL-scoped site (SPEC §10): the public bare path
+// /:org/:site/settings/:slug. Delegates to siteHref so the one place that knows the path
+// shape stays dashboard-nav.
+export function settingsHref(
+  orgSlug: string,
+  siteSlug: string,
+  slug: string,
+): string {
+  return siteHref(orgSlug, siteSlug, `settings/${slug}`);
 }
 
 // Flat, ordered slug list — validates [section] routes and seeds the index redirect.
@@ -74,7 +80,7 @@ export const SETTINGS_SLUGS = SETTINGS_NAV.flatMap((s) =>
   s.items.map((i) => i.slug),
 );
 
-// "Domain setup" is the landing surface — /dashboard/settings redirects here.
+// "Domain setup" is the landing surface — bare …/settings redirects here.
 export const FIRST_SETTINGS_SLUG = SETTINGS_SLUGS[0];
 
 export function settingsLabel(slug: string): string | undefined {

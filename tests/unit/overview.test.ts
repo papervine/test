@@ -22,8 +22,8 @@ describe("greeting time source", () => {
   // (UTC on Vercel) — else an evening visitor gets "Good morning". The dashboard page
   // is server-rendered, so it must NOT call getHours()/new Date() for the greeting;
   // that belongs in the "use client" <Greeting> component.
-  it("does not compute the greeting from server time in the dashboard page", () => {
-    const page = read("../../src/app/(app)/dashboard/page.tsx");
+  it("does not compute the greeting from server time in the site overview page", () => {
+    const page = read("../../src/app/app/[org]/[site]/page.tsx");
     expect(page).not.toMatch(/getHours/);
     expect(page).toContain("<Greeting");
   });

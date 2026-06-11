@@ -1,7 +1,8 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
 import { connectRepo, type ConnectState } from "@/lib/actions/sites";
 import { Button } from "@/components/platform/Button";
 import { Field } from "@/components/platform/Field";
@@ -11,14 +12,21 @@ const initial: ConnectState = {};
 
 export default function ConnectRepoPage() {
   const [state, formAction, pending] = useActionState(connectRepo, initial);
+  const orgSlug = String(useParams().org);
   // the incumbent's "docs.json is in a subdirectory" toggle. When off we don't render the
   // path field at all, so the form submits no `docsPath` and the server reads repo root.
   const [subdir, setSubdir] = useState(false);
 
+  // On success the action returns the new site's bare URL — navigate with a hard load so
+  // the app-host Host rewrite applies (a soft RSC nav would skip it; see connectRepo).
+  useEffect(() => {
+    if (state.redirectTo) window.location.assign(state.redirectTo);
+  }, [state.redirectTo]);
+
   return (
     <div className="mx-auto max-w-lg px-8 py-12">
       <Link
-        href="/dashboard"
+        href={`/${orgSlug}`}
         className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
       >
         ← Back

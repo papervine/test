@@ -44,6 +44,31 @@ export function isPlatformHost(host: string | null): boolean {
 }
 
 /**
+ * The control-plane host — the authenticated app (dashboard + auth), kept off the apex/
+ * docs namespace the way the incumbent uses app.example.com. `app.localhost` in dev,
+ * `app.papervine.io` in prod. Requiring a platform host stops a tenant's own
+ * `app.acme.com` vanity domain from being mistaken for ours. Pure + import-free so it's
+ * safe in the edge middleware.
+ */
+export function isAppHost(host: string | null): boolean {
+  if (!host) return false;
+  const name = host.split(":")[0].toLowerCase();
+  return (name === "app" || name.startsWith("app.")) && isPlatformHost(host);
+}
+
+/**
+ * The app host for a given request host: `app.{apexBase}` (carrying the dev port). Strips
+ * a leading `www`/`app` label so a link built on the marketing apex points at the control
+ * plane — `papervine.io`/`www.papervine.io` → `app.papervine.io`, `localhost:3000` →
+ * `app.localhost:3000`.
+ */
+export function appHostFor(host: string): string {
+  const [name, port] = host.split(":");
+  const base = name.replace(/^(www|app)\./, "");
+  return port ? `app.${base}:${port}` : `app.${base}`;
+}
+
+/**
  * Can tenants be served as `{slug}.{apexBase}` subdomains on this apex host? True only
  * for hosts the resolver actually recognizes (`papervine.io`, `localhost`) — NOT a bare
  * `*.vercel.app`, where nested-subdomain TLS isn't issued and the resolver wouldn't

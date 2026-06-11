@@ -61,13 +61,17 @@ hand-walk signup → onboarding. Seed a known account and drive a real browser:
   `dev-password-123`**, an org, and a connected site `starter` (→ `papervine/starter`) with
   activity + analytics data. Idempotent (re-run to refresh the password); **prod-guarded**
   (refuses any non-localhost `DATABASE_URL`). Needs `docker compose up` (Postgres + MinIO).
-- Log in at `http://localhost:3000/login`. Connect a repo at `/dashboard/connect`. Tenant
-  docs render at **`{slug}.localhost:3000`** (subdomain mode) or **`/sites/{slug}`** (apex
-  path mode) — `resolveTenantSlug` picks the mode off the Host header.
+- The **control plane lives on the `app.` host** (SPEC §10): log in at
+  **`http://app.localhost:3000/login`**, and the dashboard is at bare
+  **`app.localhost:3000/:org/:site`** (seed → `app.localhost:3000/dev-org/starter`). New
+  site at `/:org/connect`. The apex (`localhost:3000`) is marketing + docs, and bounces
+  auth paths to the app host. Tenant docs render at **`{slug}.localhost:3000`** (subdomain
+  mode) or **`/sites/{slug}`** (apex path mode) — `resolveTenantSlug` picks the mode off
+  the Host header; `isAppHost` picks the control plane.
 - Drive it with **`agent-browser`** (the repo standard — `open` / `snapshot -i` / `click @eN`
-  / `fill` / `screenshot`; it navigates `{slug}.localhost` fine) or Playwright. This is the
-  same loop that found the per-request content-source bug (SPEC §2): connect a repo, open its
-  docs, confirm the sidebar/pages are the tenant's, not the platform's.
+  / `fill` / `screenshot`; it navigates `app.localhost` / `{slug}.localhost` fine) or
+  Playwright. This is the same loop that found the per-request content-source bug (SPEC §2):
+  connect a repo, open its docs, confirm the sidebar/pages are the tenant's, not the platform's.
 
 ## How the renderer works (don't break this)
 
@@ -112,9 +116,14 @@ Core principles, in priority order:
   tree and **skips the Host rewrite**, so `/` lands on the apex marketing home, not the
   tenant's docs. It passes `curl`/SSR (a hard request rewrites fine) and only fails in a real
   browser. Fix: server returns the target (`{ ok, redirectTo }`), client does
-  `window.location.assign(redirectTo)`. This bit the reader-auth login (SPEC §11.2) and will
-  bite the JWT/OAuth callbacks the same way. Plain `redirect()` is fine for **apex** paths
-  (dashboard, login) — those have real routes, nothing to rewrite.
+  `window.location.assign(redirectTo)`. This bit the reader-auth login (SPEC §11.2) and the
+  **app-host dashboard** (SPEC §10): its bare `app.papervine.io/:org/:site` URLs are the same
+  Host-rewrite (→ `/app/:org/:site`), so `connectRepo`'s post-create redirect and the auth
+  pages' post-login landing return a target and the client hard-navigates. Nuance: an
+  intra-dashboard `<Link>`/`router.push` *within* the app host is fine — it already carries
+  the rewrite context (verified in-browser); it's the **cross-context** hop (apex→app, or a
+  server-action redirect into a rewritten path) that skips the rewrite. Plain `redirect()`
+  is fine for genuine apex routes (the marketing pages) — nothing to rewrite there.
 
 ## Commands
 

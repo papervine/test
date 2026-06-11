@@ -1,5 +1,5 @@
 import { notFound } from "next/navigation";
-import { getMemberRole, getSession, listOrganizations } from "@/lib/session";
+import { requireOrg } from "@/lib/dashboard-context";
 import { canSeeFeature, type FeatureKey } from "@/lib/features";
 
 // Real access control for the Automate section (SPEC §10.2) — the AppRail hides the nav
@@ -16,17 +16,13 @@ const AUTOMATE_FEATURES: FeatureKey[] = [
 
 export default async function AutomateLayout({
   children,
+  params,
 }: {
   children: React.ReactNode;
+  params: Promise<{ org: string }>;
 }) {
-  const session = await getSession();
-  if (!session) notFound();
-
-  const orgs = await listOrganizations();
-  const activeOrg = orgs?.[0] ?? null;
-  const role = activeOrg
-    ? await getMemberRole(activeOrg.id, session.user.id)
-    : null;
+  const { org: orgSlug } = await params;
+  const { role } = await requireOrg(orgSlug);
 
   if (!AUTOMATE_FEATURES.some((f) => canSeeFeature(f, role))) notFound();
 

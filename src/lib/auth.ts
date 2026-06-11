@@ -6,13 +6,15 @@ import { db } from "./db";
 import * as schema from "./db/schema";
 
 // Better Auth rejects any request whose Origin isn't trusted (CSRF protection →
-// "Invalid origin"). The control plane (signup/login/dashboard) serves on the apex
-// `papervine.io`; reserved + tenant hosts live on `*.papervine.io`. The wildcard
-// matches subdomains only, so the apex needs its own entry. BETTER_AUTH_URL adds
-// this deploy's own origin too — covering local dev and Vercel preview URLs.
+// "Invalid origin"). The control plane (signup/login/dashboard) serves on the app host
+// `app.papervine.io` (SPEC §10) — covered by the `*.papervine.io` wildcard; the apex
+// entry stays for the marketing host. In dev the control plane is `app.localhost:3000`,
+// which no wildcard above matches, so it needs its own entry. BETTER_AUTH_URL adds this
+// deploy's own origin too — covering Vercel preview URLs.
 const trustedOrigins = [
   "https://papervine.io",
   "https://*.papervine.io",
+  "http://app.localhost:3000",
   ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
 ];
 

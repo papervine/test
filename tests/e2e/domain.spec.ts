@@ -1,10 +1,11 @@
 import { test, expect } from "@playwright/test";
 import postgres from "postgres";
 import { TEST_DB_URL } from "./global-setup";
+import { sitePath } from "./constants";
 
-// Domain setup (SPEC §2): an owner maps a vanity host to the active site and serves it
-// at the root or under /docs. Deterministic — seeds a site under the seeded org (no
-// GitHub/MinIO) and pins it active via the pv_site cookie, so it runs in CI. The live
+// Domain setup (SPEC §2): an owner maps a vanity host to the site and serves it at the
+// root or under /docs. Deterministic — seeds a site under the seeded org (no GitHub/MinIO)
+// and opens its URL-scoped settings page directly (SPEC §10), so it runs in CI. The live
 // "Connected" check fetches the (unreachable) test domain and stays Pending, which is
 // exactly the not-yet-pointed-DNS state we assert.
 const SITE = { id: "e2e-domain-site", slug: "e2e-domain", name: "Domain E2E" };
@@ -28,15 +29,9 @@ test.describe("custom domain setup", () => {
 
   test("connects a domain, persists it, and toggles /docs hosting", async ({
     page,
-    context,
-    baseURL,
   }) => {
-    // Pin this site active regardless of what else is seeded.
-    await context.addCookies([
-      { name: "pv_site", value: SITE.slug, url: baseURL! },
-    ]);
-
-    await page.goto("/dashboard/settings/domain");
+    // URL-scoped: open this site's settings directly — no shared active-site cookie.
+    await page.goto(sitePath(SITE.slug, "settings/domain"));
     await expect(
       page.getByRole("heading", { name: "Set up your custom domain" }),
     ).toBeVisible();
@@ -63,7 +58,7 @@ test.describe("custom domain setup", () => {
     await expect.poll(subpathOf).toBe(false);
 
     // Flip "Host at /docs" on and re-save — the flag persists.
-    await page.getByRole("switch", { name: "Host at /docs" }).click();
+    await page.getByRole("switch", { name: "Host docs under /docs" }).click();
     await page.getByRole("button", { name: "Update domain" }).click();
     await expect.poll(subpathOf).toBe(true);
 

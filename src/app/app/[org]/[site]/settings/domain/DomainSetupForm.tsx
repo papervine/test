@@ -7,17 +7,20 @@ import {
   removeCustomDomain,
   verifyCustomDomain,
   type DomainActionState,
+  type SiteRef,
 } from "./actions";
 import type { DomainVerification } from "@/lib/vercel-domains";
 import { Switch } from "@/components/ui/switch";
 
 export function DomainSetupForm({
+  siteRef,
   initialDomain,
   initialSubpath,
   verified,
   cnameTarget,
   verificationRecords,
 }: {
+  siteRef: SiteRef;
   initialDomain: string;
   initialSubpath: boolean;
   verified: boolean;
@@ -79,7 +82,7 @@ export function DomainSetupForm({
             aria-label="Remove domain"
             disabled={pending}
             onClick={() => {
-              run(removeCustomDomain);
+              run(() => removeCustomDomain(siteRef));
               setDomain("");
               setSubpath(false);
             }}
@@ -94,7 +97,7 @@ export function DomainSetupForm({
         <button
           type="button"
           disabled={pending || domain.trim() === ""}
-          onClick={() => run(() => setCustomDomain({ domain, subpath }))}
+          onClick={() => run(() => setCustomDomain(siteRef, { domain, subpath }))}
           className="db-cta rounded-lg px-4 py-2 text-sm disabled:opacity-50"
         >
           {pending ? "Saving…" : connected ? "Update domain" : "Connect domain"}
@@ -117,7 +120,7 @@ export function DomainSetupForm({
               <button
                 type="button"
                 disabled={pending}
-                onClick={() => run(verifyCustomDomain)}
+                onClick={() => run(() => verifyCustomDomain(siteRef))}
                 className="underline-offset-2 hover:text-[var(--fg)] hover:underline disabled:opacity-50"
               >
                 Check again

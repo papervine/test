@@ -2,24 +2,27 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
-import { setActiveSite } from "@/lib/actions/sites";
+import { switchSiteHref } from "@/lib/dashboard-nav";
 
 type SiteOption = { slug: string; name: string };
 
 // The top-left site switcher (SPEC §10): shows the active site, lists the org's sites to
 // switch between (scoping the per-site pages — Analytics, Editor…), and offers "New site".
-// Selecting persists the choice (cookie via setActiveSite) and refreshes so the server
-// components re-read it.
+// Sites are URL-scoped (/:org/:site), so selecting one *navigates* — preserving the
+// sub-page you're on — instead of writing a cookie.
 export function SiteSwitcher({
+  orgSlug,
   sites,
   activeSlug,
 }: {
+  orgSlug: string;
   sites: SiteOption[];
   activeSlug: string | null;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const ref = useRef<HTMLDivElement>(null);
@@ -46,9 +49,8 @@ export function SiteSwitcher({
   function select(slug: string) {
     setOpen(false);
     if (slug === active?.slug) return;
-    startTransition(async () => {
-      await setActiveSite(slug);
-      router.refresh();
+    startTransition(() => {
+      router.push(switchSiteHref(orgSlug, slug, pathname, sites));
     });
   }
 
@@ -56,7 +58,7 @@ export function SiteSwitcher({
   if (!active) {
     return (
       <Link
-        href="/dashboard/connect"
+        href={`/${orgSlug}/connect`}
         className="mb-3 flex items-center gap-2 rounded-md border border-dashed border-white/[0.12] px-2 py-2 text-sm text-[var(--muted)] transition-colors hover:border-white/20 hover:text-[var(--fg)]"
       >
         <Plus className="h-4 w-4" />
@@ -106,7 +108,7 @@ export function SiteSwitcher({
           <div className="my-1 h-px bg-white/[0.06]" />
 
           <Link
-            href="/dashboard/connect"
+            href={`/${orgSlug}/connect`}
             onClick={() => setOpen(false)}
             className="flex w-full items-center justify-center gap-2 rounded-md border border-white/[0.1] px-2 py-2 text-sm text-[var(--muted)] transition-colors hover:border-white/20 hover:text-[var(--fg)]"
           >

@@ -662,12 +662,26 @@ Minimum to operate the SaaS:
 - **Workspace / site switcher:** an org may own several sites (§2), so the dashboard's
   **top-left switcher** selects the **active site** that per-site pages (Analytics, Editor,
   Settings) scope to — mirrors the incumbent's top-left switcher. Lists the sites the user can
-  access + a **New site** action. *(Status 2026-06-09: built — `SiteSwitcher` replaces the
-  AppRail's org chip; the active site is a cookie (`pv_site`), resolved by the pure
-  `resolveActiveSite` (cookie slug if the user owns it, else the org's first site) so the
-  layout and per-site pages agree. `setActiveSite` validates ownership before writing the
-  cookie. Analytics scopes to it; Editor/Settings will when built. Selecting refreshes
-  in place. Tests: `tests/unit/active-site.test.ts`, `tests/e2e/site-switcher.spec.ts`.)*
+  access + a **New site** action. *(Status 2026-06-10: the control plane is now
+  **URL-scoped on its own host**, mirroring the incumbent's `app.example.com/{org}/{site}`.
+  The active site is the URL (`app.papervine.io/:org/:site`, `app.localhost:3000` in dev),
+  not a cookie — switching sites navigates (`SiteSwitcher` → `switchSiteHref`, preserving
+  the sub-page), so URLs are shareable/bookmarkable and multi-tab works. **Why the app
+  host:** this is one Next app with one route tree across every host, so a bare `[org]`
+  segment at the apex root would shadow the docs catch-all (`(docs)/[[...slug]]`) — every
+  `/guide`-style docs path would resolve to the dashboard. Keeping the control plane on
+  `app.` frees the apex/tenant namespace for docs (and for our own dogfooded docs at
+  `www/...`). The route files live at an **invisible `/app` mount**; `middleware.ts`
+  Host-rewrites `app.*` bare `/:org/:site` → `/app/:org/:site` (the same trick tenant
+  subdomains use → `/sites/{slug}`), and bounces auth + stray `/app` hits on the apex over
+  to the app host so the session cookie is set there. `requireOrg`/`requireSite`
+  (`dashboard-context.ts`) resolve + authorize org/site from the path; pure path helpers
+  live in `dashboard-nav.ts` (public **bare** for links/redirects, internal **`/app`** for
+  `revalidatePath` — mixing them is a bug). Cross-context redirects (connect, login) use a
+  client hard-nav, since a soft RSC nav skips the Host rewrite (the documented
+  tenant-URL gotcha). Tests: `tests/unit/dashboard-nav.test.ts`,
+  `tests/e2e/site-switcher.spec.ts`; smoke exercises the app-host edge gate via a
+  `Host: app.localhost` header.)*
 - **Overview (home):** the per-site landing page — greeting, live preview, status/identity,
   quick actions, and the deployment **Activity** feed. Expanded in **§10.3**.
 - **Projects:** connect Git repo, pick branch, manual sync, view sync logs/errors.

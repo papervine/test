@@ -1,8 +1,10 @@
 import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { test, expect } from "@playwright/test";
-import { TEST_USER } from "./constants";
+import { TEST_USER, sitePath } from "./constants";
 import { TEST_DB_URL } from "./global-setup";
+
+const SITE_SLUG = "e2e-analytics";
 
 // Seed a site + a handful of events straight into the test DB so the analytics page
 // renders real aggregations (the only layer that exercises the DB→page path). The
@@ -17,7 +19,7 @@ test.beforeAll(async () => {
 
   await sql`delete from site where id = ${SITE_ID}`;
   await sql`insert into site (id, organization_id, name, slug, repo_owner, repo_name, status)
-            values (${SITE_ID}, ${org.id}, 'E2E Docs', 'e2e-analytics', 'acme', 'docs', 'live')`;
+            values (${SITE_ID}, ${org.id}, 'E2E Docs', ${SITE_SLUG}, 'acme', 'docs', 'live')`;
 
   const A = randomUUID();
   const B = randomUUID();
@@ -56,7 +58,7 @@ test.afterAll(async () => {
 });
 
 test("analytics renders human metrics and the Top pages table", async ({ page }) => {
-  await page.goto("/dashboard/analytics");
+  await page.goto(sitePath(SITE_SLUG, "analytics"));
 
   const heading = page.getByRole("heading", { name: "Analytics" });
   await expect(heading).toBeVisible();
@@ -78,11 +80,11 @@ test("analytics renders human metrics and the Top pages table", async ({ page })
 test("Agents view filters to agent-source data", async ({ page }) => {
   // Navigate straight to the agents tab — deterministic (no hydration race) and it
   // exercises the same server-side source=agent query the toggle drives.
-  await page.goto("/dashboard/analytics?tab=agents");
+  await page.goto(sitePath(SITE_SLUG, "analytics") + "?tab=agents");
 
   // Button text is "agents" (lowercase; capitalized via CSS), so match accordingly.
   await expect(page.getByRole("button", { name: "agents", exact: true })).toBeVisible();
-  // Agents: 2 views, 1 distinct visitor — distinct from the Humans numbers.
-  await expect(page.getByTestId("metric-views")).toContainText("2");
+  // The Agents tab shows Agent Visitors (distinct agent sessions) — 1 here, distinct from
+  // the Humans tab's 2 visitors, proving the source=agent filtering.
   await expect(page.getByTestId("metric-visitors")).toContainText("1");
 });

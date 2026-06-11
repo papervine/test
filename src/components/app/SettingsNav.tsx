@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { parseSitePath } from "@/lib/dashboard-nav";
 import { SETTINGS_NAV, settingsHref } from "@/lib/settings-nav";
 
 // The Settings subnav — a second sidebar beside the AppRail (SPEC §9 control plane).
@@ -9,6 +10,10 @@ import { SETTINGS_NAV, settingsHref } from "@/lib/settings-nav";
 // @/lib/settings-nav so routes and the rail stay in sync.
 export function SettingsNav() {
   const pathname = usePathname();
+  // The settings routes are URL-scoped (/:org/:site/settings/…), so the org +
+  // site come straight off the path — the subnav is the same for every site.
+  // Always set here — the subnav only renders under a settings route (/:org/:site/settings).
+  const { orgSlug = "", siteSlug = "" } = parseSitePath(pathname);
 
   return (
     <nav className="db-glass flex w-56 shrink-0 flex-col gap-5 overflow-y-auto border-r border-white/[0.06] px-3 py-6">
@@ -18,7 +23,7 @@ export function SettingsNav() {
             {section.heading}
           </h3>
           {section.items.map(({ slug, label, icon: Icon }) => {
-            const href = settingsHref(slug);
+            const href = settingsHref(orgSlug, siteSlug, slug);
             const active = pathname === href;
             return (
               <Link
