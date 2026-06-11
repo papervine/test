@@ -1,45 +1,51 @@
-# Papervine
+<h1 align="center">Papervine</h1>
 
-An open-source, multi-tenant documentation platform — a clone of [the incumbent](https://example.com/). Point it at a folder of **MDX** + a single **`docs.json`** and get a fast, themeable docs site.
+<p align="center">
+  <strong>The open-source docs platform alternative you can self-host.</strong><br />
+  docs.json-compatible: point it at a folder of MDX + a <code>docs.json</code> and get a fast, themeable docs site.
+</p>
 
-See [`SPEC.md`](./SPEC.md) for the full architecture and roadmap.
+<p align="center">
+  <a href="https://papervine.io">Website</a> ·
+  <a href="./SPEC.md">Architecture & roadmap</a> ·
+  <a href="https://github.com/papervine/papervine/issues">Issues</a> ·
+  <a href="#contributing">Contributing</a>
+</p>
 
-## Status: M0 — renderer skeleton
+---
 
-The single-tenant rendering core (SPEC.md milestone M0). What works today:
+## Why Papervine?
 
-- **`docs.json` parsing** — Zod-validated, docs.json-compatible schema with a recursive `navigation` tree (`src/lib/config.ts`)
-- **MDX rendering** — compiled with `@mdx-js/mdx` + Shiki syntax highlighting (`src/lib/mdx.tsx`)
-- **Component library** — Cards, Tabs, Steps, Callouts, CodeGroups, Accordions, Frame (`src/components/mdx/`)
-- **Navigation + TOC** — recursive sidebar with active states, on-page table of contents
-- **Theming** — colors from `docs.json` drive CSS variables; light/dark mode
+Hosted docs platforms are great — until you hit a paywall for basic customization, or your compliance team asks where the data lives. Papervine gives you the polish of a hosted docs platform with none of the lock-in:
 
-Not yet built (later milestones): multi-tenancy + Git sync (M2), search (M3), API playground (M4), AI assistant (M5), dashboard (M6).
+- **Own your docs.** MDX files in your repo, rendered by software you control. Your content is always just files.
+- **Drop-in docs.json compatibility.** Papervine reads the same `docs.json` + MDX format. If you have an existing incumbent docs repo, `papervine dev` renders it — we smoke-test against real-world repos like `papervine/starter`.
+- **Self-host anywhere.** Run it on your own infrastructure, in your VPC, or behind your firewall.
 
-## Run
+## Features
+
+- ✍️ **MDX rendering** with Shiki dual-theme syntax highlighting — unsupported features degrade to a notice instead of crashing the page
+- 🧩 **Component library** — Cards, Tabs, Steps, Callouts, CodeGroups, Accordions, Frame
+- 🧭 **Navigation + TOC** — recursive, docs.json-compatible `navigation` tree with active states and on-page table of contents
+- 🎨 **Theming** — colors in `docs.json` drive CSS variables; light/dark mode out of the box
+- ✅ **Validated config** — Zod-validated `docs.json`, so misconfiguration fails loudly with useful errors
+- 🏢 **Multi-tenant hosting** — serve each connected site at `{slug}.papervine.io` or a custom domain, with an automatic path-based fallback (`/sites/{slug}`) for deploys without wildcard TLS
+- 🤖 **AI docs assistant** — an "Ask Assistant" panel powered by Claude with agentic docs retrieval (bring your own `ANTHROPIC_API_KEY`)
+
+### Roadmap
+
+Search, OpenAPI playground, and the full dashboard are in progress — see [`SPEC.md`](./SPEC.md) for milestones and [open issues](https://github.com/papervine/papervine/issues) to vote on what we build next.
+
+## Quick start
 
 ```bash
 npm install
 npm run dev      # serves ./content at http://localhost:3000
 ```
 
-Other scripts: `npm run build`, `npm run start`, `npm run typecheck`.
+### Preview any docs repo with the CLI
 
-**Seed a dev account:** `npm run db:seed` (needs the docker Postgres up) creates a known
-login — `dev@papervine.local` / `dev-password-123` — with an org, a connected site
-(`papervine/starter`), an activity feed, and analytics data, so you can sign in at `/login`
-and see a populated dashboard without walking signup → onboarding → connect. Idempotent and
-**refuses any non-local `DATABASE_URL`** (a known password must never reach a real DB). Run
-dev on the port `BETTER_AUTH_URL` points at (`:3000`) so sign-in's origin check passes.
-
-**AI Assistant (M5):** set `ANTHROPIC_API_KEY` in `.env.local` to enable the "Ask
-Assistant" panel (Claude + agentic docs retrieval). Without it the panel still opens
-but the API returns a graceful 503. Optional: `PAPERVINE_AI_MODEL` (default `claude-sonnet-4-6`).
-
-## CLI — preview any docs repo
-
-`papervine dev` boots the renderer pointed at any folder of MDX + `docs.json`
-(the analogue of `docs dev`):
+`papervine dev` is the analogue of `docs dev` — run it inside any folder of MDX + `docs.json`:
 
 ```bash
 papervine dev              # preview the current directory
@@ -47,21 +53,28 @@ papervine dev ./docs       # preview ./docs
 papervine dev -p 4000      # custom port
 ```
 
-Run it inside a docs repo and it renders that repo — no copying into `./content`.
-Under the hood it sets `PAPERVINE_CONTENT` to the target folder and runs the renderer
-from the Papervine package, so the same env var works directly too:
+Pre-release, invoke it via `npm run papervine -- dev ./docs`. Once published: `npx papervine dev`. Under the hood it sets `PAPERVINE_CONTENT` to the target folder, so the env var works directly too:
 
 ```bash
 PAPERVINE_CONTENT=/path/to/docs-repo npm run dev
 ```
 
-Pre-release, invoke the CLI via `npm run papervine -- dev ./docs` or `./bin/papervine.mjs
-dev ./docs`. Once published it's `npx papervine dev`.
+## Migrating from the incumbent
 
-## Content
+There's no migration. Papervine reads the incumbent `docs.json` schema and MDX conventions directly:
 
-Docs live in [`./content`](./content), fully separate from the app — read at request
-time so nothing tenant-specific is baked into the build (the M2 multi-tenant model).
+```bash
+git clone https://github.com/your-org/your-large-docs
+papervine dev ./your-large-docs
+```
+
+Pages, navigation, frontmatter titles, snippets, and components render as-is; anything Papervine doesn't support yet degrades gracefully rather than 500ing. You can verify coverage on your own repo:
+
+```bash
+node tests/crawl.mjs /path/to/your-docs   # reports rendered / degraded / errored pages
+```
+
+## Project structure
 
 ```
 content/
@@ -73,51 +86,48 @@ content/
     └── components.mdx
 ```
 
-A page's sidebar label comes from its frontmatter `title` (falling back to a
-title-cased slug). Register pages by adding their slug to a group's `pages` array
-in `docs.json`.
+Docs live fully separate from the app and are read at request time — nothing tenant-specific is baked into the build. A page's sidebar label comes from its frontmatter `title` (falling back to a title-cased slug); register pages in a group's `pages` array in `docs.json`.
 
-## Hosting tenant docs (subdomain vs. path)
+## Self-hosting & tenant domains
 
-Each connected site is served at its own host — `{slug}.papervine.io` in prod,
-`{slug}.localhost:3100` in dev — or a custom domain. **Subdomain serving needs a
-wildcard domain you own + wildcard TLS.** A bare deploy that can't provide that — e.g.
-a free `*.vercel.app`, where the platform won't issue TLS for nested
-`{slug}.your-proj.vercel.app` subdomains — falls back to a **path form** on the apex:
+Each connected site is served at its own host — `{slug}.papervine.io` in production, `{slug}.localhost:3100` in dev — or a custom domain. Subdomain serving requires a wildcard domain + wildcard TLS; deploys that can't provide that (e.g. a bare `*.vercel.app`) automatically fall back to path-based serving at `/sites/{slug}` with links and assets correctly prefixed. See [`SPEC.md`](./SPEC.md) §2 for switching a deploy from paths to subdomains.
 
-```
-https://your-proj.vercel.app/sites/{slug}
-```
+## Development
 
-Same renderer, links/assets prefixed so they don't escape the apex (`src/lib/url-base.ts`).
-The dashboard's "live docs" link picks the right form automatically based on the deploy
-host (`supportsSubdomainTenants`). To switch to subdomains later: own a domain, add a
-wildcard `*.your-domain` DNS record pointed at the host + the apex to the project, and
-make `resolveTenantSlug` recognize its suffix — no other code changes. See SPEC.md §2.
+**Seed a dev account:** `npm run db:seed` (with the Docker Postgres running) creates a known login — `dev@papervine.local` / `dev-password-123` — with an org, a connected site, an activity feed, and analytics data, so you can sign in at `/login` and see a populated dashboard without walking signup → onboarding → connect. The seed is idempotent and refuses any non-local `DATABASE_URL`. Run dev on the port `BETTER_AUTH_URL` points at (`:3000`) so sign-in's origin check passes.
+
+**AI assistant:** set `ANTHROPIC_API_KEY` in `.env.local`. Without it the panel still opens and the API returns a graceful 503. Optional: `PAPERVINE_AI_MODEL` (default `claude-sonnet-4-6`).
+
+**Other scripts:** `npm run build`, `npm run start`, `npm run typecheck`.
 
 ## Testing
 
 ```bash
-npm test                              # smoke test: render every fixture page, assert no 500s
-node tests/crawl.mjs <docs-dir>       # crawl any real docs repo, report rendered/degraded/500
+npm test                              # render every fixture page, assert no 500s
+node tests/crawl.mjs <docs-dir>       # crawl a real docs repo, report rendered/degraded/500
 node tests/crawl.mjs <dir> --sample=120
 ```
 
-`tests/fixtures/` is a docs repo that deliberately exercises every M1 fix (object
-`favicon`, `languages` nav, `.md` files, unknown + member-expression components,
-malformed frontmatter, unresolved snippet imports, `hidden` pages). The smoke test
-boots the real renderer against it and asserts each page returns 200 — so the
-[GAP-REPORT](./GAP-REPORT.md) fixes can't silently regress. CI (GitHub Actions)
-runs typecheck + build + smoke test.
-
-`tests/crawl.mjs` is the real-repo probe (run it locally against a cloned
-docs.json repo, e.g. `papervine/starter` or `papervine/docs`); it isn't in CI because
-booting a dev server per run is flaky on hosted runners.
+`tests/fixtures/` deliberately exercises edge cases (object `favicon`, `languages` nav, `.md` files, unknown components, malformed frontmatter, unresolved snippet imports, `hidden` pages) so fixes can't silently regress. CI runs typecheck + build + smoke test.
 
 ## Tech
 
 Next.js (App Router / RSC) · TypeScript · Tailwind · Zod · Shiki.
-**MDX rendering is a hybrid:** compile with `@mintlify/mdx` (the third-party MDX serializer
-— their Shiki dual-theme highlighting + snippet handling) and execute the compiled
-output with `@mdx-js/mdx`'s `run()` inside a `try/catch`, so unsupported features
-degrade to a notice instead of crashing the page.
+
+MDX rendering is a hybrid: compiled with `@mintlify/mdx` (Shiki dual-theme highlighting + snippet handling) and executed with `@mdx-js/mdx`'s `run()` inside a `try/catch`, so unsupported features degrade to a notice instead of crashing the page.
+
+## Contributing
+
+We love contributions of every size — bug reports, docs fixes, themes, and features.
+
+1. Fork the repo and create a branch
+2. `npm install && npm run dev`
+3. Open a PR — we review fast
+
+Check [good first issues](https://github.com/papervine/papervine/labels/good%20first%20issue) to get started.
+
+## License
+
+Papervine's core is open source — see [LICENSE](LICENSE). Papervine Cloud and enterprise features are commercial offerings built on top of the open-source core.
+
+Papervine is an independent project and is not affiliated with or endorsed by the incumbent.
