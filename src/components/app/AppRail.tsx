@@ -16,6 +16,7 @@ import {
 import { signOut } from "@/lib/auth-client";
 import { canSeeFeature, type FeatureKey } from "@/lib/features";
 import { parseSitePath, pickCurrentSite, siteHref } from "@/lib/dashboard-nav";
+import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
 import { SiteSwitcher } from "./SiteSwitcher";
 
 type RailItem = {
@@ -96,6 +97,10 @@ export function AppRail({
 
   async function handleSignOut() {
     await signOut();
+    // Clear the marketing "signed in" hint on the parent domain (best-effort — a stale
+    // flag just shows a Dashboard link that the app-host gate bounces to /login).
+    const parent = location.hostname.split(".").slice(1).join(".") || location.hostname;
+    document.cookie = `${SIGNED_IN_FLAG}=; domain=${parent}; path=/; max-age=0`;
     router.push("/login");
   }
 

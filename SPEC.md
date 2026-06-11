@@ -682,6 +682,17 @@ Minimum to operate the SaaS:
   tenant-URL gotcha). Tests: `tests/unit/dashboard-nav.test.ts`,
   `tests/e2e/site-switcher.spec.ts`; smoke exercises the app-host edge gate via a
   `Host: app.localhost` header.)*
+  *(Status 2026-06-11: marketing/app session bridge. The session cookie stays host-only on
+  the app host — sharing it on `.papervine.io` would send the auth token to every tenant docs
+  subdomain (an XSS-exfil surface), so it never leaves `app.`. Instead: (1) a logged-in user
+  who hits `/login`/`/signup` on the app host is bounced to their dashboard (mirrors
+  `app.example.com/signup`), and (2) the marketing apex shows a **Dashboard →** link via a
+  *benign* `pv_signed_in=1` flag cookie (`src/lib/signed-in-flag.ts`) set on the parent domain
+  by the app-host middleware, cleared on sign-out, read by the marketing nav — a boolean, never
+  the session token. The host split also means `www` is **always** the marketing site (never a
+  Vercel-style forced redirect to the app). **Dev caveat:** Chrome rejects `Domain=localhost`
+  cookies, so the `www` Dashboard link only appears in prod (`.papervine.io`); the
+  redirect-to-dashboard works everywhere.)*
 - **Overview (home):** the per-site landing page — greeting, live preview, status/identity,
   quick actions, and the deployment **Activity** feed. Expanded in **§10.3**.
 - **Projects:** connect Git repo, pick branch, manual sync, view sync logs/errors.

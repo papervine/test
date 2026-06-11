@@ -57,6 +57,18 @@ export function isAppHost(host: string | null): boolean {
 }
 
 /**
+ * The parent domain a cookie should scope to so it's readable across the apex + app host:
+ * `app.papervine.io` → `papervine.io`, `app.localhost` → `localhost`. Used only for the
+ * benign "signed in" hint (a boolean, never the session token — see SPEC §10), so the
+ * marketing apex can show a Dashboard link without the session cookie leaving the app host.
+ */
+export function parentDomain(host: string): string {
+  const name = host.split(":")[0];
+  const parts = name.split(".");
+  return parts.length <= 1 ? name : parts.slice(1).join(".");
+}
+
+/**
  * The app host for a given request host: `app.{apexBase}` (carrying the dev port). Strips
  * a leading `www`/`app` label so a link built on the marketing apex points at the control
  * plane — `papervine.io`/`www.papervine.io` → `app.papervine.io`, `localhost:3000` →

@@ -5,7 +5,9 @@ import {
   isPlatformHost,
   isAppHost,
   appHostFor,
+  parentDomain,
 } from "./lib/tenant-host";
+import { SIGNED_IN_FLAG } from "./lib/signed-in-flag";
 
 // Bare control-plane paths that keep their own URL on the app host (real routes, not
 // rewritten onto /app): the auth pages.
@@ -59,18 +61,43 @@ export function middleware(req: NextRequest) {
   // catch-all), so we rewrite bare → /app here — the same Host-rewrite trick tenant docs
   // use (→ /sites/{slug}). Auth pages, API, and assets keep their real paths.
   if (isAppHost(reqHost)) {
+    const authed = Boolean(getSessionCookie(req));
+
+    // Stamp a *benign* "signed in" hint on the parent domain so the marketing apex can show
+    // a Dashboard link — a boolean, NEVER the session token (which stays host-only on the
+    // app host; sharing it would expose it to every tenant docs subdomain, SPEC §10).
+    const withFlag = (res: NextResponse) => {
+      if (authed && !req.cookies.get(SIGNED_IN_FLAG)) {
+        res.cookies.set(SIGNED_IN_FLAG, "1", {
+          domain: parentDomain(reqHost!),
+          path: "/",
+          sameSite: "lax",
+        });
+      }
+      return res;
+    };
+
     if (
       pathname.startsWith("/api/") ||
       pathname.startsWith("/app/") || // already internal (defensive; links are bare)
       pathname === "/app" ||
       ASSET_RE.test(pathname)
     ) {
+      return withFlag(NextResponse.next());
+    }
+    if (isAuthPath(pathname)) {
+      // Already logged in? Skip the auth form and go to the dashboard — the way
+      // app.example.com/signup bounces a signed-in user straight to their workspace.
+      if (authed) {
+        const url = req.nextUrl.clone();
+        url.pathname = "/";
+        return withFlag(NextResponse.redirect(url));
+      }
       return NextResponse.next();
     }
-    if (isAuthPath(pathname)) return NextResponse.next();
 
     // Cheap edge cookie gate — the [org] layout does the authoritative session check.
-    if (!getSessionCookie(req)) {
+    if (!authed) {
       const url = req.nextUrl.clone();
       url.pathname = "/login";
       return NextResponse.redirect(url);
@@ -79,7 +106,7 @@ export function middleware(req: NextRequest) {
     // Bare → invisible /app mount. `/` → the resolver, which forwards to the first site.
     const url = req.nextUrl.clone();
     url.pathname = pathname === "/" ? "/app" : `/app${pathname}`;
-    return NextResponse.rewrite(url);
+    return withFlag(NextResponse.rewrite(url));
   }
 
   // The control plane only answers on the app host: if its paths are hit on the apex

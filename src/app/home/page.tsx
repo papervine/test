@@ -10,9 +10,11 @@ import {
   Bot,
   MessagesSquare,
 } from "lucide-react";
+import { cookies, headers } from "next/headers";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Wordmark } from "@/components/Wordmark";
-import { getSession } from "@/lib/session";
+import { appHostFor } from "@/lib/tenant-host";
+import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
 
 // Marketing landing for the SaaS apex (SPEC §2). Reached via the middleware rewrite
 // of `/` when not in single-repo preview mode (no PAPERVINE_CONTENT).
@@ -68,10 +70,14 @@ const FEATURES = [
 ];
 
 export default async function LandingPage() {
-  // Apex nav is session-aware: a signed-in visitor gets a single Dashboard link
-  // instead of Log in / Sign up (which would dead-end them). Reading the session
-  // opts this page into dynamic rendering — fine for the marketing apex.
-  const signedIn = Boolean(await getSession());
+  // Apex nav is session-aware: a signed-in visitor gets a single Dashboard link instead
+  // of Log in / Sign up. The real session cookie is host-only on the app host (SPEC §10),
+  // so the apex can't read it — we read the benign `pv_signed_in` hint instead, and the
+  // Dashboard link points at the app host (where the gate resolves it to the dashboard).
+  // Log in / Sign up stay relative; the apex→app middleware redirect routes them over.
+  const signedIn = Boolean((await cookies()).get(SIGNED_IN_FLAG));
+  const host = (await headers()).get("host") ?? "papervine.io";
+  const appBase = `${host.includes("localhost") ? "http" : "https"}://${appHostFor(host)}`;
 
   return (
     <PlatformShell variant="full">
@@ -89,12 +95,12 @@ export default async function LandingPage() {
               GitHub
             </a>
             {signedIn ? (
-              <Link
-                href="/dashboard"
+              <a
+                href={`${appBase}/`}
                 className="db-cta ml-1 rounded-lg px-4 py-1.5 font-medium text-white"
               >
                 Dashboard
-              </Link>
+              </a>
             ) : (
               <>
                 <Link
@@ -322,12 +328,12 @@ export default async function LandingPage() {
               GitHub
             </a>
             {signedIn ? (
-              <Link
-                href="/dashboard"
+              <a
+                href={`${appBase}/`}
                 className="transition-colors hover:text-[var(--fg)]"
               >
                 Dashboard
-              </Link>
+              </a>
             ) : (
               <>
                 <Link

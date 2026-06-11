@@ -124,6 +124,16 @@ Core principles, in priority order:
   the rewrite context (verified in-browser); it's the **cross-context** hop (apex→app, or a
   server-action redirect into a rewritten path) that skips the rewrite. Plain `redirect()`
   is fine for genuine apex routes (the marketing pages) — nothing to rewrite there.
+- **The marketing apex can't see the app-host session — by design.** The Better Auth session
+  cookie is host-only on `app.papervine.io` (never shared to `.papervine.io`, which would send
+  your auth token to every tenant docs subdomain — an XSS-exfil surface). So `www` shows a
+  Dashboard link via a *benign* `pv_signed_in=1` flag cookie (`src/lib/signed-in-flag.ts`) set
+  on the parent domain by the app-host middleware, cleared on sign-out, read by the marketing
+  nav. Logged-in users who hit `/login`/`/signup` on the app host are bounced to the dashboard
+  (the `app.example.com/signup` behavior). **Dev caveat:** Chrome rejects `Domain=localhost`
+  cookies, so the flag (and thus `www`'s Dashboard link) only works in prod (`.papervine.io`);
+  the redirect-to-dashboard behavior works everywhere. Don't "fix" the missing dev label by
+  sharing the real session cookie.
 
 ## Commands
 
