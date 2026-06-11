@@ -137,6 +137,13 @@ const CONTROL_PLANE_CHECKS = [
     // Dashboard link (which only renders when getSession() resolves).
     exclude: ['href="/dashboard"'],
   },
+  {
+    path: "/pricing",
+    desc: "marketing pricing page renders in the platform theme with both tiers + the matrix",
+    // db-glow proves PlatformShell wraps it; the tier names + a matrix group prove the
+    // table content rendered (not just the chrome). Get started → /signup is the primary CTA.
+    include: ["Pricing on", "db-glow", "Starter", "Enterprise", "Customization", 'href="/signup"'],
+  },
 ];
 
 function log(msg) {

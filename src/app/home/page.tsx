@@ -88,6 +88,12 @@ export default async function LandingPage() {
             <Wordmark className="text-lg" />
           </Link>
           <nav className="flex items-center gap-1 text-sm">
+            <Link
+              href="/pricing"
+              className="rounded-lg px-3 py-1.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
+            >
+              Pricing
+            </Link>
             <a
               href={GITHUB}
               className="rounded-lg px-3 py-1.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
@@ -321,6 +327,12 @@ export default async function LandingPage() {
             <span>— open source</span>
           </span>
           <div className="flex gap-5">
+            <Link
+              href="/pricing"
+              className="transition-colors hover:text-[var(--fg)]"
+            >
+              Pricing
+            </Link>
             <a
               href={GITHUB}
               className="transition-colors hover:text-[var(--fg)]"
