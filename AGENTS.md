@@ -105,6 +105,16 @@ Core principles, in priority order:
   full-page height. Use `items-start` on content rows; this bit the Card component.
 - **Tests fetch `127.0.0.1`, not `localhost`**, and bind the dev server to `0.0.0.0`
   — some runners resolve `localhost` to IPv6 `::1` while Next listens on IPv4.
+- **Redirecting to a tenant-host URL needs a hard navigation, not a server `redirect()`.**
+  Tenant pretty-URLs (`{slug}.papervine.io/…`) only exist as a `middleware.ts` Host-rewrite
+  to `/sites/{slug}/…` — no route file backs them. A server-action `redirect("/")` (or
+  `router.push`/`<Link>`) is followed as a soft RSC nav that resolves against the real route
+  tree and **skips the Host rewrite**, so `/` lands on the apex marketing home, not the
+  tenant's docs. It passes `curl`/SSR (a hard request rewrites fine) and only fails in a real
+  browser. Fix: server returns the target (`{ ok, redirectTo }`), client does
+  `window.location.assign(redirectTo)`. This bit the reader-auth login (SPEC §11.2) and will
+  bite the JWT/OAuth callbacks the same way. Plain `redirect()` is fine for **apex** paths
+  (dashboard, login) — those have real routes, nothing to rewrite.
 
 ## Commands
 

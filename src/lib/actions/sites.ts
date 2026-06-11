@@ -10,6 +10,7 @@ import { site, deployment } from "@/lib/db/app-schema";
 import { getSession, listOrganizations } from "@/lib/session";
 import { fetchRepo, hasDocsConfig, fetchLatestCommit, parseRepoInput } from "@/lib/github";
 import { syncSite, type SyncResult } from "@/lib/sync";
+import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { revalidateSite } from "@/lib/s3-source";
 import { slugify } from "@/lib/slug";
 import { syncErrorDetail } from "@/lib/sync-error";
@@ -61,20 +62,29 @@ export async function connectRepo(
   const name = String(formData.get("name") ?? "").trim();
   const repoRaw = String(formData.get("repo") ?? "");
   const branchInput = String(formData.get("branch") ?? "").trim();
+  // Optional fine-grained PAT (Contents: read) for a private repo. When present, every
+  // GitHub call is authenticated and the token is stored encrypted for re-syncs.
+  const token = String(formData.get("token") ?? "").trim() || undefined;
   if (!name) return { error: "Give your site a name." };
 
   const parsed = parseRepoInput(repoRaw);
   if (!parsed) return { error: "Enter a repo as owner/name or a github.com URL." };
 
-  const repo = await fetchRepo(parsed.owner, parsed.name);
-  if (!repo) return { error: "Repository not found, or it isn't public." };
+  const repo = await fetchRepo(parsed.owner, parsed.name, token);
+  if (!repo) {
+    return {
+      error: token
+        ? "Repository not found, or the token can't read it (needs Contents: read on this repo)."
+        : "Repository not found, or it's private — paste a token below to connect a private repo.",
+    };
+  }
 
   const branch = branchInput || repo.defaultBranch;
-  if (!(await hasDocsConfig(parsed.owner, parsed.name, branch))) {
+  if (!(await hasDocsConfig(parsed.owner, parsed.name, branch, token))) {
     return { error: `No docs.json or mint.json at the root of ${repo.fullName}@${branch}.` };
   }
 
-  const commit = await fetchLatestCommit(parsed.owner, parsed.name, branch);
+  const commit = await fetchLatestCommit(parsed.owner, parsed.name, branch, token);
   const slug = await uniqueSlug(name);
   const siteId = randomUUID();
 
@@ -86,6 +96,8 @@ export async function connectRepo(
     repoOwner: parsed.owner,
     repoName: parsed.name,
     branch,
+    isPrivate: repo.private,
+    repoTokenEnc: token ? encryptSecret(token) : null,
     status: "live",
   });
 
@@ -95,7 +107,7 @@ export async function connectRepo(
   let result: SyncResult | null = null;
   let error: string | null = null;
   try {
-    result = await syncSite({ id: siteId, repoOwner: parsed.owner, repoName: parsed.name, branch });
+    result = await syncSite({ id: siteId, repoOwner: parsed.owner, repoName: parsed.name, branch, token });
     revalidateSite(siteId); // drop any stale Data Cache entries for this site's content
   } catch (e) {
     console.error("initial sync failed", e);
@@ -128,10 +140,13 @@ export async function resyncSite(siteId: string): Promise<void> {
   const s = rows[0];
   if (!s || s.organizationId !== org.id || !s.repoOwner || !s.repoName) return;
 
+  // Private repos: decrypt the stored token so the re-sync can authenticate.
+  const token = s.repoTokenEnc ? decryptSecret(s.repoTokenEnc) : undefined;
+
   let result: SyncResult | null = null;
   let error: string | null = null;
   try {
-    result = await syncSite({ id: s.id, repoOwner: s.repoOwner, repoName: s.repoName, branch: s.branch });
+    result = await syncSite({ id: s.id, repoOwner: s.repoOwner, repoName: s.repoName, branch: s.branch, token });
     revalidateSite(s.id); // serve the fresh content immediately, not the cached pre-sync copy
   } catch (e) {
     console.error("resync failed", e);

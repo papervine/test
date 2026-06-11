@@ -7,9 +7,11 @@ import {
   integer,
   boolean,
   timestamp,
+  jsonb,
   index,
 } from "drizzle-orm/pg-core";
 import { organization, user } from "./schema";
+import type { ReaderAuthConfig } from "@/lib/reader-auth";
 
 // A tenant's docs site. One organization can own several. `slug` is the
 // *.papervine.io subdomain; `customDomain` is the optional vanity host (docs.acme.com).
@@ -25,6 +27,12 @@ export const site = pgTable(
     repoOwner: text("repo_owner"),
     repoName: text("repo_name"),
     branch: text("branch").default("main").notNull(),
+    // Private repos: the repo isn't reachable unauthenticated, so sync must present a
+    // token. `repoTokenEnc` holds an AES-256-GCM-encrypted GitHub token (a fine-grained
+    // PAT today; a GitHub App installation token later — same seam, see src/lib/sync.ts).
+    // Never store the token in plaintext; encrypt via src/lib/crypto.ts.
+    isPrivate: boolean("is_private").default(false).notNull(),
+    repoTokenEnc: text("repo_token_enc"),
     customDomain: text("custom_domain").unique(),
     // "Host at /docs": serve the docs under {customDomain}/docs instead of at its
     // root, so the customer can keep their own site on the apex (incumbent parity).
@@ -34,6 +42,20 @@ export const site = pgTable(
     // Set once a live check (GET {domain}/api/site-identity) confirms the domain
     // actually resolves to this site; null = pending DNS. Drives the dashboard badge.
     customDomainVerifiedAt: timestamp("custom_domain_verified_at"),
+    // Layer 2 reader-auth (SPEC §11.2): gate published docs behind the customer's own
+    // login. We never run an IdP for readers — we verify a signed assertion and mint a
+    // short docs session. These columns are the dashboard-managed config; enforcement
+    // (the JWT/OAuth/password handshake in middleware) is the v2 follow-up.
+    authEnabled: boolean("auth_enabled").default(false).notNull(),
+    // null until a method is chosen. 'jwt' | 'oauth' | 'password' (build order, §11.2).
+    authMethod: text("auth_method"),
+    // Non-secret per-method config (login URL, OAuth endpoints, client id, scopes).
+    // Secrets never live here — see authSecretEnc.
+    authConfig: jsonb("auth_config").$type<ReaderAuthConfig>(),
+    // The method's one secret — the JWT signing secret, the OAuth client secret, or the
+    // shared password — AES-256-GCM-encrypted at rest (src/lib/crypto.ts), same as
+    // repoTokenEnc. Decrypted only to display to the site's own owner.
+    authSecretEnc: text("auth_secret_enc"),
     // 'draft' until the first successful sync, then 'live'.
     status: text("status").default("draft").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),

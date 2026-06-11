@@ -9,6 +9,7 @@ import {
   type DomainActionState,
 } from "./actions";
 import type { DomainVerification } from "@/lib/vercel-domains";
+import { Switch } from "@/components/ui/switch";
 
 export function DomainSetupForm({
   initialDomain,
@@ -50,21 +51,11 @@ export function DomainSetupForm({
         </div>
         <label className="flex shrink-0 items-center gap-2 pt-0.5 text-sm text-[var(--muted)]">
           Host at <code className="text-[var(--fg)]">/docs</code>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={subpath}
-            onClick={() => setSubpath((v) => !v)}
-            className={`relative h-5 w-9 rounded-full transition-colors ${
-              subpath ? "bg-[var(--blue)]" : "bg-white/[0.12]"
-            }`}
-          >
-            <span
-              className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-                subpath ? "translate-x-4" : "translate-x-0.5"
-              }`}
-            />
-          </button>
+          <Switch
+            checked={subpath}
+            onCheckedChange={setSubpath}
+            aria-label="Host docs under /docs"
+          />
         </label>
       </div>
 

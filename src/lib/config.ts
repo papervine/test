@@ -59,6 +59,10 @@ export type DocsConfig = z.infer<typeof docsConfigSchema>;
 const KNOWN_KEYS = new Set([
   "$schema", "name", "theme", "appearance", "logo", "favicon", "colors",
   "navigation", "navbar", "footer",
+  // Reader-auth gating (SPEC §11.2) is configured in the dashboard, not docs.json, but
+  // representative docs repos may still carry an `authentication` block — pass it through
+  // without a noisy warning.
+  "authentication",
 ]);
 
 /**

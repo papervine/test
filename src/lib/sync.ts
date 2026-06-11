@@ -1,36 +1,60 @@
 import "server-only";
 import { putObject } from "./storage";
+import { ghHeaders } from "./github";
+
+const API = "https://api.github.com";
 
 // File types we copy into object storage on sync: docs config + pages + assets.
 const TEXT_EXT = /\.(mdx?|json|ya?ml)$/i;
 const ASSET_EXT = /\.(png|jpe?g|gif|svg|webp|avif|ico|bmp|mp4|webm|pdf|woff2?)$/i;
 
-export type SyncResult = { files: number };
-
-function ghHeaders(): HeadersInit {
-  const h: Record<string, string> = { accept: "application/vnd.github+json", "user-agent": "papervine" };
-  if (process.env.GITHUB_TOKEN) h.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
-  return h;
+// The blobs API returns raw bytes without a meaningful content-type, so for private
+// assets we infer the type from the extension (public assets keep the raw CDN's header).
+// The tenant-asset route serves whatever content-type we store, so getting it right matters.
+const MIME: Record<string, string> = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  svg: "image/svg+xml", webp: "image/webp", avif: "image/avif", ico: "image/x-icon",
+  bmp: "image/bmp", mp4: "video/mp4", webm: "video/webm", pdf: "application/pdf",
+  woff: "font/woff", woff2: "font/woff2",
+};
+function mimeForPath(path: string): string {
+  const ext = path.split(".").pop()?.toLowerCase() ?? "";
+  return MIME[ext] ?? "application/octet-stream";
 }
 
-type SyncSite = { id: string; repoOwner: string; repoName: string; branch: string };
+export type SyncResult = { files: number };
+
+type SyncSite = {
+  id: string;
+  repoOwner: string;
+  repoName: string;
+  branch: string;
+  // Decrypted GitHub token for private repos (fine-grained PAT today, GitHub App
+  // installation token later). Absent → public repo, served from the raw CDN.
+  token?: string;
+};
 
 /**
  * Copy a repo's docs (config + MDX + assets) into object storage under
  * sites/{id}/… — the C-lite step of SPEC §3 (copy-on-sync; compile stays on the
  * render path for now). Reads the file list once via the git tree API, then pulls
- * each file from the raw CDN (not rate-limited) and uploads it. The GitHub App
- * token (private repos) plugs in via GITHUB_TOKEN later.
+ * each file's bytes and uploads it.
+ *
+ * Public repos: pull from the raw CDN (`raw.githubusercontent.com`, not rate-limited).
+ * Private repos: the raw CDN can't serve them (it has no Authorization), so pull each
+ * blob through the authenticated git blobs API by sha (`Accept: raw`). The token is
+ * held only here on the server; it never reaches the browser or the render path.
  */
 export async function syncSite(site: SyncSite): Promise<SyncResult> {
-  const { id, repoOwner: owner, repoName: name, branch } = site;
+  const { id, repoOwner: owner, repoName: name, branch, token } = site;
+  const headers = ghHeaders(token);
 
   const treeRes = await fetch(
-    `https://api.github.com/repos/${owner}/${name}/git/trees/${branch}?recursive=1`,
-    { headers: ghHeaders() },
+    `${API}/repos/${owner}/${name}/git/trees/${branch}?recursive=1`,
+    { headers },
   );
   if (!treeRes.ok) throw new Error(`Could not read ${owner}/${name}@${branch} (${treeRes.status})`);
-  const tree = ((await treeRes.json()).tree ?? []) as { path: string; type: string }[];
+  const tree = ((await treeRes.json()).tree ?? []) as { path: string; type: string; sha: string }[];
   const files = tree.filter(
     (t) => t.type === "blob" && (TEXT_EXT.test(t.path) || ASSET_EXT.test(t.path)),
   );
@@ -38,13 +62,31 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
   const rawBase = `https://raw.githubusercontent.com/${owner}/${name}/${branch}`;
   let count = 0;
   for (const f of files) {
-    const res = await fetch(`${rawBase}/${f.path}`);
-    if (!res.ok) continue;
-    const key = `sites/${id}/${f.path}`;
-    if (ASSET_EXT.test(f.path)) {
-      await putObject(key, new Uint8Array(await res.arrayBuffer()), res.headers.get("content-type") ?? undefined);
+    const isAsset = ASSET_EXT.test(f.path);
+    let bytes: ArrayBuffer | null = null;
+    let contentType: string | undefined;
+
+    if (token) {
+      // Private: fetch the blob by sha with the raw media type → exact file bytes.
+      const res = await fetch(`${API}/repos/${owner}/${name}/git/blobs/${f.sha}`, {
+        headers: { ...headers, accept: "application/vnd.github.raw" },
+      });
+      if (!res.ok) continue;
+      bytes = await res.arrayBuffer();
+      contentType = isAsset ? mimeForPath(f.path) : "text/plain; charset=utf-8";
     } else {
-      await putObject(key, await res.text(), "text/plain; charset=utf-8");
+      // Public: the raw CDN, which serves with a usable content-type for assets.
+      const res = await fetch(`${rawBase}/${f.path}`);
+      if (!res.ok) continue;
+      bytes = await res.arrayBuffer();
+      contentType = isAsset ? (res.headers.get("content-type") ?? undefined) : "text/plain; charset=utf-8";
+    }
+
+    const key = `sites/${id}/${f.path}`;
+    if (isAsset) {
+      await putObject(key, new Uint8Array(bytes), contentType);
+    } else {
+      await putObject(key, new TextDecoder().decode(bytes), contentType);
     }
     count++;
   }

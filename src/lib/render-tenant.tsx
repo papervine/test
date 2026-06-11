@@ -1,4 +1,7 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { cookies } from "next/headers";
+import { getSiteBySlug } from "@/lib/tenant";
+import { READER_COOKIE, readerSessionValid } from "@/lib/reader-session";
 import { requestContentSource } from "@/lib/request-source";
 import { contentContext, loadConfig, loadPage } from "@/lib/content";
 import { buildNav, findGroupLabel } from "@/lib/nav";
@@ -32,6 +35,22 @@ export async function renderTenantDocs({
   assetBase: string;
   path: string[];
 }) {
+  // Layer 2 reader-auth gate (SPEC §11.2). A site with auth enabled only renders to a
+  // reader holding a valid docs session for it; everyone else is bounced to the site's
+  // login, round-tripping the intended path so they land back here after signing in. This
+  // is the single chokepoint for all three serving modes (subdomain / path / custom
+  // domain), and the login route renders outside this function, so it isn't gated — no
+  // redirect loop. Enforcement lives here, not in middleware, because the per-site config
+  // is a DB read the edge runtime can't do (same reason custom-domain resolution is here).
+  const record = await getSiteBySlug(slug);
+  if (record?.authEnabled) {
+    const cookie = (await cookies()).get(READER_COOKIE)?.value;
+    if (!readerSessionValid(cookie, record.id)) {
+      const intended = `${base}/${path.join("/")}`;
+      redirect(`${base}/login?redirect=${encodeURIComponent(intended)}`);
+    }
+  }
+
   const src = await requestContentSource(slug);
   if (!src) notFound();
 

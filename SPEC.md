@@ -281,6 +281,18 @@ once C lands. We build C next. C ships in two steps so it's incremental, not a b
 - **C-full (later):** also **precompile** MDX → bundles at sync time so the render plane only
   executes (the §3 perf goal), plus push webhooks for auto-sync. Optimizations on top of C-lite.
 
+**Private repos — PAT first, GitHub App next (landed 2026-06-10).** The connect flow now
+accepts an optional **fine-grained PAT** (Contents: read) for a private repo. The token is
+encrypted at rest (AES-256-GCM, `src/lib/crypto.ts`, key in `PAPERVINE_ENCRYPTION_KEY`) on the
+`site` row (`repo_token_enc`, plus an `is_private` flag) and decrypted only server-side at sync.
+The real renderer-path change is in `src/lib/sync.ts`: private repos **can't** use the
+`raw.githubusercontent.com` CDN (no `Authorization`), so each file is pulled through the
+authenticated **git blobs API** by sha (`Accept: application/vnd.github.raw`) with a correct
+content-type inferred per extension; public repos keep the raw CDN. The token flows through one
+seam — `ghHeaders(token?)` in `src/lib/github.ts` — so the **GitHub App** is a drop-in follow-up:
+the install flow mints an installation token that takes the same parameter, no sync/render
+changes. (App also unlocks push-webhook auto-sync, the C-full piece.)
+
 The request-time GitHub fallback (`githubSource`) is **removed** — `requestContentSource`
 serves a site only once it's synced (`isSynced` → `s3Source`), else 404; an unsynced site has
 nothing to show rather than reaching back to the repo live. GitHub is touched only at *sync
@@ -878,6 +890,31 @@ Match the incumbent's model exactly so their configs migrate unchanged.
 **Personalization:** the `content` blob is exposed as a `user` variable in MDX scope
 (threaded through `src/lib/mdx.tsx`), letting a page render conditionally per user/group.
 This forces per-request rendering, which fights compile-on-sync caching — defer to v2+.
+
+**Status (2026-06-10) — config surface + password enforcement shipped.** The dashboard
+**Settings → Authentication** page (`settings/authentication/`) configures Layer 2: the
+master enable toggle plus the JWT / OAuth 2.0 / Password method picker and per-method
+config. It persists to **`site` columns** (`authEnabled`, `authMethod`, `authConfig`
+jsonb, `authSecretEnc`), *not* docs.json — the incumbent configures this in the dashboard too,
+and we have no Git-write authoring backend (§9.2) yet to round-trip a docs.json
+`authentication` block. The one secret per method (JWT signing secret / OAuth client
+secret / shared password) is AES-256-GCM-encrypted via `src/lib/crypto.ts`, same as
+`repoTokenEnc`; switching methods resets it (a JWT signing secret is meaningless as an
+OAuth client secret). Pure validation + types live in `src/lib/reader-auth.ts`.
+
+**Enforcement.** The gate is the **node** chokepoint `renderTenantDocs` (not edge
+middleware — the per-site config is a DB read the edge can't do, same constraint as
+custom-domain resolution): an `authEnabled` site renders only to a reader holding a valid
+docs session for it, else it 307s to the site's `/login` round-tripping the intended path.
+The **password** method is wired end-to-end: a `/login` route per serving mode
+(`sites/[site]/login`, `custom-domain/login`) → `submitReaderPassword` constant-time-checks
+the shared secret → mints an encrypted, site-bound, 7-day session cookie (`pv_docs_session`,
+`src/lib/reader-session.ts`) → bounces back (open-redirect-guarded). **Still to build:** the
+**JWT** and **OAuth** handshakes (their `/login` shows a "not available yet" notice today);
+per-page `public:` / per-group `"public": true` exemptions (currently the gate is
+all-or-nothing per site); and gating of **assets + agent surfaces** (`/api/tenant-asset`,
+`llms.txt`, `/mcp`) — today only HTML pages are gated, so a private site's images and
+agent feeds remain reachable.
 
 ### 11.3 Sequencing (v1 → enterprise)
 

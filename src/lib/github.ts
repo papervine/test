@@ -1,7 +1,9 @@
-// Minimal GitHub REST client for the connect-a-repo flow. Public repos only for
-// now (unauthenticated — 60 req/hr); the GitHub App (private repos, install
-// tokens, push webhooks) is the follow-up. A GITHUB_TOKEN, if present, raises the
-// rate limit and is the seam the App will plug into later.
+// Minimal GitHub REST client for the connect-a-repo flow. Works for public repos
+// unauthenticated (60 req/hr), and for **private** repos when handed a token — a
+// fine-grained PAT today; a GitHub App installation token later (the App is the
+// follow-up: install flow + token minting, plugging into this same `token` seam).
+// A GITHUB_TOKEN env var, if present, is the default for public-repo calls (raises
+// the rate limit); a per-site token always wins when supplied.
 const API = "https://api.github.com";
 
 // Accepts "owner/name", a github.com URL, or "owner/name.git". Pure — kept out of
@@ -14,29 +16,41 @@ export function parseRepoInput(input: string): { owner: string; name: string } |
   return { owner: m[1], name: m[2] };
 }
 
-function ghHeaders(): HeadersInit {
+// Per-site `token` (private repos) takes precedence; otherwise fall back to the
+// optional global GITHUB_TOKEN for public-repo rate limits.
+export function ghHeaders(token?: string): HeadersInit {
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
     "user-agent": "papervine",
   };
-  if (process.env.GITHUB_TOKEN) headers.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  const auth = token ?? process.env.GITHUB_TOKEN;
+  if (auth) headers.authorization = `Bearer ${auth}`;
   return headers;
 }
 
-export type RepoMeta = { fullName: string; defaultBranch: string };
+export type RepoMeta = { fullName: string; defaultBranch: string; private: boolean };
 
-export async function fetchRepo(owner: string, name: string): Promise<RepoMeta | null> {
-  const res = await fetch(`${API}/repos/${owner}/${name}`, { headers: ghHeaders() });
+export async function fetchRepo(
+  owner: string,
+  name: string,
+  token?: string,
+): Promise<RepoMeta | null> {
+  const res = await fetch(`${API}/repos/${owner}/${name}`, { headers: ghHeaders(token) });
   if (!res.ok) return null;
   const data = await res.json();
-  return { fullName: data.full_name, defaultBranch: data.default_branch };
+  return { fullName: data.full_name, defaultBranch: data.default_branch, private: !!data.private };
 }
 
 // True if the repo has a Papervine/docs.json config at its root on the given ref.
-export async function hasDocsConfig(owner: string, name: string, ref: string): Promise<boolean> {
+export async function hasDocsConfig(
+  owner: string,
+  name: string,
+  ref: string,
+  token?: string,
+): Promise<boolean> {
   for (const file of ["docs.json", "mint.json"]) {
     const res = await fetch(`${API}/repos/${owner}/${name}/contents/${file}?ref=${ref}`, {
-      headers: ghHeaders(),
+      headers: ghHeaders(token),
     });
     if (res.ok) return true;
   }
@@ -49,8 +63,11 @@ export async function fetchLatestCommit(
   owner: string,
   name: string,
   ref: string,
+  token?: string,
 ): Promise<CommitInfo | null> {
-  const res = await fetch(`${API}/repos/${owner}/${name}/commits/${ref}`, { headers: ghHeaders() });
+  const res = await fetch(`${API}/repos/${owner}/${name}/commits/${ref}`, {
+    headers: ghHeaders(token),
+  });
   if (!res.ok) return null;
   const data = await res.json();
   return { sha: data.sha, message: data.commit?.message ?? "" };
