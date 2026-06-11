@@ -1,12 +1,12 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
-import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { searchDocs, readPage, listPages, searchApi, apiEnabled } from "@/lib/docs-tools";
 import { contentContext } from "@/lib/content";
 import { requestContentSource } from "@/lib/request-source";
 import { getSiteByHost } from "@/lib/tenant";
 import { detectAgent } from "@/lib/ua-detect";
+import { agentSessionId, firstForwardedIp } from "@/lib/agent-session";
 import { logEvent, type EventType } from "@/lib/track";
 
 /**
@@ -35,7 +35,15 @@ const handler = createMcpHandler(
     const site = await getSiteByHost(h.get("host"));
     // Anything reaching /mcp is an agent; name it when we can, else "Other".
     const agentName = detectAgent(h.get("user-agent")).name || "Other";
-    const sessionId = randomUUID();
+    // Stable per-client id so a connection's many tool calls count as ONE visitor,
+    // not one-per-call — the server is stateless, so a fresh UUID here would inflate
+    // "Agent Visitors" to equal page views (SPEC §10.1, see agent-session.ts).
+    const sessionId = agentSessionId({
+      mcpSessionId: h.get("mcp-session-id"),
+      agent: agentName,
+      userAgent: h.get("user-agent"),
+      ip: firstForwardedIp(h.get("x-forwarded-for")) ?? h.get("x-real-ip"),
+    });
 
     const run = <T>(fn: () => Promise<T>): Promise<T> =>
       src ? contentContext.run(src, fn) : fn();

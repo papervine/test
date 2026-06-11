@@ -1,10 +1,10 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
 import { type NextRequest } from "next/server";
 import { requestContentSource } from "./request-source";
 import { contentContext } from "./content";
 import { getSiteByHost } from "./tenant";
 import { detectAgent } from "./ua-detect";
+import { agentSessionId, firstForwardedIp } from "./agent-session";
 import { logEvent } from "./track";
 import { renderLlmsTxt } from "./llms";
 
@@ -30,8 +30,9 @@ export async function handleLlmsRequest(req: NextRequest, full: boolean): Promis
   }
 
   // Record the visit by agent name (fire-and-forget). llms.txt is an agent surface, so
-  // we log known agents and generic non-browser clients; a per-fetch session id makes
-  // each retrieval one "visit". No-op on the apex/preview host (no tenant site).
+  // we log known agents and generic non-browser clients. A stable per-client session id
+  // (not a per-fetch UUID) keeps "Agent Visitors" a distinct-client count, consistent
+  // with the MCP tools (SPEC §10.1). No-op on the apex/preview host (no tenant site).
   const { isAgent, name } = detectAgent(req.headers.get("user-agent"));
   if (isAgent) {
     const site = await getSiteByHost(host);
@@ -42,7 +43,12 @@ export async function handleLlmsRequest(req: NextRequest, full: boolean): Promis
         source: "agent",
         agent: name,
         path: full ? "/llms-full.txt" : "/llms.txt",
-        sessionId: randomUUID(),
+        sessionId: agentSessionId({
+          mcpSessionId: req.headers.get("mcp-session-id"),
+          agent: name,
+          userAgent: req.headers.get("user-agent"),
+          ip: firstForwardedIp(req.headers.get("x-forwarded-for")) ?? req.headers.get("x-real-ip"),
+        }),
       });
     }
   }

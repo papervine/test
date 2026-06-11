@@ -733,6 +733,21 @@ The control-plane **Analytics** page (the incumbent: *Analytics*) — scoped to 
 > site** chosen by the top-left switcher (§10; defaults to the org's first site). The assistant
 > deep-dive (usage chart, Claude-clustered categories + content-gap engine, chat history, CSV
 > export) is not yet built.
+>
+> **Agent-visitor identity (fix 2026-06-11).** "Agent Visitors" = `count(distinct sessionId)`
+> over agent page-views, the agent analogue of the Humans tab's distinct-visitor metric (which
+> keys off a persisted `localStorage` UUID). The MCP server is **stateless** (no Redis), so it
+> re-instantiates per tool call — minting a fresh `randomUUID()` sessionId each time counted
+> every `read_page` as a *new* visitor (3 reads in one Claude session showed as "3 Agent
+> Visitors" — effectively the page-view count wearing the Visitors label). Fixed in
+> `src/lib/agent-session.ts`: `sessionId` is now a **stable per-client id** — the client's
+> `Mcp-Session-Id` when supplied, else `sha256(agent + UA + IP)` (no time component, so it's
+> stable across the window like the human UUID). A client's burst of calls now collapses to one
+> visitor; distinct clients stay distinct. Matching the incumbent, the Agents tab keeps just two
+> cards (**Agent Visitors** + **MCP Searches**) — no separate agent "Views" card; per-page agent
+> volume lives in **Top pages**. Same derivation on the `/llms.txt` agent surface
+> (`src/lib/llms-route.ts`). Regression: `tests/unit/agent-session.test.ts` (dedupe/stability)
+> + `tests/e2e/analytics.spec.ts` (a 3-call session + a 2nd session → 2 visitors, not 4).
 
 - **Metric cards** (each with a vs-previous delta): **Visitors**, **Views**, **Assistant**
   (queries), **Searches**, **Feedback** (👍/👎).

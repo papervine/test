@@ -24,6 +24,7 @@ test.beforeAll(async () => {
   const A = randomUUID();
   const B = randomUUID();
   const G = randomUUID();
+  const H = randomUUID();
   const ev = (e: Record<string, unknown>) => ({
     id: randomUUID(),
     site_id: SITE_ID,
@@ -43,9 +44,13 @@ test.beforeAll(async () => {
     ev({ type: "page_view", path: "/guide", referrer: "$direct", session_id: A }),
     ev({ type: "search", query: "roles", session_id: A }),
     ev({ type: "assistant", query: "how?", status: "answered", session_id: B }),
-    // Agents: 2 views, 1 distinct visitor.
+    // Agents: 4 views, 2 distinct visitors. Session G makes three calls (the read_page
+    // burst that used to inflate to "3 Agent Visitors"); a stable session id now collapses
+    // them to one visitor. Session H is a second, distinct client that adds one more.
     ev({ type: "page_view", source: "agent", path: "/", referrer: "$direct", session_id: G }),
     ev({ type: "page_view", source: "agent", path: "/api", referrer: "$direct", session_id: G }),
+    ev({ type: "page_view", source: "agent", path: "/guide", referrer: "$direct", session_id: G }),
+    ev({ type: "page_view", source: "agent", path: "/", referrer: "$direct", session_id: H }),
   ];
   await sql`insert into analytics_event ${sql(rows)}`;
   await sql.end();
@@ -84,7 +89,8 @@ test("Agents view filters to agent-source data", async ({ page }) => {
 
   // Button text is "agents" (lowercase; capitalized via CSS), so match accordingly.
   await expect(page.getByRole("button", { name: "agents", exact: true })).toBeVisible();
-  // The Agents tab shows Agent Visitors (distinct agent sessions) — 1 here, distinct from
-  // the Humans tab's 2 visitors, proving the source=agent filtering.
-  await expect(page.getByTestId("metric-visitors")).toContainText("1");
+  // Agent Visitors counts distinct agent *sessions*, not page views: session G's three
+  // calls collapse to one visitor and session H adds a second, so 4 agent views → 2
+  // visitors (not 4). Distinct from the Humans tab's 2 visitors, proving source=agent.
+  await expect(page.getByTestId("metric-visitors")).toContainText("2");
 });
