@@ -4,20 +4,18 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { eq, like } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { site, deployment } from "@/lib/db/app-schema";
+import { site, githubInstallation } from "@/lib/db/app-schema";
 import { getSession, listOrganizations } from "@/lib/session";
 import {
   fetchRepo,
   hasDocsConfig,
-  fetchLatestCommit,
   parseRepoInput,
   normalizeDocsPath,
 } from "@/lib/github";
-import { syncSite, type SyncResult } from "@/lib/sync";
-import { encryptSecret, decryptSecret } from "@/lib/crypto";
-import { revalidateSite } from "@/lib/s3-source";
+import { getInstallationToken } from "@/lib/github-app";
+import { runSync } from "@/lib/sync-runner";
+import { encryptSecret } from "@/lib/crypto";
 import { slugify } from "@/lib/slug";
-import { syncErrorDetail } from "@/lib/sync-error";
 import { siteBase, siteRoute } from "@/lib/dashboard-nav";
 
 // `redirectTo` is the new site's bare URL; the client does the navigation. A server
@@ -64,68 +62,69 @@ export async function connectRepo(
   const parsed = parseRepoInput(repoRaw);
   if (!parsed) return { error: "Enter a repo as owner/name or a github.com URL." };
 
-  const repo = await fetchRepo(parsed.owner, parsed.name, token);
+  // Credentials, in precedence order: a pasted PAT wins (the user's explicit choice),
+  // else the org's GitHub App installation (preferred — auto-rotating, no secret to
+  // store). Either authenticates the validation calls below and backs later syncs; a
+  // public repo needs neither.
+  const install = (
+    await db
+      .select()
+      .from(githubInstallation)
+      .where(eq(githubInstallation.organizationId, org.id))
+      .limit(1)
+  )[0];
+  const installToken = install ? await getInstallationToken(install.installationId) : undefined;
+  const authToken = token ?? installToken;
+
+  const repo = await fetchRepo(parsed.owner, parsed.name, authToken);
   if (!repo) {
     return {
-      error: token
-        ? "Repository not found, or the token can't read it (needs Contents: read on this repo)."
-        : "Repository not found, or it's private — paste a token below to connect a private repo.",
+      error: authToken
+        ? "Repository not found, or the credentials can't read it (needs Contents: read on this repo)."
+        : "Repository not found, or it's private — install the GitHub App or paste a token below.",
     };
   }
 
   const branch = branchInput || repo.defaultBranch;
-  if (!(await hasDocsConfig(parsed.owner, parsed.name, branch, token, docsPath))) {
+  if (!(await hasDocsConfig(parsed.owner, parsed.name, branch, authToken, docsPath))) {
     const where = docsPath ? `in ${docsPath}/ of` : "at the root of";
     return { error: `No docs.json or mint.json ${where} ${repo.fullName}@${branch}.` };
   }
 
-  const commit = await fetchLatestCommit(parsed.owner, parsed.name, branch, token);
   const slug = await uniqueSlug(name);
-  const siteId = randomUUID();
 
-  await db.insert(site).values({
-    id: siteId,
-    organizationId: org.id,
-    name,
-    slug,
-    repoOwner: parsed.owner,
-    repoName: parsed.name,
-    branch,
-    docsPath,
-    isPrivate: repo.private,
-    repoTokenEnc: token ? encryptSecret(token) : null,
-    status: "live",
-  });
+  // Insert as a draft (the schema default); runSync promotes it to 'live' once the first
+  // sync succeeds. `.returning()` hands back the full row to feed the shared runner.
+  // Persist whichever credential was used: a PAT → repoTokenEnc; otherwise attribute the
+  // site to the App installation so syncs/webhooks mint installation tokens (§3 seam).
+  const [created] = await db
+    .insert(site)
+    .values({
+      id: randomUUID(),
+      organizationId: org.id,
+      name,
+      slug,
+      repoOwner: parsed.owner,
+      repoName: parsed.name,
+      branch,
+      docsPath,
+      isPrivate: repo.private,
+      repoTokenEnc: token ? encryptSecret(token) : null,
+      githubInstallationId: token ? null : (install?.installationId ?? null),
+    })
+    .returning();
 
-  // Copy the repo's content into object storage so the render path reads from us,
-  // not GitHub (SPEC §3.1 model C). A failed sync shouldn't lose the connection —
-  // record it as failed and let the user re-sync.
-  let result: SyncResult | null = null;
-  let error: string | null = null;
-  try {
-    result = await syncSite({ id: siteId, repoOwner: parsed.owner, repoName: parsed.name, branch, token, docsPath });
-    revalidateSite(siteId); // drop any stale Data Cache entries for this site's content
-  } catch (e) {
-    console.error("initial sync failed", e);
-    error = syncErrorDetail(e);
-  }
-
-  await db.insert(deployment).values({
-    id: randomUUID(),
-    siteId,
-    status: result ? "successful" : "failed",
-    target: "live",
-    commitSha: commit?.sha ?? null,
-    commitMessage: commit?.message ?? "Connected repository",
-    error,
-    filesAdded: result?.files ?? 0,
-    actorUserId: session.user.id,
-  });
+  // Copy the repo's content into object storage so the render path reads from us, not
+  // GitHub (SPEC §3.1 model C). A failed sync is recorded as failed and never throws —
+  // the connection survives and the user can re-sync.
+  await runSync(created, { actorUserId: session.user.id, trigger: "connect" });
 
   return { redirectTo: siteBase(org.slug, slug) };
 }
 
-// Re-pull a site's repo into object storage (manual sync; webhooks come in C-full).
+// Re-pull a site's repo into object storage. The manual ("Re-sync" button) counterpart
+// to the push webhook (SPEC §3) — both run the same session-less runSync; here the
+// session is the authorization, there it's the verified signature.
 export async function resyncSite(siteId: string): Promise<void> {
   const session = await getSession();
   const org = (await listOrganizations())?.[0];
@@ -135,29 +134,7 @@ export async function resyncSite(siteId: string): Promise<void> {
   const s = rows[0];
   if (!s || s.organizationId !== org.id || !s.repoOwner || !s.repoName) return;
 
-  // Private repos: decrypt the stored token so the re-sync can authenticate.
-  const token = s.repoTokenEnc ? decryptSecret(s.repoTokenEnc) : undefined;
-
-  let result: SyncResult | null = null;
-  let error: string | null = null;
-  try {
-    result = await syncSite({ id: s.id, repoOwner: s.repoOwner, repoName: s.repoName, branch: s.branch, token, docsPath: s.docsPath });
-    revalidateSite(s.id); // serve the fresh content immediately, not the cached pre-sync copy
-  } catch (e) {
-    console.error("resync failed", e);
-    error = syncErrorDetail(e);
-  }
-
-  await db.insert(deployment).values({
-    id: randomUUID(),
-    siteId: s.id,
-    status: result ? "successful" : "failed",
-    target: "live",
-    commitMessage: result ? `Re-synced ${result.files} files` : "Re-sync failed",
-    error,
-    filesEdited: result?.files ?? 0,
-    actorUserId: session.user.id,
-  });
+  await runSync(s, { actorUserId: session.user.id, trigger: "manual" });
 
   // Refresh the site's Overview so the new deployment shows in its Activity feed. The
   // ResyncButton sits on the site's page; revalidate its INTERNAL route (Next keys the

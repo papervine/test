@@ -300,8 +300,26 @@ once C lands. We build C next. C ships in two steps so it's incremental, not a b
   removes GitHub-at-request-time entirely, fixes assets (root-absolute logo/image paths now
   resolve through `/api/tenant-asset/{slug}/…` against the synced bucket), and works for
   private repos (the worker holds the token). Public repos need no GitHub App; private add it.
-- **C-full (later):** also **precompile** MDX → bundles at sync time so the render plane only
-  executes (the §3 perf goal), plus push webhooks for auto-sync. Optimizations on top of C-lite.
+- **C-full (in progress):** also **precompile** MDX → bundles at sync time so the render plane
+  only executes (the §3 perf goal, still deferred), plus push webhooks for auto-sync.
+  **Push auto-sync landed 2026-06-11** (below); precompile-on-sync remains the open piece.
+
+**Push auto-sync (landed 2026-06-11).** A registered **GitHub App** delivers `push` events
+to `POST /api/github/webhook` (on the **apex** host — middleware passes `/api/` through
+ungated there; the app host would redirect GitHub's unauthed POST to `/login`). The route
+(`src/app/api/github/webhook/route.ts`) verifies the `X-Hub-Signature-256` HMAC over the raw
+body (`src/lib/github-webhook.ts`, all pure + unit-tested), maps the push to the site(s) on
+that repo+branch, and runs the sync in `after()` so GitHub gets a fast `202`. Sync itself is
+the shared **`runSync`** (`src/lib/sync-runner.ts`) — the session-less core also behind the
+connect flow and the manual Re-sync button; the webhook's authorization is the signature, not
+a session. Idempotent across redeliveries via `site.lastSyncedCommitSha` (skip a head we've
+already synced). The App also replaces the pasted PAT for private repos: an installation
+(stored in the `github_installation` table, tied to the org by the `/api/github/setup`
+callback) mints a short-lived **installation token** (`src/lib/github-app.ts`, RS256 JWT via
+`node:crypto` — no new deps) that flows through the same `ghHeaders(token?)` seam as the PAT,
+so neither `sync.ts` nor the render path changed. All four env vars are optional: with no App
+configured the webhook 401s every (unsignable) delivery and the connect form falls back to the
+PAT field — public repos and self-host stay zero-config. See `.env.example` for registration.
 
 **Private repos — PAT first, GitHub App next (landed 2026-06-10).** The connect flow now
 accepts an optional **fine-grained PAT** (Contents: read) for a private repo. The token is

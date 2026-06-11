@@ -333,6 +333,32 @@ async function run() {
       log(`  ${failures.length === before ? "✓" : "✗"} llms.txt index (200 text/plain + page links)`);
     }
 
+    // GitHub push webhook signature gate (SPEC §3 auto-sync). DB-free: an unsigned /
+    // wrongly-signed delivery must be rejected with 401 BEFORE the route parses the body
+    // or touches the DB — so this runs without Postgres. The happy path (valid signature
+    // → matching site syncs) needs the DB and is covered in the e2e suite.
+    {
+      const before = failures.length;
+      try {
+        const res = await fetch(`${BASE}/api/github/webhook`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-github-event": "push",
+            "x-hub-signature-256": "sha256=deadbeef", // not a valid HMAC of the body
+          },
+          body: JSON.stringify({ ref: "refs/heads/main" }),
+          signal: AbortSignal.timeout(30_000),
+        });
+        if (res.status !== 401) {
+          failures.push(`[gh-webhook] expected 401 for a bad signature, got ${res.status}`);
+        }
+      } catch (e) {
+        failures.push(`[gh-webhook] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} github webhook rejects an unsigned delivery (401)`);
+    }
+
     for (const check of CONTROL_PLANE_CHECKS) {
       const before = failures.length;
       const tag = `control-plane ${check.host ? `${check.host}` : ""}${check.path}`;

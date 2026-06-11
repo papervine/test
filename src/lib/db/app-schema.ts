@@ -60,12 +60,51 @@ export const site = pgTable(
     // shared password — AES-256-GCM-encrypted at rest (src/lib/crypto.ts), same as
     // repoTokenEnc. Decrypted only to display to the site's own owner.
     authSecretEnc: text("auth_secret_enc"),
+    // GitHub App installation that grants access to this repo (SPEC §3). The numeric
+    // GitHub installation id — minted into a short-lived token at sync time (see
+    // src/lib/github-app.ts), the same `token` seam as repoTokenEnc/PAT. Not a FK so an
+    // uninstall (which nulls this in the webhook handler) never cascades the site away;
+    // a re-link restores it. null → connected by PAT or public, not by the App.
+    githubInstallationId: integer("github_installation_id"),
+    // Head commit sha of the last successful sync. Lets the push webhook skip a delivery
+    // whose head we've already synced (idempotency for redeliveries / rapid pushes).
+    lastSyncedCommitSha: text("last_synced_commit_sha"),
     // 'draft' until the first successful sync, then 'live'.
     status: text("status").default("draft").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
-  (table) => [index("site_organizationId_idx").on(table.organizationId)],
+  (table) => [
+    index("site_organizationId_idx").on(table.organizationId),
+    // The push webhook fans out by repo → all sites on that repo, so it queries by
+    // (repo_owner, repo_name). Index it so a busy install doesn't table-scan `site`.
+    index("site_repo_idx").on(table.repoOwner, table.repoName),
+  ],
+);
+
+// A GitHub App installation (SPEC §3). One install on a user/org account grants access
+// to many repos, so it's its own table keyed by the org that installed it — sites then
+// carry the numeric installation id (site.githubInstallationId) to mint sync tokens.
+// Created/updated by the App setup callback and the `installation` webhook event;
+// removed on uninstall (which also nulls the dependent sites' githubInstallationId).
+export const githubInstallation = pgTable(
+  "github_installation",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    // GitHub's numeric installation id — the value the webhook payload carries and the
+    // token-mint endpoint takes (POST /app/installations/{id}/access_tokens). Unique:
+    // one row per real installation.
+    installationId: integer("installation_id").notNull().unique(),
+    // The account (user or org login) the App was installed on, e.g. "acme". Shown in
+    // the connect UI so the owner can tell which install backs which repo.
+    accountLogin: text("account_login").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("githubInstallation_organizationId_idx").on(table.organizationId)],
 );
 
 // One row per git-sync / publish — backs the dashboard "Activity" feed.
@@ -150,6 +189,13 @@ export const siteRelations = relations(site, ({ one, many }) => ({
 
 export const analyticsEventRelations = relations(analyticsEvent, ({ one }) => ({
   site: one(site, { fields: [analyticsEvent.siteId], references: [site.id] }),
+}));
+
+export const githubInstallationRelations = relations(githubInstallation, ({ one }) => ({
+  organization: one(organization, {
+    fields: [githubInstallation.organizationId],
+    references: [organization.id],
+  }),
 }));
 
 export const deploymentRelations = relations(deployment, ({ one }) => ({

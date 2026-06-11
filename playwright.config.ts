@@ -50,6 +50,9 @@ export default defineConfig({
       S3_ACCESS_KEY_ID: "papervine",
       S3_SECRET_ACCESS_KEY: "papervinesecret",
       S3_BUCKET: "papervine-content",
+      // Deterministic GitHub App webhook secret so the push-webhook spec can sign payloads
+      // the running server will verify (SPEC §3 auto-sync). Test-only.
+      GITHUB_APP_WEBHOOK_SECRET: "e2e-webhook-secret",
     },
   },
 });

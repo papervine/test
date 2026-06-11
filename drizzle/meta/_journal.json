@@ -50,6 +50,13 @@
       "when": 1781138536669,
       "tag": "0006_steady_saracen",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1781215659465,
+      "tag": "0007_concerned_wasp",
+      "breakpoints": true
     }
   ]
 }
