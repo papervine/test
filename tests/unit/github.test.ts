@@ -1,5 +1,29 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { parseRepoInput, ghHeaders } from "@/lib/github";
+import { parseRepoInput, ghHeaders, normalizeDocsPath } from "@/lib/github";
+
+describe("normalizeDocsPath", () => {
+  it("passes a clean single segment through", () => {
+    expect(normalizeDocsPath("docs")).toBe("docs");
+  });
+  it("keeps nested paths", () => {
+    expect(normalizeDocsPath("content/docs")).toBe("content/docs");
+  });
+  it("strips leading/trailing slashes and whitespace", () => {
+    expect(normalizeDocsPath("  /docs/  ")).toBe("docs");
+  });
+  it("drops `.` and `..` segments so it can't climb out of the repo", () => {
+    expect(normalizeDocsPath("./docs")).toBe("docs");
+    expect(normalizeDocsPath("../../secret")).toBe("secret");
+  });
+  it("normalizes backslashes and collapses empty segments", () => {
+    expect(normalizeDocsPath("content\\\\docs")).toBe("content/docs");
+    expect(normalizeDocsPath("a//b")).toBe("a/b");
+  });
+  it("treats empty/whitespace as repo root", () => {
+    expect(normalizeDocsPath("")).toBe("");
+    expect(normalizeDocsPath("   ")).toBe("");
+  });
+});
 
 describe("parseRepoInput", () => {
   it("parses owner/name", () => {

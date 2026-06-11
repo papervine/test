@@ -1,15 +1,19 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import Link from "next/link";
 import { connectRepo, type ConnectState } from "@/lib/actions/sites";
 import { Button } from "@/components/platform/Button";
 import { Field } from "@/components/platform/Field";
+import { Switch } from "@/components/ui/switch";
 
 const initial: ConnectState = {};
 
 export default function ConnectRepoPage() {
   const [state, formAction, pending] = useActionState(connectRepo, initial);
+  // the incumbent's "docs.json is in a subdirectory" toggle. When off we don't render the
+  // path field at all, so the form submits no `docsPath` and the server reads repo root.
+  const [subdir, setSubdir] = useState(false);
 
   return (
     <div className="mx-auto max-w-lg px-8 py-12">
@@ -44,6 +48,39 @@ export default function ConnectRepoPage() {
           label="Branch"
           placeholder="defaults to the repo's default branch"
         />
+
+        <div className="space-y-3">
+          <label className="flex items-center gap-3 text-sm">
+            <Switch checked={subdir} onCheckedChange={setSubdir} />
+            <span className="font-medium">docs.json is in a subdirectory</span>
+          </label>
+          {subdir && (
+            <Field
+              name="docsPath"
+              label="Path to directory containing docs.json"
+              placeholder="docs"
+              autoComplete="off"
+              autoFocus
+              hint={
+                <span className="mt-2 flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    aria-hidden
+                    className="size-3.5 shrink-0"
+                  >
+                    <circle cx="12" cy="12" r="10" />
+                    <path d="M12 16v-4M12 8h.01" strokeLinecap="round" />
+                  </svg>
+                  Please make sure that a docs.json file exists at the selected
+                  directory.
+                </span>
+              }
+            />
+          )}
+        </div>
         <Field
           name="token"
           type="password"

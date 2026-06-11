@@ -16,6 +16,20 @@ export function parseRepoInput(input: string): { owner: string; name: string } |
   return { owner: m[1], name: m[2] };
 }
 
+// Normalize a user-typed "docs.json is in a subdirectory" path into a clean,
+// slash-delimited repo-relative prefix: trims, drops leading/trailing/`.` segments,
+// strips `..` so it can't climb out, and collapses backslashes. "" → repo root.
+// Pure — unit-tested alongside parseRepoInput.
+export function normalizeDocsPath(input: string): string {
+  return input
+    .trim()
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((s) => s.trim())
+    .filter((s) => s && s !== "." && s !== "..")
+    .join("/");
+}
+
 // Per-site `token` (private repos) takes precedence; otherwise fall back to the
 // optional global GITHUB_TOKEN for public-repo rate limits.
 export function ghHeaders(token?: string): HeadersInit {
@@ -41,15 +55,18 @@ export async function fetchRepo(
   return { fullName: data.full_name, defaultBranch: data.default_branch, private: !!data.private };
 }
 
-// True if the repo has a Papervine/docs.json config at its root on the given ref.
+// True if the repo has a Papervine/docs.json config on the given ref. `docsPath` is the
+// normalized subdirectory the config lives in (see normalizeDocsPath); "" = repo root.
 export async function hasDocsConfig(
   owner: string,
   name: string,
   ref: string,
   token?: string,
+  docsPath = "",
 ): Promise<boolean> {
+  const dir = docsPath ? `${docsPath}/` : "";
   for (const file of ["docs.json", "mint.json"]) {
-    const res = await fetch(`${API}/repos/${owner}/${name}/contents/${file}?ref=${ref}`, {
+    const res = await fetch(`${API}/repos/${owner}/${name}/contents/${dir}${file}?ref=${ref}`, {
       headers: ghHeaders(token),
     });
     if (res.ok) return true;

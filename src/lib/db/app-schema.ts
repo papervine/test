@@ -27,6 +27,10 @@ export const site = pgTable(
     repoOwner: text("repo_owner"),
     repoName: text("repo_name"),
     branch: text("branch").default("main").notNull(),
+    // Subdirectory the docs.json lives in (the incumbent's "docs.json is in a subdirectory"
+    // option), normalized by normalizeDocsPath. "" = repo root. Sync strips this prefix
+    // so storage keys stay sites/{id}/docs.json regardless — the render path never sees it.
+    docsPath: text("docs_path").default("").notNull(),
     // Private repos: the repo isn't reachable unauthenticated, so sync must present a
     // token. `repoTokenEnc` holds an AES-256-GCM-encrypted GitHub token (a fine-grained
     // PAT today; a GitHub App installation token later — same seam, see src/lib/sync.ts).

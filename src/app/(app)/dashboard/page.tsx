@@ -11,7 +11,6 @@ import { ACTIVE_SITE_COOKIE, resolveActiveSite } from "@/lib/active-site";
 import { parseFeedTarget } from "@/lib/overview";
 import { Greeting } from "@/components/app/Greeting";
 import { ResyncButton } from "@/components/app/ResyncButton";
-import { WorkflowUpsellBanner } from "@/components/app/WorkflowUpsellBanner";
 import { ButtonLink } from "@/components/platform/Button";
 
 function timeAgo(date: Date): string {
@@ -245,8 +244,6 @@ export default async function DashboardHome({
           </dl>
         </div>
       </section>
-
-      <WorkflowUpsellBanner />
 
       <section className="mt-10">
         <div className="flex items-center justify-between">

@@ -32,6 +32,10 @@ type SyncSite = {
   // Decrypted GitHub token for private repos (fine-grained PAT today, GitHub App
   // installation token later). Absent → public repo, served from the raw CDN.
   token?: string;
+  // Normalized subdirectory the docs live in (see normalizeDocsPath); "" = repo root.
+  // We sync only files under it and strip the prefix from storage keys, so the render
+  // path always finds sites/{id}/docs.json no matter where the config lived in the repo.
+  docsPath?: string;
 };
 
 /**
@@ -48,6 +52,8 @@ type SyncSite = {
 export async function syncSite(site: SyncSite): Promise<SyncResult> {
   const { id, repoOwner: owner, repoName: name, branch, token } = site;
   const headers = ghHeaders(token);
+  // Only sync files under the docs subdirectory, and strip the prefix from storage keys.
+  const prefix = site.docsPath ? `${site.docsPath}/` : "";
 
   const treeRes = await fetch(
     `${API}/repos/${owner}/${name}/git/trees/${branch}?recursive=1`,
@@ -56,7 +62,10 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
   if (!treeRes.ok) throw new Error(`Could not read ${owner}/${name}@${branch} (${treeRes.status})`);
   const tree = ((await treeRes.json()).tree ?? []) as { path: string; type: string; sha: string }[];
   const files = tree.filter(
-    (t) => t.type === "blob" && (TEXT_EXT.test(t.path) || ASSET_EXT.test(t.path)),
+    (t) =>
+      t.type === "blob" &&
+      (!prefix || t.path.startsWith(prefix)) &&
+      (TEXT_EXT.test(t.path) || ASSET_EXT.test(t.path)),
   );
 
   const rawBase = `https://raw.githubusercontent.com/${owner}/${name}/${branch}`;
@@ -82,7 +91,9 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
       contentType = isAsset ? (res.headers.get("content-type") ?? undefined) : "text/plain; charset=utf-8";
     }
 
-    const key = `sites/${id}/${f.path}`;
+    // f.path is the real repo path (used above to fetch bytes); the storage key drops
+    // the docs-subdir prefix so the render path resolves sites/{id}/docs.json as usual.
+    const key = `sites/${id}/${prefix ? f.path.slice(prefix.length) : f.path}`;
     if (isAsset) {
       await putObject(key, new Uint8Array(bytes), contentType);
     } else {

@@ -43,6 +43,13 @@
       "when": 1781126130795,
       "tag": "0005_cooing_proudstar",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1781138536669,
+      "tag": "0006_steady_saracen",
+      "breakpoints": true
     }
   ]
 }

@@ -8,7 +8,13 @@ import { and, eq, like } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { site, deployment } from "@/lib/db/app-schema";
 import { getSession, listOrganizations } from "@/lib/session";
-import { fetchRepo, hasDocsConfig, fetchLatestCommit, parseRepoInput } from "@/lib/github";
+import {
+  fetchRepo,
+  hasDocsConfig,
+  fetchLatestCommit,
+  parseRepoInput,
+  normalizeDocsPath,
+} from "@/lib/github";
 import { syncSite, type SyncResult } from "@/lib/sync";
 import { encryptSecret, decryptSecret } from "@/lib/crypto";
 import { revalidateSite } from "@/lib/s3-source";
@@ -65,6 +71,9 @@ export async function connectRepo(
   // Optional fine-grained PAT (Contents: read) for a private repo. When present, every
   // GitHub call is authenticated and the token is stored encrypted for re-syncs.
   const token = String(formData.get("token") ?? "").trim() || undefined;
+  // "docs.json is in a subdirectory": the path is only meaningful when the toggle is on,
+  // and the client omits the field when off — so an empty value means repo root.
+  const docsPath = normalizeDocsPath(String(formData.get("docsPath") ?? ""));
   if (!name) return { error: "Give your site a name." };
 
   const parsed = parseRepoInput(repoRaw);
@@ -80,8 +89,9 @@ export async function connectRepo(
   }
 
   const branch = branchInput || repo.defaultBranch;
-  if (!(await hasDocsConfig(parsed.owner, parsed.name, branch, token))) {
-    return { error: `No docs.json or mint.json at the root of ${repo.fullName}@${branch}.` };
+  if (!(await hasDocsConfig(parsed.owner, parsed.name, branch, token, docsPath))) {
+    const where = docsPath ? `in ${docsPath}/ of` : "at the root of";
+    return { error: `No docs.json or mint.json ${where} ${repo.fullName}@${branch}.` };
   }
 
   const commit = await fetchLatestCommit(parsed.owner, parsed.name, branch, token);
@@ -96,6 +106,7 @@ export async function connectRepo(
     repoOwner: parsed.owner,
     repoName: parsed.name,
     branch,
+    docsPath,
     isPrivate: repo.private,
     repoTokenEnc: token ? encryptSecret(token) : null,
     status: "live",
@@ -107,7 +118,7 @@ export async function connectRepo(
   let result: SyncResult | null = null;
   let error: string | null = null;
   try {
-    result = await syncSite({ id: siteId, repoOwner: parsed.owner, repoName: parsed.name, branch, token });
+    result = await syncSite({ id: siteId, repoOwner: parsed.owner, repoName: parsed.name, branch, token, docsPath });
     revalidateSite(siteId); // drop any stale Data Cache entries for this site's content
   } catch (e) {
     console.error("initial sync failed", e);
@@ -146,7 +157,7 @@ export async function resyncSite(siteId: string): Promise<void> {
   let result: SyncResult | null = null;
   let error: string | null = null;
   try {
-    result = await syncSite({ id: s.id, repoOwner: s.repoOwner, repoName: s.repoName, branch: s.branch, token });
+    result = await syncSite({ id: s.id, repoOwner: s.repoOwner, repoName: s.repoName, branch: s.branch, token, docsPath: s.docsPath });
     revalidateSite(s.id); // serve the fresh content immediately, not the cached pre-sync copy
   } catch (e) {
     console.error("resync failed", e);

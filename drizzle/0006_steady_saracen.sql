@@ -1,0 +1,1 @@
+ALTER TABLE "site" ADD COLUMN "docs_path" text DEFAULT '' NOT NULL;
