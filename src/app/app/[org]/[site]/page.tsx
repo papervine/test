@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { and, desc, eq } from "drizzle-orm";
-import { ExternalLink, GitBranch, PenLine } from "lucide-react";
+import { ExternalLink, GitBranch, Lock, PenLine } from "lucide-react";
 import { supportsSubdomainTenants } from "@/lib/tenant-host";
+import { AUTH_METHOD_META, isAuthMethod } from "@/lib/reader-auth";
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
 import { deployment } from "@/lib/db/app-schema";
@@ -58,6 +59,12 @@ export default async function SiteOverview({
     activeSite.repoOwner && activeSite.repoName
       ? `https://github.com/${activeSite.repoOwner}/${activeSite.repoName}`
       : null;
+
+  // Reader-auth status surfaced on the overview (SPEC §11.2): when a site gates its docs,
+  // show that plus the chosen method, with a jump to the settings surface that edits it.
+  const authMethodLabel = isAuthMethod(activeSite.authMethod)
+    ? AUTH_METHOD_META[activeSite.authMethod].label
+    : null;
 
   // "Last updated by" reflects the latest *live* publish, independent of which feed tab
   // is showing — the incumbent shows the live deploy here.
@@ -209,6 +216,28 @@ export default async function SiteOverview({
                     <GitBranch className="size-3" />
                     {activeSite.branch}
                   </span>
+                </dd>
+              </div>
+            )}
+            {activeSite.authEnabled && (
+              <div>
+                <dt className="text-xs text-[var(--muted)]">Authentication</dt>
+                <dd className="mt-0.5 flex items-center gap-3">
+                  <span className="inline-flex items-center gap-1.5 text-emerald-400">
+                    <Lock className="size-3" />
+                    Required
+                    {authMethodLabel && (
+                      <span className="text-[var(--muted)]">
+                        · {authMethodLabel}
+                      </span>
+                    )}
+                  </span>
+                  <Link
+                    href={`${base}/settings/authentication`}
+                    className="text-[var(--muted)] hover:opacity-80"
+                  >
+                    Edit
+                  </Link>
                 </dd>
               </div>
             )}

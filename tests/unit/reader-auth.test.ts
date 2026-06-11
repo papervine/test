@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { validateAuthConfig, isAuthMethod, AUTH_METHODS } from "@/lib/reader-auth";
+import {
+  validateAuthConfig,
+  isAuthMethod,
+  AUTH_METHODS,
+  AUTH_METHOD_META,
+} from "@/lib/reader-auth";
 
 describe("isAuthMethod", () => {
   it("accepts the three spec methods, rejects everything else", () => {
@@ -8,6 +13,18 @@ describe("isAuthMethod", () => {
     expect(isAuthMethod("")).toBe(false);
     expect(isAuthMethod(undefined)).toBe(false);
     expect(isAuthMethod(null)).toBe(false);
+  });
+});
+
+describe("AUTH_METHOD_META", () => {
+  // The site Overview surfaces `AUTH_METHOD_META[method].label` in its
+  // "Authentication · <method>" badge — pin the labels so a rename can't
+  // silently blank that out.
+  it("labels every method the dashboard badge can show", () => {
+    for (const m of AUTH_METHODS) expect(AUTH_METHOD_META[m].label).toBeTruthy();
+    expect(AUTH_METHOD_META.jwt.label).toBe("JWT");
+    expect(AUTH_METHOD_META.oauth.label).toBe("OAuth 2.0");
+    expect(AUTH_METHOD_META.password.label).toBe("Password");
   });
 });
 
