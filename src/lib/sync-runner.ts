@@ -62,17 +62,33 @@ export async function runSync(
   opts: RunSyncOptions,
 ): Promise<RunSyncOutcome> {
   const { trigger, actorUserId = null } = opts;
-  const token = await repoTokenForSite(site);
+  const startedAt = Date.now();
 
-  // Use the caller-provided commit (push payload / connect) or look up the head so the
-  // recorded sha is real. A failed lookup is non-fatal — we just record an unknown sha.
-  const commit =
-    opts.commit ??
-    (await fetchLatestCommit(site.repoOwner!, site.repoName!, site.branch, token));
+  // Record a 'building' deployment row UP FRONT, before any slow/fallible work. This is
+  // the durable log: if the whole thing throws (e.g. a bad App private key) the catch
+  // below flips it to 'failed' with the reason; if the function is *killed* mid-sync (a
+  // serverless timeout — no catch can run), the row simply STAYS 'building', which the
+  // Activity feed shows as a stuck/in-progress sync — a visible signal instead of the old
+  // silent nothing. Every attempt leaves a trace.
+  const deploymentId = randomUUID();
+  await db.insert(deployment).values({
+    id: deploymentId,
+    siteId: site.id,
+    status: "building",
+    target: "live",
+    commitMessage: trigger === "connect" ? "Connecting repository…" : "Syncing…",
+    actorUserId,
+  });
 
   let result: SyncResult | null = null;
   let error: string | null = null;
+  let commit = opts.commit ?? null;
   try {
+    const token = await repoTokenForSite(site);
+    // Caller-provided commit (push payload) or look up the head so the recorded sha is real.
+    if (!commit) {
+      commit = await fetchLatestCommit(site.repoOwner!, site.repoName!, site.branch, token);
+    }
     result = await syncSite({
       id: site.id,
       repoOwner: site.repoOwner!,
@@ -83,23 +99,32 @@ export async function runSync(
     });
     revalidateSite(site.id); // serve fresh content immediately, not the pre-sync copy
   } catch (e) {
-    console.error(`sync failed (${trigger}) for site ${site.id}`, e);
+    // Tagged + structured so it's greppable in the platform's runtime logs (`vercel logs`)
+    // as well as recorded on the row below.
+    console.error(
+      `[sync] failed trigger=${trigger} site=${site.id} repo=${site.repoOwner}/${site.repoName}@${site.branch}`,
+      e,
+    );
     error = syncErrorDetail(e);
   }
 
+  // Resolve the building row to its outcome. Includes how long it took, since a sync that
+  // genuinely runs near the function time limit is itself diagnostic.
   const isConnect = trigger === "connect";
-  await db.insert(deployment).values({
-    id: randomUUID(),
-    siteId: site.id,
-    status: result ? "successful" : "failed",
-    target: "live",
-    commitSha: commit?.sha ?? null,
-    commitMessage: deploymentMessage(trigger, commit, result),
-    error,
-    filesAdded: isConnect ? (result?.files ?? 0) : 0,
-    filesEdited: isConnect ? 0 : (result?.files ?? 0),
-    actorUserId,
-  });
+  await db
+    .update(deployment)
+    .set({
+      status: result ? "successful" : "failed",
+      commitSha: commit?.sha ?? null,
+      commitMessage: deploymentMessage(trigger, commit, result),
+      error,
+      filesAdded: isConnect ? (result?.files ?? 0) : 0,
+      filesEdited: isConnect ? 0 : (result?.files ?? 0),
+    })
+    .where(eq(deployment.id, deploymentId));
+  console.log(
+    `[sync] done trigger=${trigger} site=${site.id} status=${result ? "successful" : "failed"} files=${result?.files ?? 0} ms=${Date.now() - startedAt}`,
+  );
 
   // On success: promote to live (the schema's "draft until first successful sync") and
   // stamp the synced head so a redelivered/duplicate push webhook can no-op.

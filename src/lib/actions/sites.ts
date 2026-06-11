@@ -115,9 +115,15 @@ export async function connectRepo(
     .returning();
 
   // Copy the repo's content into object storage so the render path reads from us, not
-  // GitHub (SPEC §3.1 model C). A failed sync is recorded as failed and never throws —
-  // the connection survives and the user can re-sync.
-  await runSync(created, { actorUserId: session.user.id, trigger: "connect" });
+  // GitHub (SPEC §3.1 model C). runSync records its own failed deployment and shouldn't
+  // throw, but guard anyway: the site row exists, so we ALWAYS redirect to it (where the
+  // Activity feed shows the sync's building/failed state) rather than bubble a raw error
+  // up as an opaque client-side exception.
+  try {
+    await runSync(created, { actorUserId: session.user.id, trigger: "connect" });
+  } catch (e) {
+    console.error(`[connect] runSync threw for site ${created.id}`, e);
+  }
 
   return { redirectTo: siteBase(org.slug, slug) };
 }
@@ -134,7 +140,11 @@ export async function resyncSite(siteId: string): Promise<void> {
   const s = rows[0];
   if (!s || s.organizationId !== org.id || !s.repoOwner || !s.repoName) return;
 
-  await runSync(s, { actorUserId: session.user.id, trigger: "manual" });
+  try {
+    await runSync(s, { actorUserId: session.user.id, trigger: "manual" });
+  } catch (e) {
+    console.error(`[resync] runSync threw for site ${s.id}`, e);
+  }
 
   // Refresh the site's Overview so the new deployment shows in its Activity feed. The
   // ResyncButton sits on the site's page; revalidate its INTERNAL route (Next keys the

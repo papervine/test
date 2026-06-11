@@ -5,6 +5,11 @@ import { listOrganizations } from "@/lib/session";
 import { isGithubAppConfigured, installUrl } from "@/lib/github-app";
 import ConnectForm from "./ConnectForm";
 
+// connectRepo runs the initial repo sync inline (so the user lands on a ready site), and
+// that sync can take a while on a large repo — give it headroom past the platform default
+// (~10s), which is what made connecting a big private repo hang then 500.
+export const maxDuration = 60;
+
 // Server shell: resolve the org's GitHub App install state, then hand it to the client
 // form. The edge gate (middleware) already guarantees a session here, so this only runs
 // for an authenticated user.

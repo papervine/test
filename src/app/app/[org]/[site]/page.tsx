@@ -14,6 +14,10 @@ import { Greeting } from "@/components/app/Greeting";
 import { ResyncButton } from "@/components/app/ResyncButton";
 import { SitePreview } from "@/components/app/SitePreview";
 
+// The Re-sync button's server action (resyncSite) re-pulls the whole repo inline; give it
+// headroom past the platform default so a large repo doesn't time out mid-sync.
+export const maxDuration = 60;
+
 function timeAgo(date: Date): string {
   const secs = Math.floor((Date.now() - date.getTime()) / 1000);
   if (secs < 60) return "just now";

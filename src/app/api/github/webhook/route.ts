@@ -9,6 +9,10 @@ import {
 } from "@/lib/github-webhook";
 import { runSync } from "@/lib/sync-runner";
 
+// The push sync runs in after() (below); give it headroom past the platform default so a
+// large repo's sync isn't killed mid-flight after we've already returned 202.
+export const maxDuration = 60;
+
 /**
  * GitHub App webhook (SPEC §3 — push auto-sync). The App is registered with this URL on
  * the **apex** host (papervine.io/api/github/webhook), where middleware passes /api/

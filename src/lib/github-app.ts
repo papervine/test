@@ -88,8 +88,11 @@ export async function getInstallationToken(
   if (!res.ok) {
     // A revoked/suspended install (404/403) shouldn't throw here — sync will surface a
     // clean "couldn't read repo" error via the normal path, recorded on the deployment.
+    // Log the GitHub response body so the *reason* (suspended, not found, key mismatch)
+    // is visible in runtime logs rather than just a bare status.
+    const detail = await res.text().catch(() => "");
     console.error(
-      `installation token mint failed for ${installationId} (${res.status})`,
+      `[github-app] installation token mint failed id=${installationId} status=${res.status} ${detail.slice(0, 300)}`,
     );
     return undefined;
   }
