@@ -14,8 +14,8 @@ import "server-only";
 // GITHUB_TOKEN seam in github.ts.
 const API = "https://api.vercel.com";
 
-// Customers CNAME their vanity host here; Vercel maps it to whichever project the
-// domain is attached to. (Apex domains use an A record — out of scope for Phase 1.)
+// The literal Vercel edge — the CNAME fallback when no branded host is configured but
+// Vercel manages domains. Works, just unbranded.
 export const VERCEL_CNAME_TARGET = "cname.vercel-dns.com";
 
 const token = () => process.env.VERCEL_TOKEN;
@@ -27,6 +27,26 @@ const teamId = () => process.env.VERCEL_TEAM_ID;
 // generic CNAME instruction instead of Vercel's exact records.
 export function vercelDomainsConfigured(): boolean {
   return Boolean(token() && projectId());
+}
+
+// What we tell customers to CNAME their vanity host at, in precedence order:
+//  1. CUSTOM_DOMAIN_CNAME_TARGET — an operator-owned branded host (e.g. cname.acme.com,
+//     itself a CNAME to the provider's edge). SHOULD be set in any multi-tenant prod: it's
+//     the stable, provider-agnostic contract that survives the Phase 2 cap escape (SPEC §2)
+//     — the provider's real edge moves behind this one record we control, so no customer
+//     re-points DNS at migration. Papervine's hosted prod sets it to cname.papervine.io;
+//     a self-hoster sets their own host (verified: Vercel cold-issues the cert through the
+//     CNAME chain, SPEC §2). Keep this provider-agnostic — never hardcode an operator domain.
+//  2. The raw Vercel edge — Vercel manages domains but no branded host is set. Unbranded,
+//     and bakes Vercel into customer zones, but it works out of the box.
+//  3. The platform apex — self-host / no Vercel, where Domain setup falls back to the
+//     DNS-only live check and the path/self-host story.
+// (Apex customer domains use an A record regardless — out of this CNAME seam.)
+export function customDomainCnameTarget(apexBase: string): string {
+  return (
+    process.env.CUSTOM_DOMAIN_CNAME_TARGET ||
+    (vercelDomainsConfigured() ? VERCEL_CNAME_TARGET : apexBase)
+  );
 }
 
 function authHeaders(): HeadersInit {

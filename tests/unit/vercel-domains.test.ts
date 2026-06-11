@@ -1,5 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { parseDomainStatus, vercelDomainsConfigured } from "@/lib/vercel-domains";
+import {
+  customDomainCnameTarget,
+  parseDomainStatus,
+  vercelDomainsConfigured,
+  VERCEL_CNAME_TARGET,
+} from "@/lib/vercel-domains";
 
 describe("parseDomainStatus", () => {
   it("folds a verified project domain with no challenge into a clean status", () => {
@@ -55,5 +60,45 @@ describe("vercelDomainsConfigured", () => {
     expect(vercelDomainsConfigured()).toBe(false); // token alone isn't enough
     process.env.VERCEL_PROJECT_ID = "prj_123";
     expect(vercelDomainsConfigured()).toBe(true);
+  });
+});
+
+describe("customDomainCnameTarget", () => {
+  const saved = {
+    brand: process.env.CUSTOM_DOMAIN_CNAME_TARGET,
+    token: process.env.VERCEL_TOKEN,
+    project: process.env.VERCEL_PROJECT_ID,
+  };
+  beforeEach(() => {
+    delete process.env.CUSTOM_DOMAIN_CNAME_TARGET;
+    delete process.env.VERCEL_TOKEN;
+    delete process.env.VERCEL_PROJECT_ID;
+  });
+  afterEach(() => {
+    for (const [k, v] of [
+      ["CUSTOM_DOMAIN_CNAME_TARGET", saved.brand],
+      ["VERCEL_TOKEN", saved.token],
+      ["VERCEL_PROJECT_ID", saved.project],
+    ] as const) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  it("prefers the operator's branded host over everything (and any provider) — the self-host knob", () => {
+    process.env.CUSTOM_DOMAIN_CNAME_TARGET = "cname.yourdocs.com";
+    process.env.VERCEL_TOKEN = "tok";
+    process.env.VERCEL_PROJECT_ID = "prj_123";
+    expect(customDomainCnameTarget("app.papervine.io")).toBe("cname.yourdocs.com");
+  });
+
+  it("falls back to the raw Vercel edge when Vercel manages domains but no brand is set", () => {
+    process.env.VERCEL_TOKEN = "tok";
+    process.env.VERCEL_PROJECT_ID = "prj_123";
+    expect(customDomainCnameTarget("app.papervine.io")).toBe(VERCEL_CNAME_TARGET);
+  });
+
+  it("falls back to the platform apex when neither a brand nor Vercel is configured (self-host)", () => {
+    expect(customDomainCnameTarget("app.papervine.io")).toBe("app.papervine.io");
   });
 });

@@ -179,10 +179,26 @@ Two **independent** domain systems — don't conflate them:
 
 2. **`docs.acme.com` (customer's domain).** Lives under the **customer's** nameservers,
    which we never control, so the wildcard trick can't apply — each custom domain needs its
-   **own** cert. Customer adds a `CNAME docs.acme.com → cname.vercel-dns.com` (apex → `A`,
+   **own** cert. Customer adds a `CNAME docs.acme.com → {branded target}` (apex → `A`,
    can't CNAME); we attach the domain to the project; the platform issues a per-host cert via
    HTTP-01 (no nameserver change from the customer); we poll until verified; our middleware
-   maps host → site.
+   maps host → site. **Why a branded target, not `cname.vercel-dns.com` directly:** the branded
+   host is a record in *our* zone (hosted: `cname.papervine.io → cname.vercel-dns.com`; Vercel
+   chases the chain to its edge, so the cert still issues). It's the indirection seam for the
+   Phase 2 cap escape below — the customer-facing contract stays constant, and we re-point one
+   record on our side at migration instead of asking 50+ customers to edit their DNS. Pointing
+   straight at `cname.vercel-dns.com` would bake Vercel into every customer zone and make the
+   Phase 2 cutover a per-customer fire drill. The target is **operator-configurable**
+   (`CUSTOM_DOMAIN_CNAME_TARGET` — hosted sets `cname.papervine.io`; a self-hoster sets their
+   own host; unset falls back to the raw Vercel edge, then the apex), so the OSS code hardcodes
+   no operator domain. (Apex `A`-record customers can't CNAME, so they fall outside this seam
+   and would re-point at migration.) **Verified (2026-06-10):** Vercel
+   cold-issues the per-host Let's Encrypt cert through the chain — a fresh test host
+   (`docs.bugnjeff.com → cname.papervine.io → cname.vercel-dns.com`), having *only ever*
+   pointed through the branded record, got a valid `CN=docs.bugnjeff.com` cert and routed to
+   the right tenant (`/api/site-identity` → `{"site":"starter"}`). So the chain is sound for
+   HTTP-01; the undocumented-by-Vercel concern (would it literal-match the immediate CNAME?)
+   is empirically a non-issue.
 
 **The cap, and the escape (decided 2026-06-09).** Attaching each customer domain to the
 Vercel project hits Vercel's per-project domain cap (~50 on Pro) → an Enterprise upsell.
@@ -202,17 +218,23 @@ the platform never needs to know individual customer domains:
   `verified` flag — it can only pass once the cert issued *and* our middleware maps the host to
   the right slug); Vercel's `verification` records surface in the form only when the host's apex
   is already in use elsewhere and an ownership challenge is required. Customer CNAMEs to
-  `cname.vercel-dns.com` when Vercel-managed, the apex otherwise (the self-host path form).
-  Pure `parseDomainStatus` + env-gating unit-tested (`tests/unit/vercel-domains.test.ts`).
+  the operator's branded target (`CUSTOM_DOMAIN_CNAME_TARGET`, `cname.papervine.io` on hosted)
+  when set, the raw Vercel edge if unset-but-Vercel-managed, the apex otherwise (the self-host
+  path form). Pure `parseDomainStatus`, env-gating, and CNAME-target precedence unit-tested
+  (`tests/unit/vercel-domains.test.ts`).
 - **Phase 2 (trigger: ~40–50 custom domains):** front custom-domain traffic with a
   purpose-built SaaS-domains proxy that issues a cert per hostname and forwards to **one**
   origin we already serve (e.g. `origin.papervine.io`, under our wildcard), passing the real
   host in **`X-Forwarded-Host`**. Vercel then sees a single domain → cap is moot. Candidates:
   **Approximated** (drop-in, purpose-built, API), **Cloudflare for SaaS / Custom Hostnames**
   (cheapest at scale, more config), or self-hosted **Caddy on-demand-TLS** (cheapest, we
-  operate it). Migration is front-door-only: DNS + reading `X-Forwarded-Host` (trusted-proxy
-  gated) in `resolveTenantSlug` — the renderer doesn't move. Build the proxy only when the
-  cap is in sight, not before.
+  operate it). Because customers CNAME at the **branded `cname.papervine.io`** (Phase 1
+  above), the cutover is **zero customer DNS change** for the CNAME majority: we re-point that
+  one record in our zone at the proxy. Migration is then front-door-only on *our* side —
+  re-point + read `X-Forwarded-Host` (trusted-proxy gated) in `resolveTenantSlug`; the renderer
+  doesn't move. (Provider-dependent: the proxy may want a one-time ownership/TXT step, and apex
+  `A`-record customers still re-point.) Build the proxy only when the cap is in sight, not
+  before.
 
 ---
 
