@@ -62,17 +62,27 @@ export function middleware(req: NextRequest) {
   // use (→ /sites/{slug}). Auth pages, API, and assets keep their real paths.
   if (isAppHost(reqHost)) {
     const authed = Boolean(getSessionCookie(req));
+    const hasFlag = Boolean(req.cookies.get(SIGNED_IN_FLAG));
 
-    // Stamp a *benign* "signed in" hint on the parent domain so the marketing apex can show
-    // a Dashboard link — a boolean, NEVER the session token (which stays host-only on the
-    // app host; sharing it would expose it to every tenant docs subdomain, SPEC §10).
-    const withFlag = (res: NextResponse) => {
-      if (authed && !req.cookies.get(SIGNED_IN_FLAG)) {
+    // Keep the *benign* "signed in" hint in sync so the marketing apex can show a Dashboard
+    // link — a boolean, NEVER the session token (which stays host-only on the app host;
+    // sharing it would expose it to every tenant docs subdomain, SPEC §10). It's a
+    // parent-domain cookie, so it DOES reach tenant subdomains — hence httpOnly (tenant page
+    // JS can't read it; only our servers ever see it) + Secure in prod. Cleared here on
+    // logout rather than client-side, since client JS can't touch an httpOnly cookie.
+    const syncFlag = (res: NextResponse) => {
+      const domain = parentDomain(reqHost!);
+      const secure = req.nextUrl.protocol === "https:";
+      if (authed && !hasFlag) {
         res.cookies.set(SIGNED_IN_FLAG, "1", {
-          domain: parentDomain(reqHost!),
+          domain,
           path: "/",
           sameSite: "lax",
+          httpOnly: true,
+          secure,
         });
+      } else if (!authed && hasFlag) {
+        res.cookies.set(SIGNED_IN_FLAG, "", { domain, path: "/", maxAge: 0 });
       }
       return res;
     };
@@ -83,7 +93,7 @@ export function middleware(req: NextRequest) {
       pathname === "/app" ||
       ASSET_RE.test(pathname)
     ) {
-      return withFlag(NextResponse.next());
+      return syncFlag(NextResponse.next());
     }
     if (isAuthPath(pathname)) {
       // Already logged in? Skip the auth form and go to the dashboard — the way
@@ -91,22 +101,22 @@ export function middleware(req: NextRequest) {
       if (authed) {
         const url = req.nextUrl.clone();
         url.pathname = "/";
-        return withFlag(NextResponse.redirect(url));
+        return syncFlag(NextResponse.redirect(url));
       }
-      return NextResponse.next();
+      return syncFlag(NextResponse.next());
     }
 
     // Cheap edge cookie gate — the [org] layout does the authoritative session check.
     if (!authed) {
       const url = req.nextUrl.clone();
       url.pathname = "/login";
-      return NextResponse.redirect(url);
+      return syncFlag(NextResponse.redirect(url));
     }
 
     // Bare → invisible /app mount. `/` → the resolver, which forwards to the first site.
     const url = req.nextUrl.clone();
     url.pathname = pathname === "/" ? "/app" : `/app${pathname}`;
-    return withFlag(NextResponse.rewrite(url));
+    return syncFlag(NextResponse.rewrite(url));
   }
 
   // The control plane only answers on the app host: if its paths are hit on the apex

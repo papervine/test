@@ -21,9 +21,15 @@ const DEV = {
   // the render path reads only from us — config, pages, AND assets (logos/images). `starter`
   // is the tiny canonical template; `large-docs` is a large real repo, good for exercising
   // the renderer/nav at scale. The first site is the "primary" (gets analytics seeded).
+  // `starter` stays public (anyone can read); `large-docs` is the *gated* example — its
+  // reader-auth flag is on (JWT), so the dashboard shows the "Required · JWT" status and the
+  // docs enforce a reader login (render-tenant.tsx). No signing secret is seeded — that's
+  // enough to exercise the gate + the dashboard row; set a real one in Settings →
+  // Authentication. Re-seeding resets both to this known state.
   sites: [
     { name: "Starter Docs", slug: "starter", repoOwner: "papervine", repoName: "starter", branch: "main" },
-    { name: "Incumbent Docs", slug: "large-docs", repoOwner: "papervine", repoName: "docs", branch: "main" },
+    { name: "Incumbent Docs", slug: "large-docs", repoOwner: "papervine", repoName: "docs", branch: "main",
+      auth: { method: "jwt", config: { loginUrl: "https://app.acme.com/login" } } },
   ],
 };
 
@@ -162,18 +168,27 @@ const feed = [
 ];
 
 for (const s of DEV.sites) {
+  // Reader-auth columns — set deterministically so re-seeding resets the known state.
+  const authEnabled = !!s.auth;
+  const authMethod = s.auth?.method ?? null;
+  const authConfig = s.auth?.config ? sql.json(s.auth.config) : null;
+
   let siteId = await findId("site", "slug", s.slug);
   if (siteId) {
     await sql`update site set organization_id = ${orgId}, name = ${s.name},
               repo_owner = ${s.repoOwner}, repo_name = ${s.repoName},
-              branch = ${s.branch}, status = 'live', updated_at = ${now} where id = ${siteId}`;
-    console.log(`• site ${s.slug} exists — updated`);
+              branch = ${s.branch}, status = 'live',
+              auth_enabled = ${authEnabled}, auth_method = ${authMethod}, auth_config = ${authConfig},
+              updated_at = ${now} where id = ${siteId}`;
+    console.log(`• site ${s.slug} exists — updated${authEnabled ? ` (auth: ${authMethod})` : ""}`);
   } else {
     siteId = randomUUID();
-    await sql`insert into site (id, organization_id, name, slug, repo_owner, repo_name, branch, status, created_at, updated_at)
+    await sql`insert into site (id, organization_id, name, slug, repo_owner, repo_name, branch, status,
+                               auth_enabled, auth_method, auth_config, created_at, updated_at)
               values (${siteId}, ${orgId}, ${s.name}, ${s.slug}, ${s.repoOwner},
-                      ${s.repoName}, ${s.branch}, 'live', ${now}, ${now})`;
-    console.log(`• created site ${s.slug} → ${s.repoOwner}/${s.repoName}`);
+                      ${s.repoName}, ${s.branch}, 'live',
+                      ${authEnabled}, ${authMethod}, ${authConfig}, ${now}, ${now})`;
+    console.log(`• created site ${s.slug} → ${s.repoOwner}/${s.repoName}${authEnabled ? ` (auth: ${authMethod})` : ""}`);
   }
 
   // Sync the repo into our object storage so the render path serves config, pages, AND

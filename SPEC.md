@@ -688,8 +688,11 @@ Minimum to operate the SaaS:
   who hits `/login`/`/signup` on the app host is bounced to their dashboard (mirrors
   `app.example.com/signup`), and (2) the marketing apex shows a **Dashboard →** link via a
   *benign* `pv_signed_in=1` flag cookie (`src/lib/signed-in-flag.ts`) set on the parent domain
-  by the app-host middleware, cleared on sign-out, read by the marketing nav — a boolean, never
-  the session token. The host split also means `www` is **always** the marketing site (never a
+  by the app-host middleware, read by the marketing nav — a boolean, never the session token.
+  Being a parent-domain cookie it *does* reach tenant subdomains, so it's **`httpOnly`** (+
+  `Secure` in prod) — tenant page JS can never read it; only our servers see it — and it's
+  cleared **server-side in the middleware** on logout (a client clear can't touch an httpOnly
+  cookie). The host split also means `www` is **always** the marketing site (never a
   Vercel-style forced redirect to the app). **Dev caveat:** Chrome rejects `Domain=localhost`
   cookies, so the `www` Dashboard link only appears in prod (`.papervine.io`); the
   redirect-to-dashboard works everywhere.)*

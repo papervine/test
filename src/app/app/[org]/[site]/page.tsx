@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { and, desc, eq } from "drizzle-orm";
-import { ExternalLink, GitBranch, Lock, PenLine } from "lucide-react";
+import { ExternalLink, GitBranch, Globe, Lock, PenLine } from "lucide-react";
 import { supportsSubdomainTenants } from "@/lib/tenant-host";
 import { AUTH_METHOD_META, isAuthMethod } from "@/lib/reader-auth";
 import { db } from "@/lib/db";
@@ -12,6 +12,7 @@ import { siteBase } from "@/lib/dashboard-nav";
 import { parseFeedTarget } from "@/lib/overview";
 import { Greeting } from "@/components/app/Greeting";
 import { ResyncButton } from "@/components/app/ResyncButton";
+import { SitePreview } from "@/components/app/SitePreview";
 
 function timeAgo(date: Date): string {
   const secs = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -115,25 +116,9 @@ export default async function SiteOverview({
       </h1>
 
       <section className="mt-8 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-        {/* Live preview — a real (scaled) iframe of the tenant's rendered home page. */}
-        <a
-          href={siteUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="db-ring group relative block aspect-[16/10] overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02]"
-        >
-          <iframe
-            src={siteUrl}
-            title={`${activeSite.name} preview`}
-            tabIndex={-1}
-            aria-hidden
-            className="pointer-events-none absolute left-0 top-0 origin-top-left"
-            style={{ width: "200%", height: "200%", transform: "scale(0.5)" }}
-          />
-          <span className="absolute inset-x-0 bottom-0 flex items-center justify-end gap-1 bg-gradient-to-t from-black/60 to-transparent px-3 py-2 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100">
-            Open site <ExternalLink className="size-3" />
-          </span>
-        </a>
+        {/* Live preview — a real (scaled) iframe of the tenant's home page, with a
+            viewer-side load-time badge (SitePreview owns the timing, needs the client). */}
+        <SitePreview siteUrl={siteUrl} name={activeSite.name} />
 
         {/* Status & identity. */}
         <div className="flex flex-col">
@@ -219,10 +204,10 @@ export default async function SiteOverview({
                 </dd>
               </div>
             )}
-            {activeSite.authEnabled && (
-              <div>
-                <dt className="text-xs text-[var(--muted)]">Authentication</dt>
-                <dd className="mt-0.5 flex items-center gap-3">
+            <div>
+              <dt className="text-xs text-[var(--muted)]">Authentication</dt>
+              <dd className="mt-0.5 flex items-center gap-3">
+                {activeSite.authEnabled ? (
                   <span className="inline-flex items-center gap-1.5 text-emerald-400">
                     <Lock className="size-3" />
                     Required
@@ -232,15 +217,20 @@ export default async function SiteOverview({
                       </span>
                     )}
                   </span>
-                  <Link
-                    href={`${base}/settings/authentication`}
-                    className="text-[var(--muted)] hover:opacity-80"
-                  >
-                    Edit
-                  </Link>
-                </dd>
-              </div>
-            )}
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 text-[var(--muted)]">
+                    <Globe className="size-3" />
+                    Public — anyone can read
+                  </span>
+                )}
+                <Link
+                  href={`${base}/settings/authentication`}
+                  className="text-[var(--muted)] hover:opacity-80"
+                >
+                  Edit
+                </Link>
+              </dd>
+            </div>
           </dl>
         </div>
       </section>

@@ -128,8 +128,10 @@ Core principles, in priority order:
   cookie is host-only on `app.papervine.io` (never shared to `.papervine.io`, which would send
   your auth token to every tenant docs subdomain — an XSS-exfil surface). So `www` shows a
   Dashboard link via a *benign* `pv_signed_in=1` flag cookie (`src/lib/signed-in-flag.ts`) set
-  on the parent domain by the app-host middleware, cleared on sign-out, read by the marketing
-  nav. Logged-in users who hit `/login`/`/signup` on the app host are bounced to the dashboard
+  on the parent domain by the app-host middleware, read by the marketing nav. It reaches tenant
+  subdomains (parent-domain cookie), so it's **httpOnly** (+ Secure in prod) — tenant page JS
+  can't read it — and cleared **server-side in the middleware** on logout (a client clear can't
+  touch httpOnly). Logged-in users who hit `/login`/`/signup` on the app host go to the dashboard
   (the `app.example.com/signup` behavior). **Dev caveat:** Chrome rejects `Domain=localhost`
   cookies, so the flag (and thus `www`'s Dashboard link) only works in prod (`.papervine.io`);
   the redirect-to-dashboard behavior works everywhere. Don't "fix" the missing dev label by
