@@ -8,7 +8,8 @@ import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
 import { site, deployment } from "@/lib/db/app-schema";
 import { ACTIVE_SITE_COOKIE, resolveActiveSite } from "@/lib/active-site";
-import { partOfDay, parseFeedTarget } from "@/lib/overview";
+import { parseFeedTarget } from "@/lib/overview";
+import { Greeting } from "@/components/app/Greeting";
 import { ResyncButton } from "@/components/app/ResyncButton";
 import { WorkflowUpsellBanner } from "@/components/app/WorkflowUpsellBanner";
 import { ButtonLink } from "@/components/platform/Button";
@@ -38,7 +39,6 @@ export default async function DashboardHome({
   if (!session || !activeOrg) return null;
 
   const firstName = session.user.name.split(" ")[0];
-  const greeting = `Good ${partOfDay(new Date().getHours())}, ${firstName}`;
 
   // The Overview is per-site, scoped to the active site picked by the top-left switcher
   // (SPEC §10) — the cookie's site if it's one of this org's, else the first.
@@ -53,7 +53,9 @@ export default async function DashboardHome({
   if (!activeSite) {
     return (
       <div className="mx-auto max-w-5xl px-8 py-10">
-        <h1 className="text-2xl font-semibold">{greeting}</h1>
+        <h1 className="text-2xl font-semibold">
+        <Greeting firstName={firstName} />
+      </h1>
         <div className="mt-8 rounded-xl border border-dashed border-white/[0.1] px-6 py-12 text-center">
           <p className="text-sm text-[var(--muted)]">
             No docs site yet — connect a repository to get started.
@@ -131,7 +133,9 @@ export default async function DashboardHome({
 
   return (
     <div className="mx-auto max-w-5xl px-8 py-10">
-      <h1 className="text-2xl font-semibold">{greeting}</h1>
+      <h1 className="text-2xl font-semibold">
+        <Greeting firstName={firstName} />
+      </h1>
 
       <section className="mt-8 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* Live preview — a real (scaled) iframe of the tenant's rendered home page. */}
