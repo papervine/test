@@ -2,9 +2,12 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  feedParam,
   formatDurationMs,
   partOfDay,
   parseFeedTarget,
+  pollDelayMs,
+  timeAgo,
   triggerDetail,
   triggerLabel,
 } from "../../src/lib/overview";
@@ -50,6 +53,37 @@ describe("parseFeedTarget", () => {
     expect(parseFeedTarget(undefined)).toBe("live");
     expect(parseFeedTarget("live")).toBe("live");
     expect(parseFeedTarget("garbage")).toBe("live");
+  });
+});
+
+describe("feedParam", () => {
+  it("is the inverse of parseFeedTarget — round-trips both tabs", () => {
+    expect(feedParam("preview")).toBe("previews");
+    expect(feedParam("live")).toBe("live");
+    expect(parseFeedTarget(feedParam("preview"))).toBe("preview");
+    expect(parseFeedTarget(feedParam("live"))).toBe("live");
+  });
+});
+
+describe("pollDelayMs (live feed cadence)", () => {
+  it("polls fast while any row is building (catch building → successful live)", () => {
+    expect(pollDelayMs([{ status: "successful" }, { status: "building" }])).toBe(2_500);
+  });
+  it("idles slowly when everything is settled", () => {
+    expect(pollDelayMs([{ status: "successful" }, { status: "failed" }])).toBe(20_000);
+    expect(pollDelayMs([])).toBe(20_000);
+  });
+});
+
+describe("timeAgo", () => {
+  const now = 1_000_000_000_000;
+  it("reads under a minute as 'just now'", () => {
+    expect(timeAgo(now - 30_000, now)).toBe("just now");
+  });
+  it("steps through minutes, hours, days", () => {
+    expect(timeAgo(now - 5 * 60_000, now)).toBe("5m ago");
+    expect(timeAgo(now - 3 * 3_600_000, now)).toBe("3h ago");
+    expect(timeAgo(now - 2 * 86_400_000, now)).toBe("2d ago");
   });
 });
 

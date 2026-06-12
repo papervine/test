@@ -879,6 +879,31 @@ domains/§2, workflows/§10.2), not new capability. Layout, top to bottom:
   reason+stack, the §10 Projects 2026-06-08 note), and a **Changes** summary (commit
   message + file counts: "11 files added, 27 files edited"). Rows expand for detail. This is
   the same `deployment`-backed feed the dashboard already renders; the Overview is its home.
+  **The feed is live (2026-06-12):** a webhook sync that lands while you're on the page shows
+  up — and resolves *Building → Successful* — without a reload.
+
+> **Status (2026-06-12) — live Activity feed.** The feed now updates without a refresh. There's
+> no realtime infra and none was added: we're on serverless (the webhook that starts a sync runs
+> in a *different* invocation than any connection the browser holds — no shared memory to push
+> from), and the trigger is a GitHub push, not a user action, so there's nothing to do
+> optimistically. The durable `deployment` row is the event log — `runSync` inserts it `building`
+> *before* the slow work and flips it to successful/failed at the end (`sync-runner`) — so the
+> client just has to *read* it. **Approach:** the feed became a client component (`ActivityFeed`)
+> seeded with the server-rendered rows (first paint unchanged, SSR stays source of truth), polling
+> a bare **`/:org/:site/activity`** JSON endpoint (route under the `/app` mount, reached via the
+> app-host rewrite; authorized like the page — session → membership → org-scoped site, so no
+> cross-tenant leak). **Cadence is adaptive and self-regulating** (`pollDelayMs`): a `building`
+> row in the payload means a sync is in flight, so poll ~2.5s to catch the transition; everything
+> settled → idle at ~20s; backgrounded tab → pause and refresh on focus. Rows are uncontrolled
+> `<details>` keyed by id, so React preserves each one's open/closed state across a poll. The
+> shared feed query moved to `getActivityFeed` (`src/lib/activity-feed.ts`); pure bits
+> (`feedParam`, `pollDelayMs`, `timeAgo`) live in `src/lib/overview.ts`, unit-tested; the endpoint's
+> auth gate is locked by a `smoke.mjs` control-plane check. **Verified in-browser:** inserted a
+> `building` deploy → it appeared within ~2s with a *Building* pill; flipped it to `successful` →
+> the pill resolved within ~2s, no reload (the control plane is dark-only). **When to upgrade:**
+> for sub-second feel or *intra-sync* progress (per-file upload, streaming logs), add a pub/sub
+> (Pusher/Ably/Upstash) and have `runSync` emit progress events — polling's latency floor and
+> lack of intra-job granularity are the ceiling, not worth paying until then.
 
 > **Status (2026-06-10):** built — `/dashboard` is now the per-site Overview, scoped to the
 > active site (§10 switcher). Greeting + a **live-preview iframe** (scaled render of the

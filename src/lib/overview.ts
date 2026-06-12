@@ -1,5 +1,24 @@
 // Pure helpers for the Site Overview home page (SPEC §10.3). Kept out of the page
-// component so they're unit-testable with no DB/headers/cookies dependency.
+// component so they're unit-testable with no DB/headers/cookies dependency — and so the
+// client-side ActivityFeed can share the same formatting/transport logic as the server.
+
+export type FeedTarget = "live" | "preview";
+
+// One Activity-feed row, transport-shaped: `createdAt` is epoch ms (not a Date) so the
+// row survives JSON serialization to the polling client unchanged (SPEC §10.3 live feed).
+export type ActivityRow = {
+  id: string;
+  status: string;
+  commitMessage: string | null;
+  commitSha: string | null;
+  error: string | null;
+  filesAdded: number;
+  filesEdited: number;
+  trigger: string | null;
+  durationMs: number | null;
+  createdAt: number;
+  actorName: string | null;
+};
 
 export function partOfDay(hour: number): "morning" | "afternoon" | "evening" {
   if (hour < 12) return "morning";
@@ -10,8 +29,35 @@ export function partOfDay(hour: number): "morning" | "afternoon" | "evening" {
 // The Activity feed's Live/Previews toggle maps onto `deployment.target`. Anything
 // but the explicit "previews" param is the default Live view, so a stale/garbage
 // query param degrades to Live rather than an empty feed.
-export function parseFeedTarget(param: string | undefined): "live" | "preview" {
+export function parseFeedTarget(param: string | undefined): FeedTarget {
   return param === "previews" ? "preview" : "live";
+}
+
+// Inverse of parseFeedTarget — the `?feed=` query value for a target. The polling client
+// asks the JSON endpoint for the same tab it's showing.
+export function feedParam(target: FeedTarget): string {
+  return target === "preview" ? "previews" : "live";
+}
+
+// How long the ActivityFeed waits before re-polling. The durable `deployment` row goes
+// in as `building` and flips to successful/failed at sync end (sync-runner), so an
+// in-flight sync IS visible as a `building` row: poll fast while one's running (catch the
+// transition live), idle slowly otherwise. Pure so the cadence is unit-tested, not the
+// effect.
+export function pollDelayMs(rows: readonly { status: string }[]): number {
+  return rows.some((r) => r.status === "building") ? 2_500 : 20_000;
+}
+
+// Relative "x ago" from an epoch-ms timestamp. Takes ms (not a Date) so it works for both
+// the server-rendered "last updated" line and the client feed's JSON rows.
+export function timeAgo(ms: number, now: number = Date.now()): string {
+  const secs = Math.floor((now - ms) / 1000);
+  if (secs < 60) return "just now";
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
 }
 
 // Human-readable sync wall-time for the feed's expanded detail: "412ms", "1.4s", "2m 05s".

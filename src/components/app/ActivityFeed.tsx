@@ -1,0 +1,208 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { ChevronRight } from "lucide-react";
+import {
+  type ActivityRow,
+  type FeedTarget,
+  formatDurationMs,
+  pollDelayMs,
+  timeAgo,
+  triggerDetail,
+  triggerLabel,
+} from "@/lib/overview";
+
+// The Activity feed (SPEC §10.3), live. Seeded with the server-rendered rows (so first
+// paint is unchanged and SSR stays the source of truth), then it polls the bare
+// `/:org/:site/activity` endpoint and swaps in fresh rows — a webhook sync that starts
+// while you're watching appears, and its `building` pill flips to Successful, with no
+// reload. Cadence is adaptive (pollDelayMs): ~2.5s while any row is building, ~20s idle.
+//
+// Rows are uncontrolled `<details>` keyed by id, so React preserves each one's open/closed
+// state across a poll's re-render — an expanded row stays expanded when the list refreshes.
+export function ActivityFeed({
+  endpoint,
+  target,
+  initialRows,
+  repoUrl,
+}: {
+  endpoint: string;
+  target: FeedTarget;
+  initialRows: ActivityRow[];
+  repoUrl: string | null;
+}) {
+  const [rows, setRows] = useState(initialRows);
+
+  // Re-seed when the server hands new rows (tab switch Live↔Previews re-renders the page,
+  // which remounts with a new `endpoint` anyway, but a soft refresh can change props too).
+  useEffect(() => setRows(initialRows), [initialRows]);
+
+  useEffect(() => {
+    let stopped = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let inflight: AbortController | null = null;
+
+    const schedule = (ms: number) => {
+      if (stopped) return;
+      timer = setTimeout(tick, ms);
+    };
+
+    async function tick() {
+      if (stopped) return;
+      // Don't poll a backgrounded tab; re-check (and fetch immediately) when it's shown.
+      if (typeof document !== "undefined" && document.hidden) {
+        schedule(15_000);
+        return;
+      }
+      inflight?.abort();
+      inflight = new AbortController();
+      try {
+        const res = await fetch(endpoint, {
+          signal: inflight.signal,
+          cache: "no-store",
+        });
+        // Session expired in a long-idle tab, or a transient error: back off, keep trying.
+        if (!res.ok) {
+          schedule(res.status === 401 ? 60_000 : 30_000);
+          return;
+        }
+        const data = (await res.json()) as { rows?: ActivityRow[] };
+        if (stopped) return;
+        const next = data.rows ?? [];
+        setRows(next);
+        schedule(pollDelayMs(next));
+      } catch {
+        if (!stopped) schedule(10_000);
+      }
+    }
+
+    const onVisible = () => {
+      if (stopped || document.hidden) return;
+      if (timer) clearTimeout(timer);
+      tick(); // refresh the moment the tab regains focus
+    };
+
+    schedule(pollDelayMs(rows));
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      stopped = true;
+      if (timer) clearTimeout(timer);
+      inflight?.abort();
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+    // Only re-arm when the endpoint changes (the feed target). Reading `rows` here just
+    // seeds the first delay; subsequent delays come from each fetch's own result.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [endpoint]);
+
+  if (rows.length === 0) {
+    return (
+      <div className="mt-3 rounded-xl border border-white/[0.06] px-6 py-8 text-center text-sm text-[var(--muted)]">
+        {target === "preview"
+          ? "No preview deployments yet — branch previews will appear here."
+          : "No activity yet — syncs will appear here once a repo is connected."}
+      </div>
+    );
+  }
+
+  return (
+    <ul className="mt-3 divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-white/[0.02]">
+      {rows.map((d) => (
+        // Each row is an expander (<details>): the summary is the familiar row, the panel
+        // holds sync metadata (duration, trigger, commit, error).
+        <li key={d.id}>
+          <details className="group">
+            <summary className="flex cursor-pointer select-none items-start justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
+              <div className="flex min-w-0 items-start gap-3">
+                <ChevronRight
+                  aria-hidden
+                  className="mt-1.5 size-3.5 shrink-0 text-[var(--muted)] transition-transform group-open:rotate-90"
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-[var(--fg)]">
+                    {(d.commitMessage || "Sync").split("\n")[0]}
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--muted)]">
+                    {triggerLabel(d.trigger, d.actorName)} · {timeAgo(d.createdAt)}
+                    {(d.filesAdded > 0 || d.filesEdited > 0) &&
+                      ` · ${d.filesAdded} added, ${d.filesEdited} edited`}
+                  </p>
+                </div>
+              </div>
+              <span
+                className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
+                  d.status === "successful"
+                    ? "bg-emerald-500/15 text-emerald-400"
+                    : d.status === "failed"
+                      ? "bg-red-500/15 text-red-400"
+                      : "bg-white/[0.06] text-[var(--muted)]"
+                }`}
+              >
+                {d.status === "successful"
+                  ? "Successful"
+                  : d.status === "failed"
+                    ? "Failed"
+                    : "Building"}
+              </span>
+            </summary>
+            {/* pl aligns with the summary text: px-4 + chevron 14 + gap 12. */}
+            <div className="pb-3 pl-[42px] pr-4">
+              <dl className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs sm:grid-cols-4">
+                <div>
+                  <dt className="text-[var(--muted)]">Duration</dt>
+                  <dd className="mt-0.5 text-[var(--fg)]">
+                    {d.durationMs != null ? formatDurationMs(d.durationMs) : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--muted)]">Trigger</dt>
+                  <dd className="mt-0.5 text-[var(--fg)]">{triggerDetail(d.trigger)}</dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--muted)]">Commit</dt>
+                  <dd className="mt-0.5 font-mono text-[var(--fg)]">
+                    {d.commitSha && repoUrl ? (
+                      <a
+                        href={`${repoUrl}/commit/${d.commitSha}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="hover:underline"
+                      >
+                        {d.commitSha.slice(0, 7)}
+                      </a>
+                    ) : (
+                      (d.commitSha?.slice(0, 7) ?? "—")
+                    )}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-[var(--muted)]">Files</dt>
+                  <dd className="mt-0.5 text-[var(--fg)]">
+                    {d.filesAdded + d.filesEdited > 0
+                      ? `${d.filesAdded} added, ${d.filesEdited} edited`
+                      : "—"}
+                  </dd>
+                </div>
+              </dl>
+              {/* Multi-line commit messages: the summary shows the first line; the body
+                  lands here. */}
+              {(d.commitMessage ?? "").includes("\n") && (
+                <pre className="mt-2.5 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-[var(--muted)]">
+                  {(d.commitMessage ?? "").split("\n").slice(1).join("\n").trim()}
+                </pre>
+              )}
+              {d.status === "failed" && d.error && (
+                <div className="mt-2.5">
+                  <p className="text-xs text-red-400/80">Why it failed</p>
+                  <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-[var(--muted)]">
+                    {d.error}
+                  </pre>
+                </div>
+              )}
+            </div>
+          </details>
+        </li>
+      ))}
+    </ul>
+  );
+}

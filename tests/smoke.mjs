@@ -118,6 +118,15 @@ const CONTROL_PLANE_CHECKS = [
     redirectTo: "/login",
   },
   {
+    // The live Activity feed's polling endpoint (SPEC §10.3) is a bare /:org/:site path, so
+    // the edge gate must catch it like any dashboard page — an unauthenticated poll redirects
+    // to /login, never leaks a tenant's deployment feed.
+    host: "app.localhost",
+    path: "/acme/docs/activity",
+    desc: "unauthenticated app host activity feed redirects to /login (SPEC §10.3)",
+    redirectTo: "/login",
+  },
+  {
     path: "/login",
     desc: "login page renders in the platform theme (shell + gradient CTA)",
     // `db-glow` proves PlatformShell wraps it; `db-cta` proves the shared Button is used.

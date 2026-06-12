@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { and, desc, eq } from "drizzle-orm";
-import { ChevronRight, ExternalLink, GitBranch, Globe, Lock, PenLine } from "lucide-react";
+import { ExternalLink, GitBranch, Globe, Lock, PenLine } from "lucide-react";
 import { supportsSubdomainTenants } from "@/lib/tenant-host";
 import { AUTH_METHOD_META, isAuthMethod } from "@/lib/reader-auth";
 import { db } from "@/lib/db";
@@ -9,12 +9,9 @@ import { user } from "@/lib/db/schema";
 import { deployment } from "@/lib/db/app-schema";
 import { requireSite } from "@/lib/dashboard-context";
 import { siteBase } from "@/lib/dashboard-nav";
-import {
-  formatDurationMs,
-  parseFeedTarget,
-  triggerDetail,
-  triggerLabel,
-} from "@/lib/overview";
+import { getActivityFeed } from "@/lib/activity-feed";
+import { feedParam, parseFeedTarget, timeAgo } from "@/lib/overview";
+import { ActivityFeed } from "@/components/app/ActivityFeed";
 import { Greeting } from "@/components/app/Greeting";
 import { ResyncButton } from "@/components/app/ResyncButton";
 import { SitePreview } from "@/components/app/SitePreview";
@@ -23,16 +20,6 @@ import { SitePreview } from "@/components/app/SitePreview";
 // real headroom — 60s sat right AT a big repo's sync time (intermittent 504s); 300 is the
 // Fluid Compute cap on Hobby (Pro allows 800).
 export const maxDuration = 300;
-
-function timeAgo(date: Date): string {
-  const secs = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (secs < 60) return "just now";
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-}
 
 type Params = { org: string; site: string };
 type Search = { feed?: string };
@@ -94,30 +81,7 @@ export default async function SiteOverview({
     .limit(1);
 
   const feedTarget = parseFeedTarget((await searchParams).feed);
-  const feed = await db
-    .select({
-      id: deployment.id,
-      status: deployment.status,
-      commitMessage: deployment.commitMessage,
-      commitSha: deployment.commitSha,
-      error: deployment.error,
-      filesAdded: deployment.filesAdded,
-      filesEdited: deployment.filesEdited,
-      trigger: deployment.trigger,
-      durationMs: deployment.durationMs,
-      createdAt: deployment.createdAt,
-      actorName: user.name,
-    })
-    .from(deployment)
-    .leftJoin(user, eq(deployment.actorUserId, user.id))
-    .where(
-      and(
-        eq(deployment.siteId, activeSite.id),
-        eq(deployment.target, feedTarget),
-      ),
-    )
-    .orderBy(desc(deployment.createdAt))
-    .limit(20);
+  const feed = await getActivityFeed(activeSite.id, feedTarget);
 
   const isLive = activeSite.status === "live";
 
@@ -152,7 +116,7 @@ export default async function SiteOverview({
 
           {latest && (
             <p className="mt-2 flex items-center gap-1.5 text-sm text-[var(--muted)]">
-              Last updated {timeAgo(latest.createdAt)}
+              Last updated {timeAgo(latest.createdAt.getTime())}
               {latest.actorName && (
                 <>
                   {" by "}
@@ -277,114 +241,15 @@ export default async function SiteOverview({
           </div>
         </div>
 
-        {feed.length === 0 ? (
-          <div className="mt-3 rounded-xl border border-white/[0.06] px-6 py-8 text-center text-sm text-[var(--muted)]">
-            {feedTarget === "preview"
-              ? "No preview deployments yet — branch previews will appear here."
-              : "No activity yet — syncs will appear here once a repo is connected."}
-          </div>
-        ) : (
-          <ul className="mt-3 divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-white/[0.02]">
-            {feed.map((d) => (
-              // Each row is a no-JS expander (<details>, the pattern the old "Why it
-              // failed" toggle used): the summary is the familiar row, the panel holds
-              // sync metadata (duration, trigger, commit, error). Server component
-              // throughout — no client state.
-              <li key={d.id}>
-                <details className="group">
-                  <summary className="flex cursor-pointer select-none items-start justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
-                    <div className="flex min-w-0 items-start gap-3">
-                      <ChevronRight
-                        aria-hidden
-                        className="mt-1.5 size-3.5 shrink-0 text-[var(--muted)] transition-transform group-open:rotate-90"
-                      />
-                      <div className="min-w-0">
-                        <p className="truncate text-sm text-[var(--fg)]">
-                          {(d.commitMessage || "Sync").split("\n")[0]}
-                        </p>
-                        <p className="mt-0.5 text-xs text-[var(--muted)]">
-                          {triggerLabel(d.trigger, d.actorName)} · {timeAgo(d.createdAt)}
-                          {(d.filesAdded > 0 || d.filesEdited > 0) &&
-                            ` · ${d.filesAdded} added, ${d.filesEdited} edited`}
-                        </p>
-                      </div>
-                    </div>
-                    <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
-                        d.status === "successful"
-                          ? "bg-emerald-500/15 text-emerald-400"
-                          : d.status === "failed"
-                            ? "bg-red-500/15 text-red-400"
-                            : "bg-white/[0.06] text-[var(--muted)]"
-                      }`}
-                    >
-                      {d.status === "successful"
-                        ? "Successful"
-                        : d.status === "failed"
-                          ? "Failed"
-                          : "Building"}
-                    </span>
-                  </summary>
-                  {/* pl aligns with the summary text: px-4 + chevron 14 + gap 12. */}
-                  <div className="pb-3 pl-[42px] pr-4">
-                    <dl className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs sm:grid-cols-4">
-                      <div>
-                        <dt className="text-[var(--muted)]">Duration</dt>
-                        <dd className="mt-0.5 text-[var(--fg)]">
-                          {d.durationMs != null ? formatDurationMs(d.durationMs) : "—"}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-[var(--muted)]">Trigger</dt>
-                        <dd className="mt-0.5 text-[var(--fg)]">{triggerDetail(d.trigger)}</dd>
-                      </div>
-                      <div>
-                        <dt className="text-[var(--muted)]">Commit</dt>
-                        <dd className="mt-0.5 font-mono text-[var(--fg)]">
-                          {d.commitSha && repoUrl ? (
-                            <a
-                              href={`${repoUrl}/commit/${d.commitSha}`}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="hover:underline"
-                            >
-                              {d.commitSha.slice(0, 7)}
-                            </a>
-                          ) : (
-                            (d.commitSha?.slice(0, 7) ?? "—")
-                          )}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt className="text-[var(--muted)]">Files</dt>
-                        <dd className="mt-0.5 text-[var(--fg)]">
-                          {d.filesAdded + d.filesEdited > 0
-                            ? `${d.filesAdded} added, ${d.filesEdited} edited`
-                            : "—"}
-                        </dd>
-                      </div>
-                    </dl>
-                    {/* Multi-line commit messages: the summary shows the first line; the
-                        body lands here. */}
-                    {(d.commitMessage ?? "").includes("\n") && (
-                      <pre className="mt-2.5 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-[var(--muted)]">
-                        {(d.commitMessage ?? "").split("\n").slice(1).join("\n").trim()}
-                      </pre>
-                    )}
-                    {d.status === "failed" && d.error && (
-                      <div className="mt-2.5">
-                        <p className="text-xs text-red-400/80">Why it failed</p>
-                        <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-[var(--muted)]">
-                          {d.error}
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-                </details>
-              </li>
-            ))}
-          </ul>
-        )}
+        {/* Live, self-polling (SPEC §10.3): seeded with these server-rendered rows, then it
+            polls /:org/:site/activity so a webhook sync that lands while you're here shows
+            up — and resolves building → successful — without a reload. */}
+        <ActivityFeed
+          endpoint={`${base}/activity?feed=${feedParam(feedTarget)}`}
+          target={feedTarget}
+          initialRows={feed}
+          repoUrl={repoUrl}
+        />
       </section>
     </div>
   );
