@@ -185,6 +185,31 @@ export const analyticsEvent = pgTable(
   ],
 );
 
+// Exit-survey row captured when an owner deletes a site or org from the Danger zone
+// (SPEC §10.5). Deliberately NOT FK'd to site/organization: the whole point is to
+// outlive the thing being deleted (those rows are gone the moment the deletion commits),
+// so we snapshot the subject's name + id as plain text. Append-only; nothing reads it in
+// the app yet — it's product/retention feedback, the way Vercel/the incumbent ask "why are
+// you deleting this?". actorUserId stays (the user isn't deleted) but is set null if they
+// later are, so the survey survives independently.
+export const deletionFeedback = pgTable(
+  "deletion_feedback",
+  {
+    id: text("id").primaryKey(),
+    // 'site' | 'organization' (DangerScope in src/lib/danger-zone.ts).
+    scope: text("scope").notNull(),
+    // The deleted thing's id + display name, snapshotted (no FK — the row is gone).
+    subjectId: text("subject_id").notNull(),
+    subjectName: text("subject_name").notNull(),
+    reason: text("reason").notNull(),
+    actorUserId: text("actor_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("deletionFeedback_createdAt_idx").on(table.createdAt)],
+);
+
 export const siteRelations = relations(site, ({ one, many }) => ({
   organization: one(organization, {
     fields: [site.organizationId],

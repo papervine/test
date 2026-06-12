@@ -4,6 +4,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
+  DeleteObjectsCommand,
 } from "@aws-sdk/client-s3";
 
 // Object storage over the S3 API. Local = MinIO, prod = Cloudflare R2 — same code,
@@ -56,6 +57,24 @@ export async function getObjectBytes(
   } catch (err) {
     if ((err as { name?: string }).name === "NoSuchKey") return null;
     throw err;
+  }
+}
+
+/**
+ * Delete every object under a prefix. Used when a site/org is deleted (SPEC §10.5) — the
+ * Postgres FK cascade drops the rows, but object storage has no cascade, so the synced
+ * content (sites/{id}/…) must be swept explicitly or it leaks. Batches by 1000 (the
+ * S3 DeleteObjects cap). Best-effort and idempotent: an empty prefix is a no-op.
+ */
+export async function deletePrefix(prefix: string): Promise<void> {
+  const keys = await listKeys(prefix);
+  for (let i = 0; i < keys.length; i += 1000) {
+    await s3.send(
+      new DeleteObjectsCommand({
+        Bucket: BUCKET,
+        Delete: { Objects: keys.slice(i, i + 1000).map((Key) => ({ Key })) },
+      }),
+    );
   }
 }
 

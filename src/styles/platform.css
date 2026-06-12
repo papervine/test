@@ -11,6 +11,8 @@
   --muted: #8a8a99;
   --blue: #5b8cff;
   --violet: #a974ff;
+  --danger: #e5484d;
+  --amber: #f5a623;
   --line: rgba(255, 255, 255, 0.07);
   --card: rgba(255, 255, 255, 0.025);
   font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
@@ -117,6 +119,31 @@
 .db-cta:disabled {
   transform: none;
   opacity: 0.5;
+}
+
+/* Destructive action — solid red fill for irreversible deletes (Danger zone, §10.5).
+   No lift/glow like .db-cta: a delete button shouldn't feel inviting. */
+.db-danger {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+  transition:
+    background 0.2s ease,
+    opacity 0.2s ease;
+}
+.db-danger:hover:not(:disabled) {
+  background: #d13b40;
+}
+.db-danger:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Amber warning callout — the "this cannot be undone" banner above org deletion. */
+.db-warn {
+  background: rgba(245, 166, 35, 0.08);
+  box-shadow: 0 0 0 1px rgba(245, 166, 35, 0.25);
+  color: var(--fg);
 }
 
 /* Secondary action / quiet outline. */
