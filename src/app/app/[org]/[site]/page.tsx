@@ -107,7 +107,6 @@ export default async function SiteOverview({
       durationMs: deployment.durationMs,
       createdAt: deployment.createdAt,
       actorName: user.name,
-      actorImage: user.image,
     })
     .from(deployment)
     .leftJoin(user, eq(deployment.actorUserId, user.id))
@@ -299,16 +298,6 @@ export default async function SiteOverview({
                         aria-hidden
                         className="mt-1.5 size-3.5 shrink-0 text-[var(--muted)] transition-transform group-open:rotate-90"
                       />
-                      {d.actorImage ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={d.actorImage}
-                          alt=""
-                          className="mt-0.5 size-6 shrink-0 rounded-full"
-                        />
-                      ) : (
-                        <span className="mt-0.5 size-6 shrink-0 rounded-full bg-white/[0.08]" />
-                      )}
                       <div className="min-w-0">
                         <p className="truncate text-sm text-[var(--fg)]">
                           {(d.commitMessage || "Sync").split("\n")[0]}
@@ -336,8 +325,8 @@ export default async function SiteOverview({
                           : "Building"}
                     </span>
                   </summary>
-                  {/* pl aligns with the summary text: px-4 + chevron 14 + gap 12 + avatar 24 + gap 12. */}
-                  <div className="pb-3 pl-[82px] pr-4">
+                  {/* pl aligns with the summary text: px-4 + chevron 14 + gap 12. */}
+                  <div className="pb-3 pl-[42px] pr-4">
                     <dl className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs sm:grid-cols-4">
                       <div>
                         <dt className="text-[var(--muted)]">Duration</dt>
