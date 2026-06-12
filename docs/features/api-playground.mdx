@@ -1,0 +1,103 @@
+---
+title: API Playground
+description: An OpenAPI-driven API reference — one page per operation, generated at sync time, with an interactive "Try it" panel and auto-generated code samples.
+---
+
+Point Papervine at an OpenAPI (or AsyncAPI) spec and it generates a full, interactive API
+reference: one page per operation, request/response schema docs, runnable requests, and
+copy-paste code samples in several languages.
+
+<Note>
+  The API playground is part of the v1 feature set. The generation pipeline and component
+  output described here are the target shape; treat live "Try it" execution and the optional
+  request proxy as the maturing edges.
+</Note>
+
+## Input
+
+The spec is referenced from your [`docs.json`](/rendering/config):
+
+```json docs.json
+{
+  "openapi": "https://api.example.com/openapi.yaml"
+}
+```
+
+Papervine accepts **OpenAPI 3.0+** (YAML or JSON) and **AsyncAPI**.
+
+## Generation (at sync time)
+
+When the site syncs, Papervine parses the spec and generates pages. Operations become
+**one page each**, or are grouped by tag. Each operation page includes:
+
+- A **method + path header**, the operation description, and its auth requirements.
+- **Request documentation** — params, headers, and body fields rendered with
+  [`<ParamField>`](/rendering/components), plus a schema explorer.
+- **Response documentation** — response schemas and examples rendered with
+  [`<ResponseField>`](/rendering/components).
+
+Because generation happens at sync time, the reference is just more pages in your site —
+searchable, themeable, and indexed for the [AI assistant](/features/ai-assistant) like any
+other content.
+
+## Try it
+
+Each operation page carries an interactive **"Try it"** panel: the reader fills in params,
+headers, and body, sends the request, and sees the live response inline.
+
+### Auth methods
+
+The playground supports the auth schemes declared in your spec, configured per tenant:
+
+<CardGroup cols={2}>
+  <Card title="API key">Header / query key authentication.</Card>
+  <Card title="Bearer">Bearer token in the `Authorization` header.</Card>
+  <Card title="Basic">HTTP Basic credentials.</Card>
+  <Card title="OAuth2">OAuth2 flows, config-driven.</Card>
+</CardGroup>
+
+### CORS and the request proxy
+
+Browsers block many cross-origin API calls. To avoid CORS failures — and to inject secrets
+safely without exposing them to the reader's browser — requests can optionally route through
+a **Papervine proxy endpoint** rather than going direct. This is opt-in per tenant.
+
+<Warning>
+  Routing through the proxy is what lets you keep API credentials server-side. When "Try it"
+  must send a secret, prefer the proxy over a direct browser request so the key never reaches
+  client-side code.
+</Warning>
+
+## Code samples
+
+For every endpoint, Papervine auto-generates ready-to-run snippets so readers can leave the
+page with working code:
+
+<CodeGroup>
+
+```bash curl
+curl https://api.example.com/v1/widgets \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```js JavaScript
+await fetch("https://api.example.com/v1/widgets", {
+  headers: { Authorization: `Bearer ${token}` },
+});
+```
+
+```python Python
+import requests
+requests.get(
+    "https://api.example.com/v1/widgets",
+    headers={"Authorization": f"Bearer {token}"},
+)
+```
+
+</CodeGroup>
+
+## Under the hood
+
+The generation pipeline builds on established open-source tooling — `openapi-types` for
+the spec model, the [Scalar](https://github.com/scalar/scalar) open-source API reference as
+a reference implementation worth reusing, and `openapi-sampler` for example payloads.

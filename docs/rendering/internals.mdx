@@ -1,0 +1,101 @@
+---
+title: Renderer internals
+description: The hybrid MDX pipeline — serialize then run() inside a try/catch — and why a single unsupported feature never 500s a page.
+---
+
+The cardinal rule of the renderer is **never let one unsupported feature 500 a page.** A
+docs site is a mix of supported and not-yet-supported MDX; a single unknown component,
+malformed frontmatter, or compile error on one page must degrade gracefully and never take
+down the page (let alone the site). Everything below exists to honor that rule.
+
+## The hybrid MDX pipeline
+
+MDX rendering (`src/lib/mdx.tsx`) is a deliberate **hybrid** of two libraries:
+
+<Steps>
+  <Step title="Compile with @mintlify/mdx's serialize">
+    `serialize` is the third-party MDX serializer — it brings Shiki dual-theme syntax highlighting
+    and snippet handling, so highlighting matches the incumbent exactly. It produces compiled,
+    serializable output rather than a rendered element.
+  </Step>
+  <Step title="Execute with @mdx-js/mdx's run(), inside a try/catch">
+    The compiled output is executed with `@mdx-js/mdx`'s `run()` wrapped in our own
+    `try/catch`. Because *we* run the compiled source, the whole step is catchable: a failure
+    renders an inline notice instead of throwing.
+  </Step>
+</Steps>
+
+### Why not MDXRemote
+
+The obvious simplification — the incumbent's `MDXRemote` — is wrong here. `MDXRemote` throws
+compile errors **at RSC render time**, which cannot be caught without an error boundary, and
+an error boundary breaks RSC streaming. Running the compiled source ourselves keeps the
+entire compile-and-execute step inside a `try/catch`.
+
+<Warning>
+  Do not "simplify" the hybrid to `MDXRemote`. It reintroduces uncatchable RSC-render-time
+  compile errors. This was measured: `MDXRemote` rendered a few more pages but produced
+  HTTP 500s, while the hybrid produced **zero 500s** on the same sample. Zero 500s is the
+  whole point. See [gotchas](/contributing/gotchas).
+</Warning>
+
+## Graceful fallback for unknown components
+
+Compiled MDX references components by name. If a referenced component is not in our set, the
+naive behavior is a hard throw — *"Expected component X to be defined."* — which 500s the
+page. Instead, `componentsForCompiled` **scans the compiled source for every referenced
+component** and supplies a passthrough `Fallback` for any that are unknown. An unsupported
+component therefore renders its children and a dev warning rather than crashing.
+
+This even covers **member-expression components** like `<Color.Item>`: a `Proxy` stands in
+for the namespace object, so `Color.Item` resolves to the same passthrough fallback. The
+result is that an unimplemented component degrades to "render its contents as plain content,"
+which is almost always the right thing.
+
+<Info>
+  Alongside the component fallback, two more guards keep a bad page from crashing: frontmatter
+  is parsed defensively (bad YAML does not throw), and a compile failure on the whole page
+  renders an **inline notice** instead of a 500. Layered together, these mean any real
+  docs.json repo renders without crashing — supported features render, unsupported ones
+  degrade.
+</Info>
+
+## The dev/prod JSX runtime must match
+
+A subtle constraint ties the two halves together: the `development` flag and JSX runtime used
+to **compile** (`serialize`) must match the ones used to **run** (`run()`). If they diverge,
+React 19 throws *"production element rendered in development."* Keeping the runtimes in lockstep
+is non-negotiable — it is the reason the renderer cannot fall back to a plain off-the-shelf
+remote-MDX setup.
+
+<Warning>
+  When touching the compile or run side of `src/lib/mdx.tsx`, keep the `development` flag and
+  runtime identical on both sides. A mismatch produces a confusing React 19 error that looks
+  unrelated to MDX.
+</Warning>
+
+## Packaging gotchas
+
+The hybrid carries a couple of environment requirements worth knowing:
+
+- **`legacy-peer-deps`** — `@mintlify/mdx@4` declares a broken peer dependency
+  (a nonexistent `@radix-ui/react-popover` version), so `.npmrc` sets `legacy-peer-deps=true`.
+  Keep it.
+- **`serverExternalPackages`** — the MDX packages must be listed in `serverExternalPackages`
+  in `next.config.mjs`, or they fail to compile inside the Next bundle.
+
+## Compile-on-sync, not compile-on-request
+
+The performance principle behind all of this: MDX is meant to be compiled **once at sync
+time** into serializable bundles, so the render plane only *executes* them on request — no
+live compilation on the hot path. The render plane reads compiled content from object
+storage; see the [content pipeline](/rendering/content-pipeline). (Precompiling fully at sync
+time is the remaining piece; the architecture and the catch-everything pipeline above are
+built for it.)
+
+## Related
+
+- [Content pipeline](/rendering/content-pipeline) — where compiled content comes from.
+- [Config](/rendering/config) — the same warn-don't-throw philosophy for `docs.json`.
+- [Components](/rendering/components) — the component set this pipeline resolves.
+- [Gotchas](/contributing/gotchas) — the hard-won rules summarized here.

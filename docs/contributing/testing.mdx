@@ -1,0 +1,99 @@
+---
+title: Testing
+description: Three test layers — unit, smoke, and e2e — where each lives, what it covers, and the CI gate that keeps them green.
+---
+
+Regression protection is a hard requirement, not optional (it's part of the
+[definition of done](/contributing/working-on-papervine#definition-of-done)). There are
+three layers, and the rule is simple: **put the test where the logic lives.**
+
+<CardGroup cols={3}>
+  <Card title="Unit (Vitest)">
+    Pure functions, no infra. `tests/unit/` · `npm run test:unit`
+  </Card>
+  <Card title="Smoke (zero-dep)">
+    The real renderer + control-plane gate, no DB. `tests/smoke.mjs` · `npm test`
+  </Card>
+  <Card title="E2E (Playwright)">
+    Authed journeys against real Postgres + MinIO. `tests/e2e/` · `npm run test:e2e`
+  </Card>
+</CardGroup>
+
+## Unit — `tests/unit/`
+
+```bash
+npm run test:unit
+```
+
+Pure logic, no DB or browser: `resolveTenantSlug`, `parseRepoInput`, `slugify`, lenient
+config parsing. Fast — runs anywhere.
+
+<Tip>
+  If you add a pure helper, unit-test it — and keep it pure. `"use server"` files can't
+  export sync helpers, so extract the logic (e.g. into `src/lib/slug.ts`) where a unit test
+  can reach it directly.
+</Tip>
+
+## Smoke — `tests/smoke.mjs`
+
+```bash
+npm test
+```
+
+The renderer + control-plane **gate**. It boots the real renderer against `tests/fixtures/`
+— a docs repo that reproduces every fixed bug — and asserts each page returns **200, never
+500**, with the expected content. Zero-dep and no Postgres, so it runs in CI everywhere.
+
+<Note>
+  **To cover a new renderer case, add a fixture.** Drop it under `tests/fixtures/`, register
+  it in `tests/fixtures/docs.json` nav, and add a check to `CHECKS`. Fixtures reproduce the
+  *actual failure shape* — object favicon, `languages` nav, `.md` pages, unknown and
+  member-expression components, malformed frontmatter, snippet imports, hidden pages,
+  standalone cards, OpenAPI endpoints, search, the assistant route, and the Card height bug.
+</Note>
+
+DB-free control-plane checks (gate redirects, auth pages rendering in the platform theme)
+live alongside the renderer checks in `CONTROL_PLANE_CHECKS`.
+
+## E2E — `tests/e2e/`
+
+```bash
+npm run test:e2e        # needs docker Postgres + MinIO up
+```
+
+Authed control-plane journeys against a dedicated `papervine_test` Postgres + MinIO:
+signup → onboarding → connect repo → dashboard, plus the logged-out gate. `globalSetup`
+creates, migrates, and truncates the test DB; `auth.setup.ts` logs in once and saves the
+session (storageState) so specs start authenticated.
+
+<Warning>
+  Tag any spec that hits the network (e.g. the GitHub connect flow) `@external` so CI can
+  `--grep-invert @external` and stay deterministic.
+</Warning>
+
+## Real-repo crawl
+
+```bash
+node tests/crawl.mjs <dir>
+```
+
+The `papervine dev` analogue used to validate against representative docs repos. It reports
+rendered / degraded / 500 counts and exits non-zero on any 500 — run it for every renderer,
+config, or nav change. Compatibility findings vs. representative docs repos are tracked in
+`GAP-REPORT.md`.
+
+## The CI gate
+
+CI lives in `.github/workflows/ci.yml` and has two jobs — keep both green.
+
+| Job | Runs | Services |
+| --- | --- | --- |
+| `verify` | typecheck + unit + build + smoke | none |
+| `e2e` | Playwright (skipping `@external`) | Postgres |
+
+<Info>
+  Migrations are part of the test story: they're versioned SQL committed to `drizzle/`,
+  reviewed like code, and applied by `drizzle-kit migrate` locally, in CI's e2e (which
+  rebuilds `papervine_test` from the same files), and in prod on deploy. A broken migration
+  fails CI. See the [GitOps migration flow](/contributing/working-on-papervine#database-migrations-gitops).
+</Info>

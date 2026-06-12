@@ -1,0 +1,62 @@
+---
+title: Search
+description: A per-tenant full-text search index built at sync time, with a Cmd/Ctrl-K command palette and an edge-cached query API.
+---
+
+Every Papervine site ships with full-text search over its own content. The index is
+built during [content sync](/rendering/content-pipeline) and stored per tenant, so each
+docs site searches only its own pages — never the platform's or another tenant's.
+
+<Note>
+  Search is part of the v1 surface area. The exact engine choice (see below) is still being
+  finalized; the index shape — what gets indexed and the query API contract — is the stable
+  part.
+</Note>
+
+## How it works
+
+When a site syncs, Papervine extracts searchable text from every published page and writes
+a tenant-scoped index. The index covers:
+
+- **Page titles**
+- **Headings** (so results can deep-link to a `#anchor`)
+- **Body prose**
+- **Code blocks**
+
+Readers query that index two ways:
+
+<CardGroup cols={2}>
+  <Card title="Command palette">
+    `Cmd/Ctrl-K` opens a command-palette UI with full keyboard navigation and
+    recent/suggested entries. This is the primary reader-facing surface.
+  </Card>
+  <Card title="Query API">
+    `GET /api/search?q=…` returns results for the current tenant. The endpoint is
+    edge-cached, so repeated and popular queries are fast and cheap.
+  </Card>
+</CardGroup>
+
+<Tip>
+  `Cmd/Ctrl-K` is search; `Cmd/Ctrl-I` is the [AI assistant](/features/ai-assistant). They
+  are deliberately distinct surfaces — one finds pages, the other answers questions.
+</Tip>
+
+## Engine
+
+The search engine is a **pluggable provider**, selected per tenant via config:
+
+- **[Orama](https://oramasearch.com/)** — embeddable, runs in-process or as a service. This
+  is the lead choice for the hosted SaaS.
+- **Pagefind** — a good fit for static-leaning setups.
+- **Algolia** — supported as an alternative provider for tenants that already run it.
+
+Because the index is built from your synced content rather than a proprietary store, the
+provider can change without changing your source files.
+
+## Relationship to the AI assistant
+
+The same indexed content also backs `search_docs`, the retrieval tool the
+[AI assistant](/features/ai-assistant) and the [read MCP server](/features/mcp-servers) use
+to answer questions. Keyword search powers both the human-facing palette and the agentic
+retrieval loop; a semantic (embeddings) backend can be added later behind the same
+`search_docs` contract without changing how either surface calls it.

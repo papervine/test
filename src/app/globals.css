@@ -163,3 +163,62 @@ html.dark .prose pre.shiki {
 html.dark .prose pre.shiki span {
   color: var(--shiki-dark) !important;
 }
+
+/* --- Assistant answers (Streamdown output in the chat panel) ---
+ * Without this, Streamdown's markdown falls back to *browser default* styles —
+ * a 2em bold <h1>, heavy <code>, loose margins — which reads as "giant white,
+ * wild formatting" in the narrow panel. Keep it tame: everything tracks the
+ * panel's `text-sm` body, headings are barely larger, code is a subtle pill.
+ * The wrapper sets color (zinc-800 / dark zinc-200); we mostly inherit it. */
+.prose-assistant {
+  @apply text-sm leading-6;
+}
+.prose-assistant > :first-child {
+  @apply mt-0;
+}
+.prose-assistant > :last-child {
+  @apply mb-0;
+}
+.prose-assistant p {
+  @apply my-2;
+}
+.prose-assistant h1,
+.prose-assistant h2,
+.prose-assistant h3,
+.prose-assistant h4 {
+  @apply mb-1 mt-4 text-sm font-semibold text-zinc-900 dark:text-zinc-100;
+}
+.prose-assistant ul {
+  @apply my-2 list-disc space-y-1 pl-5;
+}
+.prose-assistant ol {
+  @apply my-2 list-decimal space-y-1 pl-5;
+}
+.prose-assistant li {
+  @apply leading-6;
+}
+.prose-assistant strong {
+  @apply font-semibold text-zinc-900 dark:text-zinc-100;
+}
+.prose-assistant blockquote {
+  @apply my-2 border-l-2 border-zinc-200 pl-3 italic text-zinc-600 dark:border-zinc-700 dark:text-zinc-400;
+}
+/* Inline code: a quiet zinc pill, not the article's pink. */
+.prose-assistant :not(pre) > code {
+  font-family: var(--db-font-mono);
+  @apply rounded bg-zinc-100 px-1 py-0.5 text-[0.8em] font-medium text-zinc-700 before:content-[''] after:content-[''] dark:bg-zinc-800 dark:text-zinc-300;
+}
+.prose-assistant pre {
+  font-family: var(--db-font-mono);
+  border-radius: var(--db-radius-lg);
+  @apply my-2 overflow-x-auto border border-zinc-200 p-3 text-xs dark:border-zinc-800;
+}
+.prose-assistant table {
+  @apply my-2 w-full border-collapse text-xs;
+}
+.prose-assistant th {
+  @apply border-b border-zinc-300 px-2 py-1 text-left font-semibold dark:border-zinc-700;
+}
+.prose-assistant td {
+  @apply border-b border-zinc-100 px-2 py-1 dark:border-zinc-800;
+}

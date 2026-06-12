@@ -74,6 +74,29 @@ export async function hasDocsConfig(
   return false;
 }
 
+// List a repo's branches (Git settings' Branch dropdown). Paginates to a sane cap —
+// 300 branches is far more than any docs repo, and an unbounded loop on a pathological
+// repo would stall the settings page. Empty on any error so the UI degrades to the
+// stored branch rather than 500ing.
+export async function listBranches(
+  owner: string,
+  name: string,
+  token?: string,
+): Promise<string[]> {
+  const names: string[] = [];
+  for (let page = 1; page <= 3; page++) {
+    const res = await fetch(
+      `${API}/repos/${owner}/${name}/branches?per_page=100&page=${page}`,
+      { headers: ghHeaders(token) },
+    );
+    if (!res.ok) break;
+    const batch = (await res.json()) as Array<{ name: string }>;
+    names.push(...batch.map((b) => b.name));
+    if (batch.length < 100) break;
+  }
+  return names;
+}
+
 export type CommitInfo = { sha: string; message: string };
 
 export async function fetchLatestCommit(

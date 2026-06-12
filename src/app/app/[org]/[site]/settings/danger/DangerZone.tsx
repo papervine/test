@@ -12,14 +12,14 @@ import {
 
 export function DangerZone({
   siteRef,
-  siteName,
-  orgName,
+  siteSlug,
+  orgSlug,
   canDeleteSite,
   canDeleteOrg,
 }: {
   siteRef: SiteRef;
-  siteName: string;
-  orgName: string;
+  siteSlug: string;
+  orgSlug: string;
   canDeleteSite: boolean;
   canDeleteOrg: boolean;
 }) {
@@ -39,8 +39,8 @@ export function DangerZone({
         <DangerSection
           title="Delete this site"
           blurb="Your site and all its deployments, analytics, and synced content will be deleted and cannot be restored. This is irreversible."
-          confirmName={siteName}
-          buttonLabel={`Delete ${siteName}`}
+          confirmName={siteSlug}
+          buttonLabel={`Delete ${siteSlug}`}
           action={(reason) => deleteSite(siteRef, reason)}
         />
       )}
@@ -54,8 +54,8 @@ export function DangerZone({
           title="Delete this organization"
           blurb="Your organization will be deleted and cannot be restored. This is irreversible."
           warning="This will permanently delete your entire organization, all sites, team members, and data. This cannot be undone."
-          confirmName={orgName}
-          buttonLabel={`Delete ${orgName}`}
+          confirmName={orgSlug}
+          buttonLabel={`Delete ${orgSlug}`}
           action={(reason) => deleteOrganization(siteRef, reason)}
         />
       )}
@@ -198,7 +198,6 @@ function ConfirmModal({
           spellCheck={false}
           autoCapitalize="none"
           autoComplete="off"
-          placeholder={confirmName}
           className="db-input mt-4 w-full rounded-lg px-3.5 py-2.5 text-sm outline-none"
         />
 

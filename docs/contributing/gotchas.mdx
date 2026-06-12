@@ -1,0 +1,99 @@
+---
+title: Gotchas
+description: Hard-won pitfalls — JSX runtime matching, peer-dep workarounds, flex-height bugs, host rewrites, and the host-only session cookie — with the why and the fix.
+---
+
+These are learned the hard way. Each one cost real debugging time; the *why* matters as much
+as the fix, because every one of them passes the obvious check and fails somewhere subtle.
+
+### dev/prod JSX runtime must match
+
+<Warning>
+  Compile (`serialize`) and `run()` must use the **same** `development` flag and runtime, or
+  React 19 throws *"production element rendered in development"*.
+</Warning>
+
+This is why we left plain `next-mdx-remote` for the hybrid renderer. See
+[renderer internals](/rendering/internals) for the full compile-then-run design.
+
+### `@mintlify/mdx@4` has a broken peer dep
+
+<Warning>
+  `@mintlify/mdx@4` declares a peer dep on `@radix-ui/react-popover@^19.2.1`, which doesn't
+  exist. **Fix:** `.npmrc` sets `legacy-peer-deps=true`. Keep it.
+</Warning>
+
+### MDX packages must be in `serverExternalPackages`
+
+<Note>
+  The MDX packages have to be listed in `serverExternalPackages` (`next.config.mjs`) or they
+  fail to compile inside the Next bundle.
+</Note>
+
+### Percentage heights + flex stretch
+
+<Warning>
+  `h-full` resolves against the nearest definite-height ancestor. A stretched flex item
+  (e.g. `<article>`) can hand a card full-page height — this bit the Card component.
+  **Fix:** put `items-start` on content rows so children don't stretch.
+</Warning>
+
+This is a *visual* bug — it passes the DOM check and only shows in a screenshot, which is
+why [definition of done](/contributing/working-on-papervine#definition-of-done) requires a
+real-browser screenshot for UI changes.
+
+### Tests fetch `127.0.0.1`, not `localhost`
+
+<Note>
+  Tests fetch `127.0.0.1`, and the dev server binds to `0.0.0.0`. Some runners resolve
+  `localhost` to IPv6 `::1` while Next listens on IPv4 — using `127.0.0.1` sidesteps the
+  mismatch.
+</Note>
+
+### Redirecting to a tenant host needs a hard navigation
+
+<Warning>
+  A server-action `redirect()` (or `router.push` / `<Link>`) into a tenant or app-host URL
+  **skips the middleware Host rewrite**. **Fix:** the server returns the target
+  (`{ ok, redirectTo }`) and the client does `window.location.assign(redirectTo)`.
+</Warning>
+
+Tenant pretty-URLs (`{slug}.papervine.io/…`) and the bare app-host dashboard URLs
+(`app.papervine.io/:org/:site`) exist only as a `middleware.ts` Host-rewrite (to
+`/sites/{slug}/…` and `/app/:org/:site`) — no route file backs them. A soft RSC nav resolves
+against the *real* route tree and skips that rewrite, so `redirect("/")` lands on the apex
+marketing home, not the tenant's docs. It passes `curl` and SSR (a hard request rewrites
+fine) and only fails in a real browser. This bit reader-auth login and the app-host
+dashboard's post-create / post-login landings.
+
+<Info>
+  **Nuance:** an intra-dashboard `<Link>` or `router.push` *within* the app host is fine — it
+  already carries the rewrite context. It's the **cross-context** hop (apex → app, or a
+  server-action redirect into a rewritten path) that drops it. Plain `redirect()` is fine for
+  genuine apex routes (the marketing pages) — there's nothing to rewrite there.
+</Info>
+
+### The marketing apex can't see the app-host session — by design
+
+<Warning>
+  The Better Auth session cookie is **host-only** on `app.papervine.io` and is never shared
+  to `.papervine.io` — doing so would send your auth token to every tenant docs subdomain, an
+  XSS-exfil surface. Don't "fix" a missing dev label by sharing the real session cookie.
+</Warning>
+
+So `www` shows a Dashboard link via a *benign* `pv_signed_in=1` flag cookie
+(`src/lib/signed-in-flag.ts`), set on the parent domain by the app-host middleware and read
+by the marketing nav. Because it reaches tenant subdomains (parent-domain cookie), it's
+**httpOnly** (+ Secure in prod) so tenant page JS can't read it, and it's cleared
+**server-side in the middleware** on logout (a client clear can't touch httpOnly).
+Logged-in users who hit `/login` or `/signup` on the app host go straight to the dashboard.
+
+<Note>
+  **Dev caveat:** Chrome rejects `Domain=localhost` cookies, so the flag (and thus `www`'s
+  Dashboard link) only works in prod (`.papervine.io`). The redirect-to-dashboard behavior
+  works everywhere.
+</Note>
+
+For more on the two-host topology and the auth model, see
+[platform auth](/auth/platform-auth) and the
+[control-plane overview](/control-plane/overview).

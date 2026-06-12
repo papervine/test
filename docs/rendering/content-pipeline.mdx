@@ -1,0 +1,132 @@
+---
+title: Content pipeline
+description: How Papervine syncs a Git repo of MDX into object storage and serves it, including static assets.
+---
+
+Papervine renders from a Git repo, but it never reaches into that repo on the hot path.
+Content flows through a **sync step** that copies a repo into Papervine's own object
+storage; the render plane then reads only from storage. This page describes that flow,
+where things land, and how a push (or a manual re-sync) keeps it fresh.
+
+## The sync flow
+
+A sync runs when a site is first connected, when a `push` webhook arrives, or when an
+operator clicks **Re-sync**. All three paths call the same session-less core,
+`runSync` (`src/lib/sync-runner.ts`) — the webhook's authorization is its signature, not
+a user session.
+
+<Steps>
+  <Step title="Fetch the repo at the target ref">
+    The sync fetches the whole repo as a **single tarball**
+    (`GET /repos/{owner}/{repo}/tarball/{ref}`) and untars it in memory
+    (`src/lib/tar.ts`, a minimal pax-aware reader — no tar dependency). One request beats
+    per-file fetching, whose N round-trips would push a large repo past the serverless time
+    limit. The same endpoint serves public and private repos; for a private repo the
+    installation token (or PAT) authenticates the request.
+  </Step>
+  <Step title="Validate docs.json">
+    The config is parsed against the schema. Because config is a compatibility layer,
+    parsing **warns rather than throws** — see [config](/rendering/config).
+  </Step>
+  <Step title="Copy content and assets into object storage">
+    `docs.json`, every `.md(x)` file, and all referenced assets are uploaded to the site's
+    storage prefix, pool-parallel, with `Content-Type` inferred per extension.
+  </Step>
+  <Step title="Record the synced head">
+    The site row is stamped with `lastSyncedCommitSha`, and a deployment row records the
+    outcome. The render plane keys its cache on that sha (below), so the new content is
+    served immediately.
+  </Step>
+</Steps>
+
+<Info>
+  The long-term goal is to **precompile MDX → serializable bundles at sync time** so the
+  render plane only executes them — no live compilation on the hot path. Today the synced
+  files are compiled on request (reusing the same pipeline). The decision that matters for
+  contributors is *compile-on-sync, not compile-on-request* — see
+  [renderer internals](/rendering/internals).
+</Info>
+
+## Object storage layout
+
+Each site owns a prefix in the bucket, `sites/{id}/…`, holding its `docs.json`, MDX, and
+assets. The render plane reads a site only through the `s3Source` content source (behind
+the `ContentSource` abstraction); the old request-time GitHub fallback is **gone**. A site
+that has not synced has nothing to show — it 404s rather than reaching back to the repo
+live. GitHub is touched only at sync time.
+
+This is why local development seeds its sites into object storage too: docs render exactly
+the same way locally as in production.
+
+## Version-keyed cache, not GitHub-at-request-time
+
+The render path reads config and pages through the Next Data Cache (with a TTL safety net).
+Rather than relying on cache invalidation to serve fresh content after a sync, the
+**content cache key is stamped with the synced head sha** (`lastSyncedCommitSha`, read
+live per request). A new sync writes new keys and therefore serves fresh content with no
+revalidation needed; old versions age out via the TTL.
+
+<Note>
+  Stamping the key on the sha is what makes the **push webhook** correct. The webhook runs
+  its sync in a deferred callback, where cache-tag revalidation does not propagate to the
+  Data Cache — so a tag bust alone would serve stale docs until the TTL self-healed.
+  Version-keying sidesteps that entirely. See [gotchas](/contributing/gotchas).
+</Note>
+
+## Push webhook vs. manual re-sync
+
+<CardGroup cols={2}>
+  <Card title="Push webhook (auto-sync)">
+    A registered GitHub App delivers `push` events to `POST /api/github/webhook`. The route
+    verifies the `X-Hub-Signature-256` HMAC over the raw body, maps the push to the site(s)
+    on that repo + branch, and runs the sync in a deferred callback so GitHub gets a fast
+    `202`. It is idempotent across redeliveries: a head already in `lastSyncedCommitSha` is
+    skipped.
+  </Card>
+  <Card title="Manual re-sync">
+    The **Re-sync** button in the dashboard runs the same `runSync` synchronously. Because
+    there is no per-site lock yet, it **refuses while a sync is already in flight** (guarding
+    the common case of a mid-build re-sync); the button surfaces *"A sync is already in
+    progress."*
+  </Card>
+</CardGroup>
+
+The GitHub App is optional. With no App configured, the webhook rejects every (unsignable)
+delivery and the connect form falls back to a pasted fine-grained PAT. Public repos and
+self-hosters stay zero-config; private repos add the App (or a PAT), whose token flows
+through one seam (`ghHeaders(token?)` in `src/lib/github.ts`) and is encrypted at rest.
+
+<Warning>
+  There is **no sync queue or lock** yet, so two concurrent syncs on the same site (e.g.
+  webhook + manual, or two quick pushes) write to the same storage prefix and a reader can
+  briefly see a torn tree. The manual-path guard and the idempotent sha-skip cover the
+  common cases; a per-site advisory lock or job queue is the real fix.
+</Warning>
+
+## Static assets
+
+Docs reference assets by **absolute path from the repo root** — `![](/img/hero.png)`, and
+the `logo` / `favicon` paths in `docs.json`. Those files live alongside the MDX, outside the
+app, so they are not served from Next's `public/`. `src/middleware.ts` rewrites any request
+whose path ends in a static-asset extension to an asset handler that streams the file with
+the correct `Content-Type` and a path-traversal guard. The `/img/…` URL shape never changes
+regardless of where the bytes actually live.
+
+Assets are served by **proxying from object storage**: a request like
+`{slug}.papervine.io/img/x.png` is rewritten to `/api/tenant-asset/{slug}/…`, whose handler
+reads the object server-side (the bucket stays private, no CORS) and streams it back with a
+cache header so the host CDN edge-caches it.
+
+<Note>
+  Proxying works transparently on custom domains because the page's hostname and the asset's
+  hostname are independent — both resolve to our origin as same-origin `/img/…`, whether the
+  docs live on `{slug}.papervine.io` or a tenant's own `docs.acme.com`, so there is never a
+  CORS step. Serving assets directly from a dedicated bucket-backed host is a possible future
+  optimization, not required at launch.
+</Note>
+
+## Related
+
+- [Renderer internals](/rendering/internals) — the hybrid MDX pipeline that compiles each page.
+- [Config](/rendering/config) — how `docs.json` is parsed leniently during sync.
+- [Architecture](/architecture) — the render plane and control plane, and tenant resolution.

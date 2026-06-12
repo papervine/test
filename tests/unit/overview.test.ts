@@ -2,11 +2,13 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
+  SYNC_INFLIGHT_MS,
   feedParam,
   formatDurationMs,
   partOfDay,
   parseFeedTarget,
   pollDelayMs,
+  syncInFlight,
   timeAgo,
   triggerDetail,
   triggerLabel,
@@ -72,6 +74,19 @@ describe("pollDelayMs (live feed cadence)", () => {
   it("idles slowly when everything is settled", () => {
     expect(pollDelayMs([{ status: "successful" }, { status: "failed" }])).toBe(20_000);
     expect(pollDelayMs([])).toBe(20_000);
+  });
+});
+
+describe("syncInFlight (re-sync concurrency guard)", () => {
+  const now = 1_000_000_000_000;
+  it("treats a fresh building row as in-flight (blocks a concurrent re-sync)", () => {
+    expect(syncInFlight(now - 10_000, now)).toBe(true);
+  });
+  it("treats a stale building row as an orphan (does NOT block — timed-out run)", () => {
+    expect(syncInFlight(now - SYNC_INFLIGHT_MS - 1, now)).toBe(false);
+  });
+  it("is not in flight when there's no building row", () => {
+    expect(syncInFlight(null, now)).toBe(false);
   });
 });
 

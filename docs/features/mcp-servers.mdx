@@ -1,0 +1,114 @@
+---
+title: MCP Servers
+description: Model Context Protocol servers that let AI tools both read a docs site and edit it — a generated read MCP per site and an authoring (write) MCP.
+---
+
+Papervine exposes [Model Context Protocol](https://modelcontextprotocol.io/) servers so AI
+tools can both **read** a docs site and **edit** it — mirroring the incumbent, which ships two
+distinct MCP servers. The two have very different maturity and trust models.
+
+<Info>
+  The **read MCP is shipped**. The **authoring (write) MCP is planned** — it depends on the
+  Git-sync and [platform-auth](/auth/platform-auth) foundations and follows them on the
+  roadmap.
+</Info>
+
+## Generated read MCP (per docs site)
+
+Every published site gets a read MCP server automatically — no authoring step. It is for the
+*readers'* AI tools (Claude, Cursor, Windsurf) and exposes the **same tool layer as the
+[AI assistant](/features/ai-assistant)** — `search_docs`, `read_page`, `list_pages`, and
+`search_api` — over Streamable HTTP at `https://{tenant}/mcp`. One implementation, two
+transports (in-docs chat and MCP).
+
+Connect any MCP-capable tool to `https://<host>/mcp`:
+
+<Steps>
+  <Step title="Point your tool at the endpoint">
+    Add `https://<your-docs-host>/mcp` as a Streamable HTTP MCP server in Claude, Cursor, or
+    Windsurf.
+  </Step>
+  <Step title="The model lists and calls tools">
+    It sees `search_docs`, `read_page`, `list_pages`, and — only when the site references an
+    OpenAPI spec — `search_api`.
+  </Step>
+  <Step title="Retrieval runs over published content">
+    The same index the docs site uses, scoped to that tenant.
+  </Step>
+</Steps>
+
+What ships today:
+
+- **Streamable HTTP server at `/mcp`** (stateless), exposing the four tools. `search_api`
+  appears only when the site has an OpenAPI reference. The tools are the *shared* docs-tools
+  capabilities — the same code the assistant calls.
+- **Tenant-routed and instrumented.** The endpoint serves on the tenant host and resolves the
+  right content source per connection. Each connection logs agent analytics: `search_docs`
+  becomes an MCP-search event and `read_page` becomes an agent page view
+  (`source:"agent"`), which feeds the Agents tab in [Analytics](/control-plane/analytics).
+- **`llms.txt`.** Every site also serves `/llms.txt` and `/llms-full.txt` — the
+  [llmstxt.org](https://llmstxt.org/) index of every page (the `full` variant inlines page
+  bodies), generated from the in-scope content source and logged as agent traffic.
+
+Indexing follows the same [freshness rules](/features/ai-assistant#indexing-and-freshness) as
+the assistant — published pages + OpenAPI specs, excluding hidden/`noindex`.
+
+<Note>
+  Still to come for the read MCP: a `docs.json` opt-out and per-tenant rate limits; live API
+  execution as MCP tools (which depends on the "Try it" auth/proxy work, see the
+  [API playground](/features/api-playground)); and building the index at sync time.
+</Note>
+
+## Authoring MCP (admin / write)
+
+The authoring MCP lets a docs *owner* connect an AI tool to **edit their docs** (matching
+The incumbent's Admin MCP). It is the agent-native counterpart to the web editor: any action an
+owner can take in the dashboard, an agent can take through this MCP.
+
+<Warning>
+  All edits happen on a **session branch** and land via a **Pull Request** — never directly
+  on the deploy branch. The authoring MCP requires a [platform-auth](/auth/platform-auth)
+  token scoped to the org/repo, with a role of **editor or above**.
+</Warning>
+
+The tools, grouped by what they touch:
+
+- **Content** — `read`, `write_page` (full MDX), `edit_page` (targeted), `search`.
+- **Structure** — `create_node` / `move_node` / `update_node` / `delete_node` / `list_nodes`,
+  operating on the recursive `navigation` tree (pages, groups, tabs, anchors, versions).
+- **Config** — `update_config` to edit `docs.json`.
+- **Git** — `checkout` (**must be the first call**), `diff`, `save` (`mode: "pr" | "commit"`),
+  and `discard_session`.
+
+`checkout` opens a `papervine-mcp/<slug>-<sha>` branch off the deploy branch (or attaches to a
+named existing branch) and returns an `editorUrl`.
+
+### One backend, two front-ends
+
+The authoring MCP and the web editor are **not separate write paths**. They operate on the
+**same session branch and the same server-side draft buffer**:
+
+- `checkout`'s response includes an `editorUrl` you can open to "follow along" in the
+  dashboard editor on that same branch.
+- Edits **buffer on the session branch in real time**, persisted server-side across tabs and
+  devices.
+- Nothing reaches the deploy branch until `save` / publish — a **direct commit** if you're on
+  the deploy branch, otherwise a **PR** with a returned link.
+
+The draft buffer is real persistent state, not a commit-on-save shortcut. The build approach
+is to write the authoring layer once — GitHub-App write creds → session branch + draft buffer
+→ `save` as commit-or-PR — and put both the MCP and the [web editor](/control-plane/overview)
+on top of it.
+
+## Read vs. authoring at a glance
+
+<CardGroup cols={2}>
+  <Card title="Read MCP">
+    Auto-generated per site. No auth. Read-only retrieval (`search_docs`, `read_page`,
+    `list_pages`, `search_api`). For docs *readers'* tools. **Shipped.**
+  </Card>
+  <Card title="Authoring MCP">
+    Owner-connected. Platform-auth token, editor+ role. Writes via session branch → PR.
+    For docs *owners*. **Planned.**
+  </Card>
+</CardGroup>

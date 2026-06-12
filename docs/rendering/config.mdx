@@ -1,0 +1,114 @@
+---
+title: docs.json config
+description: How Papervine parses docs.json as a docs.json-compatible compatibility layer and walks its recursive navigation tree.
+---
+
+A single `docs.json` at the repo root configures a Papervine site. It mirrors the incumbent's
+schema so an existing docs.json repo migrates unchanged. The core shape:
+
+```jsonc
+{
+  "$schema": "https://papervine.io/schema.json",
+  "name": "Acme Docs",
+  "theme": "mint",
+  "logo": { "light": "/logo-light.svg", "dark": "/logo-dark.svg" },
+  "favicon": "/favicon.png",
+  "colors": { "primary": "#16A34A", "light": "#4ADE80", "dark": "#15803D" },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          { "group": "Getting Started", "pages": ["index", "quickstart", "guides/auth"] }
+        ]
+      },
+      { "tab": "API Reference", "openapi": "/openapi.yaml" }
+    ],
+    "global": {
+      "anchors": [{ "anchor": "Community", "href": "https://...", "icon": "discord" }]
+    }
+  },
+  "navbar": { "links": [], "primary": { "type": "button", "label": "Dashboard", "href": "..." } },
+  "footer": { "socials": { "github": "https://..." } },
+  "search": { "prompt": "Search docs..." },
+  "ai": { "assistant": true }
+}
+```
+
+## Config is a compatibility layer: warn, don't throw
+
+The single most important rule: **a single unexpected field must never break the site.**
+Parsing lives in `src/lib/config.ts` and is deliberately lenient — every field uses a
+forgiving Zod parse (`.catch`), and unknown top-level keys are **passed through with a
+warning** rather than rejected.
+
+This matters because real docs.json configs use keys and shapes Papervine has not implemented
+yet. Strict validation is the wrong default for a compatibility layer: one over-strict field
+once took down an entire production docs site (a `favicon` declared as a `string` rejected
+the whole config when a repo supplied `{ light, dark }`). The fix — and the policy — is to
+accept the union and warn on anything unrecognized, not hard-fail.
+
+<Warning>
+  Do not "tighten" the config schema by making fields required or by rejecting unknown keys.
+  Lenient parsing is a feature: it is what lets unmodified docs repos render. Add support
+  for a field, or pass it through with a warning — never throw. See
+  [gotchas](/contributing/gotchas).
+</Warning>
+
+<Info>
+  Some keys are accepted but not yet acted on (passed through, ignored at render). Examples
+  seen in real repos include `seo`, `redirects`, `icons`, `integrations`, `contextual`, and
+  `api`. Passing them through harmlessly is the whole point — the site renders, and the keys
+  light up as features land.
+</Info>
+
+## The navigation tree
+
+`navigation` is **one recursive structure**, matching the incumbent's docs.json. It is not a flat
+list of pages — it is a nested tree of *division* types, each of which can contain the next,
+bottoming out in page slugs:
+
+```
+languages → versions → tabs → anchors / dropdowns → groups → pages
+```
+
+A repo uses only the layers it needs. A small site might declare just `groups` at the top
+level; a large multi-language product nests `languages[].versions[].tabs[]…` all the way
+down. Every layer is optional and composable.
+
+`src/lib/nav.ts` walks this tree **fully recursively** over all division types, so the
+sidebar is built correctly no matter how deep the nesting goes. Walking only `tabs` /
+`groups` / `pages` is a bug: a repo that nests its nav under `languages` would render an
+empty sidebar even though its config parsed fine.
+
+<Accordion title="Navigation layers, top to bottom">
+  - **`languages`** — top-level locale split (e.g. `en`, `es`); each language carries its own
+    subtree.
+  - **`versions`** — product/version split within a language.
+  - **`tabs`** — render as a horizontal tab bar; the sidebar is scoped to the active tab.
+  - **`anchors` / `dropdowns`** — labeled links and grouped menus (often global, via
+    `navigation.global`).
+  - **`groups`** — collapsible sidebar sections; support `group.root` and `group.icon`.
+  - **`pages`** — leaf slugs (or further nested groups).
+</Accordion>
+
+## Themes and appearance
+
+`theme` selects a named visual preset — `mint` (default), `maple`, `palm`, `willow`,
+`linden`, `almond`, `aspen`, `sequoia`, or `luma` (the incumbent's set). Each preset is a small
+token bundle (font stack, corner radius, …) defined in `src/lib/theme.ts` and applied as CSS
+variables on `<html data-theme="…">`, so the whole UI re-skins from one config value. An
+unknown theme name falls back to `mint`.
+
+- **`colors`** (`primary` / `light` / `dark`) drives the brand accent independently of the
+  theme preset.
+- **`appearance`** controls light/dark: `{ "default": "light" | "dark" | "system", "strict":
+  boolean }`. `default` sets the initial mode (a stored reader toggle wins; `system` follows
+  the OS), and `strict` hides the light/dark switcher. The default is light, matching the incumbent.
+
+## Related
+
+- [Content pipeline](/rendering/content-pipeline) — `docs.json` is validated during sync.
+- [Renderer internals](/rendering/internals) — the same warn-don't-throw philosophy applied
+  to MDX components.
+- [Components](/rendering/components) — the MDX component library configured by this file.

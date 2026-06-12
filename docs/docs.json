@@ -1,0 +1,56 @@
+{
+  "$schema": "https://papervine.io/schema.json",
+  "name": "Papervine",
+  "description": "Architecture and contributor reference for Papervine — the docs.json-compatible docs platform. These docs are written in Papervine's own format and render in Papervine itself.",
+  "favicon": { "light": "/favicon.ico", "dark": "/favicon.ico" },
+  "colors": { "primary": "#7C3AED", "light": "#A78BFA", "dark": "#5B21B6" },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get started",
+        "pages": ["index", "architecture", "tech-stack"]
+      },
+      {
+        "group": "Rendering",
+        "pages": [
+          "rendering/content-pipeline",
+          "rendering/config",
+          "rendering/components",
+          "rendering/internals"
+        ]
+      },
+      {
+        "group": "Features",
+        "pages": [
+          "features/search",
+          "features/api-playground",
+          "features/ai-assistant",
+          "features/mcp-servers"
+        ]
+      },
+      {
+        "group": "Control plane",
+        "pages": [
+          "control-plane/overview",
+          "control-plane/analytics",
+          "control-plane/automate",
+          "control-plane/exports",
+          "control-plane/danger-zone"
+        ]
+      },
+      {
+        "group": "Auth & access",
+        "pages": ["auth/overview", "auth/platform-auth", "auth/reader-auth"]
+      },
+      {
+        "group": "Contributing",
+        "pages": [
+          "contributing/working-on-papervine",
+          "contributing/testing",
+          "contributing/gotchas",
+          "roadmap"
+        ]
+      }
+    ]
+  }
+}

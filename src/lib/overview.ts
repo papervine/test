@@ -48,6 +48,21 @@ export function pollDelayMs(rows: readonly { status: string }[]): number {
   return rows.some((r) => r.status === "building") ? 2_500 : 20_000;
 }
 
+// A `building` deployment younger than this is treated as a live, in-flight sync; older
+// than this it's an orphan (its serverless function was killed mid-run — no catch flips it
+// to failed), so it must NOT block a fresh re-sync forever. Sized to the sync route ceiling
+// (maxDuration=300s) plus slack.
+export const SYNC_INFLIGHT_MS = 5 * 60_000;
+
+// Is a sync in flight, given the newest `building` row's timestamp (epoch ms, or null if
+// none)? Pure so the re-sync guard's decision is unit-tested, not just the DB action.
+export function syncInFlight(
+  newestBuildingMs: number | null,
+  now: number = Date.now(),
+): boolean {
+  return newestBuildingMs != null && now - newestBuildingMs < SYNC_INFLIGHT_MS;
+}
+
 // Relative "x ago" from an epoch-ms timestamp. Takes ms (not a Date) so it works for both
 // the server-rendered "last updated" line and the client feed's JSON rows.
 export function timeAgo(ms: number, now: number = Date.now()): string {

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { switchSiteHref } from "@/lib/dashboard-nav";
+import { siteMarkGradient } from "@/lib/site-mark";
 
 type SiteOption = { slug: string; name: string };
 
@@ -59,7 +60,7 @@ export function SiteSwitcher({
     return (
       <Link
         href={`/${orgSlug}/connect`}
-        className="mb-3 flex items-center gap-2 rounded-md border border-dashed border-white/[0.12] px-2 py-2 text-sm text-[var(--muted)] transition-colors hover:border-white/20 hover:text-[var(--fg)]"
+        className="db-cta mb-3 flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-white"
       >
         <Plus className="h-4 w-4" />
         New site
@@ -77,7 +78,7 @@ export function SiteSwitcher({
         aria-expanded={open}
         className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
       >
-        <SiteMark name={active.name} />
+        <SiteMark name={active.name} colorKey={active.slug} />
         <span className="truncate text-sm font-medium">{active.name}</span>
         <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 text-[var(--muted)]" />
       </button>
@@ -98,7 +99,7 @@ export function SiteSwitcher({
                 onClick={() => select(s.slug)}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-white/[0.06]"
               >
-                <SiteMark name={s.name} />
+                <SiteMark name={s.name} colorKey={s.slug} />
                 <span className="truncate">{s.name}</span>
                 {isActive && <Check className="ml-auto h-4 w-4 shrink-0 text-[var(--blue)]" />}
               </button>
@@ -110,7 +111,7 @@ export function SiteSwitcher({
           <Link
             href={`/${orgSlug}/connect`}
             onClick={() => setOpen(false)}
-            className="flex w-full items-center justify-center gap-2 rounded-md border border-white/[0.1] px-2 py-2 text-sm text-[var(--muted)] transition-colors hover:border-white/20 hover:text-[var(--fg)]"
+            className="db-cta flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-white"
           >
             <Plus className="h-4 w-4" />
             New site
@@ -122,9 +123,14 @@ export function SiteSwitcher({
 }
 
 // The small gradient square with the site's initial — mirrors the incumbent's switcher mark.
-function SiteMark({ name }: { name: string }) {
+// The gradient is derived per-site from `colorKey` (the slug) so a list of sites reads as
+// distinct colored chips instead of identical blue→violet squares (see lib/site-mark).
+function SiteMark({ name, colorKey }: { name: string; colorKey: string }) {
   return (
-    <span className="grid h-6 w-6 shrink-0 place-items-center rounded bg-gradient-to-br from-[var(--blue)] to-[var(--violet)] text-xs font-bold text-white">
+    <span
+      className="grid h-6 w-6 shrink-0 place-items-center rounded text-xs font-bold text-white"
+      style={{ background: siteMarkGradient(colorKey) }}
+    >
       {name.charAt(0).toUpperCase()}
     </span>
   );

@@ -1,0 +1,69 @@
+---
+title: Introduction
+description: Papervine is an open-source, self-hostable docs.json-compatible docs platform — it renders a docs site from a Git repo of MDX + a docs.json.
+---
+
+Papervine renders a fast, themeable documentation site from a folder of **MDX + a
+`docs.json`**, in a format that is **drop-in compatible with the incumbent**. Point it at an
+existing docs.json repo and it renders unchanged; self-host it anywhere.
+
+<Note>
+  These docs are written in Papervine's own format and render in Papervine itself. The
+  source lives in [`docs/`](https://github.com/papervine/papervine/tree/main/docs) and is
+  crawled in CI as a renderer regression test. If you can read this page, the dogfood works.
+</Note>
+
+## What it is
+
+- **Own your docs.** MDX files in your repo, rendered by software you control. Your content
+  is always just files — there is no proprietary store to get locked into.
+- **docs.json-compatible.** Papervine reads the same `docs.json` + MDX, matching the incumbent's
+  schema and behavior so real repos migrate unchanged. We smoke-test against real-world
+  repos like `papervine/starter`.
+- **Multi-tenant.** One deployment serves many docs sites — each at `{slug}.papervine.io`,
+  a custom domain, or a path-based fallback (`/sites/{slug}`).
+
+## Core principles
+
+These three rules drive most of the architecture. When in doubt, they win.
+
+<CardGroup cols={1}>
+  <Card title="Never let one unsupported feature 500 a page">
+    Unknown MDX components degrade to their children; a compile failure renders an inline
+    notice, not a 500. A single bad page must not take down the site.
+  </Card>
+  <Card title="Config is a compatibility layer: warn, don't throw">
+    A single unexpected `docs.json` field must never break the site. Every field is lenient;
+    unknown keys pass through with a warning.
+  </Card>
+  <Card title="Match the incumbent, don't guess">
+    `docs.json` is docs.json-compatible so real repos migrate unchanged. When unsure how
+    something should behave, check it against a representative docs repo.
+  </Card>
+</CardGroup>
+
+## How these docs are organized
+
+- **[Architecture](/architecture)** — the two deployable planes, tenant resolution, custom
+  domains, and the tech stack.
+- **Rendering** — the [content pipeline](/rendering/content-pipeline) (Git sync),
+  [`docs.json` config](/rendering/config), the [component library](/rendering/components),
+  and the [renderer internals](/rendering/internals) (the hybrid MDX pipeline you must not
+  break).
+- **Features** — [search](/features/search), the [API playground](/features/api-playground),
+  the [AI assistant](/features/ai-assistant), and the [MCP servers](/features/mcp-servers).
+- **Control plane** — the dashboard: [overview](/control-plane/overview),
+  [analytics](/control-plane/analytics), [automate](/control-plane/automate),
+  [exports](/control-plane/exports), and the [danger zone](/control-plane/danger-zone).
+- **Auth & access** — the [two separate auth systems](/auth/overview):
+  [platform auth](/auth/platform-auth) and [reader auth](/auth/reader-auth).
+- **Contributing** — [working on Papervine](/contributing/working-on-papervine),
+  [testing](/contributing/testing), the hard-won [gotchas](/contributing/gotchas), and the
+  [roadmap](/roadmap).
+
+<Info>
+  These docs describe **how the system works** (evergreen reference). For the design
+  *decisions*, dated status notes, and roadmap rationale, see
+  [`SPEC.md`](https://github.com/papervine/papervine/blob/main/SPEC.md); for what does and
+  doesn't render yet versus representative docs repos, see `GAP-REPORT.md`.
+</Info>

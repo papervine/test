@@ -1,0 +1,108 @@
+---
+title: Analytics
+description: Page views, search terms, assistant usage, and a Humans-vs-Agents view — scoped to the active site.
+---
+
+The **Analytics** page reports how a site is used. It is scoped to the **active site** (the
+[dashboard switcher](/control-plane/overview)) and offers a **Humans vs Agents** toggle —
+human visitors versus agent/MCP traffic — plus a **date-range** picker. The
+[AI assistant](/features/ai-assistant) management page links here via its "Get insights"
+card.
+
+## Humans vs Agents
+
+A toggle splits the page into two distinct views.
+
+<Tabs>
+  <Tab title="Humans">
+    Metric cards, a visitors-over-time chart, top pages, and referrals — the standard docs
+    analytics for human readers.
+  </Tab>
+  <Tab title="Agents">
+    A distinct layout for agent/MCP traffic: **Agent Visitors** and **MCP Searches** cards, an
+    Agent-Visitors-Over-Time chart, and **Top pages** plus **Top agents** (Claude, ChatGPT,
+    and so on). Per-page agent volume lives under Top pages — matching the incumbent, the Agents
+    tab keeps just the two headline cards, with no separate agent "Views" card.
+  </Tab>
+</Tabs>
+
+Agent traffic is logged live. User-agent detection names the agent; a `read_page` call or an
+`/llms.txt` fetch counts as an agent page view, and a `search_docs` call counts as an MCP
+search. See the [MCP servers](/features/mcp-servers) and [search](/features/search) pages for
+those surfaces.
+
+## Metric cards
+
+Each card carries a delta versus the previous period:
+
+- **Visitors** — distinct visitors.
+- **Views** — page views.
+- **Assistant** — assistant queries.
+- **Searches** — search intents (see below).
+- **Feedback** — 👍 / 👎 counts.
+
+## Assistant analytics
+
+- **Assistant Usage chart** — daily **Answered vs Unanswered** over the period, with the split
+  spelled out (e.g. "Answered 5 (100%) · Unanswered 0 (0%)").
+- Two tabs over the assistant conversation log, each with **Export to CSV**:
+
+<CardGroup cols={2}>
+  <Card title="Categories">
+    Questions auto-clustered into labeled categories (e.g. "Understanding roles") with an
+    **Occurrence** count and a **last-asked** date; rows expand to the underlying questions.
+    This is the **content-gap engine**: high-occurrence and unanswered questions are the docs
+    to write next. Clustering and labeling run as a scheduled Claude job.
+  </Card>
+  <Card title="Chat history">
+    Every conversation as a **Query** plus timestamp and **Chat length** (turns); a row
+    expands to the full transcript — question, answer, citations, and feedback. Browsable and
+    searchable.
+  </Card>
+</CardGroup>
+
+## Two counting subtleties
+
+Analytics is only as good as what it counts. Two derivations are worth understanding because
+the naive version is wrong.
+
+### Agent visitors are distinct clients, not call counts
+
+**Agent Visitors** is `count(distinct sessionId)` over agent page views — the agent analogue
+of the Humans tab's distinct-visitor metric (which keys off a persisted `localStorage` UUID).
+
+The MCP server is **stateless** (no Redis), so it re-instantiates per tool call. Minting a
+fresh id on each call would count every `read_page` as a *new* visitor — three reads in one
+Claude session would show as "3 Agent Visitors". Instead, `sessionId` is a **stable per-client
+id**: the client's `Mcp-Session-Id` when supplied, otherwise `sha256(agent + UA + IP)` with no
+time component, so it stays stable across the window just like the human UUID. A client's burst
+of calls collapses to one visitor; distinct clients stay distinct.
+
+### Searches count intents, not keystrokes
+
+The reader's search box fetches results on a short keystroke debounce. Logging a `search` event
+for every served query inflated the **Searches** card several-fold — typing `analytics` would
+log eight events (`a`, `an`, `ana`, …) for one search. The debounce is a *fetch* throttle, not
+an analytics trigger.
+
+<Note>
+  Search now logs a single search **intent** via a beacon on settle, result-click, or close —
+  collapsing a refinement chain down to the one query the user meant. A query that extends or
+  trims the pending one is treated as the same evolving search; only a topic switch commits a
+  new event. This mirrors how Algolia/DocSearch separate searches from result clicks and
+  collapse keystroke-level queries server-side.
+</Note>
+
+## Data model
+
+Every assistant turn logs:
+
+```
+{ tenant, ts, question, toolsUsed, retrievedPages, answer,
+  status: answered | deflected | unanswered, feedback,
+  source: human | agent, sessionId }
+```
+
+The assistant overview cards, the usage chart, the categories, and the content gaps all derive
+from this. Analytics is backed by a first-party events table (an `analytics_event` table with
+an `agent` name column), respecting `noindex`/privacy rules and per-tenant retention.

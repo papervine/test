@@ -1,0 +1,99 @@
+---
+title: Reader auth
+description: A docs.json-compatible handshake that gates a customer's published docs for their own end users, without Papervine ever storing reader credentials.
+---
+
+Reader auth (Layer 2) gates a customer's *published docs pages* for *their* end users. The
+key property: **Papervine never runs an identity provider for readers and never stores
+reader credentials.** Instead, we **verify a signed assertion** produced by the customer's
+own login system, then mint a short-lived docs session. The customer's IdP does the hard
+part, so this is a much smaller security surface than real authentication.
+
+The model matches the incumbent's exactly, so an existing incumbent "Authentication &
+Personalization" configuration migrates unchanged. For how this differs from the dashboard
+account system, see [platform auth](/auth/platform-auth) and the
+[auth overview](/auth/overview).
+
+## Handshake methods
+
+A handshake is how a reader who is already logged into the *customer's* app proves it to the
+docs site. Three methods are supported, in build order.
+
+<Steps>
+  <Step title="JWT — the simplest, built first">
+    Each tenant gets an Ed25519 keypair and holds the private key. After a reader logs into
+    the customer's own app, the customer's backend signs a JWT (**EdDSA only**) and redirects
+    the browser to `https://{DOCS_HOST}/login/jwt-callback#{JWT}` — the token rides in the
+    URL **hash**, so it is never written to server logs. Papervine verifies the signature and
+    the `host` claim, then sets its own docs session cookie.
+  </Step>
+  <Step title="OAuth 2.0 (PKCE)">
+    For tenants that already run an OAuth/OIDC server. They expose a user-info `GET` endpoint
+    that returns the same `User` JSON shape; Papervine runs the standard authorization-code +
+    PKCE flow and reads the reader's groups and content from it.
+  </Step>
+  <Step title="Password">
+    A single shared secret, with no per-user identity. The cheapest method to ship and the
+    simplest to configure.
+  </Step>
+</Steps>
+
+### The JWT payload
+
+The signed payload is docs.json-compatible:
+
+```ts
+type User = {
+  host?: string;          // must equal the docs domain — blocks token replay
+  expiresAt?: number;     // docs session length (hours to weeks)
+  groups?: string[];      // drives page access control
+  content?: Record<string, any>;  // personalization, exposed as `user` in MDX
+  apiPlaygroundInputs?: {          // pre-fills API keys in the playground
+    server; header; query; cookie; path;
+  };
+};
+```
+
+<Warning>
+  Two expirations do different jobs. The JWT's own `exp` is kept very short (≤10 seconds) —
+  it is a **one-time handoff**, not a session. The `expiresAt` field is the **docs session**
+  length and can run from hours to weeks. The `host` claim must equal the docs domain so a
+  token signed for one site can't be replayed against another.
+</Warning>
+
+When an unauthenticated reader follows a deep link into a gated page, the flow round-trips
+the intended path through `?redirect=%2Fintended-path` so they land where they meant to after
+the handshake completes.
+
+## Access control
+
+Gating is **default-deny**: every page requires a valid reader session unless explicitly
+opened up.
+
+- **Make a page public** with `public: true` in its frontmatter, or open a whole nav group
+  with `"public": true` in `docs.json`.
+- **Gate by group** with `groups: ["admin"]` in frontmatter — the reader must belong to at
+  least one listed group (groups come from the handshake's `groups` claim).
+
+<Note>
+  Denial returns **404, not 403** — on purpose. A 403 would confirm that a protected page
+  exists at that URL; a 404 leaks nothing.
+</Note>
+
+Enforcement happens at the node-level render chokepoint that serves tenant docs, *before* a
+page renders. That point — rather than edge middleware — is required because the per-site
+auth config is a database read the edge can't do, the same constraint that governs
+custom-domain resolution. A gated site renders only to a reader holding a valid, site-bound
+docs session; otherwise it redirects to that site's `/login`, carrying the intended path.
+
+## Personalization
+
+The `content` blob from the handshake is exposed as a `user` variable in MDX scope (threaded
+through `src/lib/mdx.tsx`), so a page can render conditionally per reader or per group — for
+example, showing different content to an `admin` group.
+
+<Info>
+  Personalization forces **per-request rendering**, which works against compile-on-sync
+  caching. It is therefore sequenced after the core handshake and gating, rather than shipped
+  alongside them. See the [auth overview](/auth/overview) for how the layers are sequenced.
+</Info>

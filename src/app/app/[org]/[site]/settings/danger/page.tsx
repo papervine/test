@@ -12,7 +12,7 @@ export default async function DangerSettingsPage({
   params: Promise<{ org: string; site: string }>;
 }) {
   const { org: orgSlug, site: siteSlug } = await params;
-  const { site, org, role } = await requireSite(orgSlug, siteSlug);
+  const { role } = await requireSite(orgSlug, siteSlug);
 
   const isAdmin = role === "owner" || role === "admin";
   const isOwner = role === "owner";
@@ -32,8 +32,8 @@ export default async function DangerSettingsPage({
 
       <DangerZone
         siteRef={{ org: orgSlug, site: siteSlug }}
-        siteName={site.name}
-        orgName={org.name}
+        siteSlug={siteSlug}
+        orgSlug={orgSlug}
         canDeleteSite={isAdmin}
         canDeleteOrg={isOwner}
       />

@@ -1,0 +1,132 @@
+---
+title: Dashboard overview
+description: How Papervine's control plane is laid out — the app host, the org/site switcher, and the per-site Overview home.
+---
+
+The **control plane** is where you operate a Papervine site: connect a repo, watch syncs,
+read analytics, manage domains, and change settings. It is a separate surface from the
+rendered docs — see [architecture](/architecture) for how the two planes split.
+
+## The app host
+
+The control plane lives on its own host: **`app.papervine.io`** (`app.localhost:3000` in
+local development). Tenant docs render on subdomains or apex paths; the dashboard never
+shares their namespace.
+
+<Info>
+  **Why a dedicated host?** Papervine is one Next.js app with a single route tree across
+  every host. A bare `[org]` segment at the apex root would shadow the docs catch-all —
+  every `/guide`-style docs path would resolve to the dashboard instead of a page. Keeping
+  the control plane on `app.` frees the apex and tenant namespaces entirely for docs.
+</Info>
+
+### Bare URLs, scoped by path
+
+The dashboard is **URL-scoped**, mirroring `app.example.com/{org}/{site}`. A site's home is
+the bare path **`app.papervine.io/:org/:site`** (in dev, `app.localhost:3000/dev-org/starter`).
+The active site is the **URL**, not a cookie — so dashboard URLs are shareable, bookmarkable,
+and work correctly across multiple tabs.
+
+Behind the scenes the route files live at an invisible **`/app` mount**. `middleware.ts`
+Host-rewrites `app.*` bare `/:org/:site` to `/app/:org/:site` — the same rewrite trick tenant
+subdomains use to reach `/sites/{slug}`. It also bounces auth and stray `/app` hits on the
+apex over to the app host, so the session cookie is always set on `app.`.
+
+<Warning>
+  When linking or redirecting within the control plane, use the **public bare** path for
+  links and redirects, and the internal **`/app`** path only for `revalidatePath`. Mixing
+  the two is a bug. Cross-context hops (apex → app, or a server-action redirect into a
+  rewritten path) must use a **client hard-navigation** — a soft RSC nav skips the Host
+  rewrite and lands on the apex. See [gotchas](/contributing/gotchas).
+</Warning>
+
+## The org / site switcher
+
+An organization can own several sites. The **top-left switcher** selects the active site that
+per-site pages (Overview, Analytics, Settings) scope to — mirroring the incumbent's switcher. It
+lists every site you can access plus a **New site** action.
+
+Because the active site is encoded in the URL, switching sites simply navigates: the switcher
+preserves the current sub-page, so jumping from one site's Analytics to another's keeps you on
+Analytics.
+
+Each site shows a small avatar — a colored gradient square with the site's initial. The color
+is derived from the site's slug, so every site gets its own hue and two sites that share a
+first letter still look distinct, making the list easy to scan at a glance.
+
+## The Overview home
+
+The **Overview** is the per-site landing page — the default destination on entering a
+connected site. It is a *consolidation* surface: every panel is a window onto a system
+specified elsewhere (sync, the web editor, domains, [workflows](/control-plane/automate)),
+not a new capability. From top to bottom:
+
+<Steps>
+  <Step title="Greeting">
+    A time-of-day greeting with your first name ("Good afternoon, Jeff"). Cosmetic.
+  </Step>
+  <Step title="Live preview">
+    A scaled, real render of the tenant's home page in an iframe, so you see your live site
+    at a glance.
+  </Step>
+  <Step title="Status & identity panel">
+    The site name and a **Live** status pill (green when the last deploy succeeded; degraded
+    and failed states reuse the deployment status). Shows **Last updated &lt;relative time&gt;
+    by &lt;author&gt;** from the latest deployment, plus quick actions: **Sync** (a manual sync, the same
+    path as Projects' manual sync) and **Open editor**. Below: the **Domain**, the **repo**,
+    and the **branch**.
+  </Step>
+  <Step title="Workflow upsell banner">
+    A dismissible CTA linking into [Automate › Workflows](/control-plane/automate). Shows
+    until the org has configured a workflow.
+  </Step>
+  <Step title="Activity feed">
+    The deployment/sync history, with a **Live / Previews** toggle (live deploys vs per-branch
+    preview builds).
+  </Step>
+</Steps>
+
+### The Activity feed
+
+The feed is the same `deployment`-backed history the control plane already renders; the
+Overview is its home. Each row shows:
+
+- **Actor** — an avatar and name, or a system actor like *Manual Update* or *Creating your
+  site*.
+- **Relative time** — when the deploy ran.
+- **Status** — *Successful* or *failed*. Failures expand to the persisted "Why it failed"
+  reason and stack trace, so the cause is visible to the tenant rather than lost in
+  serverless logs.
+- **Changes** — a commit message and file counts ("11 files added, 27 files edited"). Rows
+  expand for detail.
+
+### Live updates, without realtime infra
+
+A webhook sync that lands while you are on the page **appears without a reload** — and
+resolves *Building → Successful* in place.
+
+There is no realtime infrastructure behind this, and none is needed. The durable
+`deployment` row is the event log: a sync inserts it as `building` *before* the slow work and
+flips it to successful or failed at the end. The client just has to *read* it.
+
+<Note>
+  The feed is a client component seeded with the server-rendered rows (first paint is
+  unchanged; SSR stays the source of truth), polling a bare **`/:org/:site/activity`** JSON
+  endpoint — authorized exactly like the page (session → membership → org-scoped site), so
+  there is no cross-tenant leak. The cadence is **adaptive**: a `building` row means a sync is
+  in flight, so it polls ~2.5s to catch the transition; once everything is settled it idles at
+  ~20s; a backgrounded tab pauses and refreshes on focus.
+</Note>
+
+An in-flight sync's `building` pill **counts up live** ("Building 0:14", with a pulsing dot),
+so a running sync reads as active rather than a static label. This is purely client-side: the
+row already carries its `createdAt`, so the feed ticks a 1s clock (only while something is
+building) and renders the elapsed time. The counter is scoped to *live* runs — an older
+`building` row is treated as a killed or orphaned run and drops the counter rather than
+ticking to infinity.
+
+<Tip>
+  For sub-second feel or *intra-sync* progress (per-file upload, streaming logs), the next
+  step would be a pub/sub layer (Pusher/Ably/Upstash) with the sync runner emitting progress
+  events. Polling's latency floor is the ceiling — not worth paying until then.
+</Tip>

@@ -1,0 +1,90 @@
+---
+title: Automate
+description: Workflows, the Slack agent, and the assistant — the three surfaces where Papervine acts on the docs (roadmap).
+---
+
+The **Automate** rail groups the three surfaces where Papervine *acts on* the docs rather than
+just rendering them: **Workflows**, **Agent**, and **Assistant**. All three mirror the incumbent's
+Automate area and are gated behind a per-org **Trialing** entitlement.
+
+<Note>
+  **This is a roadmap target, not a built feature.** The Automate pages are UI scaffolds — the
+  catalog, onboarding, and empty states render, but none of the toggles, prompts, or inputs
+  post anywhere yet. This page describes the shape we're building *toward*. Where the spec and
+  the implementation diverge, the spec wins; treat everything below as the design intent.
+</Note>
+
+## Why one section
+
+Workflows, Agent, and Assistant all run Claude over the tenant's content with tools, and all
+three write through a **single shared authoring backend**: GitHub-App write credentials → a
+session branch → a draft buffer → `save` as a commit or PR. This is the same pipeline as the
+[authoring MCP](/features/mcp-servers) and the web editor — never a parallel write path.
+
+Building that backend once unblocks all three. Until it exists, these remain scaffolds.
+
+## Workflows
+
+A catalog of scheduled or triggered jobs that open content changes as PRs. Each workflow is
+`{ enabled, trigger (event | cron), config }`; runs land as commits or PRs through the shared
+authoring backend. Two built-in families, plus custom:
+
+<CardGroup cols={2}>
+  <Card title="Self-updating content">
+    `Update from code changes` (watch a source repo and draft doc updates when APIs or features
+    change), `Draft changelog`, `Draft improvements from assistant conversations` (feed the
+    [analytics](/control-plane/analytics) content-gap engine into PRs), and `Draft improvements
+    from user feedback`.
+  </Card>
+  <Card title="Maintenance">
+    `Translate content` (keep configured locales in sync), `Fix broken links`, `Audit SEO
+    metadata`, `Fix grammar & typos`, and `Apply style guide`.
+  </Card>
+</CardGroup>
+
+A **Custom** workflow is a user-defined `{ trigger, prompt, action }`. The page splits into a
+**Configure** tab (the catalog) and a **Workflows** tab (the run history and log).
+
+<Warning>
+  The open risk is the **output quality and auditability** of agent-authored PRs. Because every
+  run lands as a commit or PR through the same pipeline a human uses, the changes are
+  reviewable — but a workflow that drafts low-quality updates at scale is noise. This is the
+  reason the backend is the long pole, not the UI.
+</Warning>
+
+## Agent
+
+An interactive agent reachable from chat. The surface is **Slack-centric** (matching the incumbent,
+which built Agent as a Slack app first): you invoke it with `@papervine <prompt>` in a channel,
+and onboarding's "Send your first message" posts a starter prompt to a Slack channel you pick.
+
+Steady state is a connected Slack app that answers questions and opens doc changes on request.
+It shares the authoring backend with Workflows — the distinction is **interactive (Agent) vs
+scheduled/triggered (Workflows)**, over the same underlying tools.
+
+<Info>
+  **Why Slack.** The reference product treats Agent as "your docs teammate in Slack" — it lives
+  where the team already works rather than as a separate console, and threads give it
+  conversational context and an audit trail for the PRs it opens. Open question: whether to also
+  offer Teams, Discord, or a web console, or keep Slack the canonical home.
+</Info>
+
+The plumbing (none of it built yet) needs a Slack OAuth app and per-org install (bot token), the
+`channels:read` and `chat:write` scopes, a channel allowlist, and an events endpoint for
+`app_mention`.
+
+## Assistant
+
+The management page for the **same in-docs [AI assistant](/features/ai-assistant)**, surfaced
+under Automate. This is not a fourth system — it is the settings surface the assistant calls
+for. The layout:
+
+- A **usage overview** strip (Total questions / Answered properly / Not Answered, each with a
+  vs-last-month delta) plus a "Get insights" card linking to the
+  [Analytics](/control-plane/analytics) deep-dive. The overview is cross-linked, not
+  duplicated.
+- **Status and control** — enable/disable the assistant.
+- **Response handling** — deflection to a support email and a "show help button", with **Search
+  Domains** gated behind an enterprise-plan upsell.
+- **Bot protection** — invisible hCaptcha.
+- **Starter questions** — up to three.

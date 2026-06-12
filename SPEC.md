@@ -321,6 +321,35 @@ so neither `sync.ts` nor the render path changed. All four env vars are optional
 configured the webhook 401s every (unsignable) delivery and the connect form falls back to the
 PAT field — public repos and self-host stay zero-config. See `.env.example` for registration.
 
+> **Cache invalidation is version-keyed, not tag-based (fixed 2026-06-12).** The render path
+> reads config/pages/keys through the Next Data Cache (`unstable_cache`, `src/lib/s3-source.ts`,
+> 1h TTL safety net). Invalidation originally relied solely on `revalidateTag` in `runSync`.
+> That works for the **synchronous** paths (connect, manual Re-sync — server actions in a live
+> request) but **not for the push webhook**: its `runSync` runs in `after()`, where
+> `revalidateTag` doesn't propagate to the Data Cache (the request's revalidation set is
+> committed before the callback runs). Symptom: a push synced fresh content + recorded a
+> "Successful" deployment (DB-driven, cache-independent), yet the docs site served the stale
+> copy until the TTL self-healed. **Fix:** the content cache key is stamped with the synced head
+> sha (`site.lastSyncedCommitSha`, read live via the per-request `getSiteBySlug`), so a new sync
+> writes new keys and serves fresh content with no revalidation needed — old versions age out via
+> the TTL. The `revalidateTag` bust is kept (it still helps a same-sha re-sync drop stale entries
+> promptly) but is no longer load-bearing. This also fixed a latent first-connect bug where
+> `isSynced` cached `false` for the full TTL. Regression: `tests/unit/s3-source-version.test.ts`.
+
+> **Known limitation — no sync queue/lock (2026-06-12).** `runSync` has no mutual exclusion:
+> two concurrent runs on the same site (a manual Re-sync during an in-flight webhook sync, or
+> two pushes in quick succession) both fetch + upload to the **same object-storage prefix**, so
+> their writes interleave and a reader can briefly see a torn tree. The live Activity feed
+> (§10.3) makes in-flight syncs visible, which *invites* a mid-build Re-sync — so as an interim
+> guard, **`resyncSite` refuses while a sync is in flight** (a `building` row younger than the
+> ~5-min function ceiling; older is treated as an orphaned timed-out run so it can't block
+> forever — `syncInFlight`, unit-tested), and the Re-sync button surfaces *"A sync is already in
+> progress."* This only covers the **manual** path; webhook↔webhook and webhook↔manual races are
+> still open. **Real fix (deferred):** a per-site advisory lock (Postgres `pg_advisory_xact_lock`
+> on a hash of the site id) or a proper job queue, so the second sync waits/coalesces instead of
+> racing. Until then the guard + the idempotent `lastSyncedCommitSha` skip keep the common cases
+> safe.
+
 **Private repos — PAT first, GitHub App next (landed 2026-06-10).** The connect flow now
 accepts an optional **fine-grained PAT** (Contents: read) for a private repo. The token is
 encrypted at rest (AES-256-GCM, `src/lib/crypto.ts`, key in `PAPERVINE_ENCRYPTION_KEY`) on the
@@ -704,6 +733,16 @@ Minimum to operate the SaaS:
   tenant-URL gotcha). Tests: `tests/unit/dashboard-nav.test.ts`,
   `tests/e2e/site-switcher.spec.ts`; smoke exercises the app-host edge gate via a
   `Host: app.localhost` header.)*
+  *(Status 2026-06-12: distinct switcher avatars. The little gradient mark next to each
+  site was a single hardcoded blue→violet square, so a multi-site org was a wall of
+  identical purple chips (and two sites sharing an initial — e.g. `large-docs` /
+  `starter` — were indistinguishable). The mark now derives a per-site
+  gradient from a stable key (the **slug**, not the display name, so it survives renames
+  and never collides on a shared first letter) via `siteMarkGradient` (`src/lib/site-mark.ts`):
+  an FNV-1a hash → hue, two-stop HSL gradient tuned to keep the bold white initial legible
+  across the wheel on dark glass. Pure + deterministic (no server/client hydration drift),
+  unit-tested in `tests/unit/site-mark.test.ts`; applied as an inline `background` since
+  Tailwind can't generate arbitrary classes from a runtime value.)*
   *(Status 2026-06-11: marketing/app session bridge. The session cookie stays host-only on
   the app host — sharing it on `.papervine.io` would send the auth token to every tenant docs
   subdomain (an XSS-exfil surface), so it never leaves `app.`. Instead: (1) a logged-in user
@@ -920,6 +959,20 @@ domains/§2, workflows/§10.2), not new capability. Layout, top to bottom:
 > (Pusher/Ably/Upstash) and have `runSync` emit progress events — polling's latency floor and
 > lack of intra-job granularity are the ceiling, not worth paying until then.
 
+> **Active counter (2026-06-12).** An in-flight sync's `building` pill now counts up live —
+> `Building 0:14`, with a pulsing dot — so a running sync reads as *active*, not a static label.
+> Pure client-side: the row already carries `createdAt` (epoch ms), so `ActivityFeed` ticks a 1s
+> clock (only while something is `building` — a quiet feed arms no timer) and renders
+> `Date.now() − createdAt` via `formatElapsed` (m:ss, `src/lib/format-elapsed.ts` — split out
+> standalone so the client component imports it without the server-coupled `overview` helpers,
+> unit-tested). The
+> tick state starts null so SSR and first client paint both show plain "Building" (no hydration
+> mismatch). Scoped to *live* in-flight runs (younger than a 5-min ceiling, the sync route's
+> maxDuration + slack): an older `building` row is a killed/orphaned run, so it drops the counter
+> rather than ticking to infinity. The expanded Duration field shows the same live elapsed instead of "—". No new data,
+> no extra requests — it rides the existing ~2.5s poll. **Verified in-browser** (dark): injected a
+> `building` deploy → pill ticked 1:00 → 2:16, Duration matched.
+
 > **Status (2026-06-10):** built — `/dashboard` is now the per-site Overview, scoped to the
 > active site (§10 switcher). Greeting + a **live-preview iframe** (scaled render of the
 > tenant's home page) + the status/identity panel (Live pill off `site.status`, "Last updated
@@ -982,21 +1035,39 @@ shape of the incumbent/Vercel's danger zone (a "Delete my deployment" section + 
 organization" section, each with a required *reason* and a red action). Two scopes:
 
 - **Delete this site** (the incumbent's "deployment") — owner **or** admin. Drops the `site` row;
-  the Postgres FK cascade takes its `deployment` + `analytics_event` rows. Object storage
-  has no cascade, so the action sweeps `sites/{id}/` explicitly (`deletePrefix`,
-  `src/lib/storage.ts`). Lands on the bare org (`/:org`), which forwards to the next site or
-  the connect form.
+  the Postgres FK cascade takes its `deployment` + `analytics_event` rows. **Two resources
+  don't cascade**, so the action sweeps them by hand *before* the row goes away (it's the
+  only key to find them again): the object-storage prefix `sites/{id}/` (`deletePrefix`,
+  `src/lib/storage.ts`), and — if the site set a custom domain — its attached Vercel
+  project-domain (`removeProjectDomain`), which otherwise leaks a slot against the finite
+  per-project cap (SPEC §2) exactly as a stale un-set would. Both run **best-effort**
+  (logged, never fatal): the user asked to delete, and a leaked prefix/slot is recoverable
+  while a half-deleted, stuck row isn't. Lands on the bare org (`/:org`), which forwards to
+  the next site or the connect form.
 - **Delete this organization** — **owner only** (Better Auth's `organization:delete`
-  permission also enforces it server-side). Sweeps every site's storage prefix, then hands
-  off to `auth.api.deleteOrganization`, whose org-row delete fires our FK cascade (sites →
+  permission also enforces it server-side). Sweeps every site's out-of-band resources
+  (storage prefix **and** Vercel domain, same best-effort cleanup), then hands off to
+  `auth.api.deleteOrganization`, whose org-row delete fires our FK cascade (sites →
   deployments/analytics, installs, members). The user account survives; they land on the app
   root, which forwards to their next org or onboarding.
 
+The out-of-band cleanup decision is a pure helper — `planResourceCleanup(sites)`
+(`src/lib/danger-zone.ts`) folds a set of site rows into `{ storagePrefixes, domainsToDetach }`
+— so both delete paths share it and it's unit-tested without a DB or the network
+(`tests/unit/danger-zone.test.ts`), the same split as `parseDomainStatus` vs. its fetch.
+
 **Two gates, both required.** A non-empty **reason** (persisted — see below) arms the
-section's button; clicking opens a **type-to-confirm** modal (type the exact site/org name,
-case-sensitive, the GitHub/Vercel guard against a fat-fingered irreversible click) that arms
-the final delete. Both checks are pure (`src/lib/danger-zone.ts`: `isReasonValid`,
+section's button; clicking opens a **type-to-confirm** modal (type the exact site/org
+**slug**, case-sensitive, the GitHub/Vercel guard against a fat-fingered irreversible click)
+that arms the final delete. Both checks are pure (`src/lib/danger-zone.ts`: `isReasonValid`,
 `confirmationMatches`, `canDelete`) and unit-tested (`tests/unit/danger-zone.test.ts`).
+**Confirm against the slug, not the display name** — the slug is the identifier the user
+sees in the URL, the subdomain, and the sidebar, while a site's display name can diverge from
+it (a site named `sdfdsf` whose slug deduped to `sdfdsf-3`). Confirming the *name* asked the
+user to type a string they couldn't see anywhere, so the button never armed; the modal now
+takes the slug (`siteSlug`/`orgSlug` straight from the URL params), exactly like GitHub's
+"type the repository name" prints the URL path. The input has no placeholder echoing the
+answer (it read as pre-filled).
 
 - **Route:** `settings/danger/` overrides the `settings/[section]` placeholder for the
   `danger` slug (the same pattern as `domain`/`authentication`). The page (`requireSite`)
@@ -1014,11 +1085,34 @@ the final delete. Both checks are pure (`src/lib/danger-zone.ts`: `isReasonValid
 > **Status (2026-06-11):** built. Verified end-to-end in-browser against the seeded
 > `dev-org`/`starter`: the surface renders both sections (site + the amber "this cannot be
 > undone" org warning), the reason gate disables the button until filled, the type-to-confirm
-> modal disables the final delete until the exact name is typed, and a real site delete
+> modal disables the final delete until the exact slug is typed, and a real site delete
 > removed the row, cascaded its children, recorded the `deletion_feedback` row, and
 > hard-navigated to the next site. Org deletion verified against the same Better Auth
 > `organization/delete` endpoint the action calls — org + sites + members cascade away, the
 > user account remains.
+>
+> **Status (2026-06-12):** fixed a confirm-phrase mismatch. The type-to-confirm asked for the
+> display *name*, but every visible identifier (URL, subdomain, sidebar) is the *slug* — so a
+> site named `sdfdsf` with slug `sdfdsf-3` could never be confirmed (typing what the URL
+> showed never matched the name, and the Delete button never armed). Now confirms the slug
+> (`siteSlug`/`orgSlug` from the URL params), and dropped the input placeholder that echoed
+> the answer (it read as pre-filled). Verified in-browser against the seeded `dev-org`/`starter`
+> (name "Starter Docs", slug `starter`): the modal reads "Type starter to confirm" and the
+> delete arms once the slug is typed.
+>
+> **Status (2026-06-12):** plugged a resource leak on delete. The action swept `sites/{id}/`
+> storage but never detached the site's **Vercel custom domain** — so deleting a site (or org)
+> with a connected domain left the project-domain slot claimed against a finite cap, and since
+> the row delete dropped the only record of the host, it couldn't be found again to detach
+> (an unrecoverable-in-band leak). `removeCustomDomain` already freed the slot on un-set;
+> deletion now does too. Extracted the cleanup *decision* into a pure `planResourceCleanup`
+> (storage prefixes + domains-to-detach for a set of sites) so both delete paths share it and
+> it's unit-tested (the regression: a site with a `customDomain` must appear in
+> `domainsToDetach`). Also made the cleanup **best-effort** — `deletePrefix` could throw and
+> block the row delete, contradicting its own "we still delete the row" comment; now a sweep
+> or detach failure is logged and the delete proceeds. Scoped: the Vercel seam is env-gated
+> (no-op without `VERCEL_TOKEN`, so local/CI unaffected), affecting only hosted-prod sites
+> that set a custom domain.
 
 ---
 

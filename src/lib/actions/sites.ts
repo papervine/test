@@ -2,9 +2,10 @@
 
 import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
-import { eq, like } from "drizzle-orm";
+import { and, desc, eq, like } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { site, githubInstallation } from "@/lib/db/app-schema";
+import { site, githubInstallation, deployment } from "@/lib/db/app-schema";
+import { syncInFlight } from "@/lib/overview";
 import { getSession, listOrganizations } from "@/lib/session";
 import {
   fetchRepo,
@@ -131,14 +132,35 @@ export async function connectRepo(
 // Re-pull a site's repo into object storage. The manual ("Re-sync" button) counterpart
 // to the push webhook (SPEC §3) — both run the same session-less runSync; here the
 // session is the authorization, there it's the verified signature.
-export async function resyncSite(siteId: string): Promise<void> {
+export async function resyncSite(
+  siteId: string,
+): Promise<{ ok: boolean; error?: string }> {
   const session = await getSession();
   const org = (await listOrganizations())?.[0];
-  if (!session || !org) return;
+  if (!session || !org) return { ok: false };
 
   const rows = await db.select().from(site).where(eq(site.id, siteId)).limit(1);
   const s = rows[0];
-  if (!s || s.organizationId !== org.id || !s.repoOwner || !s.repoName) return;
+  if (!s || s.organizationId !== org.id || !s.repoOwner || !s.repoName) {
+    return { ok: false };
+  }
+
+  // INTERIM concurrency guard (SPEC §3 / §10.3): there's no sync queue or lock yet, so two
+  // runSyncs on the same site race on the same object-storage prefix and can leave readers a
+  // torn tree. The live Activity feed now makes in-flight syncs visible, which invites a
+  // re-sync mid-build — so until we add an advisory lock, refuse one while a sync is already
+  // in flight (a `building` row younger than the function ceiling; a stale one is an orphaned
+  // timed-out run and must not block forever). Doesn't cover webhook↔manual races — that's the
+  // real fix below.
+  const [building] = await db
+    .select({ createdAt: deployment.createdAt })
+    .from(deployment)
+    .where(and(eq(deployment.siteId, s.id), eq(deployment.status, "building")))
+    .orderBy(desc(deployment.createdAt))
+    .limit(1);
+  if (syncInFlight(building?.createdAt.getTime() ?? null)) {
+    return { ok: false, error: "A sync is already in progress — give it a moment." };
+  }
 
   try {
     await runSync(s, { actorUserId: session.user.id, trigger: "manual" });
@@ -151,4 +173,5 @@ export async function resyncSite(siteId: string): Promise<void> {
   // cache by the real /app mount, not the rewritten-away public URL). s.organizationId
   // === org.id here, so org.slug is the right org for this site.
   revalidatePath(siteRoute(org.slug, s.slug));
+  return { ok: true };
 }

@@ -1,0 +1,98 @@
+---
+title: Danger zone
+description: Irreversibly delete a site or organization, behind a required-reason gate and a type-to-confirm modal.
+---
+
+**Settings → Danger zone** holds the irreversible deletes, mirroring the shape of
+The incumbent's and Vercel's danger zones — a "delete my deployment" section and a "delete my
+organization" section, each with a required reason and a red action.
+
+<Warning>
+  These actions **cannot be undone.** Deleting a site drops its content and history;
+  deleting an organization removes every site it owns. The two gates below exist precisely
+  because there is no recovery path.
+</Warning>
+
+## Two scopes
+
+<CardGroup cols={2}>
+  <Card title="Delete this site">
+    Owner **or** admin. Drops the `site` row; the Postgres foreign-key cascade takes its
+    `deployment` and `analytics_event` rows. Resources that **don't** cascade are swept by
+    hand first (see below). You land on the bare org (`/:org`), which forwards to the next
+    site or the connect form.
+  </Card>
+  <Card title="Delete this organization">
+    **Owner only** (Better Auth's `organization:delete` permission also enforces this
+    server-side). Sweeps every site's out-of-band resources, then hands off to
+    `auth.api.deleteOrganization`, whose org-row delete fires the FK cascade (sites →
+    deployments/analytics, installs, members). Your **user account survives**; you land on the
+    app root, which forwards to your next org or to onboarding.
+  </Card>
+</CardGroup>
+
+## What gets cleaned up
+
+Deleting a site removes more than its database rows. The foreign-key cascade handles
+everything keyed to the `site` row (deployments, analytics), but two resources live
+**outside** Postgres and have no cascade, so the delete sweeps them explicitly — and it
+does so **before** dropping the row, because the row is the only key to find them again:
+
+- **Object storage** — the site's synced content under `sites/{id}/` (`deletePrefix`,
+  `src/lib/storage.ts`).
+- **Custom domain** — if the site connected one, its attachment to the hosting project is
+  released (`removeProjectDomain`). A project holds a finite number of domain slots, so a
+  delete that skipped this would leak the slot and block reconnecting that host to a new
+  site — the same release that happens when you un-set a domain on the Domain page.
+
+The cleanup is **best-effort**: a storage or domain failure is logged but never blocks the
+delete you asked for. A leaked prefix or domain slot is recoverable after the fact; a
+half-deleted row that won't go away is not. The decision of *what* to clean up for a set of
+sites is a pure helper — `planResourceCleanup` in `src/lib/danger-zone.ts` — shared by both
+the single-site and whole-org paths and unit-tested in isolation.
+
+## Two gates, both required
+
+<Steps>
+  <Step title="Provide a reason">
+    A non-empty **reason** arms the section's button. The reason is persisted — see the exit
+    survey below.
+  </Step>
+  <Step title="Type the exact slug to confirm">
+    Clicking the armed button opens a **type-to-confirm** modal: you must type the exact
+    site or organization **slug**, **case-sensitive**. This is the GitHub/Vercel guard against
+    a fat-fingered irreversible click. Only an exact match arms the final delete.
+
+    The confirm phrase is the **slug**, not the display name — the slug is what you see in the
+    URL, the subdomain, and the sidebar, so it's the identifier you can actually reproduce. A
+    site's display name can diverge from its slug (a site named `sdfdsf` whose slug deduped to
+    `sdfdsf-3`); confirming against the name would ask you to type a string shown nowhere. This
+    matches GitHub's "type the repository name," which prints the URL path you already see.
+  </Step>
+</Steps>
+
+<Note>
+  Both checks are pure functions — `isReasonValid`, `confirmationMatches`, and `canDelete` in
+  `src/lib/danger-zone.ts` — and unit-tested. The UI gates are a convenience; the server
+  actions **re-check the role**, so hiding a section is never the same as gating the action.
+</Note>
+
+## How it's wired
+
+- **Route.** `settings/danger/` overrides the `settings/[section]` placeholder for the
+  `danger` slug — the same pattern as `domain` and `authentication`. The page gates org
+  membership; the **role decides which sections render**, and the server actions re-check that
+  role.
+
+- **Exit survey.** Each delete first records the reason in a `deletion_feedback` row — `scope`,
+  a snapshotted `subjectId` and `subjectName`, the `reason`, and the `actorUserId`. It is
+  deliberately **not** foreign-keyed to the site or org: the whole point is to outlive the
+  deleted thing, so the subject is snapshotted as plain text. It is append-only product
+  feedback ("why are you deleting this?") — nothing in the app reads it yet.
+
+<Warning>
+  **Cross-context redirect.** Like the repo-connect action, the delete actions return a bare
+  `redirectTo` and the client **hard-navigates** (`window.location.assign`). A soft RSC redirect
+  would skip the app-host Host rewrite (the documented tenant-URL gotcha) and land on the apex.
+  See [gotchas](/contributing/gotchas).
+</Warning>

@@ -1,0 +1,71 @@
+---
+title: Exports
+description: Download a whole site as one PDF for offline viewing, rendered through the real MDX pipeline.
+---
+
+**Settings → Exports** lets an owner download the entire site as **one PDF** for offline
+viewing — "Export all content". The incumbent gates this behind Enterprise; Papervine ships it
+ungated.
+
+## Print, not a server-side PDF pipeline
+
+There is no headless-Chromium or PDF-library dependency — both are heavy and awkward on
+serverless. Instead the export is a dedicated **print view** that reuses the real MDX renderer,
+and the browser's *Save as PDF* produces the file.
+
+<Info>
+  This approach is zero-new-deps, serverless-safe, and gives **full fidelity** for free.
+  Because the same [renderer](/rendering/internals) produces the print view, every component
+  comes through — [Cards, Steps, callouts](/rendering/components), Shiki-highlighted code, the
+  lot.
+</Info>
+
+## How it works
+
+<Steps>
+  <Step title="A dedicated export route">
+    `src/app/sites/[site]/export/page.tsx` is a static segment that wins over the docs
+    catch-all, the same way `/login` does. It is reachable on the subdomain host
+    (`{slug}.host/export`, middleware-rewritten here) and via the apex path form
+    (`/sites/{slug}/export`).
+  </Step>
+  <Step title="Enumerate every page in sidebar order">
+    `collectExportPages` (`src/lib/export-content.ts`) is structurally identical to the
+    `llms-full.txt` walk: `listPages()` for the nav-ordered leaves, then `loadPage` for each
+    body. A leaf with no loadable page (an API-group entry, a stale nav reference) is skipped
+    rather than failing the whole export. The walk runs inside the tenant's content context.
+  </Step>
+  <Step title="Render into one print-styled document">
+    `renderExportDoc` stacks every page into a single document with a **cover** (site name +
+    page count) and a `break-before: page` between pages.
+  </Step>
+  <Step title="Save as PDF">
+    A small client toolbar exposes the *Save as PDF* button (hidden from the printout itself).
+  </Step>
+</Steps>
+
+## Always light
+
+The export is a print artifact — black-on-white regardless of the reader's stored theme. The
+print toolbar strips `.dark` from the document so the output is always light mode, and hides
+itself from the printout.
+
+## Access and availability
+
+<Warning>
+  **Auth-gated sites stay gated.** The export route applies the same Layer-2
+  [reader-auth gate](/auth/reader-auth) as the normal renderer — an auth-gated site must not
+  leak its full corpus through `/export`, so an unauthenticated reader is bounced to the site
+  login.
+</Warning>
+
+- **Dashboard link.** The Settings surface links the **apex path-mode** URL
+  (`/sites/{slug}/export`), so one route serves the export on every deploy regardless of
+  wildcard-DNS or custom-domain routing.
+- **Disabled until synced.** The button is disabled while the site is still `draft` — there is
+  nothing to export until the repo has synced at least once.
+
+<Tip>
+  A future server-rendered-PDF pipeline (a true one-click download with no print dialog) could
+  supersede the print view. The print path is the pragmatic, full-fidelity v1.
+</Tip>

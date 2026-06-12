@@ -2,8 +2,10 @@
 
 Papervine is an open-source, multi-tenant **docs.json-compatible docs platform**: it renders a docs site
 from a Git repo of MDX + a `docs.json`. Read [`SPEC.md`](./SPEC.md) for the
-architecture and roadmap, and [`GAP-REPORT.md`](./GAP-REPORT.md) for what does and
-doesn't render yet vs. representative docs repos.
+architecture and roadmap, [`GAP-REPORT.md`](./GAP-REPORT.md) for what does and
+doesn't render yet vs. representative docs repos, and [`docs/`](./docs/) for the evergreen
+"how it works" reference — **written in Papervine's own MDX + `docs.json` format and
+rendered by Papervine itself** (we dogfood; `node tests/crawl.mjs docs` is a CI gate).
 
 This file is the contract for how to work in this repo. Follow it for every change.
 
@@ -22,8 +24,30 @@ A feature/fix is not done until **all** of these pass:
    regressions — `node tests/crawl.mjs <cloned-incumbent-repo>` (expect 0 × HTTP 500).
 6. For control-plane / authed changes: `npm run test:e2e` green (needs docker
    Postgres + MinIO up).
+7. **Documentation reflects the change in both places** — see "Document every change"
+   below. `SPEC.md` gets the decision/status note; `docs/` gets the evergreen reference.
 
 State plainly what you ran and what passed. If something is unverified, say so.
+
+## Document every change (SPEC.md *and* docs/)
+
+Every new feature or behavior change is documented in **two** places — they serve
+different readers, so a change isn't done until both are current:
+
+- **`SPEC.md` — the design log.** The *why*: the decision, the trade-off, the dated status
+  note, the measured result, the roadmap impact. This is where "we chose X over Y because…"
+  and "landed 2026-06-12" live. Keep `GAP-REPORT.md` current here too when you change what
+  renders.
+- **`docs/` — the evergreen reference.** The *how it works*, present tense, no dates. This
+  is Papervine's own docs site (MDX + `docs.json`), so it dogfoods the renderer. Add or
+  update the page under the right nav group in `docs/docs.json`; a brand-new surface gets a
+  new page (and a nav entry). Then **crawl it**: `node tests/crawl.mjs docs` must report
+  0 × HTTP 500 (it's a CI gate). Don't paste SPEC's dated notes into `docs/` — translate
+  the mechanism into evergreen prose.
+
+Rule of thumb: if you wrote a `SPEC.md` status note, you owe a `docs/` page edit, and vice
+versa. New control-plane surface → both. Pure internal refactor with no behavior change →
+neither (a code comment suffices).
 
 ## Always write tests
 
@@ -180,7 +204,8 @@ prefer expand-then-contract.
   only for interactivity (see `src/components/mdx/Tabs.tsx`, `Accordion.tsx`).
 - Match the surrounding code's style, comment density, and naming. Comments explain
   *why* (especially the non-obvious gotchas above), not *what*.
-- Keep `SPEC.md` / `GAP-REPORT.md` current when you make architectural decisions or
-  change what renders — record the decision and the measured result.
+- Keep `SPEC.md` / `GAP-REPORT.md` **and `docs/`** current when you make architectural
+  decisions or change what renders — record the decision and measured result in `SPEC.md`,
+  the evergreen "how it works" in `docs/`. See "Document every change" above.
 - Don't commit unless asked. When you do, end commit messages with the Co-Authored-By
   trailer already used in this repo's history.

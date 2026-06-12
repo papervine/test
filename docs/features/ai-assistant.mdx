@@ -1,0 +1,165 @@
+---
+title: AI Assistant
+description: A conversational assistant that answers questions over a tenant's docs and OpenAPI using agentic retrieval with Claude — not single-shot RAG.
+---
+
+The AI assistant is a slide-out chat panel that answers reader questions from a tenant's own
+docs and OpenAPI spec. It is modeled on the incumbent's "Ask Assistant": the model *navigates*
+the docs to find answers, cites its sources, and admits when it doesn't know.
+
+<Info>
+  A first slice is built: an agentic `/api/assistant` route (Claude via the Vercel AI SDK,
+  calling `searchDocs` / `readPage` / `listPages` / `searchApi` tools), the slide-out panel,
+  the navbar **Ask Assistant** button, the `Cmd/Ctrl-I` shortcut, and the `?assistant=` deep
+  link. A dedicated Sources citation UI, multi-modal attachments, and an embeddings-backed
+  `searchDocs` are in progress. Bring your own `ANTHROPIC_API_KEY` — without it the endpoint
+  returns a graceful `503` and the panel is unavailable.
+</Info>
+
+## Agentic retrieval, not single-shot RAG
+
+A naïve docs bot does one top-`k` vector lookup and stuffs the results into a prompt.
+Papervine's assistant instead **lets the model decide how to search**, iterating with tools
+until it can answer — the same shape the incumbent uses (they describe it as a "virtual
+filesystem over their vector DB" the model navigates with filesystem-like tools).
+
+This is cheap to build because the tools are thin wrappers over capabilities Papervine
+already has — the content loader, the navigation tree, [search](/features/search), and the
+[OpenAPI pipeline](/features/api-playground):
+
+```
+User question ──▶ /api/assistant  (Vercel AI SDK streamText, Claude)
+                    │  loop: the model calls tools until it can answer
+                    ├─ search_docs(query)   → search index (titles / headings / body)
+                    ├─ read_page(slug)      → full MDX for a page
+                    ├─ list_pages()         → the navigation tree
+                    └─ search_api(query)    → OpenAPI operations
+                    ▼
+                 streamed answer + Sources (cited page hrefs / #anchors)
+```
+
+Why tools instead of pure top-`k`:
+
+- **Multi-step retrieval handles vague questions** — the model can refine its own search.
+- **It can read a whole page** when a snippet isn't enough.
+- **One tool layer, many surfaces** — the same tools power the in-docs chat and the
+  [read MCP server](/features/mcp-servers).
+
+<Note>
+  Embeddings are optional for v1. Agentic search runs on the keyword index first — the model
+  iterates to compensate. A `pgvector` semantic backend can be added behind `search_docs`
+  later without changing the tool contract.
+</Note>
+
+### Model
+
+The assistant runs **Claude via the Vercel AI SDK** (`@ai-sdk/anthropic`):
+
+- **`claude-sonnet-4-6`** by default, tuned for cost and latency.
+- **`claude-opus-4-8`** as an optional higher-quality tier.
+
+### Current-page context
+
+The page the reader is currently on is injected into the system prompt as starting context,
+so a question like "how do I do *this*?" resolves locally without the model having to first
+re-discover where the reader is.
+
+### Guardrails
+
+- **Answer only from tool results**, and **cite every claim**.
+- When confidence is low, say "I don't know" and surface the tenant's configurable
+  **deflection email / support contact** rather than guessing.
+- Per-tenant **rate limits and token budgets** cap runaway cost.
+
+## The Ask-Assistant UI
+
+The chat UI is built on [AI Elements](https://elements.ai-sdk.dev/) (shadcn/ui + Vercel AI
+SDK components) rather than hand-rolled, and themed with the same CSS variables as the docs
+site so it matches the surrounding theme:
+
+- **Conversation / Message** — the transcript.
+- **Response** — streaming markdown, including code blocks.
+- **Sources** — the cited pages and `#anchors` under each answer, navigable.
+- **PromptInput** — the "Ask a question…" box, with file/image attach for multi-modal input.
+- **Suggestions** — starter and follow-up questions (see [starter questions](#starter-questions)).
+- **Reasoning / Chain of Thought** — optional, to surface the tool-call and search steps.
+
+The panel slides out from the right (expand + close), opened by an **Ask Assistant** button
+in the navbar, and carries the disclaimer "Responses are generated using AI and may contain
+mistakes."
+
+## Invocation
+
+The assistant matches the incumbent's invocation surfaces:
+
+<CardGroup cols={2}>
+  <Card title="Ask Assistant button">
+    The navbar button opens the panel.
+  </Card>
+  <Card title="Cmd/Ctrl-I">
+    The keyboard shortcut. `Cmd/Ctrl-K` stays [search](/features/search) — the two surfaces
+    are distinct.
+  </Card>
+  <Card title="Ask about this">
+    Highlight text on a page to ask about the selection.
+  </Card>
+  <Card title="Deep link">
+    `?assistant=YOUR_QUERY` on any page auto-opens the panel and asks the question — used for
+    "Ask AI" links and shareable answers.
+  </Card>
+</CardGroup>
+
+## Indexing and freshness
+
+The assistant retrieves over the same content the rest of the site indexes:
+
+- **Published pages + OpenAPI specs** are indexed at [sync time](/rendering/content-pipeline);
+  changed pages are re-indexed on publish.
+- **Hidden / `noindex` pages are excluded** by default. Setting `docs.json`'s
+  `seo.indexing: "all"` includes them (this is the incumbent's exact toggle, and Papervine already
+  parses `hidden` / `noindex` frontmatter).
+
+## Surfaces beyond the docs site
+
+The assistant is not confined to the docs panel:
+
+- **`/api/assistant`** is an SSE endpoint (AI SDK data stream), with a docs.json-compatible
+  alias path so existing integrations port over.
+- It is **embeddable** in external apps and portals; **Slack and Discord bots** are planned.
+- **The tool layer *is* the read MCP server.** `search_docs` / `read_page` / `list_pages` /
+  `search_api` are exactly the tools a generated read-MCP exposes, so the in-docs assistant
+  and the [MCP server](/features/mcp-servers) are one implementation behind two transports.
+
+## Assistant settings (control plane)
+
+Docs owners manage the assistant from a dashboard page (the incumbent's **Automate → Assistant**;
+see the [control plane overview](/control-plane/overview)). The top of the page shows three
+overview cards — *Total questions*, *Answered properly*, *Not answered* — each with a
+month-over-month delta, plus a link through to [Analytics](/control-plane/analytics).
+
+Settings are grouped:
+
+- **Status & control** — an *Assistant Status* enable/disable toggle (Active/Inactive). This
+  is an **operational kill switch** held in the database, not `docs.json`, so it takes effect
+  instantly without a Git commit.
+- **Response handling — Deflection** — a support **email** the assistant points readers at
+  when it can't answer, plus an optional **"Contact support" help button** in the widget.
+  Drives the low-confidence guardrail above.
+- **Search domains** — extra **domains** to include as retrieval context beyond the tenant's
+  own docs (e.g. a marketing site), added/removed with validation.
+- **Bot protection** — an **invisible CAPTCHA** (hCaptcha) toggle on the public
+  `/api/assistant` endpoint to limit automated abuse and runaway token cost.
+- **Starter questions** — up to **3** suggested questions shown in the chat empty state
+  (rendered via AI Elements `Suggestions`).
+- **Plan / credits** — trial banner, per-tenant credit metering, and rate limits. Some
+  controls are plan-gated by config (not hardcoded), so self-hosters get everything.
+
+### Where each setting lives
+
+<Note>
+  **Published behavior** — starter questions, deflection email + help button, search domains
+  — is version-controlled in `docs.json`'s `assistant` block; the dashboard edits it through
+  the [authoring layer](/features/mcp-servers) so it stays in Git. **Operational state** —
+  the enable toggle, CAPTCHA, credits, plan — lives in the database for instant effect.
+  Self-hosters read it all from `docs.json` + environment variables, no dashboard required.
+</Note>

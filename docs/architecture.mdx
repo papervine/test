@@ -1,0 +1,169 @@
+---
+title: Architecture
+description: Papervine runs two planes — a multi-tenant docs renderer and a control plane — that share one codebase.
+---
+
+Papervine is **docs-as-code**: the source of truth is MDX + a `docs.json` in your Git
+repo, never the platform. The deployed app holds no tenant content at build time — content
+is fetched and rendered on demand, with aggressive caching, so a new deploy never requires
+rebuilding every tenant's site. Everything below follows from that: a stateless renderer
+that resolves a tenant per request, and a control plane that syncs Git into a content store
+for the renderer to read.
+
+```
+            Git repo (MDX + docs.json)
+                     │ push webhook
+                     ▼
+   Dashboard ──▶ Control Plane ──▶ Content Store ──▶ Render Plane
+  (settings,      (tenant mgmt,     (Postgres,        (multi-tenant
+   members,        git sync,         object store,     Next.js app:
+   analytics)      domains)          cache)            resolve → render)
+```
+
+## Two deployable planes
+
+Papervine is one Next.js codebase that exposes two surfaces. They can split into separate
+deployments later for scaling, but v1 is a single app with different route groups.
+
+<CardGroup cols={2}>
+  <Card title="Render plane">
+    The public-facing app that serves every tenant's docs site. Stateless, horizontally
+    scalable, reads from the content store. This is where ~99% of traffic goes. Its routes
+    are the docs pages plus `/api/search`, `/api/assistant`, and the playground.
+  </Card>
+  <Card title="Control plane">
+    The dashboard + API for tenant management, Git sync, billing, and analytics. Lower
+    traffic, write-heavy. It owns the [content pipeline](/rendering/content-pipeline) that
+    turns a push into compiled bundles the render plane can serve.
+  </Card>
+</CardGroup>
+
+The two planes are deliberately **themed apart and must never leak into each other**:
+
+- The **docs renderer** is light-first and themed *per tenant* from `docs.json`
+  (`src/lib/theme.ts`, `globals.css`) — see [config](/rendering/config).
+- The **control plane** shares one dark, luminous design language codified in
+  `src/styles/platform.css` (scoped under `.db`) and applied via `<PlatformShell>`. Its UI
+  primitives are [shadcn/ui](https://ui.shadcn.com) mapped onto the `.db` palette — the
+  same choice the incumbent made for their own dashboard. The neutral tokens resolve only inside
+  the `.db` scope, so they cannot bleed into the renderer.
+
+<Note>
+  The control plane lives on its own host (`app.papervine.io`). For how it is mounted and
+  why, and for the host-only session cookie, see the
+  [control-plane overview](/control-plane/overview) and [platform auth](/auth/platform-auth).
+</Note>
+
+## Tenant resolution
+
+Next.js **middleware** (`src/middleware.ts`) inspects the `Host` header and rewrites
+internally so the right tenant renders — without touching the database at the edge. Edge
+middleware classifies by **host suffix only** (`isPlatformHost` / `isAppHost`); anything
+that needs the DB happens downstream in a Node-runtime route.
+
+`resolveTenantSlug` (`src/lib/tenant-host.ts`) reads the host and picks one of two serving
+modes:
+
+<Tabs>
+  <Tab title="Subdomain mode">
+    `{slug}.papervine.io` → tenant by **slug**. Middleware rewrites to
+    `/sites/[tenant]/[...slug]`. This is the primary, production form, and needs a wildcard
+    domain you own plus wildcard TLS.
+  </Tab>
+  <Tab title="Path mode">
+    `apex/sites/{slug}/…` → the same tenant docs reached by **path** on the platform apex
+    (`src/app/sites/[site]`). `resolveTenantSlug(host)` returns `null` on the apex, so the
+    route detects path mode and threads a tenant **base** through nav, MDX links, and the
+    navbar (`withBase`, `src/lib/url-base.ts`) so root-absolute URLs like `/quickstart`
+    stay inside the tenant instead of escaping to the apex.
+  </Tab>
+</Tabs>
+
+The apex, `www`, and reserved labels resolve to the platform landing and control plane —
+**never** a tenant. The `isAppHost` check routes the `app.` host to the control plane.
+
+<Info>
+  Path mode is **additive**, not a downgrade: in subdomain (host) mode the base is empty, so
+  the rendered output is byte-identical. The path form is the fallback when there is no
+  wildcard domain — for example a bare `*.vercel.app` deploy can't get nested TLS — and it
+  doubles as the self-host / no-custom-domain story. When a real domain is added, subdomain
+  serving lights up through the unchanged resolver.
+</Info>
+
+### Keeping config and pages on the same source
+
+Because content is fetched per request, the renderer scopes the active content source with
+request-scoped storage. A single `requestContentSource()` (`src/lib/request-source.ts`)
+resolves the tenant source from the `x-papervine-site` header (stamped by middleware for
+both subdomain rewrites and apex path mode), or from the host. The **root layout and the
+page both** read config inside that scope, so the sidebar (built from `docs.json`) and the
+page body always come from the same tenant — not the platform's default content.
+
+The API routes need the same care: middleware does **not** rewrite `/api/*`, so
+`/api/search` and `/api/assistant` resolve their source explicitly via
+`requestContentSource(site)` and run their whole body (including streaming tool calls)
+inside that scope. In path mode the request hits the apex with no tenant in the host, so the
+client passes the active slug explicitly (`?site=` / body `site`). See
+[search](/features/search) and the [AI assistant](/features/ai-assistant).
+
+## Custom domains (BYO `docs.acme.com`)
+
+There are two **independent** domain systems. Don't conflate them.
+
+<Steps>
+  <Step title="*.papervine.io — our domain, one wildcard cert">
+    Because we control the DNS for `papervine.io`, the host platform can auto-issue a single
+    wildcard TLS cert. Pointing the nameservers at the host lets it complete a DNS-01
+    challenge for `*.papervine.io`. A wildcard CNAME at a registrar is **not** enough — the
+    wildcard cert only issues when the host controls DNS.
+  </Step>
+  <Step title="docs.acme.com — the customer's domain, a cert per host">
+    A custom domain lives under the **customer's** nameservers, which we never control, so
+    the wildcard trick can't apply — each custom domain needs its own cert. The customer adds
+    a `CNAME docs.acme.com → {branded target}` (apex domains use an `A` record, since you
+    can't CNAME an apex); we attach the domain to the project; the platform issues a per-host
+    cert via HTTP-01, with no nameserver change from the customer.
+  </Step>
+  <Step title="Verify, then route">
+    We poll until the cert verifies. A live check (`GET {domain}/api/site-identity`) confirms
+    the cert issued *and* that middleware maps the host to the right slug — strictly stronger
+    than a DNS-only verified flag — then flips the dashboard badge to **Connected**. From
+    then on, the middleware's third branch resolves the host to a site via
+    `getSiteByCustomDomain(host)` and renders through the same `renderTenantDocs()` path as
+    everything else.
+  </Step>
+</Steps>
+
+Owners connect or remove a domain and choose **root** vs **`/docs`** hosting
+(`customDomainSubpath`) at **Settings → Domain setup**. In `/docs` mode the route owns only
+the `/docs/*` subtree, so the customer keeps their apex for other purposes. A custom-domain
+request never goes through `/sites` — the slug isn't known at the edge — so middleware
+forwards the raw host (`x-papervine-host`) and rewrites to a dedicated
+`/custom-domain/[[...path]]` route (Node runtime, has DB) that resolves the site or returns
+`notFound()`.
+
+<Tip>
+  **Why a branded CNAME target, not the host's edge directly.** Customers CNAME at a record
+  in *our* zone (e.g. `cname.papervine.io → cname.vercel-dns.com`). That indirection means we
+  can re-point one record on our side at migration time instead of asking every customer to
+  edit their DNS. The target is operator-configurable (`CUSTOM_DOMAIN_CNAME_TARGET`), so the
+  open-source code hardcodes no operator domain — a self-hoster sets their own.
+</Tip>
+
+<Warning>
+  Attaching each customer domain to the hosting project hits a per-project domain cap (~50
+  on Vercel Pro). Papervine doesn't get trapped: tenant resolution already keys off the host
+  header, so the platform never needs to know individual customer domains. Phase 2 (around
+  40–50 custom domains) fronts custom-domain traffic with a SaaS-domains proxy that issues a
+  cert per hostname and forwards to one origin under our wildcard, passing the real host in
+  `X-Forwarded-Host`. Because customers CNAME at the **branded** target, that cutover is a
+  zero-customer-DNS-change re-point for the CNAME majority. Build the proxy only when the cap
+  is in sight.
+</Warning>
+
+## Where to go next
+
+- [Tech stack](/tech-stack) — the chosen building blocks and the monorepo layout.
+- [Content pipeline](/rendering/content-pipeline) — how a Git push becomes compiled bundles.
+- [Renderer internals](/rendering/internals) — the hybrid MDX pipeline that never 500s.
+- [Introduction](/) — the project at a glance.

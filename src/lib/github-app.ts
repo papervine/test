@@ -125,6 +125,47 @@ export async function fetchInstallation(
   return { accountLogin: data.account?.login ?? "" };
 }
 
+export type InstallRepo = { owner: string; name: string; fullName: string };
+
+// The repos an installation can access (Git settings' Repository dropdown + the
+// "Installed organizations" tag list). Uses the installation token — the App only ever
+// sees repos the owner granted it, which is exactly the set we want to offer. Paginates
+// to a cap; returns [] on any failure (no token / suspended install) so the caller shows
+// the stored repo rather than an error.
+export async function listInstallationRepos(
+  installationId: number,
+): Promise<InstallRepo[]> {
+  const token = await getInstallationToken(installationId);
+  if (!token) return [];
+  const repos: InstallRepo[] = [];
+  for (let page = 1; page <= 5; page++) {
+    const res = await fetch(
+      `${API}/installation/repositories?per_page=100&page=${page}`,
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: "application/vnd.github+json",
+          "user-agent": "papervine",
+        },
+      },
+    );
+    if (!res.ok) break;
+    const data = (await res.json()) as {
+      repositories?: Array<{ name: string; full_name: string; owner: { login: string } }>;
+    };
+    const batch = data.repositories ?? [];
+    repos.push(
+      ...batch.map((r) => ({
+        owner: r.owner.login,
+        name: r.name,
+        fullName: r.full_name,
+      })),
+    );
+    if (batch.length < 100) break;
+  }
+  return repos;
+}
+
 // The page we send owners to to install the App (the connect UI's "Install" button).
 // `state` round-trips through GitHub back to our setup callback so we can tie the
 // resulting installation to the org that started the flow.

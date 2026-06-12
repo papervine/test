@@ -1,0 +1,156 @@
+---
+title: Working on Papervine
+description: The contributor contract — definition of done, how to drive the app, the GitOps migration flow, the command reference, and code conventions.
+---
+
+Papervine is an open-source, multi-tenant **docs.json-compatible docs platform**: it renders a docs site from a
+Git repo of MDX + a `docs.json`. This page is the contract for how to work in the repo —
+follow it for every change. Start with the [architecture](/architecture) overview for the
+big picture, and [renderer internals](/rendering/internals) for how MDX actually renders.
+
+## Definition of done
+
+A feature or fix is not done until **all** of these pass. State plainly what you ran and
+what passed — if something is unverified, say so.
+
+<Steps>
+  <Step title="Typecheck is clean">
+    `npm run typecheck` — TypeScript strict, no errors.
+  </Step>
+  <Step title="The smoke test is green">
+    `npm test` boots the real renderer against fixtures and asserts no page 500s.
+  </Step>
+  <Step title="A regression test exists for what you changed">
+    At the right layer — unit, smoke, or e2e. See [testing](/contributing/testing).
+  </Step>
+  <Step title="Verified in a real browser">
+    Screenshot the affected page (`agent-browser`, light **and** dark mode if visual).
+    Don't claim a UI change works from the DOM alone — layout bugs (e.g. the Card `h-full`
+    height bug) only show visually.
+  </Step>
+  <Step title="Renderer / config / nav changes: crawl a representative docs repo">
+    `node tests/crawl.mjs <cloned-incumbent-repo>` — expect 0 × HTTP 500.
+  </Step>
+  <Step title="Control-plane / authed changes: e2e is green">
+    `npm run test:e2e` (needs docker Postgres + MinIO up).
+  </Step>
+</Steps>
+
+<Tip>
+  Regression protection is a hard requirement, not optional. If you added a pure helper,
+  unit-test it. If you fixed a render bug, add a fixture. See [testing](/contributing/testing)
+  for which layer fits.
+</Tip>
+
+## Driving the app to test it
+
+When a change needs hands-on verification (DoD step 4, or someone says "go test this"),
+don't hand-walk signup → onboarding. Seed a known account and drive a real browser.
+
+<Steps>
+  <Step title="Bring up local infra">
+    ```bash
+    docker compose up -d        # Postgres (+pgvector) + MinIO (S3)
+    ```
+  </Step>
+  <Step title="Seed a known account">
+    ```bash
+    npm run db:seed
+    ```
+    `scripts/seed-dev.mjs` creates the login **`dev@papervine.local`** /
+    **`dev-password-123`**, an org, and a connected site `starter` (→ `papervine/starter`)
+    with activity + analytics data. It is idempotent (re-run to refresh the password) and
+    **prod-guarded** — it refuses any non-localhost `DATABASE_URL`.
+  </Step>
+  <Step title="Log in on the app host">
+    The control plane lives on the **`app.` host**. Log in at
+    **`http://app.localhost:3000/login`**; the dashboard is at bare
+    **`app.localhost:3000/:org/:site`** (seed → `app.localhost:3000/dev-org/starter`). New
+    site at `/:org/connect`.
+  </Step>
+  <Step title="Open the rendered docs">
+    Tenant docs render at **`{slug}.localhost:3000`** (subdomain mode) or **`/sites/{slug}`**
+    (apex path mode). `resolveTenantSlug` picks the mode off the `Host` header; `isAppHost`
+    picks the control plane.
+  </Step>
+</Steps>
+
+<Note>
+  The apex (`localhost:3000`) is marketing + docs and bounces auth paths to the app host.
+  Drive everything with **`agent-browser`** (the repo standard — `open` / `snapshot -i` /
+  `click @eN` / `fill` / `screenshot`; it navigates `app.localhost` and `{slug}.localhost`
+  fine) or Playwright. This is the same loop that catches per-request content-source bugs:
+  connect a repo, open its docs, confirm the sidebar and pages are the tenant's, not the
+  platform's.
+</Note>
+
+## Database migrations (GitOps)
+
+The schema is **versioned** — every change is a committed SQL migration, never a live
+`push`. Pushing the migration *is* shipping it.
+
+<Steps>
+  <Step title="Edit the Drizzle schema">
+    `src/lib/db/schema.ts` is Better Auth (regeneratable); `src/lib/db/app-schema.ts` is
+    our tables.
+  </Step>
+  <Step title="Generate the migration">
+    ```bash
+    npm run db:generate
+    ```
+    Writes `drizzle/NNNN_*.sql` (+ `meta/`). **Commit it** and review the SQL like any code.
+  </Step>
+  <Step title="Apply it locally">
+    ```bash
+    npm run db:migrate
+    ```
+    CI's e2e rebuilds `papervine_test` from these same files, so a broken migration fails CI.
+  </Step>
+  <Step title="Prod applies on deploy">
+    `vercel.json`'s build command runs `drizzle-kit migrate` before `next build`, so each
+    Vercel preview migrates its own Neon branch. No manual prod steps, no `push --force`.
+  </Step>
+</Steps>
+
+<Warning>
+  Destructive changes (drop / rename) need care: generate, **read the SQL**, and prefer
+  expand-then-contract. Drizzle's journal lives in a separate `drizzle` schema — a full
+  local reset is `DROP SCHEMA public CASCADE; DROP SCHEMA drizzle CASCADE; CREATE SCHEMA
+  public;` then migrate.
+</Warning>
+
+## Command reference
+
+```bash
+docker compose up -d        # local Postgres (+pgvector) + MinIO (S3) for the control plane
+npm run dev                 # serve the app (singleton: reuses a running server, so parallel agents can't corrupt .next)
+npm run dev:fresh           # kill the dev server, wipe .next, restart clean (use when chunks/manifests are corrupted)
+npm run build               # production build
+npm run typecheck           # tsc --noEmit
+npm test                    # smoke: renderer + control-plane gate (zero-dep, no DB)
+npm run test:unit           # vitest — pure-logic unit tests
+npm run test:e2e            # playwright — authed journeys (needs docker Postgres + MinIO)
+npm run db:generate         # generate a versioned SQL migration from schema changes
+npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
+node bin/papervine.mjs dev <dir>     # preview any docs repo (docs dev analogue)
+node tests/crawl.mjs <dir>           # crawl a real repo, report rendered/degraded/500
+```
+
+## Conventions
+
+- **TypeScript strict, App Router / RSC.** Server components by default; add `"use client"`
+  only for interactivity (see `src/components/mdx/Tabs.tsx`, `Accordion.tsx`).
+- **Match the surrounding code** — its style, comment density, and naming. Comments explain
+  *why* (especially the [gotchas](/contributing/gotchas)), not *what*.
+- **Keep `SPEC.md` and `GAP-REPORT.md` current** when you make an architectural decision or
+  change what renders — record the decision and the measured result.
+- **Don't commit unless asked.** When you do, end commit messages with the `Co-Authored-By`
+  trailer already used in this repo's history.
+
+<Info>
+  Two principles guide every renderer change: **never let one unsupported feature 500 a
+  page** (unknown components degrade to their children; compile failures render an inline
+  notice), and **config is a compatibility layer — warn, don't throw**. `docs.json` is
+  docs.json-compatible, so real repos migrate unchanged. When unsure how something should
+  behave, check against a representative docs repo rather than guess.
+</Info>

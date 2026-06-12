@@ -3,6 +3,7 @@ import {
   isReasonValid,
   confirmationMatches,
   canDelete,
+  planResourceCleanup,
 } from "@/lib/danger-zone";
 
 describe("isReasonValid", () => {
@@ -39,5 +40,40 @@ describe("canDelete", () => {
     expect(canDelete("", "acme", "acme")).toBe(false);
     expect(canDelete("leaving", "acm", "acme")).toBe(false);
     expect(canDelete("  ", "acme", "acme")).toBe(false);
+  });
+});
+
+describe("planResourceCleanup", () => {
+  it("always sweeps a site's storage prefix", () => {
+    expect(planResourceCleanup([{ id: "abc", customDomain: null }])).toEqual({
+      storagePrefixes: ["sites/abc/"],
+      domainsToDetach: [],
+    });
+  });
+
+  it("detaches the custom domain when one is set (the deletion-leak regression)", () => {
+    expect(
+      planResourceCleanup([{ id: "abc", customDomain: "docs.acme.com" }]),
+    ).toEqual({
+      storagePrefixes: ["sites/abc/"],
+      domainsToDetach: ["docs.acme.com"],
+    });
+  });
+
+  it("collects across every site (org delete) and skips the domainless ones", () => {
+    const plan = planResourceCleanup([
+      { id: "s1", customDomain: "docs.one.com" },
+      { id: "s2", customDomain: null },
+      { id: "s3", customDomain: "docs.three.com" },
+    ]);
+    expect(plan.storagePrefixes).toEqual(["sites/s1/", "sites/s2/", "sites/s3/"]);
+    expect(plan.domainsToDetach).toEqual(["docs.one.com", "docs.three.com"]);
+  });
+
+  it("is a no-op for an org with no sites", () => {
+    expect(planResourceCleanup([])).toEqual({
+      storagePrefixes: [],
+      domainsToDetach: [],
+    });
   });
 });

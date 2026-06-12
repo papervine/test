@@ -1,0 +1,73 @@
+---
+title: Authentication overview
+description: Papervine has two completely separate auth systems — platform auth for our customers and reader auth for their end users.
+---
+
+Papervine runs **two completely separate authentication systems**. They have different
+users, different urgency, and different security surfaces. Keeping them apart is the most
+important idea on this page — conflating them is the easiest way to over-build, because each
+layer's hard problem is the other layer's non-problem.
+
+- **Layer 1 — Platform auth** signs *our customers* into the Papervine dashboard. We are the
+  identity provider here: we own accounts, organizations, and roles.
+- **Layer 2 — Reader auth** gates *our customers' published docs pages* for *their* end
+  users. We never run an identity provider for readers — the customer's own login system
+  does, and we only verify a signed assertion it hands us.
+
+## The two layers at a glance
+
+| | **Layer 1 — Platform auth** | **Layer 2 — Reader auth** |
+|---|---|---|
+| Who logs in | Our customers (docs owners and their team) | Our customers' *readers* (their end users) |
+| What it protects | The Papervine dashboard / control plane | Published docs *pages* (private, internal, or gated docs) |
+| Who owns identity | **We do** — we are the IdP | **The customer does** — we only *verify* an assertion |
+| Who needs it | Every tenant; a prerequisite for multi-tenancy | Only some tenants (typically enterprise) |
+| Maps to the incumbent | Their dashboard account | Their "Authentication & Personalization" |
+
+The asymmetry in the last two rows is why the layers stay separate. Platform auth is
+table stakes — nothing multi-tenant works until a customer can sign in, create an
+organization, and connect a repo. Reader auth is an opt-in feature most sites never turn on,
+and it carries a much smaller security surface because the customer's identity provider does
+the hard part.
+
+<CardGroup cols={2}>
+  <Card title="Platform auth" href="/auth/platform-auth">
+    How our customers and their teammates sign into the dashboard: Better Auth,
+    organizations, roles, and the host-only session cookie.
+  </Card>
+  <Card title="Reader auth" href="/auth/reader-auth">
+    The docs.json-compatible handshake that gates a customer's published docs for their own
+    end users, without us ever storing reader credentials.
+  </Card>
+</CardGroup>
+
+## How the two layers are sequenced
+
+Because the layers serve different needs, they ship in order of necessity rather than
+together. Platform auth comes first and unconditionally; reader auth follows as customers
+ask for it.
+
+<Steps>
+  <Step title="v1 — Platform auth only">
+    Layer 1 lands first: [Better Auth](https://www.better-auth.com/) with its
+    `organization` plugin, email/password sign-in (GitHub OAuth as a fast-follow), a
+    middleware session check, role-based access control, and repo connection. The public
+    renderer can go live as a single-tenant site *before* this — auth does not block getting
+    online — but nothing multi-tenant works without it.
+  </Step>
+  <Step title="v2 — Reader auth, JWT first">
+    Layer 2 arrives when the first paying customers ask for gated docs: the **JWT**
+    handshake plus `public:` and `groups:` page gating. Per-user personalization (exposing a
+    `user` variable in MDX) follows after that.
+  </Step>
+  <Step title="Enterprise — SSO and scale">
+    When a deal demands it: WorkOS SAML/SSO *into the platform* (Layer 1), the OAuth 2.0
+    reader handshake (Layer 2), and per-user personalization at scale.
+  </Step>
+</Steps>
+
+<Note>
+  These layers compose: an enterprise customer signs into the dashboard with Layer 1, and
+  *configures* Layer 2 there to gate the docs their own readers see. The reader never touches
+  Papervine's platform accounts, and a platform user never needs a reader session.
+</Note>

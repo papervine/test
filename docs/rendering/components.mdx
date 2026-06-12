@@ -1,0 +1,123 @@
+---
+title: Component library
+description: The v1 MDX components Papervine ships — cards, tabs, steps, callouts, code groups, accordions, and frames.
+---
+
+Papervine ships a styled set of MDX components, resolved at compile time, matching
+The incumbent's so real repos render unchanged. This page describes each v1 component and what
+it is for. Because these docs render in Papervine itself, several are demonstrated inline.
+
+<Note>
+  Unknown components never crash a page — they degrade to their children. This page covers
+  the supported set; see [renderer internals](/rendering/internals) for how the fallback
+  works.
+</Note>
+
+## Cards
+
+`<Card>` is a linkable panel with an optional icon and title; `<CardGroup>` arranges cards in
+a responsive grid (`cols`). Use them for navigation hubs and feature overviews. (`<Columns>`
+is the incumbent's current name for the grid; `<CardGroup>` is the legacy alias.)
+
+<CardGroup cols={2}>
+  <Card title="Linkable" icon="link">
+    A card can wrap a link, turning the whole panel into a navigation target.
+  </Card>
+  <Card title="Grouped">
+    `<CardGroup cols={2}>` lays cards out in a grid that reflows on small screens.
+  </Card>
+</CardGroup>
+
+## Tabs
+
+`<Tabs>` with `<Tab>` children renders tabbed content — switch between alternative views
+without leaving the page. Common for showing the same task in different languages or
+platforms.
+
+<Tabs>
+  <Tab title="npm">
+    Install with `npm install`.
+  </Tab>
+  <Tab title="pnpm">
+    Install with `pnpm add`.
+  </Tab>
+</Tabs>
+
+## Steps
+
+`<Steps>` with `<Step>` children renders a numbered walkthrough — sequential instructions
+with automatic numbering and connecting rail. Use for setup guides and ordered procedures.
+
+<Steps>
+  <Step title="Connect a repo">
+    Point Papervine at a Git repo of MDX + `docs.json`.
+  </Step>
+  <Step title="Sync">
+    Papervine copies the repo into object storage.
+  </Step>
+  <Step title="Render">
+    Your docs site is live.
+  </Step>
+</Steps>
+
+## Callouts
+
+Callouts highlight an aside with a colored panel and icon. Four variants ship in v1, each
+signaling a different intent:
+
+<Note>`<Note>` — a neutral aside; supplementary information.</Note>
+<Info>`<Info>` — context or background worth knowing.</Info>
+<Tip>`<Tip>` — a helpful suggestion or shortcut.</Tip>
+<Warning>`<Warning>` — something that can bite you; read before proceeding.</Warning>
+
+## CodeGroup
+
+`<CodeGroup>` wraps several code blocks into a single tabbed widget — one tab per block,
+labeled by the block's language (or title). Use it to present the same snippet across
+languages or tools.
+
+<CodeGroup>
+```bash Terminal
+papervine dev ./docs
+```
+
+```js config.js
+export default { theme: "mint" };
+```
+</CodeGroup>
+
+Individual code blocks get Shiki syntax highlighting (dual light/dark theme), a copy button,
+optional titles, and line highlights.
+
+## Accordion
+
+`<Accordion>` is a single collapsible disclosure; `<AccordionGroup>` stacks several so they
+can share a section. Use them to hide secondary detail (FAQs, advanced options) until the
+reader expands it.
+
+<AccordionGroup>
+  <Accordion title="What is collapsed by default?">
+    Accordions start closed, keeping the page scannable until a reader opens one.
+  </Accordion>
+  <Accordion title="When to group">
+    Use `<AccordionGroup>` for a related set, like a FAQ list.
+  </Accordion>
+</AccordionGroup>
+
+## Frame
+
+`<Frame>` wraps an image or embed in a bordered container with an optional caption. Use it to
+present screenshots and diagrams consistently, with framing and centering handled for you.
+
+## Beyond v1
+
+Larger docs repos use more components — `<ParamField>` / `<ResponseField>` for API docs,
+`<Expandable>`, `<Update>`, `<Icon>`, `<Tooltip>`, Mermaid diagrams, and others. Coverage
+expands over time; until a component is implemented, it degrades gracefully to its children
+rather than failing the page.
+
+## Related
+
+- [Renderer internals](/rendering/internals) — how components resolve and how unknown ones
+  fall back.
+- [Config](/rendering/config) — themes and brand colors that style these components.

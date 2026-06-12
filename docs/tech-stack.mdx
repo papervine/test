@@ -1,0 +1,103 @@
+---
+title: Tech stack
+description: The building blocks Papervine is made of, and how the monorepo is laid out.
+---
+
+Papervine is built from scratch on Next.js rather than on an existing docs framework:
+multi-tenancy and full control over the renderer outweighed the head start a framework would
+have given. It still borrows OSS building blocks where they earn their place — `@mintlify/mdx`
+for compile-fidelity, `@scalar/openapi-parser` for OpenAPI — but owns the parts that make it
+a multi-tenant platform.
+
+<Info>
+  Prior art studied before deciding to build from scratch: Fumadocs, unmint, Scalar, Nextra,
+  and Docusaurus. The rationale and measured trade-offs live in `GAP-REPORT.md`.
+</Info>
+
+## The stack
+
+| Layer | Choice | Why |
+|---|---|---|
+| Framework | **Next.js** (App Router, RSC) | Matches the incumbent; multi-tenant middleware; streaming render |
+| Language | **TypeScript**, strict | |
+| MDX | **Hybrid**: `@mintlify/mdx` `serialize` + `@mdx-js/mdx` `run` | the incumbent-fidelity highlighting/snippets, plus a catchable render that never 500s |
+| Syntax highlighting | **Shiki** (via `@mintlify/mdx`) | Fast, accurate, dual light/dark themes |
+| API reference | `@scalar/openapi-parser` + a native renderer | In-nav endpoint pages, not a foreign embed |
+| CLI | `papervine dev <dir>` (`bin/papervine.mjs`) | Preview any MDX + `docs.json` repo locally — the `docs dev` analogue |
+| Styling | **Tailwind CSS** + CSS variables | Theme tokens come from `docs.json` |
+| Search | **Orama** (Algolia optional) | Embeddable, multi-tenant |
+| Database | **Postgres** + `pgvector` (hosted: **Neon**) | Tenants, config, embeddings; serverless Postgres for the Vercel deploy |
+| Cache | **Redis** | Domain→tenant map, page cache |
+| Object storage | **S3 API** (hosted: **Cloudflare R2**, local: **MinIO**) | Compiled bundles and assets, behind a pluggable `S3_ENDPOINT` |
+| Queue / workers | **BullMQ** / serverless functions | Git sync jobs |
+| AI | **Vercel AI SDK** + `@ai-sdk/anthropic` (Claude) | The agentic [AI assistant](/features/ai-assistant) |
+| Platform auth | **Better Auth** (+ `organization`) | OSS, self-hostable; orgs + RBAC |
+| Hosting | Vercel (render) + workers elsewhere | Mirrors the incumbent's Vercel approach |
+| Monorepo | pnpm + Turborepo | Shared packages |
+
+A few choices are worth calling out:
+
+<CardGroup cols={2}>
+  <Card title="Hybrid MDX, never MDXRemote">
+    Compile with `@mintlify/mdx`'s `serialize` (the third-party MDX serializer), then execute the
+    compiled output with `@mdx-js/mdx`'s `run()` inside a `try/catch`. This keeps the whole
+    step catchable, so an unsupported feature degrades to an inline notice instead of a 500.
+    See [renderer internals](/rendering/internals).
+  </Card>
+  <Card title="Code to the S3 API, not to one vendor">
+    Object storage is reached through the S3 API behind a pluggable `S3_ENDPOINT` — Cloudflare
+    R2 in production (zero egress for read-heavy docs serving, plus a built-in CDN), MinIO
+    locally, and any S3-compatible store for self-hosters.
+  </Card>
+  <Card title="Postgres + pgvector, not a separate vector DB">
+    One database holds tenants, config, and the embeddings the AI assistant retrieves over —
+    no second datastore to operate. Hosted on Neon for serverless scaling on Vercel.
+  </Card>
+  <Card title="Better Auth for the platform">
+    Open-source and self-hostable, with first-class organizations and RBAC for the control
+    plane. This is distinct from how docs readers authenticate — see
+    [reader auth](/auth/reader-auth).
+  </Card>
+</CardGroup>
+
+## Monorepo layout
+
+The repo is a pnpm + Turborepo monorepo: two deployable **apps** (the two
+[planes](/architecture)) over a set of shared **packages**, so the renderer and the dashboard
+reuse the same config parser, MDX pipeline, and component library.
+
+```
+papervine/
+├── apps/
+│   ├── render/          # public docs site (multi-tenant Next.js)
+│   └── dashboard/       # control plane UI + API
+├── packages/
+│   ├── config/          # docs.json schema, parser, validator, TS types
+│   ├── mdx/             # MDX compile pipeline + component resolution
+│   ├── ui/              # shared component library (Card, Tabs, Steps…)
+│   ├── search/          # search index build + query
+│   ├── openapi/         # spec parsing → playground page model
+│   ├── ai/              # RAG pipeline, embeddings, chat
+│   ├── sync/            # git sync workers
+│   └── db/              # Postgres schema + access (Drizzle)
+└── SPEC.md
+```
+
+The split mirrors the architecture: `apps/render` is the stateless render plane,
+`apps/dashboard` is the control plane, and the shared `packages/*` are the seams that keep
+them consistent — `config` and `mdx` define what renders, `db` defines the schema both apps
+read, and `sync` runs the [content pipeline](/rendering/content-pipeline) that feeds the
+store.
+
+<Note>
+  Splitting the codebase into separate deployments is a scaling option, not a requirement.
+  v1 ships as a single Next.js app with the two planes as route groups; the package
+  boundaries above are what make a later split cheap.
+</Note>
+
+## Where to go next
+
+- [Architecture](/architecture) — the two planes, tenant resolution, and custom domains.
+- [Content pipeline](/rendering/content-pipeline) — Git sync into the content store.
+- [`docs.json` config](/rendering/config) — the docs.json-compatible config schema.
+- [Introduction](/) — the project at a glance.

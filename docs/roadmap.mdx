@@ -1,0 +1,102 @@
+---
+title: Roadmap
+description: The milestone arc from renderer skeleton to beta, the open questions still in play, and what's explicitly out of scope for v1.
+---
+
+The roadmap is roughly dependency-driven — each milestone builds on the last, though M3–M5
+can parallelize once multi-tenancy (M2) lands.
+
+## Milestones
+
+<Steps>
+  <Step title="M0 — Foundations (renderer skeleton)">
+    Single-tenant happy path: read a local `docs.json` + MDX folder, render the nav tree,
+    pages, core components, and Shiki highlighting. No multi-tenancy yet. Proves the
+    rendering core.
+  </Step>
+  <Step title="M1 — docs.json parity + components">
+    Full schema parser/validator, recursive navigation, theming from colors, the full v1
+    component library, dark mode, per-page TOC, and frontmatter.
+  </Step>
+  <Step title="M2 — Multi-tenancy + Git sync">
+    Middleware host → tenant resolution, subdomains, GitHub App connect, sync workers,
+    compiled-bundle storage, and cache invalidation. Now it's a SaaS.
+  </Step>
+  <Step title="M3 — Search">
+    Orama index, the `⌘K` command palette, and `/api/search`. **Slice 1 is done:** full-text
+    search over page titles + per-heading sections (hits jump to the right `#anchor`), with
+    prefix/typo tolerance; `hidden`/`noindex` pages excluded; built per request (memoized) so
+    it stays fresh in `papervine dev`. **Next:** index at sync time per tenant, an "Ask AI"
+    toggle, and recent/suggested terms. See [search](/features/search).
+  </Step>
+  <Step title="M4 — API Playground">
+    OpenAPI → reference pages, a "Try it" panel, code samples, and auth. **Slice 1 is done:**
+    a `docs.json` `openapi` on a nav division auto-generates in-theme, in-nav endpoint pages
+    (params and schemas via `ParamField`/`ResponseField`/`Expandable`, static cURL). **Next:**
+    interactive request execution with auth + proxy, per-operation MDX stubs, multi-language
+    code samples (`x-codeSamples`), and AsyncAPI. See [API playground](/features/api-playground).
+  </Step>
+  <Step title="M5 — AI Assistant">
+    Agentic retrieval (Claude + tool calling over `search_docs` / `read_page` / `list_pages`
+    / `search_api`) via the Vercel AI SDK; a slide-out "Ask Assistant" panel with streamed
+    answers + citations; `⌘I`, navbar button, and `?assistant=` deep link; current-page
+    context; unanswered-question analytics. Embeddings (`pgvector`) are an optional later
+    upgrade, not a v1 blocker. See [AI assistant](/features/ai-assistant).
+  </Step>
+  <Step title="M6 — Dashboard + Domains + Analytics">
+    Org / auth / RBAC, custom domains + TLS, and analytics views. Beta-ready.
+  </Step>
+</Steps>
+
+## Open questions
+
+These are unresolved (or recently resolved and worth recording). Several earlier ones have
+since been decided — captured here as the rationale.
+
+<Info>
+  **Compile-on-sync vs. on-request.** The design assumes compile-on-sync for performance and
+  predictability. Does that block any dynamic features we care about (e.g. live Twoslash)?
+</Info>
+
+<Info>
+  **Versioning & i18n.** `docs.json` supports versions + languages in the nav tree. In v1
+  scope, or fast-follow?
+</Info>
+
+<Info>
+  **License & governance.** MIT vs. Apache-2.0; CLA; and what (if anything) is SaaS-only
+  (open-core) vs. fully open.
+</Info>
+
+<Info>
+  **Pricing & limits** for the hosted version. Out of scope for the build, but it shapes the
+  tenancy and metering design.
+</Info>
+
+<Info>
+  **Web editor.** Defer past v1? The incumbent treats it as a differentiator.
+</Info>
+
+<Note>
+  **Decided — build from scratch (not on Fumadocs).** Multi-tenancy and full architectural
+  control outweigh the head start. M0 is a single Next.js app; it refactors into monorepo
+  packages at M2 when multi-tenancy lands.
+</Note>
+
+<Note>
+  **Decided — self-host codes to portable interfaces, not vendors.** Better Auth owns its
+  schema in Postgres, and storage is the **S3 API** (hosted default R2, local MinIO,
+  self-host points `S3_ENDPOINT` anywhere). Domains/TLS use a host-platform wildcard cert
+  plus a SaaS-domains proxy for custom domains; self-host swaps the proxy or uses Caddy
+  on-demand TLS directly.
+</Note>
+
+## Non-goals (v1)
+
+Explicitly out of scope for the first version:
+
+- Visual / WYSIWYG web editor (fast-follow)
+- Migrating from non-hosted docs sources (Docusaurus / GitBook importers)
+- Embeddable AI on third-party sites
+- Marketplace / plugin ecosystem
+- On-prem enterprise deploys

@@ -1,0 +1,94 @@
+---
+title: Platform auth
+description: How our customers and their teammates sign into the Papervine dashboard, with organizations, roles, and a host-only session cookie.
+---
+
+Platform auth (Layer 1) is the account system for *our customers* — the people who own a
+docs site and manage it from the dashboard. Papervine is the identity provider here: we own
+the accounts, the organizations, and the roles. This is standard SaaS account auth — sign
+up, create or join an organization, invite teammates, connect a repo, manage billing — and
+it is a prerequisite for everything multi-tenant.
+
+For the other system — gating a customer's *published docs* for *their* readers — see
+[reader auth](/auth/reader-auth). The two are deliberately separate; the
+[auth overview](/auth/overview) explains why.
+
+## Better Auth and the organization model
+
+Platform auth is built on [Better Auth](https://www.better-auth.com/). The choice follows
+from a few requirements that rule out the hosted-only alternatives:
+
+<CardGroup cols={2}>
+  <Card title="Open-source and self-hostable">
+    Better Auth owns its own schema in our Postgres, so a self-hoster runs the exact same
+    code with no third-party accounts and no OSS-vs-SaaS fork. Baking a vendor like Clerk or
+    Auth0 into the *core* would put a hosted dependency inside the open-source product.
+  </Card>
+  <Card title="First-class organizations">
+    The `organization` plugin gives us tenants, teams, roles, and invites out of the box.
+    "Multi-tenant" here means *organizations*, not just users — exactly the shape we need,
+    rather than hand-rolling it (the main reason to pick it over Auth.js v5).
+  </Card>
+  <Card title="App Router / RSC-native">
+    TypeScript-native, so sessions read cleanly in `middleware.ts` and server components and
+    fit the strict-TypeScript codebase.
+  </Card>
+  <Card title="One library, both layers">
+    Better Auth's JWT/JWKS plugins let the *same* library that issues platform sessions also
+    sign the per-tenant tokens [reader auth](/auth/reader-auth) needs — one mental model
+    across both layers.
+  </Card>
+</CardGroup>
+
+An **organization** *is* a tenant. A user signs up, then creates or joins an organization,
+and from there connects repos and invites members. Access within an organization is governed
+by roles — owner, admin, editor, viewer — so a viewer can read dashboard state while an owner
+can perform destructive operations like `organization:delete`.
+
+<Note>
+  WorkOS is the planned path for enterprise **SAML/SSO into the platform**, added *behind*
+  Better Auth's organization model when the first enterprise deal lands — not a replacement
+  for the core.
+</Note>
+
+## Where platform auth lives: the app host
+
+The control plane runs on its own host, `app.papervine.io`, separate from the marketing apex
+(`www.papervine.io`) and from every tenant's docs subdomain. That separation is what makes
+the session cookie safe to scope tightly. See the
+[control-plane overview](/control-plane/overview) for how the host is mounted.
+
+## The host-only session cookie
+
+The Better Auth session cookie is **host-only on `app.papervine.io`**. It is never widened
+to the parent domain `.papervine.io`.
+
+<Warning>
+  A parent-domain cookie would be sent to **every tenant's docs subdomain**
+  (`{tenant}.papervine.io`). That would ship your platform auth token to untrusted,
+  customer-authored pages — an XSS exfiltration surface. Scoping the session cookie to the
+  exact app host closes that door entirely.
+</Warning>
+
+The trade-off is that the marketing apex genuinely cannot read the session — by design. To
+still show a "Dashboard" link to signed-in visitors, the app-host middleware sets a separate,
+**benign flag cookie** (`pv_signed_in`) on the parent domain (`src/lib/signed-in-flag.ts`).
+It carries no identity and no credentials — only the fact that *someone* is signed in.
+
+Because that flag cookie *does* reach tenant subdomains, it is hardened so it can never be
+abused:
+
+- It is **`httpOnly`** (and `Secure` in production), so page JavaScript — including a
+  tenant's own docs pages — cannot read it.
+- It is cleared **server-side in the middleware** on logout. A client-side clear can't touch
+  an `httpOnly` cookie, so logout must happen on the server to be authoritative.
+
+<Info>
+  The session cookie and the flag cookie are independent on purpose: the real credential
+  stays locked to the app host, while only a non-sensitive presence signal crosses domains.
+  Never "simplify" this by sharing the real session cookie across domains.
+</Info>
+
+Visitors who are already signed in and hit `/login` or `/signup` on the app host are sent
+straight to the dashboard, matching the familiar dashboard-account behavior of comparable
+products.
