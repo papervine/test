@@ -893,6 +893,93 @@ domains/§2, workflows/§10.2), not new capability. Layout, top to bottom:
 > variant). Not yet wired: *Open editor* (the §10 web-editor is still a "soon" surface), and
 > "suppress the banner once a workflow is configured" (Workflows aren't built, §10.2).
 
+### 10.4 Settings → Exports
+
+The control-plane **Settings → Exports** surface (the incumbent: *Settings → Exports*) lets an
+owner download the whole site as **one PDF for offline viewing** — "Export all content".
+(the incumbent gates this behind Enterprise; we ship it ungated.)
+
+**Approach — print, not a server-side PDF pipeline.** There is no headless-Chromium /
+PDF-library dependency (heavy, and awkward on serverless). Instead the export is a
+dedicated **print view** that reuses the real MDX renderer, and the browser's *Save as PDF*
+produces the file. This is zero-new-deps, serverless-safe, and gives **full fidelity** —
+components (Cards/Steps/callouts), Shiki-highlighted code, the lot — for free.
+
+- **Route:** `src/app/sites/[site]/export/page.tsx` — a static segment that wins over the
+  docs catch-all (`[[...path]]`), the same way `/login` does. Reachable both on the
+  subdomain host (`{slug}.host/export`, middleware-rewritten → here) and via the apex path
+  form (`/sites/{slug}/export`). It enumerates every page of the site **in sidebar order**
+  and renders them stacked into one print-styled document (`renderExportDoc`), with a cover
+  (site name + page count) and a `break-before: page` between pages.
+- **Enumeration = the llms-full.txt walk.** `collectExportPages` (`src/lib/export-content.ts`)
+  is structurally identical to `renderLlmsTxt(full)`: `listPages()` for the nav-ordered
+  leaves, then `loadPage` each body, skipping any leaf with no loadable page (e.g. an API
+  group entry, a stale nav ref) rather than failing the whole export. Runs inside the
+  tenant's `contentContext`. Unit-tested (`tests/unit/export-content.test.ts`: order +
+  skip-missing).
+- **Always light.** A small client toolbar (`PrintControls`) strips `.dark` from the
+  document (the export is a print artifact — black-on-white regardless of the reader's
+  stored theme) and exposes the *Save as PDF* button. Hidden from the printout.
+- **Auth-gated sites:** the export route applies the same Layer-2 reader-auth gate as
+  `renderTenantDocs` (§11.2) — an auth-gated site must not leak its full corpus through
+  `/export`; an unauthenticated reader is bounced to the site login.
+- **Dashboard link:** the Settings surface (`settings/exports/`) links the **apex path-mode**
+  URL (`/sites/{slug}/export`), so one route serves the export on every deploy regardless of
+  wildcard-DNS / custom-domain routing. The button is disabled until the repo has synced
+  (nothing to export while `site.status === "draft"`).
+>
+> **Status (2026-06-11):** built. Verified in-browser against the seeded `starter` site —
+> the Settings surface renders the description + active "Export all content" button, and the
+> export view renders the cover + every page (Introduction, Quickstart) with Cards, Steps,
+> code blocks, and callouts intact, forced to light mode. A future server-rendered-PDF
+> pipeline (true one-click download, no print dialog) could supersede the print view, but the
+> print path is the pragmatic, full-fidelity v1.
+
+### 10.5 Settings → Danger zone
+
+The control-plane **Settings → Danger zone** surface — irreversible deletes, mirroring the
+shape of the incumbent/Vercel's danger zone (a "Delete my deployment" section + a "Delete my
+organization" section, each with a required *reason* and a red action). Two scopes:
+
+- **Delete this site** (the incumbent's "deployment") — owner **or** admin. Drops the `site` row;
+  the Postgres FK cascade takes its `deployment` + `analytics_event` rows. Object storage
+  has no cascade, so the action sweeps `sites/{id}/` explicitly (`deletePrefix`,
+  `src/lib/storage.ts`). Lands on the bare org (`/:org`), which forwards to the next site or
+  the connect form.
+- **Delete this organization** — **owner only** (Better Auth's `organization:delete`
+  permission also enforces it server-side). Sweeps every site's storage prefix, then hands
+  off to `auth.api.deleteOrganization`, whose org-row delete fires our FK cascade (sites →
+  deployments/analytics, installs, members). The user account survives; they land on the app
+  root, which forwards to their next org or onboarding.
+
+**Two gates, both required.** A non-empty **reason** (persisted — see below) arms the
+section's button; clicking opens a **type-to-confirm** modal (type the exact site/org name,
+case-sensitive, the GitHub/Vercel guard against a fat-fingered irreversible click) that arms
+the final delete. Both checks are pure (`src/lib/danger-zone.ts`: `isReasonValid`,
+`confirmationMatches`, `canDelete`) and unit-tested (`tests/unit/danger-zone.test.ts`).
+
+- **Route:** `settings/danger/` overrides the `settings/[section]` placeholder for the
+  `danger` slug (the same pattern as `domain`/`authentication`). The page (`requireSite`)
+  gates org membership; the role decides which sections render, and the server actions
+  re-check it — hiding a section is not gating the action.
+- **Exit survey.** Each delete first records the reason in a `deletion_feedback` row
+  (`scope`, snapshotted `subjectId`/`subjectName`, `reason`, `actorUserId`). Deliberately
+  **not** FK'd to site/org — the whole point is to outlive the deleted thing, so the subject
+  is snapshotted as plain text. Append-only product feedback ("why are you deleting this?"),
+  nothing in the app reads it yet.
+- **Cross-context redirect.** Like `connectRepo`, the actions return a bare `redirectTo` and
+  the client hard-navigates (`window.location.assign`) — a soft RSC redirect would skip the
+  app-host Host rewrite (the documented tenant-URL gotcha) and land on the apex.
+>
+> **Status (2026-06-11):** built. Verified end-to-end in-browser against the seeded
+> `dev-org`/`starter`: the surface renders both sections (site + the amber "this cannot be
+> undone" org warning), the reason gate disables the button until filled, the type-to-confirm
+> modal disables the final delete until the exact name is typed, and a real site delete
+> removed the row, cascaded its children, recorded the `deletion_feedback` row, and
+> hard-navigated to the next site. Org deletion verified against the same Better Auth
+> `organization/delete` endpoint the action calls — org + sites + members cascade away, the
+> user account remains.
+
 ---
 
 ## 11. Authentication & Access Control
