@@ -11,6 +11,13 @@ import {
   triggerDetail,
   triggerLabel,
 } from "@/lib/overview";
+import { formatElapsed } from "@/lib/format-elapsed";
+
+// A `building` row younger than this is a live, in-flight sync → show the ticking counter;
+// older is an orphaned/killed run (its serverless function died mid-sync, no catch to flip it
+// to failed), so the counter is dropped rather than climbing forever. Mirrors the sync route's
+// maxDuration=300s ceiling plus slack.
+const SYNC_INFLIGHT_MS = 5 * 60_000;
 
 // The Activity feed (SPEC §10.3), live. Seeded with the server-rendered rows (so first
 // paint is unchanged and SSR stays the source of truth), then it polls the bare
@@ -36,6 +43,23 @@ export function ActivityFeed({
   // Re-seed when the server hands new rows (tab switch Live↔Previews re-renders the page,
   // which remounts with a new `endpoint` anyway, but a soft refresh can change props too).
   useEffect(() => setRows(initialRows), [initialRows]);
+
+  // Live elapsed counter for in-flight syncs. While any row is `building`, tick a 1s clock so
+  // its pill counts up ("Building 0:14") instead of sitting static — the active signal that a
+  // sync is really running. `now` starts null so the server render and first client paint both
+  // show the plain "Building" (no hydration mismatch); it's set after mount. The interval only
+  // exists while something is building, so a quiet feed schedules no timer.
+  const [now, setNow] = useState<number | null>(null);
+  const hasBuilding = rows.some((d) => d.status === "building");
+  useEffect(() => {
+    if (!hasBuilding) {
+      setNow(null);
+      return;
+    }
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [hasBuilding]);
 
   useEffect(() => {
     let stopped = false;
@@ -107,10 +131,18 @@ export function ActivityFeed({
 
   return (
     <ul className="mt-3 divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-white/[0.02]">
-      {rows.map((d) => (
+      {rows.map((d) => {
+        // A `building` row younger than the in-flight ceiling is a live sync → tick a m:ss
+        // counter; an older `building` row is a stale/orphaned run (its function was killed),
+        // so it reads plain "Building". `now` is null until mount, so this is null server-side.
+        const elapsed =
+          d.status === "building" && now != null && now - d.createdAt < SYNC_INFLIGHT_MS
+            ? formatElapsed(now - d.createdAt)
+            : null;
         // Each row is an expander (<details>): the summary is the familiar row, the panel
         // holds sync metadata (duration, trigger, commit, error).
-        <li key={d.id}>
+        return (
+          <li key={d.id}>
           <details className="group">
             <summary className="flex cursor-pointer select-none items-start justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
               <div className="flex min-w-0 items-start gap-3">
@@ -138,11 +170,22 @@ export function ActivityFeed({
                       : "bg-white/[0.06] text-[var(--muted)]"
                 }`}
               >
-                {d.status === "successful"
-                  ? "Successful"
-                  : d.status === "failed"
-                    ? "Failed"
-                    : "Building"}
+                {d.status === "successful" ? (
+                  "Successful"
+                ) : d.status === "failed" ? (
+                  "Failed"
+                ) : (
+                  <span className="inline-flex items-center gap-1.5">
+                    {elapsed && (
+                      <span
+                        aria-hidden
+                        className="size-1.5 animate-pulse rounded-full bg-current"
+                      />
+                    )}
+                    Building
+                    {elapsed && <span className="tabular-nums">{elapsed}</span>}
+                  </span>
+                )}
               </span>
             </summary>
             {/* pl aligns with the summary text: px-4 + chevron 14 + gap 12. */}
@@ -150,8 +193,10 @@ export function ActivityFeed({
               <dl className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs sm:grid-cols-4">
                 <div>
                   <dt className="text-[var(--muted)]">Duration</dt>
-                  <dd className="mt-0.5 text-[var(--fg)]">
-                    {d.durationMs != null ? formatDurationMs(d.durationMs) : "—"}
+                  <dd className="mt-0.5 text-[var(--fg)] tabular-nums">
+                    {d.durationMs != null
+                      ? formatDurationMs(d.durationMs)
+                      : (elapsed ?? "—")}
                   </dd>
                 </div>
                 <div>
@@ -202,7 +247,8 @@ export function ActivityFeed({
             </div>
           </details>
         </li>
-      ))}
+        );
+      })}
     </ul>
   );
 }
