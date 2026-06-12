@@ -15,8 +15,9 @@ import { ResyncButton } from "@/components/app/ResyncButton";
 import { SitePreview } from "@/components/app/SitePreview";
 
 // The Re-sync button's server action (resyncSite) re-pulls the whole repo inline; give it
-// headroom past the platform default so a large repo doesn't time out mid-sync.
-export const maxDuration = 60;
+// real headroom — 60s sat right AT a big repo's sync time (intermittent 504s); 300 is the
+// Fluid Compute cap on Hobby (Pro allows 800).
+export const maxDuration = 300;
 
 function timeAgo(date: Date): string {
   const secs = Math.floor((Date.now() - date.getTime()) / 1000);

@@ -325,10 +325,14 @@ PAT field — public repos and self-host stay zero-config. See `.env.example` fo
 accepts an optional **fine-grained PAT** (Contents: read) for a private repo. The token is
 encrypted at rest (AES-256-GCM, `src/lib/crypto.ts`, key in `PAPERVINE_ENCRYPTION_KEY`) on the
 `site` row (`repo_token_enc`, plus an `is_private` flag) and decrypted only server-side at sync.
-The real renderer-path change is in `src/lib/sync.ts`: private repos **can't** use the
-`raw.githubusercontent.com` CDN (no `Authorization`), so each file is pulled through the
-authenticated **git blobs API** by sha (`Accept: application/vnd.github.raw`) with a correct
-content-type inferred per extension; public repos keep the raw CDN. The token flows through one
+The real renderer-path change is in `src/lib/sync.ts`. *(Updated 2026-06-11:)* sync fetches
+the repo as **one tarball** (`GET /repos/{o}/{r}/tarball/{ref}`, same endpoint public and
+private — the token authenticates it), untars in memory (`src/lib/tar.ts`, a minimal
+pax-aware reader, no tar dependency), and uploads to storage pool-parallel with content-types
+inferred per extension. This replaced per-file fetching (tree API + one blob/raw request per
+file), whose N round-trips put a ~240-file private repo right at the serverless time limit —
+syncs *intermittently* 504'd. Measured after: ~0.4s warm / ~1.4s cold for `papervine/starter`
+(previously multiple seconds, and minutes at repo scale). The token flows through one
 seam — `ghHeaders(token?)` in `src/lib/github.ts` — so the **GitHub App** is a drop-in follow-up:
 the install flow mints an installation token that takes the same parameter, no sync/render
 changes. (App also unlocks push-webhook auto-sync, the C-full piece.)

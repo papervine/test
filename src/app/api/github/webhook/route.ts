@@ -9,9 +9,10 @@ import {
 } from "@/lib/github-webhook";
 import { runSync } from "@/lib/sync-runner";
 
-// The push sync runs in after() (below); give it headroom past the platform default so a
-// large repo's sync isn't killed mid-flight after we've already returned 202.
-export const maxDuration = 60;
+// The push sync runs in after() (below); give it real headroom so a large repo's sync
+// isn't killed mid-flight after we've already returned 202 — 60s sat right AT a big
+// repo's sync time (intermittent kills); 300 is the Fluid Compute cap on Hobby.
+export const maxDuration = 300;
 
 /**
  * GitHub App webhook (SPEC §3 — push auto-sync). The App is registered with this URL on

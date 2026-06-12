@@ -1,6 +1,7 @@
 import "server-only";
 import { putObject } from "./storage";
 import { ghHeaders } from "./github";
+import { extractTarGz } from "./tar";
 
 const API = "https://api.github.com";
 
@@ -8,8 +9,7 @@ const API = "https://api.github.com";
 const TEXT_EXT = /\.(mdx?|json|ya?ml)$/i;
 const ASSET_EXT = /\.(png|jpe?g|gif|svg|webp|avif|ico|bmp|mp4|webm|pdf|woff2?)$/i;
 
-// The blobs API returns raw bytes without a meaningful content-type, so for private
-// assets we infer the type from the extension (public assets keep the raw CDN's header).
+// The tarball gives raw bytes with no content-type, so we infer it from the extension.
 // The tenant-asset route serves whatever content-type we store, so getting it right matters.
 const MIME: Record<string, string> = {
   png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
@@ -29,8 +29,8 @@ type SyncSite = {
   repoOwner: string;
   repoName: string;
   branch: string;
-  // Decrypted GitHub token for private repos (fine-grained PAT today, GitHub App
-  // installation token later). Absent → public repo, served from the raw CDN.
+  // Decrypted GitHub token for private repos (a fine-grained PAT, or a GitHub App
+  // installation token — see src/lib/github-token.ts). Absent → public repo.
   token?: string;
   // Normalized subdirectory the docs live in (see normalizeDocsPath); "" = repo root.
   // We sync only files under it and strip the prefix from storage keys, so the render
@@ -41,78 +41,59 @@ type SyncSite = {
 /**
  * Copy a repo's docs (config + MDX + assets) into object storage under
  * sites/{id}/… — the C-lite step of SPEC §3 (copy-on-sync; compile stays on the
- * render path for now). Reads the file list once via the git tree API, then pulls
- * each file's bytes and uploads it.
+ * render path for now).
  *
- * Public repos: pull from the raw CDN (`raw.githubusercontent.com`, not rate-limited).
- * Private repos: the raw CDN can't serve them (it has no Authorization), so pull each
- * blob through the authenticated git blobs API by sha (`Accept: raw`). The token is
- * held only here on the server; it never reaches the browser or the render path.
+ * The whole tree comes down as ONE tarball request (`GET /repos/{o}/{r}/tarball/{ref}`,
+ * same endpoint public and private — the token authenticates it; fetch follows GitHub's
+ * 302 to codeload). This replaced per-file fetching (tree API + one blob/raw request per
+ * file): at N files that was N round-trips, which put a big private repo right at the
+ * serverless time limit and made syncs *intermittently* time out. Now network cost is
+ * one download + the S3 uploads, which run pool-parallel. Tradeoff: the archive is the
+ * whole repo at that ref and is held in memory (docs repos are small; a code monorepo
+ * with a docs/ subdir costs its repo size in RAM — streaming untar is the next step if
+ * that ever bites). The token never reaches the browser or the render path.
  */
 export async function syncSite(site: SyncSite): Promise<SyncResult> {
   const { id, repoOwner: owner, repoName: name, branch, token } = site;
-  const headers = ghHeaders(token);
   // Only sync files under the docs subdirectory, and strip the prefix from storage keys.
   const prefix = site.docsPath ? `${site.docsPath}/` : "";
 
-  const treeRes = await fetch(
-    `${API}/repos/${owner}/${name}/git/trees/${branch}?recursive=1`,
-    { headers },
+  const res = await fetch(
+    `${API}/repos/${owner}/${name}/tarball/${encodeURIComponent(branch)}`,
+    { headers: ghHeaders(token) },
   );
-  if (!treeRes.ok) throw new Error(`Could not read ${owner}/${name}@${branch} (${treeRes.status})`);
-  const tree = ((await treeRes.json()).tree ?? []) as { path: string; type: string; sha: string }[];
-  const files = tree.filter(
-    (t) =>
-      t.type === "blob" &&
-      (!prefix || t.path.startsWith(prefix)) &&
-      (TEXT_EXT.test(t.path) || ASSET_EXT.test(t.path)),
+  if (!res.ok) throw new Error(`Could not read ${owner}/${name}@${branch} (${res.status})`);
+  const gz = Buffer.from(await res.arrayBuffer());
+
+  // Entries are rooted in {owner}-{repo}-{sha}/ — stripRoot makes paths repo-relative.
+  const files = extractTarGz(gz, { stripRoot: true }).filter(
+    (f) =>
+      (!prefix || f.path.startsWith(prefix)) &&
+      (TEXT_EXT.test(f.path) || ASSET_EXT.test(f.path)),
   );
 
-  const rawBase = `https://raw.githubusercontent.com/${owner}/${name}/${branch}`;
-
-  // Fetch one file's bytes and upload it; returns true if it landed. Private repos pull
-  // each blob through the authenticated API (the raw CDN can't serve them); public repos
-  // use the CDN. A single bad file is skipped, not fatal — the rest of the sync proceeds.
-  const syncOne = async (f: { path: string; sha: string }): Promise<boolean> => {
-    const isAsset = ASSET_EXT.test(f.path);
-    let bytes: ArrayBuffer;
-    let contentType: string | undefined;
-    if (token) {
-      // Private: fetch the blob by sha with the raw media type → exact file bytes.
-      const res = await fetch(`${API}/repos/${owner}/${name}/git/blobs/${f.sha}`, {
-        headers: { ...headers, accept: "application/vnd.github.raw" },
-      });
-      if (!res.ok) return false;
-      bytes = await res.arrayBuffer();
-      contentType = isAsset ? mimeForPath(f.path) : "text/plain; charset=utf-8";
-    } else {
-      // Public: the raw CDN, which serves with a usable content-type for assets.
-      const res = await fetch(`${rawBase}/${f.path}`);
-      if (!res.ok) return false;
-      bytes = await res.arrayBuffer();
-      contentType = isAsset ? (res.headers.get("content-type") ?? undefined) : "text/plain; charset=utf-8";
-    }
-    // f.path is the real repo path (used above to fetch bytes); the storage key drops
-    // the docs-subdir prefix so the render path resolves sites/{id}/docs.json as usual.
-    const key = `sites/${id}/${prefix ? f.path.slice(prefix.length) : f.path}`;
-    if (isAsset) {
-      await putObject(key, new Uint8Array(bytes), contentType);
-    } else {
-      await putObject(key, new TextDecoder().decode(bytes), contentType);
-    }
-    return true;
-  };
-
-  // Fetch+upload in bounded-concurrency batches. Sequential was the long pole for private
-  // repos (one round-trip per blob): a docs tree of N files took N×latency, which blew
-  // past the serverless time limit on a big repo (connect would hang then 500). 8-wide
-  // keeps us well under GitHub's secondary rate limit while cutting wall-time ~8×.
-  const CONCURRENCY = 8;
+  // Upload with a worker pool (not fixed batches, which stall on their slowest member).
+  // The shared cursor is safe: workers interleave only at await points.
+  const CONCURRENCY = 16;
+  let next = 0;
   let count = 0;
-  for (let i = 0; i < files.length; i += CONCURRENCY) {
-    const batch = files.slice(i, i + CONCURRENCY);
-    const landed = await Promise.all(batch.map((f) => syncOne(f)));
-    count += landed.filter(Boolean).length;
-  }
+  const upload = async () => {
+    while (next < files.length) {
+      const f = files[next++];
+      const isAsset = ASSET_EXT.test(f.path);
+      // f.path is the real repo path; the storage key drops the docs-subdir prefix so
+      // the render path resolves sites/{id}/docs.json as usual.
+      const key = `sites/${id}/${prefix ? f.path.slice(prefix.length) : f.path}`;
+      if (isAsset) {
+        await putObject(key, new Uint8Array(f.data), mimeForPath(f.path));
+      } else {
+        await putObject(key, f.data.toString("utf8"), "text/plain; charset=utf-8");
+      }
+      count++;
+    }
+  };
+  await Promise.all(
+    Array.from({ length: Math.min(CONCURRENCY, files.length) }, upload),
+  );
   return { files: count };
 }

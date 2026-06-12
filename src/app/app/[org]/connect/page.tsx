@@ -5,10 +5,10 @@ import { listOrganizations } from "@/lib/session";
 import { isGithubAppConfigured, installUrl } from "@/lib/github-app";
 import ConnectForm from "./ConnectForm";
 
-// connectRepo runs the initial repo sync inline (so the user lands on a ready site), and
-// that sync can take a while on a large repo — give it headroom past the platform default
-// (~10s), which is what made connecting a big private repo hang then 500.
-export const maxDuration = 60;
+// connectRepo runs the initial repo sync inline (so the user lands on a ready site) —
+// give it real headroom. 60s proved to be right AT the sync time for a big repo
+// (intermittent 504s); 300 is the Fluid Compute cap on Hobby (Pro allows 800).
+export const maxDuration = 300;
 
 // Server shell: resolve the org's GitHub App install state, then hand it to the client
 // form. The edge gate (middleware) already guarantees a session here, so this only runs
