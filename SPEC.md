@@ -773,6 +773,21 @@ The control-plane **Analytics** page (the incumbent: *Analytics*) — scoped to 
 > volume lives in **Top pages**. Same derivation on the `/llms.txt` agent surface
 > (`src/lib/llms-route.ts`). Regression: `tests/unit/agent-session.test.ts` (dedupe/stability)
 > + `tests/e2e/analytics.spec.ts` (a 3-call session + a 2nd session → 2 visitors, not 4).
+>
+> **Human "Searches" counted keystrokes, not searches (fix 2026-06-12).** The reader's search
+> box fetches results on a 160ms keystroke debounce, and `GET /api/search` logged a `search`
+> event for every query it served. Real typing is slower than 160ms, so each prefix settled and
+> fetched on its own — typing `analytics` logged ~8 events (`a`, `an`, `ana`, …) for one search,
+> inflating the **Searches** card several-fold. The debounce is a *fetch* throttle; it was wrong
+> as an analytics trigger. **Fix:** `/api/search` no longer logs. The box now logs a single
+> search *intent* via a beacon (`POST /api/search/track`, `navigator.sendBeacon`) on **settle /
+> result-click / close**, collapsing a refinement chain to the one query the user meant —
+> `reduceSearch` (`src/lib/search-track.ts`) treats a query that extends or trims the pending one
+> as the same evolving search and only commits on a topic switch. This mirrors Algolia/DocSearch,
+> which separate "searches" from result clicks and collapse keystroke-level queries server-side.
+> Regression: `tests/unit/search-track.test.ts` (the 8-prefix chain → 0 commits mid-type, 1 on
+> commit). **Verified in-browser**: typing `d-e-p-l-o-y` prefix-by-prefix then closing logged
+> exactly 1 `deploy` event and 0 prefix rows (was up to 6).
 
 - **Metric cards** (each with a vs-previous delta): **Visitors**, **Views**, **Assistant**
   (queries), **Searches**, **Feedback** (👍/👎).

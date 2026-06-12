@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
+import { reduceSearch } from "@/lib/search-track";
 
 type Hit = {
   title: string;
@@ -50,6 +51,34 @@ function SearchModal({ onClose, site }: { onClose: () => void; site?: string }) 
   const [active, setActive] = useState(0);
   const listRef = useRef<HTMLUListElement>(null);
 
+  // The most-specific query of the search the user is currently refining. We log a
+  // single "search" analytics event per *intent* (on settle's topic-switch, on a
+  // result click, or on close) — not per keystroke. See src/lib/search-track.ts.
+  const pendingRef = useRef("");
+
+  const track = useCallback(
+    (query: string) => {
+      const trimmed = query.trim();
+      if (!trimmed) return;
+      const payload = JSON.stringify({ q: trimmed, site });
+      // sendBeacon survives the navigation a result-click triggers; fall back to a
+      // keepalive fetch where it's unavailable.
+      try {
+        if (navigator.sendBeacon?.("/api/search/track", new Blob([payload], { type: "application/json" })))
+          return;
+      } catch {
+        // fall through
+      }
+      fetch("/api/search/track", {
+        method: "POST",
+        body: payload,
+        headers: { "Content-Type": "application/json" },
+        keepalive: true,
+      }).catch(() => {});
+    },
+    [site],
+  );
+
   // Debounced query.
   useEffect(() => {
     if (!q.trim()) {
@@ -58,6 +87,11 @@ function SearchModal({ onClose, site }: { onClose: () => void; site?: string }) 
     }
     const ctrl = new AbortController();
     const id = setTimeout(async () => {
+      // Settle: fold this query into the current search session, committing the prior
+      // one only if the user switched to an unrelated term (prefixes don't commit).
+      const { pending, commit } = reduceSearch(pendingRef.current, q);
+      pendingRef.current = pending;
+      if (commit) track(commit);
       try {
         // Pass the tenant slug explicitly: in path mode (apex `/sites/{slug}`) this
         // request hits the apex host, so the route can't infer the tenant from the
@@ -75,15 +109,29 @@ function SearchModal({ onClose, site }: { onClose: () => void; site?: string }) 
       clearTimeout(id);
       ctrl.abort();
     };
-  }, [q, site]);
+  }, [q, site, track]);
+
+  // Closing the dialog ends the session: log the search still in flight (a click
+  // clears `pendingRef` first, so it isn't double-counted). Read `track` via a ref so
+  // this fires exactly once, on unmount.
+  const trackRef = useRef(track);
+  trackRef.current = track;
+  useEffect(() => {
+    return () => {
+      if (pendingRef.current.trim()) trackRef.current(pendingRef.current);
+    };
+  }, []);
 
   const go = useCallback(
     (hit?: Hit) => {
       if (!hit) return;
+      // The query that led to this result is the search that counts.
+      track(q);
+      pendingRef.current = "";
       router.push(hit.href);
       onClose();
     },
-    [router, onClose],
+    [router, onClose, track, q],
   );
 
   const onKeyDown = (e: React.KeyboardEvent) => {
