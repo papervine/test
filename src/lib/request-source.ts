@@ -37,6 +37,11 @@ export async function requestContentSource(slugOverride?: string): Promise<Conte
   // assets into sites/{id}/…, and the render path reads ONLY from there: no GitHub at
   // request time. A site that hasn't been synced yet has nothing to show → null (the
   // route 404s) rather than reaching back to the repo live.
-  if (!(await isSynced(record.id))) return null;
-  return s3Source(record.id);
+  // Key the content cache to the synced head sha so a new sync's content is served
+  // immediately. This is the real invalidation for the push webhook (its sync runs in
+  // `after()`, where `revalidateTag` doesn't reach the Data Cache). `record` is read live
+  // (`getSiteBySlug` is per-request `cache()`), so this sha advances the moment a sync lands.
+  const version = record.lastSyncedCommitSha ?? "";
+  if (!(await isSynced(record.id, version))) return null;
+  return s3Source(record.id, version);
 }

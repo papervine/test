@@ -17,31 +17,46 @@ function siteContentTag(siteId: string): string {
   return `site-content:${siteId}`;
 }
 
-/** Drop a site's cached content after a (re-)sync. Call from the connect/resync actions. */
+/**
+ * Drop a site's cached content after a (re-)sync. Call from the connect/resync actions.
+ *
+ * NOTE: this is no longer the load-bearing invalidation — the cache key is version-stamped
+ * with the synced commit sha (see `s3Source`), so a sync naturally produces fresh keys. We
+ * keep the tag bust because it lets a *synchronous* re-sync of the SAME commit (force-push,
+ * a manual re-pull) drop stale entries immediately. It does NOT help the push webhook, whose
+ * `runSync` runs in `after()` where `revalidateTag` doesn't propagate to the Data Cache —
+ * that path relies entirely on the version key below.
+ */
 export function revalidateSite(siteId: string): void {
   revalidateTag(siteContentTag(siteId));
 }
 
-const CACHE = { revalidate: 3600 } as const; // tag-invalidated on sync; TTL is a safety net.
+const CACHE = { revalidate: 3600 } as const; // version-keyed on sync; TTL ages out old versions.
 
 // Per-tenant content source reading from object storage (what the sync job wrote).
 // This is the production read path (SPEC §3.1 model C) — no GitHub at request time.
 // Every read goes through the Data Cache (tagged per site), so warm requests do no R2.
-export function s3Source(siteId: string): ContentSource {
+//
+// `version` is the site's synced head sha (`lastSyncedCommitSha`). Folding it into the cache
+// key makes invalidation content-addressed: a new sync writes a new key, so the render path
+// picks up fresh content WITHOUT depending on `revalidateTag` — which the push webhook can't
+// rely on, since its sync runs in `after()` (see `revalidateSite`). The caller reads the live
+// site row (`getSiteBySlug` is per-request `cache()`, never stale), so the sha is always current.
+export function s3Source(siteId: string, version = ""): ContentSource {
   const prefix = `sites/${siteId}/`;
   const tag = siteContentTag(siteId);
 
   const readConfigRaw = unstable_cache(
     () => readConfigRawUncached(prefix),
-    ["s3-config", siteId],
+    ["s3-config", siteId, version],
     { tags: [tag], ...CACHE },
   );
   const readPageRaw = unstable_cache(
     (key: string) => getObjectText(`${prefix}${key}`),
-    ["s3-page", siteId],
+    ["s3-page", siteId, version],
     { tags: [tag], ...CACHE },
   );
-  const readKeys = unstable_cache(() => listKeys(prefix), ["s3-keys", siteId], {
+  const readKeys = unstable_cache(() => listKeys(prefix), ["s3-keys", siteId, version], {
     tags: [tag],
     ...CACHE,
   });
@@ -80,12 +95,15 @@ async function readConfigRawUncached(prefix: string): Promise<string | null> {
   );
 }
 
-/** Has this site been synced to storage yet? Reads the same cached config blob loadConfig does. */
-export async function isSynced(siteId: string): Promise<boolean> {
+/** Has this site been synced to storage yet? Reads the same cached config blob loadConfig does.
+ *  Version-keyed like `s3Source` so a fresh sync isn't masked by a cached `false` — without it,
+ *  the first connect caches "not synced" for the full TTL and the site 404s for up to an hour. */
+export async function isSynced(siteId: string, version = ""): Promise<boolean> {
   const prefix = `sites/${siteId}/`;
-  const readConfigRaw = unstable_cache(() => readConfigRawUncached(prefix), ["s3-config", siteId], {
-    tags: [siteContentTag(siteId)],
-    ...CACHE,
-  });
+  const readConfigRaw = unstable_cache(
+    () => readConfigRawUncached(prefix),
+    ["s3-config", siteId, version],
+    { tags: [siteContentTag(siteId)], ...CACHE },
+  );
   return (await readConfigRaw()) !== null;
 }
