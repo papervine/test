@@ -77,6 +77,7 @@ export async function runSync(
     status: "building",
     target: "live",
     commitMessage: trigger === "connect" ? "Connecting repository…" : "Syncing…",
+    trigger,
     actorUserId,
   });
 
@@ -120,6 +121,7 @@ export async function runSync(
       error,
       filesAdded: isConnect ? (result?.files ?? 0) : 0,
       filesEdited: isConnect ? 0 : (result?.files ?? 0),
+      durationMs: Date.now() - startedAt,
     })
     .where(eq(deployment.id, deploymentId));
   console.log(

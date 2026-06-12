@@ -1,7 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { partOfDay, parseFeedTarget } from "../../src/lib/overview";
+import {
+  formatDurationMs,
+  partOfDay,
+  parseFeedTarget,
+  triggerDetail,
+  triggerLabel,
+} from "../../src/lib/overview";
 
 describe("partOfDay", () => {
   it("splits the day into morning / afternoon / evening", () => {
@@ -44,5 +50,43 @@ describe("parseFeedTarget", () => {
     expect(parseFeedTarget(undefined)).toBe("live");
     expect(parseFeedTarget("live")).toBe("live");
     expect(parseFeedTarget("garbage")).toBe("live");
+  });
+});
+
+describe("formatDurationMs", () => {
+  it("uses ms under a second", () => {
+    expect(formatDurationMs(0)).toBe("0ms");
+    expect(formatDurationMs(412)).toBe("412ms");
+  });
+  it("uses one-decimal seconds under a minute, dropping a trailing .0", () => {
+    expect(formatDurationMs(1409)).toBe("1.4s");
+    expect(formatDurationMs(3000)).toBe("3s");
+    expect(formatDurationMs(59_940)).toBe("59.9s");
+  });
+  it("uses m + zero-padded s from a minute up", () => {
+    expect(formatDurationMs(60_000)).toBe("1m 00s");
+    expect(formatDurationMs(125_000)).toBe("2m 05s");
+  });
+});
+
+describe("triggerLabel (feed byline)", () => {
+  it("labels webhook syncs as GitHub push, never Manual Update", () => {
+    expect(triggerLabel("webhook", null)).toBe("GitHub push");
+  });
+  it("prefers the actor's name for connect/manual syncs", () => {
+    expect(triggerLabel("manual", "Jeff Loiselle")).toBe("Jeff Loiselle");
+    expect(triggerLabel("connect", "Jeff Loiselle")).toBe("Jeff Loiselle");
+  });
+  it("keeps the legacy fallback for pre-column rows", () => {
+    expect(triggerLabel(null, null)).toBe("Manual Update");
+  });
+});
+
+describe("triggerDetail (expanded panel)", () => {
+  it("describes each trigger mechanism", () => {
+    expect(triggerDetail("webhook")).toBe("GitHub push (auto-sync)");
+    expect(triggerDetail("manual")).toBe("Manual re-sync");
+    expect(triggerDetail("connect")).toBe("Repository connected");
+    expect(triggerDetail(null)).toBe("—");
   });
 });

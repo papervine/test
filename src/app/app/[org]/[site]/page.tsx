@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { headers } from "next/headers";
 import { and, desc, eq } from "drizzle-orm";
-import { ExternalLink, GitBranch, Globe, Lock, PenLine } from "lucide-react";
+import { ChevronRight, ExternalLink, GitBranch, Globe, Lock, PenLine } from "lucide-react";
 import { supportsSubdomainTenants } from "@/lib/tenant-host";
 import { AUTH_METHOD_META, isAuthMethod } from "@/lib/reader-auth";
 import { db } from "@/lib/db";
@@ -9,7 +9,12 @@ import { user } from "@/lib/db/schema";
 import { deployment } from "@/lib/db/app-schema";
 import { requireSite } from "@/lib/dashboard-context";
 import { siteBase } from "@/lib/dashboard-nav";
-import { parseFeedTarget } from "@/lib/overview";
+import {
+  formatDurationMs,
+  parseFeedTarget,
+  triggerDetail,
+  triggerLabel,
+} from "@/lib/overview";
 import { Greeting } from "@/components/app/Greeting";
 import { ResyncButton } from "@/components/app/ResyncButton";
 import { SitePreview } from "@/components/app/SitePreview";
@@ -94,9 +99,12 @@ export default async function SiteOverview({
       id: deployment.id,
       status: deployment.status,
       commitMessage: deployment.commitMessage,
+      commitSha: deployment.commitSha,
       error: deployment.error,
       filesAdded: deployment.filesAdded,
       filesEdited: deployment.filesEdited,
+      trigger: deployment.trigger,
+      durationMs: deployment.durationMs,
       createdAt: deployment.createdAt,
       actorName: user.name,
       actorImage: user.image,
@@ -279,57 +287,111 @@ export default async function SiteOverview({
         ) : (
           <ul className="mt-3 divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-white/[0.02]">
             {feed.map((d) => (
-              <li
-                key={d.id}
-                className="flex items-start justify-between gap-4 px-4 py-3"
-              >
-                <div className="flex min-w-0 items-start gap-3">
-                  {d.actorImage ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={d.actorImage}
-                      alt=""
-                      className="mt-0.5 size-6 shrink-0 rounded-full"
-                    />
-                  ) : (
-                    <span className="mt-0.5 size-6 shrink-0 rounded-full bg-white/[0.08]" />
-                  )}
-                  <div className="min-w-0">
-                    <p className="truncate text-sm text-[var(--fg)]">
-                      {(d.commitMessage || "Sync").split("\n")[0]}
-                    </p>
-                    <p className="mt-0.5 text-xs text-[var(--muted)]">
-                      {d.actorName ?? "Manual Update"} · {timeAgo(d.createdAt)}
-                      {(d.filesAdded > 0 || d.filesEdited > 0) &&
-                        ` · ${d.filesAdded} added, ${d.filesEdited} edited`}
-                    </p>
+              // Each row is a no-JS expander (<details>, the pattern the old "Why it
+              // failed" toggle used): the summary is the familiar row, the panel holds
+              // sync metadata (duration, trigger, commit, error). Server component
+              // throughout — no client state.
+              <li key={d.id}>
+                <details className="group">
+                  <summary className="flex cursor-pointer select-none items-start justify-between gap-4 px-4 py-3 [&::-webkit-details-marker]:hidden">
+                    <div className="flex min-w-0 items-start gap-3">
+                      <ChevronRight
+                        aria-hidden
+                        className="mt-1.5 size-3.5 shrink-0 text-[var(--muted)] transition-transform group-open:rotate-90"
+                      />
+                      {d.actorImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={d.actorImage}
+                          alt=""
+                          className="mt-0.5 size-6 shrink-0 rounded-full"
+                        />
+                      ) : (
+                        <span className="mt-0.5 size-6 shrink-0 rounded-full bg-white/[0.08]" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="truncate text-sm text-[var(--fg)]">
+                          {(d.commitMessage || "Sync").split("\n")[0]}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[var(--muted)]">
+                          {triggerLabel(d.trigger, d.actorName)} · {timeAgo(d.createdAt)}
+                          {(d.filesAdded > 0 || d.filesEdited > 0) &&
+                            ` · ${d.filesAdded} added, ${d.filesEdited} edited`}
+                        </p>
+                      </div>
+                    </div>
+                    <span
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
+                        d.status === "successful"
+                          ? "bg-emerald-500/15 text-emerald-400"
+                          : d.status === "failed"
+                            ? "bg-red-500/15 text-red-400"
+                            : "bg-white/[0.06] text-[var(--muted)]"
+                      }`}
+                    >
+                      {d.status === "successful"
+                        ? "Successful"
+                        : d.status === "failed"
+                          ? "Failed"
+                          : "Building"}
+                    </span>
+                  </summary>
+                  {/* pl aligns with the summary text: px-4 + chevron 14 + gap 12 + avatar 24 + gap 12. */}
+                  <div className="pb-3 pl-[82px] pr-4">
+                    <dl className="grid grid-cols-2 gap-x-8 gap-y-1.5 text-xs sm:grid-cols-4">
+                      <div>
+                        <dt className="text-[var(--muted)]">Duration</dt>
+                        <dd className="mt-0.5 text-[var(--fg)]">
+                          {d.durationMs != null ? formatDurationMs(d.durationMs) : "—"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[var(--muted)]">Trigger</dt>
+                        <dd className="mt-0.5 text-[var(--fg)]">{triggerDetail(d.trigger)}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[var(--muted)]">Commit</dt>
+                        <dd className="mt-0.5 font-mono text-[var(--fg)]">
+                          {d.commitSha && repoUrl ? (
+                            <a
+                              href={`${repoUrl}/commit/${d.commitSha}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="hover:underline"
+                            >
+                              {d.commitSha.slice(0, 7)}
+                            </a>
+                          ) : (
+                            (d.commitSha?.slice(0, 7) ?? "—")
+                          )}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-[var(--muted)]">Files</dt>
+                        <dd className="mt-0.5 text-[var(--fg)]">
+                          {d.filesAdded + d.filesEdited > 0
+                            ? `${d.filesAdded} added, ${d.filesEdited} edited`
+                            : "—"}
+                        </dd>
+                      </div>
+                    </dl>
+                    {/* Multi-line commit messages: the summary shows the first line; the
+                        body lands here. */}
+                    {(d.commitMessage ?? "").includes("\n") && (
+                      <pre className="mt-2.5 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-[var(--muted)]">
+                        {(d.commitMessage ?? "").split("\n").slice(1).join("\n").trim()}
+                      </pre>
+                    )}
                     {d.status === "failed" && d.error && (
-                      <details className="mt-1.5 max-w-full">
-                        <summary className="cursor-pointer select-none text-xs text-red-400/80 hover:text-red-400">
-                          Why it failed
-                        </summary>
+                      <div className="mt-2.5">
+                        <p className="text-xs text-red-400/80">Why it failed</p>
                         <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-[var(--muted)]">
                           {d.error}
                         </pre>
-                      </details>
+                      </div>
                     )}
                   </div>
-                </div>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-0.5 text-xs ${
-                    d.status === "successful"
-                      ? "bg-emerald-500/15 text-emerald-400"
-                      : d.status === "failed"
-                        ? "bg-red-500/15 text-red-400"
-                        : "bg-white/[0.06] text-[var(--muted)]"
-                  }`}
-                >
-                  {d.status === "successful"
-                    ? "Successful"
-                    : d.status === "failed"
-                      ? "Failed"
-                      : "Building"}
-                </span>
+                </details>
               </li>
             ))}
           </ul>

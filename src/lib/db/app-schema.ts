@@ -125,6 +125,13 @@ export const deployment = pgTable(
     // it the *why* is lost to serverless logs the user can't reach — see the
     // dashboard Activity feed, which surfaces this on failed rows.
     error: text("error"),
+    // What kicked off the sync — 'connect' | 'manual' | 'webhook' (SyncTrigger in
+    // src/lib/sync-runner.ts). Drives the feed's label ("GitHub push" vs "Manual
+    // re-sync"); null on rows that predate the column.
+    trigger: text("trigger"),
+    // Wall-time of the sync, stamped when the row resolves. null while 'building' (and
+    // on pre-column rows) — a resolved row without it reads as "—" in the feed detail.
+    durationMs: integer("duration_ms"),
     filesAdded: integer("files_added").default(0).notNull(),
     filesEdited: integer("files_edited").default(0).notNull(),
     actorUserId: text("actor_user_id").references(() => user.id, {
