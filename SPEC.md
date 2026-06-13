@@ -959,6 +959,35 @@ domains/§2, workflows/§10.2), not new capability. Layout, top to bottom:
 > (Pusher/Ably/Upstash) and have `runSync` emit progress events — polling's latency floor and
 > lack of intra-job granularity are the ceiling, not worth paying until then.
 
+> **Status (2026-06-13) — realtime feed over the Pusher protocol.** Took the "when to upgrade"
+> step above: the feed now updates the *instant* a sync starts/finishes, not up to 2.5s later.
+> **Why this shape:** Vercel functions can't hold a WebSocket open, so a self-hosted socket server
+> isn't deployable on our target — the working pattern is a *protocol* that's identical in both
+> environments with a managed equivalent in prod, the same swap we already do for Postgres
+> (docker→Neon) and object storage (MinIO→R2). We chose the **Pusher protocol**: self-hosted
+> **Soketi** in `docker-compose` locally, hosted **Pusher Channels** in prod — same `pusher` /
+> `pusher-js` SDKs, only env (`PUSHER_*` / `NEXT_PUBLIC_PUSHER_*`) changes. Publishing is an HTTP
+> trigger (a plain POST), which works fine inside a serverless function; the browser connects to the
+> realtime host directly. Supabase Realtime was the alternative (presence + Postgres-CDC built in)
+> but it drags a second Postgres-shaped stack alongside Neon for what is just broadcast — not worth
+> the surface area. **Approach:** `runSync` calls `triggerActivity(siteId)` after the `building`
+> insert and again after the resolve, publishing a *content-free* ping on a per-site **private**
+> channel (`private-site-<id>`); the client reacts by re-running its existing authorized `/activity`
+> fetch, so no row data transits the realtime host and the DB query stays the single source of
+> truth. The channel is gated by `/api/pusher/auth`, which reuses the page's session→org-membership
+> check so a tenant can't subscribe to another's channel. **Strictly additive:** the adaptive poll
+> stays as the fallback, and when the `PUSHER_*` env is unset (CI, a bare checkout) every helper
+> no-ops and the feed behaves exactly as before — realtime can never 500 a sync or a page.
+> `realtime.ts` (server SDK + publish + auth-sign, `server-only`) and `realtime-client.ts` (shared
+> channel/event names + browser config, no SDK import) keep the boundary clean; both are unit-tested
+> (config shape for Soketi vs hosted; no-op when unconfigured). **Verified in-browser:** logged in,
+> clicked Re-sync; the *Building* row appeared ~1.5s into the click — while the awaited `resyncSite`
+> action was still running server-side (its `revalidatePath` hadn't fired) and the feed was on its
+> 20s idle cadence, so it could *only* have arrived over the WebSocket — then flipped to *Successful*
+> live, no reload. Confirmed an ESTABLISHED Chrome→Soketi socket on :6001. **Next upgrade (still
+> open):** *intra-sync* progress (per-file upload, streaming logs) — now cheap to add, since the
+> publish path exists; `runSync` would emit granular progress events on the same channel.
+
 > **Active counter (2026-06-12).** An in-flight sync's `building` pill now counts up live —
 > `Building 0:14`, with a pulsing dot — so a running sync reads as *active*, not a static label.
 > Pure client-side: the row already carries `createdAt` (epoch ms), so `ActivityFeed` ticks a 1s

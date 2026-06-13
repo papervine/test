@@ -8,6 +8,7 @@ import { fetchLatestCommit, type CommitInfo } from "./github";
 import { repoTokenForSite } from "./github-token";
 import { revalidateSite } from "./s3-source";
 import { syncErrorDetail } from "./sync-error";
+import { triggerActivity } from "./realtime";
 
 type SiteRow = typeof siteTable.$inferSelect;
 
@@ -80,6 +81,9 @@ export async function runSync(
     trigger,
     actorUserId,
   });
+  // Nudge any open Activity feed to show the building row now, not on its next poll.
+  // Best-effort: unconfigured/failed realtime no-ops (the row is already durable in the DB).
+  await triggerActivity(site.id);
 
   let result: SyncResult | null = null;
   let error: string | null = null;
@@ -127,6 +131,8 @@ export async function runSync(
   console.log(
     `[sync] done trigger=${trigger} site=${site.id} status=${result ? "successful" : "failed"} files=${result?.files ?? 0} ms=${Date.now() - startedAt}`,
   );
+  // Second ping: the building pill flips to Successful/Failed in the feed without a poll.
+  await triggerActivity(site.id);
 
   // On success: promote to live (the schema's "draft until first successful sync") and
   // stamp the synced head so a redelivered/duplicate push webhook can no-op.

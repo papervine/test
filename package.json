@@ -43,6 +43,8 @@
     "mcp-handler": "^1.1.0",
     "next": "^15.5.19",
     "postgres": "^3.4.9",
+    "pusher": "^5.3.4",
+    "pusher-js": "^8.5.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "rehype-autolink-headings": "7.1.0",

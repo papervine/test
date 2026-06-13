@@ -56,6 +56,24 @@ services:
       echo 'bucket ready'
       "
 
+  # Realtime (Pusher protocol, SPEC §10.3) — self-hosted Soketi, a drop-in Pusher-compatible
+  # WebSocket server. Prod swaps it for hosted Pusher Channels: same client/server SDKs, only
+  # env changes (the same pattern as Postgres→Neon and S3→R2). Drives the live Activity feed.
+  # The app id/key/secret here must match PUSHER_*/NEXT_PUBLIC_PUSHER_* in .env.local.
+  soketi:
+    image: quay.io/soketi/soketi:1.6-16-alpine
+    container_name: papervine-soketi
+    restart: unless-stopped
+    environment:
+      SOKETI_DEFAULT_APP_ID: papervine
+      SOKETI_DEFAULT_APP_KEY: papervine-key
+      SOKETI_DEFAULT_APP_SECRET: papervine-secret
+      # Clients only subscribe + receive server-published events; they never publish directly.
+      SOKETI_DEFAULT_APP_ENABLE_CLIENT_MESSAGES: "false"
+    ports:
+      - "6001:6001" # WebSocket + HTTP trigger API
+      - "9601:9601" # metrics/health
+
 volumes:
   pgdata:
   miniodata:

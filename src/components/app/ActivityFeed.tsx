@@ -1,7 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
+import {
+  ACTIVITY_EVENT,
+  realtimeClientConfig,
+  siteChannel,
+} from "@/lib/realtime-client";
 import {
   type ActivityRow,
   type FeedTarget,
@@ -20,25 +25,37 @@ import { formatElapsed } from "@/lib/format-elapsed";
 const SYNC_INFLIGHT_MS = 5 * 60_000;
 
 // The Activity feed (SPEC §10.3), live. Seeded with the server-rendered rows (so first
-// paint is unchanged and SSR stays the source of truth), then it polls the bare
-// `/:org/:site/activity` endpoint and swaps in fresh rows — a webhook sync that starts
-// while you're watching appears, and its `building` pill flips to Successful, with no
-// reload. Cadence is adaptive (pollDelayMs): ~2.5s while any row is building, ~20s idle.
+// paint is unchanged and SSR stays the source of truth), then it swaps in fresh rows from
+// the bare `/:org/:site/activity` endpoint — a webhook sync that starts while you're watching
+// appears, and its `building` pill flips to Successful, with no reload.
+//
+// Two mechanisms drive that refetch, and the feed always works on the slower one alone:
+//  • Poll (always on) — adaptive cadence (pollDelayMs): ~2.5s while a row is building, ~20s idle.
+//  • Realtime (when configured) — subscribes to the site's private Pusher channel and refetches
+//    the instant `runSync` publishes (sync start / finish), so the update is near-immediate
+//    rather than up-to-2.5s late. If realtime is unconfigured or the socket drops, the poll
+//    still carries the feed — realtime is a strict enhancement, never a dependency.
 //
 // Rows are uncontrolled `<details>` keyed by id, so React preserves each one's open/closed
-// state across a poll's re-render — an expanded row stays expanded when the list refreshes.
+// state across a refetch's re-render — an expanded row stays expanded when the list refreshes.
 export function ActivityFeed({
   endpoint,
   target,
   initialRows,
   repoUrl,
+  siteId,
 }: {
   endpoint: string;
   target: FeedTarget;
   initialRows: ActivityRow[];
   repoUrl: string | null;
+  siteId: string;
 }) {
   const [rows, setRows] = useState(initialRows);
+  // Set by the poll effect to "fetch now (and re-arm the timer)"; called by the realtime
+  // effect when a Pusher event lands. A ref so the realtime effect needn't re-subscribe when
+  // the poll effect re-creates the closure.
+  const refetchNow = useRef<(() => void) | null>(null);
 
   // Re-seed when the server hands new rows (tab switch Live↔Previews re-renders the page,
   // which remounts with a new `endpoint` anyway, but a soft refresh can change props too).
@@ -106,10 +123,18 @@ export function ActivityFeed({
       tick(); // refresh the moment the tab regains focus
     };
 
+    // Realtime fires this to fetch immediately and re-arm the poll off the result.
+    refetchNow.current = () => {
+      if (stopped || (typeof document !== "undefined" && document.hidden)) return;
+      if (timer) clearTimeout(timer);
+      tick();
+    };
+
     schedule(pollDelayMs(rows));
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       stopped = true;
+      refetchNow.current = null;
       if (timer) clearTimeout(timer);
       inflight?.abort();
       document.removeEventListener("visibilitychange", onVisible);
@@ -118,6 +143,43 @@ export function ActivityFeed({
     // seeds the first delay; subsequent delays come from each fetch's own result.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint]);
+
+  // Realtime subscription (SPEC §10.3): when Pusher is configured, watch this site's private
+  // channel and refetch the moment a sync starts/finishes — faster than waiting for the poll.
+  // pusher-js is dynamically imported so it's out of the bundle (and never runs) when realtime
+  // is off. Errors here are non-fatal: the poll above keeps the feed live regardless.
+  useEffect(() => {
+    const config = realtimeClientConfig();
+    if (!config) return; // unconfigured → poll-only, exactly as before
+
+    let cancelled = false;
+    let cleanup: (() => void) | null = null;
+    const channelName = siteChannel(siteId);
+
+    import("pusher-js")
+      .then(({ default: Pusher }) => {
+        if (cancelled) return;
+        const pusher = new Pusher(
+          config.key,
+          config.options as ConstructorParameters<typeof Pusher>[1],
+        );
+        const channel = pusher.subscribe(channelName);
+        channel.bind(ACTIVITY_EVENT, () => refetchNow.current?.());
+        cleanup = () => {
+          channel.unbind_all();
+          pusher.unsubscribe(channelName);
+          pusher.disconnect();
+        };
+      })
+      .catch(() => {
+        /* pusher-js failed to load — stay on the poll fallback */
+      });
+
+    return () => {
+      cancelled = true;
+      cleanup?.();
+    };
+  }, [siteId]);
 
   if (rows.length === 0) {
     return (

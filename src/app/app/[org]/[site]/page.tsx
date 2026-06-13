@@ -249,6 +249,7 @@ export default async function SiteOverview({
           target={feedTarget}
           initialRows={feed}
           repoUrl={repoUrl}
+          siteId={activeSite.id}
         />
       </section>
     </div>
