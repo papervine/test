@@ -27,7 +27,7 @@ export default async function ExportsSettingsPage({
   const synced = site.status !== "draft";
 
   return (
-    <div className="px-8 py-6">
+    <div className="px-4 sm:px-6 lg:px-8 py-6">
       <nav className="flex items-center gap-1.5 text-sm text-[var(--muted)]">
         <span>Settings</span>
         <ChevronRight className="h-3.5 w-3.5" />
@@ -52,7 +52,7 @@ export default async function ExportsSettingsPage({
           </a>
         ) : (
           <>
-            <span className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg border border-white/[0.08] px-4 py-2 text-sm text-[var(--muted)] opacity-60">
+            <span className="inline-flex cursor-not-allowed items-center gap-2 rounded-lg border border-[rgba(var(--ink-rgb),0.08)] px-4 py-2 text-sm text-[var(--muted)] opacity-60">
               <FileDown className="h-4 w-4" />
               Export all content
             </span>

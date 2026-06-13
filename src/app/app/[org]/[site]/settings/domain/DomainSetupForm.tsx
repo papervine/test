@@ -63,8 +63,8 @@ export function DomainSetupForm({
       </div>
 
       <div className="mt-4 flex items-center gap-2">
-        <div className="flex flex-1 items-stretch overflow-hidden rounded-lg border border-white/[0.08]">
-          <span className="flex items-center bg-white/[0.04] px-3 text-sm text-[var(--muted)]">
+        <div className="flex flex-1 items-stretch overflow-hidden rounded-lg border border-[rgba(var(--ink-rgb),0.08)]">
+          <span className="flex items-center bg-[rgba(var(--ink-rgb),0.04)] px-3 text-sm text-[var(--muted)]">
             https://
           </span>
           <input
@@ -86,7 +86,7 @@ export function DomainSetupForm({
               setDomain("");
               setSubpath(false);
             }}
-            className="rounded-lg border border-white/[0.08] p-2.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)] disabled:opacity-50"
+            className="rounded-lg border border-[rgba(var(--ink-rgb),0.08)] p-2.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)] disabled:opacity-50"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -144,7 +144,7 @@ export function DomainSetupForm({
           {/* Vercel only demands an ownership challenge when the host (or its apex) is
               already in use elsewhere on the platform — so this block is usually empty. */}
           {verificationRecords.length > 0 && (
-            <div className="mt-3 border-t border-white/[0.08] pt-3">
+            <div className="mt-3 border-t border-[rgba(var(--ink-rgb),0.08)] pt-3">
               <div className="font-medium text-[var(--fg)]">
                 Also add {verificationRecords.length === 1 ? "this record" : "these records"} to
                 verify ownership

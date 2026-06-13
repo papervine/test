@@ -78,11 +78,11 @@ const MAINTENANCE: Workflow[] = [
 
 export default function WorkflowsPage() {
   return (
-    <div className="mx-auto max-w-5xl px-8 py-10">
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
       <AutomateHeader page="Workflows" />
 
       {/* First-run banner */}
-      <div className="mt-6 flex items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.03] px-5 py-4">
+      <div className="mt-6 flex items-center justify-between gap-4 rounded-xl border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.03)] px-5 py-4">
         <div className="flex items-center gap-3">
           <Settings className="h-5 w-5 text-[var(--muted)]" />
           <p className="text-sm">
@@ -101,9 +101,9 @@ export default function WorkflowsPage() {
       </div>
 
       {/* Workflows / Configure tabs */}
-      <div className="mt-6 inline-flex gap-1 rounded-lg border border-white/[0.06] bg-white/[0.02] p-1 text-sm">
+      <div className="mt-6 inline-flex gap-1 rounded-lg border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)] p-1 text-sm">
         <span className="rounded-md px-3 py-1 text-[var(--muted)]">Workflows</span>
-        <span className="rounded-md bg-white/[0.08] px-3 py-1 font-medium text-[var(--fg)]">
+        <span className="rounded-md bg-[rgba(var(--ink-rgb),0.08)] px-3 py-1 font-medium text-[var(--fg)]">
           Configure
         </span>
       </div>
@@ -128,9 +128,9 @@ export default function WorkflowsPage() {
         </p>
         <button
           disabled
-          className="mt-4 flex w-full cursor-not-allowed items-center gap-3 rounded-xl border border-dashed border-white/[0.12] px-5 py-4 text-left"
+          className="mt-4 flex w-full cursor-not-allowed items-center gap-3 rounded-xl border border-dashed border-[rgba(var(--ink-rgb),0.12)] px-5 py-4 text-left"
         >
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/[0.06]">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[rgba(var(--ink-rgb),0.06)]">
             <Plus className="h-4 w-4 text-[var(--muted)]" />
           </span>
           <span>
@@ -172,7 +172,7 @@ function Section({
 function WorkflowCard({ workflow: w }: { workflow: Workflow }) {
   const Icon = w.icon;
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-5 py-5">
+    <div className="flex items-center gap-4 rounded-xl border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)] px-5 py-5">
       <Icon className="h-5 w-5 shrink-0 text-[var(--muted)]" />
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
@@ -196,8 +196,8 @@ function WorkflowCard({ workflow: w }: { workflow: Workflow }) {
 // Presentational off-state switch — scaffold UI, intentionally inert.
 function Toggle() {
   return (
-    <span className="inline-flex h-6 w-11 items-center rounded-full bg-white/[0.12] p-0.5">
-      <span className="h-5 w-5 rounded-full bg-white/80" />
+    <span className="inline-flex h-6 w-11 items-center rounded-full bg-[rgba(var(--ink-rgb),0.12)] p-0.5">
+      <span className="h-5 w-5 rounded-full bg-[rgba(var(--ink-rgb),0.8)]" />
     </span>
   );
 }

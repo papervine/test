@@ -93,6 +93,41 @@ neutral tokens (`border`/`ring`/`muted`/`accent`) are mapped to the `.db` CSS va
 docs renderer. A `<EnvBadge>` (top-right, non-prod only — `local`/`preview`, hidden when
 `VERCEL_ENV=production`) is the first such primitive, mounted globally in the root layout.
 
+> **Status 2026-06-13 — full primitive set + responsive shell.** Grew `src/components/ui/`
+> from 3 primitives to the working set the control plane needs — `input`, `label`,
+> `textarea`, `select` (native, deliberately not Radix Select: the OS picker is the
+> mobile-friendly choice — no viewport-clipping popover), `card`, `table`, `separator`,
+> `skeleton`, plus the Radix-backed `sheet`, `dialog`, `alert-dialog`, `dropdown-menu`
+> (added `@radix-ui/react-dialog` · `-alert-dialog` · `-dropdown-menu`). All still speak
+> `.db`. The shared `platform/{Field,Button,Select}` were re-pointed at these primitives,
+> so every auth/app form adopts them with no call-site churn; the Danger-zone confirm
+> (§10.5) became a controlled `Dialog` (we own `open` so it survives the pending/error
+> states a Radix `AlertDialog.Action` would auto-close through), the site switcher a
+> `DropdownMenu`, the analytics panels `Card`s. **Mobile:** the control plane was
+> desktop-only (two fixed sidebars, `w-60` AppRail + `w-56` SettingsNav, that crushed
+> small screens). Now the shell is `flex-col lg:flex-row` with `min-w-0` content; on mobile
+> the AppRail collapses behind a hamburger into a `Sheet` drawer and the SettingsNav becomes
+> a horizontal pill strip, both swapping in via `hidden lg:flex` / `lg:hidden`. Page gutters
+> are responsive (`px-4 sm:px-6 lg:px-8`). Verified in-browser at 390px and 1440px (light
+> work is unaffected: `npm test` + `node tests/crawl.mjs docs` stay 0 × 500).
+
+> **Status 2026-06-13 — platform light/dark.** The control plane is now light/dark-able
+> (independent of the per-tenant docs theme). The mechanism that made it cheap: every
+> dark-surface overlay in the components was a translucent *white* (`bg-white/[0.06]`…); all
+> ~110 were swept to `rgba(var(--ink-rgb), α)`, where `--ink-rgb` is the **overlay channel**
+> — `255,255,255` on dark, `0,0,0` on light, *same α*. So dark stays pixel-identical and light
+> is its exact mirror; one channel flip re-tones every hover/active/border/card surface, and
+> the `.db-*` helper classes (`db-input`/`db-feature`/`db-ring`/`db-glass`) plus `--line`/
+> `--card` route through it too. Brand (blue/violet) and semantics (danger/amber) are
+> theme-constant. Theme is set by `data-db-theme` on `<html>` (so it reaches the `.db-portal`
+> overlays at `<body>` too), written **pre-paint** from `localStorage['pv-theme']`
+> (`light`|`dark`|`system`, default dark — no flash, mirrors the docs theme script), with a
+> `<ThemeToggle>` (sun/moon) in the AppRail footer. The art-directed marketing mockups
+> (the dark "code window" panels) stay hardcoded-dark by intent — a dark editor screenshot
+> reads correctly on a light page. Verified both themes in-browser across dashboard / settings
+> / analytics / the portalled delete dialog. **Next (Tier 2 idea):** per-org *brand* accent
+> on top of light/dark — now trivial, since the accent is already a token (`--blue`/`--violet`).
+
 ### Tenant resolution
 Next.js **middleware** (`src/middleware.ts`) inspects the `Host` header and rewrites
 internally to `/sites/[tenant]/[...slug]`:
@@ -1143,6 +1178,66 @@ answer (it read as pre-filled).
 > (no-op without `VERCEL_TOKEN`, so local/CI unaffected), affecting only hosted-prod sites
 > that set a custom domain.
 
+### 10.6 CLI (`papervine`) — local dev tool, published to npm
+
+The CLI is a **local dev tool**, not a second front door to the control plane. It's the
+`mint` analogue (the incumbent renamed `incumbent`→`mint`): you run it inside a repo of MDX +
+`docs.json` and it renders the site locally. Today that's a single command —
+`papervine dev [dir]` (`bin/papervine.mjs`), which boots the renderer with
+`PAPERVINE_CONTENT` pointed at the folder; `tests/crawl.mjs` reuses the same path.
+
+**The packaging boundary is the security decision.** The thing published to npm carries
+only the **renderer** (the `src/lib/mdx.tsx` hybrid, `src/lib/content.ts`, the docs routes,
+config parsing). It must **not** carry the control plane — `better-auth`, Postgres/Drizzle,
+the S3 SDK, Pusher, the MCP handler, the dashboard. Those are the *hosted, deployable*
+Papervine (`app.papervine.io`); bundling them into an `npx`-distributed tool ships auth + DB
++ cloud SDKs to every end user who just wants to preview docs — a transitive-CVE attack
+surface and a heavy install, for code the CLI never invokes (middleware already suppresses
+the control plane at runtime when `PAPERVINE_CONTENT` is set, but that's a runtime guard, not
+a packaging boundary). Two ways to enforce it, decision still open: **(a)** split a lean
+renderer-only package (recommended — a true boundary), or **(b)** one package with a strict
+`files` allowlist that excludes the control-plane modules (faster, but dead code still ships
+in the tarball). Either way the published tarball is allowlisted and `npm pack --dry-run`-audited
+so no `.env.local`/seed data/fixtures leak.
+
+**incumbent parity informs the surface.** `mint` has **no `deploy` and no `login`** —
+deployment is Git-based (push → their GitHub app builds it), and the CLI only reaches the
+hosted backend for *read-only live data* (`mint analytics` pulls real traffic). So a CLI
+never *is* the control plane; at most it's a thin HTTPS client to it. Papervine mirrors this:
+local dev commands now, an optional thin authenticated client (`papervine analytics`, a
+hypothetical `papervine deploy`) later — never by embedding the server. The incumbent's one gap is
+that it has **no offline `build`/static export** (prod rendering is server-side on their
+infra); because Papervine is self-hostable, `papervine build` (static export of a docs repo)
+is a genuine differentiator and a natural fit for the renderer-only package.
+
+**v0.1.0 command surface** (each maps to renderer machinery we already have; ship in this
+order, smallest lift first):
+
+| Command | Does | Reuses |
+| --- | --- | --- |
+| `papervine dev [dir]` | Local preview w/ live reload (**built**) | `bin/papervine.mjs` → `next dev` + `PAPERVINE_CONTENT` |
+| `papervine broken-links [dir]` | Report dead internal links / missing pages | `tests/crawl.mjs` link-graph |
+| `papervine openapi-check [dir]` | Validate referenced OpenAPI specs | `src/lib/openapi.ts` + `@scalar/openapi-parser` |
+| `papervine validate [dir]` | Strict-mode config + frontmatter + nav report (CI gate) | `src/lib/config.ts` run in *report* mode instead of its lenient warn-don't-throw default |
+| `papervine build [dir]` | Static export to `./dist` (the incumbent-gap differentiator) | renderer + crawl; emits the rendered route tree |
+| `papervine new [dir]` | Scaffold from the starter template | a vendored starter `docs.json` + MDX skeleton |
+
+Deferred (thin-client, needs an API + token storage, not a pure renderer): `papervine
+analytics`, `papervine login`, `papervine deploy`. Compatible with the split — they talk to
+the hosted API over HTTPS, they don't embed it.
+
+> **Status (2026-06-13):** reserved the npm namespace. Claimed the **`@papervine`** org/scope
+> *and* the unscoped **`papervine`** name (so `npx papervine` resolves to the bare name, the
+> `npx mint`-style invocation). Published a minimal **`papervine@0.0.1` placeholder** — a
+> 3-file tarball (`cli.mjs` prints a "coming soon" pointer to the repo, `package.json`,
+> `README.md`), built in a throwaway dir *outside* this repo so the main package's
+> `private:true`/secrets couldn't leak; `npm pack --dry-run` confirmed the 3-file surface
+> before publish. The real CLI ships as `papervine@0.1.0` over the top, from CI with
+> `npm publish --provenance` (GitHub Actions OIDC + automation token) — supply-chain hardening
+> the placeholder didn't need. Packaging boundary (split vs `files` allowlist) still to decide.
+> Each `0.1.0` command earns a `docs/` page as it lands (the dogfooded CLI reference); the
+> placeholder, having no real behavior, doesn't.
+
 ---
 
 ## 11. Authentication & Access Control
@@ -1276,7 +1371,7 @@ agent feeds remain reachable.
 | MDX | **hybrid**: `@mintlify/mdx` `serialize` + `@mdx-js/mdx` `run` (see §3) | the incumbent-fidelity highlighting/snippets + catchable, never-500 render |
 | Syntax highlight | **Shiki** (via `@mintlify/mdx`) | fast, accurate, dual light/dark themes |
 | API reference | `@scalar/openapi-parser` (parse/dereference) + our native renderer | incumbent model: in-nav endpoint pages, not a foreign embed (§7) |
-| CLI | `papervine dev <dir>` (`bin/papervine.mjs`) | preview any MDX + docs.json repo locally — the `docs dev` analogue; `tests/crawl.mjs` reuses it |
+| CLI | `papervine dev <dir>` (`bin/papervine.mjs`) | preview any MDX + docs.json repo locally — the `mint dev` analogue; `tests/crawl.mjs` reuses it. Local dev tool only (renderer, never the control plane); published to npm as the unscoped `papervine`. Command surface + packaging boundary: **§10.6** |
 | Styling | **Tailwind CSS** + CSS variables | theme tokens from docs.json |
 | Search | **Orama** (Algolia optional) | embeddable, multi-tenant |
 | DB | **Postgres** (+ `pgvector`) — hosted: **Neon** | tenants, config, embeddings; Neon serverless for the Vercel deploy, provisioned via the Stripe Projects CLI (`stripe projects add neon/postgres`) |

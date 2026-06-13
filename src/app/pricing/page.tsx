@@ -165,7 +165,7 @@ export default async function PricingPage() {
   return (
     <PlatformShell variant="full">
       {/* Header */}
-      <header className="db-glass sticky top-0 z-30 border-b border-white/[0.06]">
+      <header className="db-glass sticky top-0 z-30 border-b border-[rgba(var(--ink-rgb),0.06)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center">
             <Wordmark className="text-lg" />
@@ -252,7 +252,7 @@ export default async function PricingPage() {
                 </div>
                 <p className="mt-2 text-sm text-[var(--muted)]">{tier.blurb}</p>
 
-                <div className="my-7 h-px bg-white/[0.06]" />
+                <div className="my-7 h-px bg-[rgba(var(--ink-rgb),0.06)]" />
 
                 <ul className="flex flex-col gap-4 text-sm">
                   {tier.lead && (
@@ -265,7 +265,7 @@ export default async function PricingPage() {
                   )}
                   {tier.features.map((f) => (
                     <li key={f} className="flex items-center gap-3">
-                      <span className="grid h-5 w-5 place-items-center rounded-full bg-white/[0.06]">
+                      <span className="grid h-5 w-5 place-items-center rounded-full bg-[rgba(var(--ink-rgb),0.06)]">
                         <Check className="h-3.5 w-3.5 text-[var(--muted)]" />
                       </span>
                       {f}
@@ -374,7 +374,7 @@ export default async function PricingPage() {
                 {rows.map((row) => (
                   <tr
                     key={row.label}
-                    className="border-t border-white/[0.06]"
+                    className="border-t border-[rgba(var(--ink-rgb),0.06)]"
                   >
                     <td className="py-3 pr-3 text-[var(--muted)]">
                       {row.label}
@@ -394,7 +394,7 @@ export default async function PricingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/[0.06]">
+      <footer className="border-t border-[rgba(var(--ink-rgb),0.06)]">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 text-sm text-[var(--muted)] sm:flex-row">
           <span className="flex items-center gap-1.5">
             <Wordmark className="text-sm" />

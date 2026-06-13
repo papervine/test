@@ -20,14 +20,18 @@ export default async function OrgLayout({
   // the data-dense dashboard tables and forms.
   return (
     <PlatformShell variant="lite">
-      <div className="flex min-h-screen">
+      {/* Column on mobile (AppRail renders a sticky top bar above the content), row on
+          desktop (AppRail renders a fixed sidebar beside it). min-w-0 lets wide content
+          — analytics tables, code blocks — scroll inside the column instead of forcing
+          the whole page wider than the viewport. */}
+      <div className="flex min-h-screen flex-col lg:flex-row">
         <AppRail
           orgSlug={org.slug}
           sites={sites}
           userName={session.user.name}
           role={role}
         />
-        <div className="flex-1 overflow-auto">{children}</div>
+        <div className="min-w-0 flex-1 overflow-auto">{children}</div>
       </div>
     </PlatformShell>
   );

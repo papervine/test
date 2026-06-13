@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
@@ -11,12 +12,20 @@ import {
   Workflow,
   Bot,
   MessageCircle,
+  Menu,
   type LucideIcon,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
 import { canSeeFeature, type FeatureKey } from "@/lib/features";
 import { parseSitePath, pickCurrentSite, siteHref } from "@/lib/dashboard-nav";
-import { SiteSwitcher } from "./SiteSwitcher";
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
+import { ThemeToggle } from "@/components/platform/ThemeToggle";
+import { SiteSwitcher, SiteMark } from "./SiteSwitcher";
 
 type RailItem = {
   // Path under the active site (/:org/:site/<sub>); "" is the site home. Absent on
@@ -89,6 +98,8 @@ export function AppRail({
 }) {
   const pathname = usePathname();
   const router = useRouter();
+  // Mobile-only: the rail collapses behind a hamburger into a slide-in Sheet drawer.
+  const [navOpen, setNavOpen] = useState(false);
 
   // The active site comes from the URL: /:org/:site/… — the site segment if
   // it's a real site (it's "connect" on the org-level page, which falls back to first).
@@ -111,12 +122,16 @@ export function AppRail({
     ),
   })).filter((section) => section.items.length > 0);
 
-  return (
-    <aside className="db-glass flex w-60 shrink-0 flex-col border-r border-white/[0.06] px-3 py-4">
+  // The rail's contents — shared verbatim by the desktop sidebar and the mobile drawer.
+  // `onNavigate` (mobile only) closes the drawer when the user picks a destination; the
+  // nav items get larger touch targets on mobile (py-2.5) that collapse to py-1.5 on lg+.
+  const railBody = (onNavigate?: () => void) => (
+    <>
       <SiteSwitcher
         orgSlug={orgSlug}
         sites={sites}
         activeSlug={current?.slug ?? null}
+        onNavigate={onNavigate}
       />
 
       {/* The nav is per-site; with no site yet the switcher's New-site affordance is the
@@ -135,11 +150,11 @@ export function AppRail({
                   return (
                     <span
                       key={label}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm text-[var(--muted)]/60"
+                      className="flex items-center gap-2 rounded-md px-2 py-2.5 text-sm text-[var(--muted)]/60 lg:py-1.5"
                     >
                       <Icon className="h-4 w-4" />
                       {label}
-                      <span className="ml-auto rounded bg-white/[0.06] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
+                      <span className="ml-auto rounded bg-[rgba(var(--ink-rgb),0.06)] px-1.5 py-0.5 text-[10px] text-[var(--muted)]">
                         Soon
                       </span>
                     </span>
@@ -156,10 +171,11 @@ export function AppRail({
                   <Link
                     key={href}
                     href={href}
-                    className={`flex items-center gap-2 rounded-md px-2 py-1.5 text-sm transition-colors ${
+                    onClick={onNavigate}
+                    className={`flex items-center gap-2 rounded-md px-2 py-2.5 text-sm transition-colors lg:py-1.5 ${
                       active
-                        ? "bg-white/[0.06] text-[var(--fg)]"
-                        : "text-[var(--muted)] hover:bg-white/[0.04] hover:text-[var(--fg)]"
+                        ? "bg-[rgba(var(--ink-rgb),0.06)] text-[var(--fg)]"
+                        : "text-[var(--muted)] hover:bg-[rgba(var(--ink-rgb),0.04)] hover:text-[var(--fg)]"
                     }`}
                   >
                     <Icon
@@ -174,15 +190,52 @@ export function AppRail({
         </nav>
       )}
 
-      <div className="mt-auto flex items-center justify-between px-2 pt-4 text-sm">
+      <div className="mt-auto flex items-center justify-between gap-2 px-2 pt-4 text-sm">
         <span className="truncate text-[var(--muted)]">{userName}</span>
-        <button
-          onClick={handleSignOut}
-          className="text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
-        >
-          Sign out
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <ThemeToggle />
+          <button
+            onClick={() => {
+              onNavigate?.();
+              handleSignOut();
+            }}
+            className="text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
+          >
+            Sign out
+          </button>
+        </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop: a fixed-width sidebar (lg+). Hidden on mobile, where the drawer takes over. */}
+      <aside className="db-glass hidden w-60 shrink-0 flex-col border-r border-[rgba(var(--ink-rgb),0.06)] px-3 py-4 lg:flex">
+        {railBody()}
+      </aside>
+
+      {/* Mobile: a sticky top bar with a hamburger that opens the rail in a slide-in drawer. */}
+      <header className="db-glass sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-[rgba(var(--ink-rgb),0.06)] px-4 lg:hidden">
+        <Sheet open={navOpen} onOpenChange={setNavOpen}>
+          <SheetTrigger
+            aria-label="Open navigation"
+            className="-ml-1 rounded-md p-1.5 text-[var(--fg)] transition-colors hover:bg-[rgba(var(--ink-rgb),0.06)]"
+          >
+            <Menu className="h-5 w-5" />
+          </SheetTrigger>
+          <SheetContent side="left" showClose={false} className="gap-0 px-3 py-4">
+            <SheetTitle className="sr-only">Navigation</SheetTitle>
+            {railBody(() => setNavOpen(false))}
+          </SheetContent>
+        </Sheet>
+        {current && (
+          <div className="flex min-w-0 items-center gap-2">
+            <SiteMark name={current.name} colorKey={current.slug} />
+            <span className="truncate text-sm font-medium">{current.name}</span>
+          </div>
+        )}
+      </header>
+    </>
   );
 }

@@ -86,7 +86,7 @@ export default async function SiteOverview({
   const isLive = activeSite.status === "live";
 
   return (
-    <div className="mx-auto max-w-5xl px-8 py-10">
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
       <h1 className="text-2xl font-semibold">
         <Greeting firstName={firstName} />
       </h1>
@@ -104,7 +104,7 @@ export default async function SiteOverview({
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs ${
                 isLive
                   ? "bg-emerald-500/15 text-emerald-400"
-                  : "bg-white/[0.06] text-[var(--muted)]"
+                  : "bg-[rgba(var(--ink-rgb),0.06)] text-[var(--muted)]"
               }`}
             >
               <span
@@ -215,13 +215,13 @@ export default async function SiteOverview({
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-[var(--muted)]">Activity</h2>
           {/* Live / Previews toggle → deployment.target (SPEC §10.3). */}
-          <div className="inline-flex rounded-lg border border-white/[0.08] p-0.5 text-xs">
+          <div className="inline-flex rounded-lg border border-[rgba(var(--ink-rgb),0.08)] p-0.5 text-xs">
             <Link
               href={base}
               scroll={false}
               className={`rounded-md px-3 py-1 ${
                 feedTarget === "live"
-                  ? "bg-white/[0.08] text-[var(--fg)]"
+                  ? "bg-[rgba(var(--ink-rgb),0.08)] text-[var(--fg)]"
                   : "text-[var(--muted)] hover:text-[var(--fg)]"
               }`}
             >
@@ -232,7 +232,7 @@ export default async function SiteOverview({
               scroll={false}
               className={`rounded-md px-3 py-1 ${
                 feedTarget === "preview"
-                  ? "bg-white/[0.08] text-[var(--fg)]"
+                  ? "bg-[rgba(var(--ink-rgb),0.08)] text-[var(--fg)]"
                   : "text-[var(--muted)] hover:text-[var(--fg)]"
               }`}
             >

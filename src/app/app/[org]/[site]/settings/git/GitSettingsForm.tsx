@@ -242,7 +242,7 @@ export function GitSettingsForm({
           </div>
 
           {open && (
-            <div className="mt-5 border-t border-white/[0.06] pt-5">
+            <div className="mt-5 border-t border-[rgba(var(--ink-rgb),0.06)] pt-5">
               <div className="grid gap-5 sm:grid-cols-2">
                 <label className="block">
                   <span className="mb-1.5 block text-sm font-medium">
@@ -403,7 +403,7 @@ export function GitSettingsForm({
 
       {/* GitHub App section */}
       {appConfigured && (
-        <div className="mt-12 max-w-3xl border-t border-white/[0.06] pt-8">
+        <div className="mt-12 max-w-3xl border-t border-[rgba(var(--ink-rgb),0.06)] pt-8">
           <h2 className="text-lg font-semibold">GitHub app</h2>
           <p className="mt-1 text-sm text-[var(--muted)]">
             Install the GitHub app to enable automatic updates.
@@ -468,7 +468,7 @@ export function GitSettingsForm({
                             {i.repos.slice(0, 12).map((r) => (
                               <span
                                 key={r.fullName}
-                                className="rounded-md bg-white/[0.06] px-2 py-0.5 text-xs text-[var(--muted)]"
+                                className="rounded-md bg-[rgba(var(--ink-rgb),0.06)] px-2 py-0.5 text-xs text-[var(--muted)]"
                               >
                                 {r.name}
                               </span>

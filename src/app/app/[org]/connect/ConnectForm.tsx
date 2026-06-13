@@ -39,7 +39,7 @@ export default function ConnectForm({
   }, [state.redirectTo]);
 
   return (
-    <div className="mx-auto max-w-lg px-8 py-12">
+    <div className="mx-auto max-w-lg px-4 sm:px-6 lg:px-8 py-12">
       <Link
         href={`/${orgSlug}`}
         className="text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)]"

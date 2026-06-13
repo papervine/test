@@ -1,8 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { confirmationMatches, isReasonValid } from "@/lib/danger-zone";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   deleteSite,
   deleteOrganization,
@@ -45,9 +58,7 @@ export function DangerZone({
         />
       )}
 
-      {canDeleteSite && canDeleteOrg && (
-        <hr className="border-[var(--line)]" />
-      )}
+      {canDeleteSite && canDeleteOrg && <Separator />}
 
       {canDeleteOrg && (
         <DangerSection
@@ -79,82 +90,25 @@ function DangerSection({
   action: (reason: string) => Promise<DeleteState>;
 }) {
   const [reason, setReason] = useState("");
+  // The confirm step is a controlled Dialog: we own `open` so the dialog stays up while
+  // the delete is pending or errors (Radix AlertDialog's Action auto-closes, which would
+  // dismiss the dialog mid-request — Dialog lets us gate closing ourselves).
   const [confirming, setConfirming] = useState(false);
-
-  return (
-    <section>
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mt-1 text-sm text-[var(--muted)]">{blurb}</p>
-
-      {warning && (
-        <div className="db-warn mt-4 flex items-start gap-3 rounded-xl px-4 py-3">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--amber)]" />
-          <p className="text-sm font-medium">{warning}</p>
-        </div>
-      )}
-
-      <label className="mt-5 block text-sm font-medium">
-        Reason for deletion <span className="text-[var(--danger)]">*</span>
-      </label>
-      <textarea
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        rows={3}
-        placeholder={`Why are you deleting ${
-          title.includes("organization") ? "your organization" : "your site"
-        }?`}
-        className="db-input mt-2 w-full resize-y rounded-xl px-3.5 py-3 text-sm outline-none"
-      />
-
-      <button
-        type="button"
-        disabled={!isReasonValid(reason)}
-        onClick={() => setConfirming(true)}
-        className="db-danger mt-4 inline-flex items-center rounded-lg px-4 py-2 text-sm font-medium"
-      >
-        {buttonLabel}
-      </button>
-
-      {confirming && (
-        <ConfirmModal
-          title={title}
-          confirmName={confirmName}
-          buttonLabel={buttonLabel}
-          reason={reason}
-          action={action}
-          onClose={() => setConfirming(false)}
-        />
-      )}
-    </section>
-  );
-}
-
-function ConfirmModal({
-  title,
-  confirmName,
-  buttonLabel,
-  reason,
-  action,
-  onClose,
-}: {
-  title: string;
-  confirmName: string;
-  buttonLabel: string;
-  reason: string;
-  action: (reason: string) => Promise<DeleteState>;
-  onClose: () => void;
-}) {
   const [typed, setTyped] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
-  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus the confirm field on open, and close on Escape — the SearchDialog convention.
-  useEffect(() => {
-    inputRef.current?.focus();
-  }, []);
-
+  const isOrg = title.includes("organization");
   const matched = confirmationMatches(typed, confirmName);
+
+  function openConfirm(open: boolean) {
+    if (pending) return; // don't let an outside-click/Escape dismiss a delete in flight
+    setConfirming(open);
+    if (open) {
+      setTyped("");
+      setError(null);
+    }
+  }
 
   function run() {
     if (!matched) return;
@@ -172,57 +126,80 @@ function ConfirmModal({
   }
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !pending) onClose();
-      }}
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-    >
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={() => !pending && onClose()}
-      />
-      <div className="db-feature relative z-10 w-full max-w-md rounded-2xl bg-[var(--bg)] p-6">
-        <h3 className="text-base font-semibold">{title}?</h3>
-        <p className="mt-2 text-sm text-[var(--muted)]">
-          This action is irreversible. Type{" "}
-          <span className="font-mono text-[var(--fg)]">{confirmName}</span> to confirm.
-        </p>
-        <input
-          ref={inputRef}
-          value={typed}
-          onChange={(e) => setTyped(e.target.value)}
-          spellCheck={false}
-          autoCapitalize="none"
-          autoComplete="off"
-          className="db-input mt-4 w-full rounded-lg px-3.5 py-2.5 text-sm outline-none"
-        />
+    <section>
+      <h2 className="text-lg font-semibold">{title}</h2>
+      <p className="mt-1 text-sm text-[var(--muted)]">{blurb}</p>
 
-        {error && <p className="mt-3 text-sm text-[var(--danger)]">{error}</p>}
-
-        <div className="mt-5 flex items-center justify-end gap-3">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={pending}
-            className="db-ring rounded-lg px-4 py-2 text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)] disabled:opacity-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={run}
-            disabled={!matched || pending}
-            className="db-danger inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium"
-          >
-            {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {pending ? "Deleting…" : buttonLabel}
-          </button>
+      {warning && (
+        <div className="db-warn mt-4 flex items-start gap-3 rounded-xl px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--amber)]" />
+          <p className="text-sm font-medium">{warning}</p>
         </div>
-      </div>
-    </div>
+      )}
+
+      <Label className="mt-5 text-[var(--fg)]">
+        Reason for deletion <span className="text-[var(--danger)]">*</span>
+      </Label>
+      <Textarea
+        value={reason}
+        onChange={(e) => setReason(e.target.value)}
+        rows={3}
+        placeholder={`Why are you deleting ${isOrg ? "your organization" : "your site"}?`}
+        className="mt-2 resize-y"
+      />
+
+      <Dialog open={confirming} onOpenChange={openConfirm}>
+        <Button
+          type="button"
+          variant="danger"
+          disabled={!isReasonValid(reason)}
+          onClick={() => openConfirm(true)}
+          className="mt-4"
+        >
+          {buttonLabel}
+        </Button>
+
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{title}?</DialogTitle>
+            <DialogDescription>
+              This action is irreversible. Type{" "}
+              <span className="font-mono text-[var(--fg)]">{confirmName}</span> to confirm.
+            </DialogDescription>
+          </DialogHeader>
+
+          <Input
+            autoFocus
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            spellCheck={false}
+            autoCapitalize="none"
+            autoComplete="off"
+          />
+
+          {error && <p className="text-sm text-[var(--danger)]">{error}</p>}
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => openConfirm(false)}
+              disabled={pending}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={run}
+              disabled={!matched || pending}
+            >
+              {pending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+              {pending ? "Deleting…" : buttonLabel}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </section>
   );
 }

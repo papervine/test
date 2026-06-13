@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
+import { platformFontVars } from "@/lib/fonts";
 import { contentContext, loadConfig } from "@/lib/content";
 import { requestContentSource } from "@/lib/request-source";
 import { resolveTheme, themeCssVars } from "@/lib/theme";
@@ -38,6 +39,14 @@ function buildThemeScript(defaultAppearance: "light" | "dark" | "system") {
   return `(function(){try{var d=${JSON.stringify(defaultAppearance)};var s=localStorage.getItem('theme');var m=window.matchMedia('(prefers-color-scheme: dark)').matches;if(s?s==='dark':(d==='dark'||(d==='system'&&m)))document.documentElement.classList.add('dark');}catch(e){}})();`;
 }
 
+// Platform (control-plane) light/dark, independent of the per-tenant docs theme above. Sets
+// `data-db-theme` on <html> before paint from the `pv-theme` preference (`light`|`dark`|
+// `system`; default dark, preserving the original look), which `.db`/`.db-portal` read in
+// platform.css. Pre-paint so there's no flash; `system` resolves against the OS preference.
+function buildPlatformThemeScript() {
+  return `(function(){try{var t=localStorage.getItem('pv-theme')||'dark';if(t==='system')t=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';document.documentElement.setAttribute('data-db-theme',t);}catch(e){document.documentElement.setAttribute('data-db-theme','dark');}})();`;
+}
+
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const config = await loadRequestConfig();
 
@@ -53,8 +62,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <head>
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        <script dangerouslySetInnerHTML={{ __html: buildPlatformThemeScript() }} />
       </head>
-      <body className={brandFont.variable}>
+      {/* The platform font vars sit on <body> (not just the .db shell) so they also resolve
+          for control-plane content Radix portals to <body> — dialogs, the mobile nav drawer,
+          menus. Defining the vars here is inert for the docs renderer, which references its
+          own `--db-font-*`; only `.db`/`.db-portal` rules consume `--font-geist`. */}
+      <body className={`${brandFont.variable} ${platformFontVars}`}>
         {children}
         <EnvBadge />
       </body>

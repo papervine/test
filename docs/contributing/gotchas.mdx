@@ -42,6 +42,34 @@ This is a *visual* bug — it passes the DOM check and only shows in a screensho
 why [definition of done](/contributing/working-on-papervine#definition-of-done) requires a
 real-browser screenshot for UI changes.
 
+### Portalled overlays render outside the `.db` shell
+
+<Warning>
+  Dialogs, dropdown menus, and the mobile nav drawer use a Radix portal, so their content
+  mounts at the end of `<body>` — **outside** the `.db` PlatformShell. There it inherits none
+  of the platform CSS variables, so `--fg` / `--card` / the brand fonts resolve to nothing and
+  the panel renders invisible or unstyled. **Fix:** the overlay carries a `.db-portal` class —
+  the same palette and fonts as `.db` but *without* its layout (`position: relative`,
+  `min-height: 100vh`, solid background), which would otherwise fight the fixed overlay. The
+  platform font variables also sit on `<body>` (not just `.db`) so they resolve in the portal.
+</Warning>
+
+Reach for `.db-portal` (not the full `.db` class) on anything a control-plane component portals
+to `body`. Applying the whole `.db` shell there breaks the fixed overlay's positioning.
+
+This is also why the platform light/dark signal — `data-db-theme` — lives on **`<html>`**, not
+on the `.db` element: the portalled overlays sit at `<body>`, *outside* `.db`, so a theme attribute
+on `.db` wouldn't reach them. On `<html>` it covers both `.db` and `.db-portal`. The value is
+written pre-paint from `localStorage['pv-theme']` (a `<script>` in the root layout), so a reload in
+light mode never flashes dark.
+
+<Warning>
+  Don't theme the platform with hardcoded `bg-white/[0.06]`-style overlays — on a light background a
+  translucent *white* is invisible. Use the **ink channel** instead: `bg-[rgba(var(--ink-rgb),0.06)]`,
+  which is white on dark and black on light at the same opacity. The `--fg` / `--muted` / `--line` /
+  `--card` tokens already flip with the theme; reach for those for text and borders.
+</Warning>
+
 ### Tests fetch `127.0.0.1`, not `localhost`
 
 <Note>

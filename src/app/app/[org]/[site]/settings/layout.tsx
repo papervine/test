@@ -8,10 +8,13 @@ export default function SettingsLayout({
 }: {
   children: React.ReactNode;
 }) {
+  // Column on mobile (SettingsNav is a horizontal pill strip above the surface), row on
+  // desktop (SettingsNav is a second sidebar beside it). min-w-0 lets wide settings content
+  // shrink instead of overflowing.
   return (
-    <div className="flex min-h-screen">
+    <div className="flex min-h-screen flex-col lg:flex-row">
       <SettingsNav />
-      <div className="flex-1 overflow-auto">{children}</div>
+      <div className="min-w-0 flex-1 overflow-auto">{children}</div>
     </div>
   );
 }

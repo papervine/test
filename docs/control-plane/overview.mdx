@@ -54,6 +54,47 @@ Each site shows a small avatar — a colored gradient square with the site's ini
 is derived from the site's slug, so every site gets its own hue and two sites that share a
 first letter still look distinct, making the list easy to scan at a glance.
 
+## Layout & design system
+
+The control plane is built from a small set of [shadcn/ui](https://ui.shadcn.com) primitives in
+`src/components/ui/` — buttons, inputs, selects, cards, tables, dialogs, dropdown menus, and a
+slide-in sheet. Each keeps shadcn's structure but speaks the platform's dark `.db` visual
+language rather than stock shadcn colors, so the whole dashboard reads as one surface and none
+of it leaks into the per-tenant docs renderer. Forms, the delete-confirmation dialog, and the
+site switcher are all assembled from these primitives.
+
+<Note>
+  Interactive overlays — the dialog, the dropdown menu, the mobile drawer — render at the end of
+  the page (a portal), *outside* the `.db` shell, so they carry a lightweight `.db-portal` token
+  scope to keep the platform palette and fonts. See [gotchas](/contributing/gotchas).
+</Note>
+
+### Responsive shell
+
+The dashboard adapts to the viewport:
+
+- **On desktop**, the navigation rail is a fixed left sidebar, and Settings adds a second
+  sidebar beside it.
+- **On mobile**, the rail collapses behind a hamburger in a sticky top bar; tapping it slides
+  the full navigation in as a drawer that closes when you pick a destination. The Settings
+  sidebar becomes a horizontally swipeable strip of pills above the page. Content reflows to a
+  single column with comfortable, screen-size-aware gutters.
+
+The switcher and every page work the same way at both sizes — only the chrome rearranges.
+
+### Light & dark
+
+The control plane has its own light and dark themes, separate from the per-tenant docs theme.
+A **sun/moon toggle** in the navigation footer flips between them, and your choice is remembered
+and applied before the page paints, so there's no flash on reload.
+
+The two themes are exact mirrors rather than two hand-built palettes: every translucent surface
+is drawn from a single "ink" channel that is white on the dark background and black on the light
+one, at the same opacity. So the dark theme is unchanged from before, and light is its reflection
+— the brand blue→violet accent and the status colors (green/red/amber) stay the same in both.
+Pop-over surfaces (menus, the delete-confirmation dialog, the mobile drawer) follow the theme too,
+even though they render outside the main shell — see [gotchas](/contributing/gotchas).
+
 ## The Overview home
 
 The **Overview** is the per-site landing page — the default destination on entering a

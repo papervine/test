@@ -28,13 +28,13 @@ export default async function AssistantPage({
 }) {
   const { org, site } = await params;
   return (
-    <div className="mx-auto max-w-5xl px-8 py-10">
+    <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
       <AutomateHeader page="Assistant" />
 
       {/* Usage overview — links to the Analytics deep-dive (§10.1) */}
-      <div className="mt-6 grid grid-cols-1 divide-y divide-white/[0.06] overflow-hidden rounded-xl border border-white/[0.06] sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
+      <div className="mt-6 grid grid-cols-1 divide-y divide-[rgba(var(--ink-rgb),0.06)] overflow-hidden rounded-xl border border-[rgba(var(--ink-rgb),0.06)] sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
         {METRICS.map((m) => (
-          <div key={m.label} className="bg-white/[0.02] p-4">
+          <div key={m.label} className="bg-[rgba(var(--ink-rgb),0.02)] p-4">
             <p className="text-sm text-[var(--muted)]">{m.label}</p>
             <p className="mt-2 text-3xl font-semibold tabular-nums">{m.value}</p>
             <p className="mt-3 text-xs">
@@ -49,14 +49,14 @@ export default async function AssistantPage({
             </p>
           </div>
         ))}
-        <div className="flex flex-col bg-white/[0.02] p-4">
+        <div className="flex flex-col bg-[rgba(var(--ink-rgb),0.02)] p-4">
           <LineChart className="h-4 w-4 text-[var(--muted)]" />
           <p className="mt-2 text-sm text-[var(--muted)]">
             Get insights into your Assistant usage
           </p>
           <a
             href={`/${org}/${site}/analytics?tab=agents`}
-            className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-lg bg-white/[0.06] px-3 py-1.5 text-xs font-medium hover:bg-white/[0.1]"
+            className="mt-3 inline-flex w-fit items-center gap-1.5 rounded-lg bg-[rgba(var(--ink-rgb),0.06)] px-3 py-1.5 text-xs font-medium hover:bg-[rgba(var(--ink-rgb),0.1)]"
           >
             View more <ArrowRight className="h-3.5 w-3.5" />
           </a>
@@ -103,7 +103,7 @@ export default async function AssistantPage({
             <Toggle />
           </div>
 
-          <div className="mt-4 flex items-center gap-2 rounded-lg border border-white/[0.08] px-3 py-2.5">
+          <div className="mt-4 flex items-center gap-2 rounded-lg border border-[rgba(var(--ink-rgb),0.08)] px-3 py-2.5">
             <Mail className="h-4 w-4 shrink-0 text-[var(--muted)]" />
             <input
               disabled
@@ -160,7 +160,7 @@ export default async function AssistantPage({
           </div>
           <p className="mt-4 text-sm font-medium">Add new domain</p>
           <div className="mt-2 flex items-center gap-3">
-            <div className="flex flex-1 items-center gap-2 rounded-lg border border-white/[0.08] px-3 py-2.5">
+            <div className="flex flex-1 items-center gap-2 rounded-lg border border-[rgba(var(--ink-rgb),0.08)] px-3 py-2.5">
               <Globe className="h-4 w-4 shrink-0 text-[var(--muted)]" />
               <input
                 disabled
@@ -170,7 +170,7 @@ export default async function AssistantPage({
             </div>
             <button
               disabled
-              className="inline-flex shrink-0 cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/[0.08] px-3 py-2.5 text-sm text-[var(--muted)]"
+              className="inline-flex shrink-0 cursor-not-allowed items-center gap-1.5 rounded-lg border border-[rgba(var(--ink-rgb),0.08)] px-3 py-2.5 text-sm text-[var(--muted)]"
             >
               <Plus className="h-4 w-4" /> Add domain
             </button>
@@ -232,7 +232,7 @@ function SettingRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid gap-6 border-t border-white/[0.06] py-8 md:grid-cols-3">
+    <div className="grid gap-6 border-t border-[rgba(var(--ink-rgb),0.06)] py-8 md:grid-cols-3">
       <div>
         <h2 className="text-base font-medium">{title}</h2>
         <p className="mt-1 text-sm text-[var(--muted)]">{desc}</p>
@@ -251,7 +251,7 @@ function Card({
 }) {
   return (
     <div
-      className={`rounded-xl border border-white/[0.06] bg-white/[0.02] p-5 ${className}`}
+      className={`rounded-xl border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)] p-5 ${className}`}
     >
       {children}
     </div>
@@ -264,7 +264,7 @@ function Toggle({ on = false }: { on?: boolean }) {
   return (
     <span
       className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 ${
-        on ? "justify-end bg-emerald-500" : "justify-start bg-white/[0.12]"
+        on ? "justify-end bg-emerald-500" : "justify-start bg-[rgba(var(--ink-rgb),0.12)]"
       }`}
     >
       <span className="h-5 w-5 rounded-full bg-white" />

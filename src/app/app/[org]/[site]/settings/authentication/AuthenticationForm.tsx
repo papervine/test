@@ -120,7 +120,7 @@ export function AuthenticationForm({
           </p>
 
           {/* Method picker */}
-          <div className="mt-4 inline-flex rounded-lg border border-white/[0.08] p-1">
+          <div className="mt-4 inline-flex rounded-lg border border-[rgba(var(--ink-rgb),0.08)] p-1">
             {AUTH_METHODS.map((m) => {
               const activeM = m === method;
               return (
@@ -133,7 +133,7 @@ export function AuthenticationForm({
                   }}
                   className={`rounded-md px-3.5 py-1.5 text-sm font-medium transition-colors disabled:opacity-50 ${
                     activeM
-                      ? "bg-white/[0.10] text-[var(--fg)]"
+                      ? "bg-[rgba(var(--ink-rgb),0.10)] text-[var(--fg)]"
                       : "text-[var(--muted)] hover:text-[var(--fg)]"
                   }`}
                 >
@@ -163,12 +163,12 @@ export function AuthenticationForm({
                   hint="Your backend signs reader JWTs with this; we verify with it. Keep it secret."
                 >
                   <div className="flex items-center gap-2">
-                    <div className="flex flex-1 items-stretch overflow-hidden rounded-lg border border-white/[0.08]">
+                    <div className="flex flex-1 items-stretch overflow-hidden rounded-lg border border-[rgba(var(--ink-rgb),0.08)]">
                       <input
                         readOnly
                         value={reveal ? secretValue : mask(secretValue)}
                         spellCheck={false}
-                        className="min-w-0 flex-1 bg-white/[0.02] px-3 py-2.5 font-mono text-xs text-[var(--fg)] outline-none"
+                        className="min-w-0 flex-1 bg-[rgba(var(--ink-rgb),0.02)] px-3 py-2.5 font-mono text-xs text-[var(--fg)] outline-none"
                       />
                       <button
                         type="button"
@@ -182,7 +182,7 @@ export function AuthenticationForm({
                         type="button"
                         aria-label="Copy secret"
                         onClick={copySecret}
-                        className="flex items-center border-l border-white/[0.08] px-3 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
+                        className="flex items-center border-l border-[rgba(var(--ink-rgb),0.08)] px-3 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
                       >
                         {copied ? (
                           <Check className="h-4 w-4 text-emerald-400" />
@@ -195,7 +195,7 @@ export function AuthenticationForm({
                       type="button"
                       disabled={pending}
                       onClick={() => run(() => regenerateJwtSecret(siteRef))}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] px-3 py-2.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)] disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-[rgba(var(--ink-rgb),0.08)] px-3 py-2.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)] disabled:opacity-50"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
                       Regenerate
@@ -336,7 +336,7 @@ function TextInput({
       placeholder={placeholder}
       spellCheck={false}
       autoCapitalize="none"
-      className="w-full rounded-lg border border-white/[0.08] bg-transparent px-3 py-2.5 text-sm text-[var(--fg)] outline-none placeholder:text-[var(--muted)]/60 focus:border-[var(--blue)]/50"
+      className="w-full rounded-lg border border-[rgba(var(--ink-rgb),0.08)] bg-transparent px-3 py-2.5 text-sm text-[var(--fg)] outline-none placeholder:text-[var(--muted)]/60 focus:border-[var(--blue)]/50"
     />
   );
 }
@@ -359,7 +359,7 @@ function UrlInput({
       placeholder={placeholder}
       spellCheck={false}
       autoCapitalize="none"
-      className="w-full rounded-lg border border-white/[0.08] bg-transparent px-3 py-2.5 text-sm text-[var(--fg)] outline-none placeholder:text-[var(--muted)]/60 focus:border-[var(--blue)]/50"
+      className="w-full rounded-lg border border-[rgba(var(--ink-rgb),0.08)] bg-transparent px-3 py-2.5 text-sm text-[var(--fg)] outline-none placeholder:text-[var(--muted)]/60 focus:border-[var(--blue)]/50"
     />
   );
 }
@@ -378,7 +378,7 @@ function SecretInput({
   placeholder?: string;
 }) {
   return (
-    <div className="flex items-stretch overflow-hidden rounded-lg border border-white/[0.08] focus-within:border-[var(--blue)]/50">
+    <div className="flex items-stretch overflow-hidden rounded-lg border border-[rgba(var(--ink-rgb),0.08)] focus-within:border-[var(--blue)]/50">
       <input
         type={reveal ? "text" : "password"}
         value={value}

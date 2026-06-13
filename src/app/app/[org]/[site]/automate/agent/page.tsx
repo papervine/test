@@ -32,11 +32,11 @@ const CHANNELS = [
 
 export default function AgentPage() {
   return (
-    <div className="px-8 py-6">
+    <div className="px-4 sm:px-6 lg:px-8 py-6">
       <AutomateHeader page="Agent" />
 
       <div className="mx-auto mt-16 max-w-xl text-center">
-        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-white/[0.08] bg-white/[0.02]">
+        <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)]">
           <Send className="h-5 w-5" />
         </span>
         <h1 className="mt-6 text-lg font-semibold">Send your first message</h1>
@@ -50,7 +50,7 @@ export default function AgentPage() {
             <button
               key={prompt}
               disabled
-              className="flex w-full cursor-not-allowed items-start gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3 text-left"
+              className="flex w-full cursor-not-allowed items-start gap-3 rounded-xl border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-3 text-left"
             >
               <span className="shrink-0 text-sm font-medium text-[var(--fg)]">
                 @papervine
@@ -66,13 +66,13 @@ export default function AgentPage() {
             rows={3}
             disabled
             placeholder="@papervine"
-            className="mt-2 w-full resize-none rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-3 text-sm placeholder:text-[var(--muted)]/70"
+            className="mt-2 w-full resize-none rounded-xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-3 text-sm placeholder:text-[var(--muted)]/70"
           />
           <div className="mt-3 flex items-center gap-3">
             <select
               defaultValue="general"
               aria-label="Slack channel"
-              className="flex-1 rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-2.5 text-sm"
+              className="flex-1 rounded-xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-2.5 text-sm"
             >
               {CHANNELS.map((c) => (
                 <option key={c} value={c} className="bg-[var(--bg)]">
@@ -82,7 +82,7 @@ export default function AgentPage() {
             </select>
             <button
               disabled
-              className="cursor-not-allowed rounded-xl border border-white/[0.08] bg-white/[0.02] px-5 py-2.5 text-sm font-medium text-[var(--muted)]"
+              className="cursor-not-allowed rounded-xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] px-5 py-2.5 text-sm font-medium text-[var(--muted)]"
             >
               Send message
             </button>
@@ -91,16 +91,16 @@ export default function AgentPage() {
 
         <button
           disabled
-          className="mt-6 w-full cursor-not-allowed rounded-xl border border-white/[0.08] px-4 py-3 text-sm font-medium"
+          className="mt-6 w-full cursor-not-allowed rounded-xl border border-[rgba(var(--ink-rgb),0.08)] px-4 py-3 text-sm font-medium"
         >
           Skip for now
         </button>
 
         {/* Onboarding carousel position (scaffold — third of three steps) */}
         <div className="mt-8 flex items-center justify-center gap-1.5">
-          <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
-          <span className="h-1.5 w-1.5 rounded-full bg-white/20" />
-          <span className="h-1.5 w-6 rounded-full bg-white/60" />
+          <span className="h-1.5 w-1.5 rounded-full bg-[rgba(var(--ink-rgb),0.2)]" />
+          <span className="h-1.5 w-1.5 rounded-full bg-[rgba(var(--ink-rgb),0.2)]" />
+          <span className="h-1.5 w-6 rounded-full bg-[rgba(var(--ink-rgb),0.6)]" />
         </div>
       </div>
     </div>

@@ -29,14 +29,14 @@ export function AnalyticsControls({
 
   return (
     <div className="flex items-center justify-between">
-      <div className="inline-flex rounded-lg bg-white/[0.04] p-0.5 text-sm">
+      <div className="inline-flex rounded-lg bg-[rgba(var(--ink-rgb),0.04)] p-0.5 text-sm">
         {(["humans", "agents"] as const).map((t) => (
           <button
             key={t}
             onClick={() => setParam("tab", t)}
             className={`rounded-md px-3 py-1.5 capitalize transition-colors ${
               tab === t
-                ? "bg-white/[0.08] text-[var(--fg)]"
+                ? "bg-[rgba(var(--ink-rgb),0.08)] text-[var(--fg)]"
                 : "text-[var(--muted)] hover:text-[var(--fg)]"
             }`}
           >
@@ -79,14 +79,14 @@ function RangeMenu({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="db-ring inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-[var(--fg)] transition-colors hover:bg-white/[0.04]"
+        className="db-ring inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm text-[var(--fg)] transition-colors hover:bg-[rgba(var(--ink-rgb),0.04)]"
       >
         <Calendar className="h-4 w-4 text-[var(--muted)]" />
         {label}
         <ChevronDown className="h-4 w-4 text-[var(--muted)]" />
       </button>
       {open && (
-        <div className="db-glass absolute right-0 z-10 mt-1 w-44 overflow-hidden rounded-lg border border-white/[0.08] p-1">
+        <div className="db-glass absolute right-0 z-10 mt-1 w-44 overflow-hidden rounded-lg border border-[rgba(var(--ink-rgb),0.08)] p-1">
           {RANGE_PRESETS.map((p) => (
             <button
               key={p.key}
@@ -96,8 +96,8 @@ function RangeMenu({
               }}
               className={`flex w-full items-center rounded-md px-2.5 py-1.5 text-left text-sm transition-colors ${
                 value === p.key
-                  ? "bg-white/[0.08] text-[var(--fg)]"
-                  : "text-[var(--muted)] hover:bg-white/[0.04] hover:text-[var(--fg)]"
+                  ? "bg-[rgba(var(--ink-rgb),0.08)] text-[var(--fg)]"
+                  : "text-[var(--muted)] hover:bg-[rgba(var(--ink-rgb),0.04)] hover:text-[var(--fg)]"
               }`}
             >
               {p.label}

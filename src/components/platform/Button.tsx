@@ -1,36 +1,14 @@
 import Link from "next/link";
+import { Button as UIButton } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-// Platform action — the blue→violet gradient (`primary`) or quiet outline (`ghost`),
-// shared by auth + app so every button matches the landing. Use <Button> for form
-// actions and <ButtonLink> for navigation.
+// Platform action — a thin wrapper over the shadcn <Button> primitive that keeps the
+// auth/app call sites' API (`full` for a block button, plus a navigation <ButtonLink>).
+// The blue→violet gradient (`primary`) and quiet outline (`ghost`) come from the shared
+// primitive, so every button matches the landing. Use <Button> for form actions and
+// <ButtonLink> for navigation.
 type Variant = "primary" | "ghost";
 type Size = "sm" | "md";
-
-const VARIANT: Record<Variant, string> = {
-  primary: "db-cta text-white",
-  ghost: "db-ring text-[var(--fg)]",
-};
-const SIZE: Record<Size, string> = {
-  sm: "px-3 py-1.5 text-xs",
-  md: "px-4 py-2 text-sm",
-};
-
-function classes(
-  variant: Variant,
-  size: Size,
-  full: boolean,
-  className: string,
-) {
-  return [
-    "inline-flex items-center justify-center gap-2 rounded-lg font-medium",
-    VARIANT[variant],
-    SIZE[size],
-    full ? "w-full" : "",
-    className,
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
 
 type StyleProps = {
   variant?: Variant;
@@ -43,11 +21,16 @@ export function Button({
   variant = "primary",
   size = "md",
   full = false,
-  className = "",
+  className,
   ...props
 }: StyleProps & React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
-    <button className={classes(variant, size, full, className)} {...props} />
+    <UIButton
+      variant={variant}
+      size={size}
+      className={cn(full && "w-full", className)}
+      {...props}
+    />
   );
 }
 
@@ -55,7 +38,7 @@ export function ButtonLink({
   variant = "primary",
   size = "md",
   full = false,
-  className = "",
+  className,
   href,
   external = false,
   children,
@@ -64,14 +47,18 @@ export function ButtonLink({
   external?: boolean;
   children: React.ReactNode;
 }) {
-  const cls = classes(variant, size, full, className);
-  return external ? (
-    <a href={href} className={cls}>
-      {children}
-    </a>
-  ) : (
-    <Link href={href} className={cls}>
-      {children}
-    </Link>
+  return (
+    <UIButton
+      asChild
+      variant={variant}
+      size={size}
+      className={cn(full && "w-full", className)}
+    >
+      {external ? (
+        <a href={href}>{children}</a>
+      ) : (
+        <Link href={href}>{children}</Link>
+      )}
+    </UIButton>
   );
 }

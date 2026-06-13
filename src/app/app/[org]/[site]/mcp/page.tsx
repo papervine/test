@@ -29,7 +29,7 @@ export default async function McpPage({
     : `${proto}://${docsHost}/mcp`;
 
   return (
-    <div className="px-8 py-6">
+    <div className="px-4 sm:px-6 lg:px-8 py-6">
       <div className="flex items-center gap-2.5">
         <Plug className="h-5 w-5 text-[var(--blue)]" />
         <h1 className="text-xl font-semibold">MCP server</h1>

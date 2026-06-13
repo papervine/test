@@ -5,7 +5,22 @@
  * is light-first and themed per tenant. Keep this the single source of truth for the
  * platform palette + atmosphere — pages compose these classes, they don't redefine them.
  */
-.db {
+/* `.db` is the full shell (PlatformShell); `.db-portal` is the same palette + fonts WITHOUT
+   the layout (position/min-height/background/atmosphere), for content Radix portals to
+   <body> — dialogs, the mobile nav drawer, dropdown menus — which renders OUTSIDE the .db
+   tree and so can't inherit its tokens. Applying full `.db` there breaks the fixed overlay
+   panel (its `position: relative` + `min-height: 100vh` + solid bg fight the fixed layout).
+
+   THEMING (SPEC §2): the platform is light/dark-able. Dark is the default below; the light
+   palette overrides under `html[data-db-theme="light"]` (set pre-paint from the `pv-theme`
+   preference). The trick that keeps dark pixel-identical while making light its mirror is
+   `--ink-rgb`: every translucent surface overlay in the components is `rgba(var(--ink-rgb),α)`
+   — white channel on dark, black channel on light, SAME α. So one channel flip re-tones every
+   hover/active/border/card surface. The brand (blue/violet) and semantics (danger/amber) are
+   theme-constant. The docs renderer has its own separate light/dark (globals.css) — untouched. */
+.db,
+.db-portal {
+  --ink-rgb: 255, 255, 255; /* overlay channel — white on the dark surface */
   --bg: #060609;
   --fg: #ececf1;
   --muted: #8a8a99;
@@ -13,18 +28,35 @@
   --violet: #a974ff;
   --danger: #e5484d;
   --amber: #f5a623;
-  --line: rgba(255, 255, 255, 0.07);
-  --card: rgba(255, 255, 255, 0.025);
+  --line: rgba(var(--ink-rgb), 0.07);
+  --card: rgba(var(--ink-rgb), 0.025);
+  --glass: rgba(10, 10, 16, 0.6); /* frosted sticky chrome */
+  --option-bg: #16161c; /* native <select> popup options */
   font-family: var(--font-geist), ui-sans-serif, system-ui, sans-serif;
-  background: var(--bg);
   color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+}
+html[data-db-theme="light"] :is(.db, .db-portal) {
+  --ink-rgb: 0, 0, 0; /* overlay channel — black on the light surface */
+  --bg: #f7f7f9;
+  --fg: #1b1b21;
+  --muted: #61616c;
+  /* brand stays; the gradient reads on light too. Borders need a touch more weight on
+     light (black is perceptually lighter at the same α than white on dark). */
+  --line: rgba(var(--ink-rgb), 0.1);
+  --glass: rgba(250, 250, 252, 0.72);
+  --option-bg: #ffffff;
+}
+.db {
+  background: var(--bg);
   position: relative;
   min-height: 100vh;
   overflow-x: clip;
-  -webkit-font-smoothing: antialiased;
 }
 .db code,
-.db .mono {
+.db .mono,
+.db-portal code,
+.db-portal .mono {
   font-family: var(--font-geist-mono), ui-monospace, monospace;
 }
 
@@ -154,8 +186,8 @@
     background 0.2s ease;
 }
 .db-ring:hover {
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16);
-  background: rgba(255, 255, 255, 0.04);
+  box-shadow: 0 0 0 1px rgba(var(--ink-rgb), 0.16);
+  background: rgba(var(--ink-rgb), 0.04);
 }
 
 /* Feature / content card with a violet halo on hover. */
@@ -168,7 +200,7 @@
     background 0.25s ease;
 }
 .db-feature:hover {
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(var(--ink-rgb), 0.045);
   box-shadow:
     0 0 0 1px rgba(140, 140, 255, 0.3),
     0 20px 50px -24px rgba(120, 120, 255, 0.5);
@@ -177,14 +209,14 @@
 
 /* Glass surface for sticky chrome (header, app rail). */
 .db-glass {
-  background: rgba(10, 10, 16, 0.6);
+  background: var(--glass);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
 /* Form input — quiet fill that lights up violet on focus. */
 .db-input {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--ink-rgb), 0.03);
   box-shadow: 0 0 0 1px var(--line);
   color: var(--fg);
   transition:
@@ -196,7 +228,7 @@
 }
 .db-input:focus {
   outline: none;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--ink-rgb), 0.05);
   box-shadow:
     0 0 0 1px var(--blue),
     0 0 0 4px rgba(91, 140, 255, 0.18);

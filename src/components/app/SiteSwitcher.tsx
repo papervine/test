@@ -1,55 +1,48 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { switchSiteHref } from "@/lib/dashboard-nav";
 import { siteMarkGradient } from "@/lib/site-mark";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 type SiteOption = { slug: string; name: string };
 
 // The top-left site switcher (SPEC §10): shows the active site, lists the org's sites to
 // switch between (scoping the per-site pages — Analytics, Editor…), and offers "New site".
 // Sites are URL-scoped (/:org/:site), so selecting one *navigates* — preserving the
-// sub-page you're on — instead of writing a cookie.
+// sub-page you're on — instead of writing a cookie. Built on the shadcn DropdownMenu
+// (Radix) so keyboard nav / outside-click / Escape / portal positioning come for free.
 export function SiteSwitcher({
   orgSlug,
   sites,
   activeSlug,
+  onNavigate,
 }: {
   orgSlug: string;
   sites: SiteOption[];
   activeSlug: string | null;
+  // Called after a navigation choice (switch site / New site) so a host that renders the
+  // switcher inside the mobile nav drawer can close it.
+  onNavigate?: () => void;
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
-  const ref = useRef<HTMLDivElement>(null);
-
-  // Close on outside click / Escape — a plain dropdown, no portal needed at this size.
-  useEffect(() => {
-    if (!open) return;
-    function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("mousedown", onClick);
-    document.addEventListener("keydown", onKey);
-    return () => {
-      document.removeEventListener("mousedown", onClick);
-      document.removeEventListener("keydown", onKey);
-    };
-  }, [open]);
 
   const active = sites.find((s) => s.slug === activeSlug) ?? sites[0] ?? null;
 
   function select(slug: string) {
-    setOpen(false);
     if (slug === active?.slug) return;
+    onNavigate?.();
     startTransition(() => {
       router.push(switchSiteHref(orgSlug, slug, pathname, sites));
     });
@@ -60,6 +53,7 @@ export function SiteSwitcher({
     return (
       <Link
         href={`/${orgSlug}/connect`}
+        onClick={() => onNavigate?.()}
         className="db-cta mb-3 flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-white"
       >
         <Plus className="h-4 w-4" />
@@ -69,55 +63,52 @@ export function SiteSwitcher({
   }
 
   return (
-    <div ref={ref} className="relative mb-3" data-pending={pending ? "" : undefined}>
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        aria-label="Switch site"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-white/[0.04]"
-      >
-        <SiteMark name={active.name} colorKey={active.slug} />
-        <span className="truncate text-sm font-medium">{active.name}</span>
-        <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 text-[var(--muted)]" />
-      </button>
+    <div className="mb-3" data-pending={pending ? "" : undefined}>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label="Switch site"
+          className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left outline-none transition-colors hover:bg-[rgba(var(--ink-rgb),0.04)] focus-visible:ring-2 focus-visible:ring-ring/60"
+        >
+          <SiteMark name={active.name} colorKey={active.slug} />
+          <span className="truncate text-sm font-medium">{active.name}</span>
+          <ChevronsUpDown className="ml-auto h-4 w-4 shrink-0 text-[var(--muted)]" />
+        </DropdownMenuTrigger>
 
-      {open && (
-        <div
-          role="listbox"
-          className="db-glass absolute left-0 right-0 top-full z-20 mt-1 rounded-lg border border-white/[0.08] p-1 shadow-xl shadow-black/40"
+        <DropdownMenuContent
+          align="start"
+          className="w-[var(--radix-dropdown-menu-trigger-width)]"
         >
           {sites.map((s) => {
             const isActive = s.slug === active.slug;
             return (
-              <button
+              <DropdownMenuItem
                 key={s.slug}
-                type="button"
-                role="option"
+                onSelect={() => select(s.slug)}
                 aria-selected={isActive}
-                onClick={() => select(s.slug)}
-                className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm transition-colors hover:bg-white/[0.06]"
               >
                 <SiteMark name={s.name} colorKey={s.slug} />
                 <span className="truncate">{s.name}</span>
-                {isActive && <Check className="ml-auto h-4 w-4 shrink-0 text-[var(--blue)]" />}
-              </button>
+                {isActive && (
+                  <Check className="ml-auto h-4 w-4 shrink-0 text-[var(--blue)]" />
+                )}
+              </DropdownMenuItem>
             );
           })}
 
-          <div className="my-1 h-px bg-white/[0.06]" />
+          <DropdownMenuSeparator />
 
-          <Link
-            href={`/${orgSlug}/connect`}
-            onClick={() => setOpen(false)}
-            className="db-cta flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-white"
-          >
-            <Plus className="h-4 w-4" />
-            New site
-          </Link>
-        </div>
-      )}
+          <DropdownMenuItem asChild className="p-0 focus:bg-transparent">
+            <Link
+              href={`/${orgSlug}/connect`}
+              onClick={() => onNavigate?.()}
+              className="db-cta flex w-full items-center justify-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-white"
+            >
+              <Plus className="h-4 w-4" />
+              New site
+            </Link>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -125,7 +116,7 @@ export function SiteSwitcher({
 // The small gradient square with the site's initial — mirrors the incumbent's switcher mark.
 // The gradient is derived per-site from `colorKey` (the slug) so a list of sites reads as
 // distinct colored chips instead of identical blue→violet squares (see lib/site-mark).
-function SiteMark({ name, colorKey }: { name: string; colorKey: string }) {
+export function SiteMark({ name, colorKey }: { name: string; colorKey: string }) {
   return (
     <span
       className="grid h-6 w-6 shrink-0 place-items-center rounded text-xs font-bold text-white"

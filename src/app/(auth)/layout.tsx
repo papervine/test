@@ -16,7 +16,7 @@ export default function AuthLayout({
         <Link href="/" className="mb-8 flex items-center">
           <Wordmark className="text-2xl" />
         </Link>
-        <div className="w-full max-w-sm rounded-2xl border border-white/[0.06] bg-white/[0.02] p-7 shadow-[0_20px_60px_-30px_rgba(120,120,255,0.35)]">
+        <div className="w-full max-w-sm rounded-2xl border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)] p-7 shadow-[0_20px_60px_-30px_rgba(120,120,255,0.35)]">
           {children}
         </div>
       </div>

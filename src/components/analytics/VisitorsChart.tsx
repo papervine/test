@@ -19,7 +19,7 @@ export function VisitorsChart({
 
   return (
     <div>
-      <div className="relative flex h-64 items-end gap-1.5 border-b border-dashed border-white/[0.08]">
+      <div className="relative flex h-64 items-end gap-1.5 border-b border-dashed border-[rgba(var(--ink-rgb),0.08)]">
         {data.map((d) => {
           const h = d.count === 0 ? 0 : Math.max(3, (d.count / max) * 100);
           return (

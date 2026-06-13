@@ -183,7 +183,7 @@ export function ActivityFeed({
 
   if (rows.length === 0) {
     return (
-      <div className="mt-3 rounded-xl border border-white/[0.06] px-6 py-8 text-center text-sm text-[var(--muted)]">
+      <div className="mt-3 rounded-xl border border-[rgba(var(--ink-rgb),0.06)] px-6 py-8 text-center text-sm text-[var(--muted)]">
         {target === "preview"
           ? "No preview deployments yet — branch previews will appear here."
           : "No activity yet — syncs will appear here once a repo is connected."}
@@ -192,7 +192,7 @@ export function ActivityFeed({
   }
 
   return (
-    <ul className="mt-3 divide-y divide-white/[0.06] rounded-xl border border-white/[0.06] bg-white/[0.02]">
+    <ul className="mt-3 divide-y divide-[rgba(var(--ink-rgb),0.06)] rounded-xl border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)]">
       {rows.map((d) => {
         // A `building` row younger than the in-flight ceiling is a live sync → tick a m:ss
         // counter; an older `building` row is a stale/orphaned run (its function was killed),
@@ -229,7 +229,7 @@ export function ActivityFeed({
                     ? "bg-emerald-500/15 text-emerald-400"
                     : d.status === "failed"
                       ? "bg-red-500/15 text-red-400"
-                      : "bg-white/[0.06] text-[var(--muted)]"
+                      : "bg-[rgba(var(--ink-rgb),0.06)] text-[var(--muted)]"
                 }`}
               >
                 {d.status === "successful" ? (
@@ -294,14 +294,14 @@ export function ActivityFeed({
               {/* Multi-line commit messages: the summary shows the first line; the body
                   lands here. */}
               {(d.commitMessage ?? "").includes("\n") && (
-                <pre className="mt-2.5 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-[var(--muted)]">
+                <pre className="mt-2.5 max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-[rgba(var(--ink-rgb),0.05)] p-3 text-xs leading-relaxed text-[var(--muted)]">
                   {(d.commitMessage ?? "").split("\n").slice(1).join("\n").trim()}
                 </pre>
               )}
               {d.status === "failed" && d.error && (
                 <div className="mt-2.5">
                   <p className="text-xs text-red-400/80">Why it failed</p>
-                  <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-black/30 p-3 text-xs leading-relaxed text-[var(--muted)]">
+                  <pre className="mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap rounded-lg bg-[rgba(var(--ink-rgb),0.05)] p-3 text-xs leading-relaxed text-[var(--muted)]">
                     {d.error}
                   </pre>
                 </div>

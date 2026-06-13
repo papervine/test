@@ -82,7 +82,7 @@ export default async function LandingPage() {
   return (
     <PlatformShell variant="full">
       {/* Header */}
-      <header className="db-glass sticky top-0 z-30 border-b border-white/[0.06]">
+      <header className="db-glass sticky top-0 z-30 border-b border-[rgba(var(--ink-rgb),0.06)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center">
             <Wordmark className="text-lg" />
@@ -196,7 +196,7 @@ export default async function LandingPage() {
           }}
         >
           <div className="overflow-hidden rounded-2xl bg-[#0a0a12]">
-            <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-3">
+            <div className="flex items-center gap-2 border-b border-[rgba(var(--ink-rgb),0.06)] px-4 py-3">
               <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
               <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
               <span className="h-3 w-3 rounded-full bg-[#28c840]" />
@@ -206,32 +206,32 @@ export default async function LandingPage() {
             </div>
             <div className="grid grid-cols-[180px_1fr] gap-6 p-6">
               <div className="hidden flex-col gap-2.5 sm:flex">
-                <div className="h-2 w-20 rounded bg-white/10" />
+                <div className="h-2 w-20 rounded bg-[rgba(var(--ink-rgb),0.1)]" />
                 {[28, 22, 18].map((w, i) => (
                   <div
                     key={i}
-                    className="h-2 rounded bg-white/[0.06]"
+                    className="h-2 rounded bg-[rgba(var(--ink-rgb),0.06)]"
                     style={{ width: `${w * 4}px` }}
                   />
                 ))}
-                <div className="mt-3 h-2 w-16 rounded bg-white/10" />
+                <div className="mt-3 h-2 w-16 rounded bg-[rgba(var(--ink-rgb),0.1)]" />
                 {[24, 20].map((w, i) => (
                   <div
                     key={i}
-                    className="h-2 rounded bg-white/[0.06]"
+                    className="h-2 rounded bg-[rgba(var(--ink-rgb),0.06)]"
                     style={{ width: `${w * 4}px` }}
                   />
                 ))}
               </div>
               <div className="flex flex-col gap-3">
                 <div className="h-3 w-24 rounded bg-gradient-to-r from-[var(--blue)] to-[var(--violet)]" />
-                <div className="h-6 w-2/3 rounded bg-white/15" />
-                <div className="h-2.5 w-full rounded bg-white/[0.07]" />
-                <div className="h-2.5 w-11/12 rounded bg-white/[0.07]" />
-                <div className="h-2.5 w-4/5 rounded bg-white/[0.07]" />
+                <div className="h-6 w-2/3 rounded bg-[rgba(var(--ink-rgb),0.15)]" />
+                <div className="h-2.5 w-full rounded bg-[rgba(var(--ink-rgb),0.07)]" />
+                <div className="h-2.5 w-11/12 rounded bg-[rgba(var(--ink-rgb),0.07)]" />
+                <div className="h-2.5 w-4/5 rounded bg-[rgba(var(--ink-rgb),0.07)]" />
                 <div className="mt-2 grid grid-cols-2 gap-3">
-                  <div className="h-20 rounded-lg border border-white/[0.06] bg-white/[0.02]" />
-                  <div className="h-20 rounded-lg border border-white/[0.06] bg-white/[0.02]" />
+                  <div className="h-20 rounded-lg border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)]" />
+                  <div className="h-20 rounded-lg border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)]" />
                 </div>
               </div>
             </div>
@@ -253,7 +253,7 @@ export default async function LandingPage() {
         <div className="mt-14 grid gap-10 sm:grid-cols-3">
           {PILLARS.map(({ icon: Icon, title, body }) => (
             <div key={title}>
-              <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-[var(--blue)]/25 to-[var(--violet)]/25 text-[var(--blue)] ring-1 ring-white/10">
+              <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-[var(--blue)]/25 to-[var(--violet)]/25 text-[var(--blue)] ring-1 ring-[rgba(var(--ink-rgb),0.1)]">
                 <Icon className="h-5 w-5" />
               </div>
               <h3 className="mt-5 text-lg font-semibold">{title}</h3>
@@ -273,7 +273,7 @@ export default async function LandingPage() {
         <div className="mt-10 grid gap-4 sm:grid-cols-2">
           {FEATURES.map(({ icon: Icon, title, body }) => (
             <div key={title} className="db-feature rounded-2xl p-6">
-              <div className="mb-4 grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-[var(--blue)]/20 to-[var(--violet)]/20 text-[var(--blue)] ring-1 ring-white/10">
+              <div className="mb-4 grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-[var(--blue)]/20 to-[var(--violet)]/20 text-[var(--blue)] ring-1 ring-[rgba(var(--ink-rgb),0.1)]">
                 <Icon className="h-5 w-5" />
               </div>
               <h3 className="text-base font-semibold">{title}</h3>
@@ -320,7 +320,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-white/[0.06]">
+      <footer className="border-t border-[rgba(var(--ink-rgb),0.06)]">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 text-sm text-[var(--muted)] sm:flex-row">
           <span className="flex items-center gap-1.5">
             <Wordmark className="text-sm" />

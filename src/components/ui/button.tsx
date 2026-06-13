@@ -15,9 +15,10 @@ const buttonVariants = cva(
     variants: {
       variant: {
         primary: "db-cta text-white",
-        ghost: "db-ring text-[var(--fg)] hover:bg-white/5",
-        outline: "border border-border text-[var(--fg)] hover:bg-white/5",
-        muted: "bg-muted text-[var(--fg)] hover:bg-white/10",
+        danger: "db-danger text-white",
+        ghost: "db-ring text-[var(--fg)] hover:bg-[rgba(var(--ink-rgb),0.05)]",
+        outline: "border border-border text-[var(--fg)] hover:bg-[rgba(var(--ink-rgb),0.05)]",
+        muted: "bg-muted text-[var(--fg)] hover:bg-[rgba(var(--ink-rgb),0.1)]",
       },
       size: {
         sm: "h-8 px-3 text-xs",

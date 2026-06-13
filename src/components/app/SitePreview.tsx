@@ -24,7 +24,7 @@ export function SitePreview({ siteUrl, name }: { siteUrl: string; name: string }
         href={siteUrl}
         target="_blank"
         rel="noreferrer"
-        className="db-ring group relative block aspect-[16/10] overflow-hidden rounded-2xl border border-white/[0.08] bg-white/[0.02]"
+        className="db-ring group relative block aspect-[16/10] overflow-hidden rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)]"
       >
         <iframe
           src={siteUrl}
