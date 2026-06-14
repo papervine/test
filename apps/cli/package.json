@@ -1,0 +1,41 @@
+{
+  "name": "papervine",
+  "version": "0.1.0",
+  "description": "Papervine — open-source, self-hostable docs renderer (docs.json-compatible). Preview a repo of MDX + docs.json locally.",
+  "type": "module",
+  "license": "MIT",
+  "homepage": "https://github.com/phishy/papervine#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phishy/papervine.git"
+  },
+  "keywords": ["papervine", "docs", "documentation", "incumbent", "mdx"],
+  "bin": {
+    "papervine": "bin/papervine.mjs"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "next.config.mjs",
+    "tailwind.config.ts",
+    "postcss.config.mjs",
+    "tsconfig.json"
+  ],
+  "scripts": {
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@papervine/renderer": "0.0.0",
+    "next": "^15.5.19",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "tailwindcss": "3.4.17",
+    "tailwindcss-animate": "^1.0.7",
+    "autoprefixer": "10.4.20",
+    "postcss": "8.5.1"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

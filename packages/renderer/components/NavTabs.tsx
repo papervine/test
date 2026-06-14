@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import clsx from "clsx";
-import type { NavSection } from "@/lib/nav";
+import type { NavSection } from "../lib/nav";
 
 /**
  * Horizontal tab bar (the incumbent's top-level `navigation.tabs`). Each tab links to

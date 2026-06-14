@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { parseDocsConfig, type DocsConfig } from "@/lib/config";
-import { contentContext, parsePage, type ContentSource } from "@/lib/content";
-import { buildNav, type NavLeaf, type NavNode } from "@/lib/nav";
+import { parseDocsConfig, type DocsConfig } from "@papervine/renderer/lib/config";
+import { contentContext, parsePage, type ContentSource } from "@papervine/renderer/lib/content";
+import { buildNav, type NavLeaf, type NavNode } from "@papervine/renderer/lib/nav";
 
 // Regression: buildNav resolves every sidebar leaf via loadPage (one network round-trip
 // per page against tenant object storage). It used to await those serially, making a

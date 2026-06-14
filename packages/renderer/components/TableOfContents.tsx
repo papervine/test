@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import type { TocItem } from "@/lib/mdx";
+import type { TocItem } from "../lib/mdx";
 
 /** Highlight the section currently in view as the reader scrolls (scroll-spy). */
 function useActiveHeading(ids: string[]): string | null {

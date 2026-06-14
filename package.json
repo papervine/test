@@ -1,8 +1,12 @@
 {
-  "name": "papervine",
+  "name": "papervine-monorepo",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "bin": {
     "papervine": "bin/papervine.mjs"
   },

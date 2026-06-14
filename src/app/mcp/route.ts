@@ -2,7 +2,7 @@ import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { headers } from "next/headers";
 import { searchDocs, readPage, listPages, searchApi, apiEnabled } from "@/lib/docs-tools";
-import { contentContext } from "@/lib/content";
+import { contentContext } from "@papervine/renderer/lib/content";
 import { requestContentSource } from "@/lib/request-source";
 import { getSiteByHost } from "@/lib/tenant";
 import { detectAgent } from "@/lib/ua-detect";

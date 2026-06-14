@@ -1,9 +1,11 @@
-/node_modules
-/.next
+# node_modules / build output — match at any depth (workspace packages + apps)
+node_modules/
+.next/
 /out
 /build
 *.tsbuildinfo
 next-env.d.ts
+seeded-dashboard.png
 .DS_Store
 .env*.local
 .vercel

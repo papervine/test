@@ -8,8 +8,8 @@ import * as devRuntime from "react/jsx-dev-runtime";
 import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
-import { mdxComponents } from "@/components/mdx";
-import { withBase } from "@/lib/url-base";
+import { mdxComponents } from "../components/mdx";
+import { withBase } from "./url-base";
 
 /**
  * MDX rendering — HYBRID: compile with @mintlify/mdx's `serialize` (the incumbent's own

@@ -2,7 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { resolveTenantSlug, getSiteBySlug } from "./tenant";
 import { s3Source, isSynced } from "./s3-source";
-import type { ContentSource } from "./content";
+import type { ContentSource } from "@papervine/renderer/lib/content";
 
 /**
  * The content source for the current request's tenant, or null on the apex/preview

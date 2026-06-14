@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { ChevronRight } from "lucide-react";
 import { LucideIcon } from "./LucideIcon";
-import type { NavLeaf, NavNode, NavSection } from "@/lib/nav";
+import type { NavLeaf, NavNode, NavSection } from "../lib/nav";
 
 function isLeaf(n: NavLeaf | NavNode): n is NavLeaf {
   return "href" in n;

@@ -1,7 +1,7 @@
 import "server-only";
 import { type NextRequest } from "next/server";
 import { requestContentSource } from "./request-source";
-import { contentContext } from "./content";
+import { contentContext } from "@papervine/renderer/lib/content";
 import { getSiteByHost } from "./tenant";
 import { detectAgent } from "./ua-detect";
 import { agentSessionId, firstForwardedIp } from "./agent-session";

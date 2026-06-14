@@ -1,7 +1,7 @@
 import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
 import { assistantTools } from "@/lib/assistant-tools";
-import { contentContext, loadConfig, loadPage } from "@/lib/content";
+import { contentContext, loadConfig, loadPage } from "@papervine/renderer/lib/content";
 import { requestContentSource } from "@/lib/request-source";
 import { getSiteByHost } from "@/lib/tenant";
 import { logEvent } from "@/lib/track";

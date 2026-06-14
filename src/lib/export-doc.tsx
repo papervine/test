@@ -1,7 +1,7 @@
 import "server-only";
-import { loadConfig } from "./content";
+import { loadConfig } from "@papervine/renderer/lib/content";
 import { collectExportPages } from "./export-content";
-import { Mdx } from "./mdx";
+import { Mdx } from "@papervine/renderer/lib/mdx";
 
 // Self-contained print stylesheet for the export view. The document is a print artifact —
 // always light, one nav page per printed page — so it carries its own layout rather than

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { platformFontVars } from "@/lib/fonts";
-import { contentContext, loadConfig } from "@/lib/content";
+import { contentContext, loadConfig } from "@papervine/renderer/lib/content";
 import { requestContentSource } from "@/lib/request-source";
-import { resolveTheme, themeCssVars } from "@/lib/theme";
+import { resolveTheme, themeCssVars } from "@papervine/renderer/lib/theme";
 import { EnvBadge } from "@/components/platform/EnvBadge";
 
 // The root layout renders for every host, including tenant docs. Read config within

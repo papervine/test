@@ -1,9 +1,9 @@
 import "server-only";
 import { runSearch } from "./search";
-import { loadPage, loadConfig } from "./content";
-import { buildNav, type NavLeaf, type NavNode } from "./nav";
-import { loadApiCatalog } from "./openapi";
-import type { DocsConfig } from "./config";
+import { loadPage, loadConfig } from "@papervine/renderer/lib/content";
+import { buildNav, type NavLeaf, type NavNode } from "@papervine/renderer/lib/nav";
+import { loadApiCatalog } from "@papervine/renderer/lib/openapi";
+import type { DocsConfig } from "@papervine/renderer/lib/config";
 
 /**
  * Docs retrieval capabilities — the single implementation behind two transports

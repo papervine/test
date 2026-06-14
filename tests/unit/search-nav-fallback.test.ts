@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { parseDocsConfig } from "@/lib/config";
-import { contentContext, parsePage, type ContentSource } from "@/lib/content";
+import { parseDocsConfig } from "@papervine/renderer/lib/config";
+import { contentContext, parsePage, type ContentSource } from "@papervine/renderer/lib/content";
 import { runSearch } from "@/lib/search";
 
 // Regression: buildIndex must enumerate pages from the NAV, not just from

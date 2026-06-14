@@ -3,16 +3,18 @@ import { cookies } from "next/headers";
 import { getSiteBySlug } from "@/lib/tenant";
 import { READER_COOKIE, readerSessionValid } from "@/lib/reader-session";
 import { requestContentSource } from "@/lib/request-source";
-import { contentContext, loadConfig, loadPage } from "@/lib/content";
-import { buildNav, findGroupLabel } from "@/lib/nav";
-import { Mdx, extractToc } from "@/lib/mdx";
-import { resolveTheme, themeCssVars } from "@/lib/theme";
-import { Navbar } from "@/components/Navbar";
-import { NavTabs } from "@/components/NavTabs";
-import { Sidebar } from "@/components/Sidebar";
-import { TableOfContents } from "@/components/TableOfContents";
+import { contentContext, loadConfig, loadPage } from "@papervine/renderer/lib/content";
+import { buildNav, findGroupLabel } from "@papervine/renderer/lib/nav";
+import { Mdx, extractToc } from "@papervine/renderer/lib/mdx";
+import { resolveTheme, themeCssVars } from "@papervine/renderer/lib/theme";
+import { Navbar } from "@papervine/renderer/components/Navbar";
+import { NavTabs } from "@papervine/renderer/components/NavTabs";
+import { Sidebar } from "@papervine/renderer/components/Sidebar";
+import { TableOfContents } from "@papervine/renderer/components/TableOfContents";
 import { PageViewBeacon } from "@/components/analytics/PageViewBeacon";
 import { Assistant } from "@/components/assistant/Assistant";
+import { AskAssistantButton } from "@/components/assistant/AskAssistantButton";
+import { SearchButton } from "@/components/SearchDialog";
 
 /**
  * Render one tenant docs page. Shared by both serving paths so they can't drift:
@@ -75,7 +77,13 @@ export async function renderTenantDocs({
       <>
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
         <PageViewBeacon />
-        <Navbar config={config} base={base} assetBase={assetBase} site={slug} />
+        <Navbar
+          config={config}
+          base={base}
+          assetBase={assetBase}
+          search={<SearchButton site={slug} />}
+          assistant={<AskAssistantButton />}
+        />
         <NavTabs sections={sections} />
         <div className="mx-auto flex max-w-7xl gap-8 pl-9 pr-6">
           <Sidebar sections={sections} />

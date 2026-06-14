@@ -1,8 +1,8 @@
 import "server-only";
 import { cache } from "react";
 import { create, insertMultiple, search as oramaSearch } from "@orama/orama";
-import { listPageSlugs, loadPage, loadConfig } from "./content";
-import { buildNav, findGroupLabel } from "./nav";
+import { listPageSlugs, loadPage, loadConfig } from "@papervine/renderer/lib/content";
+import { buildNav, findGroupLabel } from "@papervine/renderer/lib/nav";
 
 /**
  * Full-text search index (SPEC.md §6). Each docs page is split into heading

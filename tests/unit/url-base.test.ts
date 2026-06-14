@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { withBase } from "@/lib/url-base";
+import { withBase } from "@papervine/renderer/lib/url-base";
 
 const BASE = "/sites/acme";
 

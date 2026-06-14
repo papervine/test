@@ -8,7 +8,7 @@
     "groups": [
       {
         "group": "Get started",
-        "pages": ["index", "architecture", "tech-stack"]
+        "pages": ["index", "architecture", "tech-stack", "cli"]
       },
       {
         "group": "Rendering",

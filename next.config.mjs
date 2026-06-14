@@ -9,6 +9,9 @@ const nextConfig = {
   // The MDX compiler stack (unified/@mdx-js + next-mdx-remote-client) breaks when
   // webpack bundles it for RSC — keep it external so it's required at runtime.
   serverExternalPackages: ["@mintlify/mdx", "next-mdx-remote-client"],
+  // The renderer core ships as TS/TSX source (workspace package), so Next must
+  // compile it rather than treat it as a pre-built dependency.
+  transpilePackages: ["@papervine/renderer"],
 };
 
 export default nextConfig;

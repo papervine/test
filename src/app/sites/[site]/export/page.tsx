@@ -3,7 +3,7 @@ import { notFound, redirect } from "next/navigation";
 import { getSiteBySlug, resolveTenantSlug } from "@/lib/tenant";
 import { READER_COOKIE, readerSessionValid } from "@/lib/reader-session";
 import { requestContentSource } from "@/lib/request-source";
-import { contentContext } from "@/lib/content";
+import { contentContext } from "@papervine/renderer/lib/content";
 import { renderExportDoc } from "@/lib/export-doc";
 import { PrintControls } from "@/components/export/PrintControls";
 

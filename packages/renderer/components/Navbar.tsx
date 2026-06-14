@@ -1,9 +1,8 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
-import { AskAssistantButton } from "./assistant/AskAssistantButton";
-import { SearchButton } from "./SearchDialog";
-import type { DocsConfig } from "@/lib/config";
-import { withBase } from "@/lib/url-base";
+import type { DocsConfig } from "../lib/config";
+import { withBase } from "../lib/url-base";
 
 /**
  * Render the docs logo from docs.json. `logo` is either a single path or a
@@ -41,12 +40,17 @@ export function Navbar({
   config,
   base = "",
   assetBase = "",
-  site,
+  search,
+  assistant,
 }: {
   config: DocsConfig;
   base?: string;
   assetBase?: string;
-  site?: string;
+  /** Optional search palette slot — the host app supplies its implementation
+   *  (the renderer core has no search backend of its own). Omitted → no palette. */
+  search?: ReactNode;
+  /** Optional "Ask AI" slot — supplied by hosts that wire up an assistant. */
+  assistant?: ReactNode;
 }) {
   const links = config.navbar?.links ?? [];
   const primary = config.navbar?.primary;
@@ -60,11 +64,12 @@ export function Navbar({
           <Logo logo={config.logo} name={config.name} assetBase={assetBase} />
         </Link>
 
-        {/* Search palette — absolutely centered so the logo/actions widths don't skew it. */}
-        <SearchButton site={site} />
+        {/* Search palette — absolutely centered so the logo/actions widths don't skew it.
+            Host-supplied (see `search` prop); the renderer core ships no search backend. */}
+        {search}
 
         <div className="ml-auto flex items-center gap-1">
-          <AskAssistantButton />
+          {assistant}
           {links.map((link) => (
             <Link
               key={link.href}

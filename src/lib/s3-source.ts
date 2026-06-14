@@ -1,7 +1,7 @@
 import "server-only";
 import { unstable_cache, revalidateTag } from "next/cache";
-import { parseDocsConfig } from "./config";
-import { parsePage, PAGE_EXTS, type ContentSource } from "./content";
+import { parseDocsConfig } from "@papervine/renderer/lib/config";
+import { parsePage, PAGE_EXTS, type ContentSource } from "@papervine/renderer/lib/content";
 import { getObjectText, listKeys } from "./storage";
 
 /**

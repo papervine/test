@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { contentContext } from "@/lib/content";
+import { contentContext } from "@papervine/renderer/lib/content";
 import { requestContentSource } from "@/lib/request-source";
 import { runSearch } from "@/lib/search";
 

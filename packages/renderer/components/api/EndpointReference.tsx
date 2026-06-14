@@ -1,7 +1,7 @@
 import clsx from "clsx";
-import { sampleFromSchema, type Operation, type Schema } from "@/lib/openapi";
-import { ApiField, FieldSection } from "@/components/mdx/ApiField";
-import { Expandable } from "@/components/mdx/Expandable";
+import { sampleFromSchema, type Operation, type Schema } from "../../lib/openapi";
+import { ApiField, FieldSection } from "../mdx/ApiField";
+import { Expandable } from "../mdx/Expandable";
 
 const METHOD_COLORS: Record<string, string> = {
   GET: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",

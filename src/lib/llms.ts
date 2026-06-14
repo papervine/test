@@ -1,5 +1,5 @@
 import "server-only";
-import { loadConfig, loadPage } from "./content";
+import { loadConfig, loadPage } from "@papervine/renderer/lib/content";
 import { listPages } from "./docs-tools";
 
 /**

@@ -1194,11 +1194,39 @@ Papervine (`app.papervine.io`); bundling them into an `npx`-distributed tool shi
 + cloud SDKs to every end user who just wants to preview docs — a transitive-CVE attack
 surface and a heavy install, for code the CLI never invokes (middleware already suppresses
 the control plane at runtime when `PAPERVINE_CONTENT` is set, but that's a runtime guard, not
-a packaging boundary). Two ways to enforce it, decision still open: **(a)** split a lean
-renderer-only package (recommended — a true boundary), or **(b)** one package with a strict
-`files` allowlist that excludes the control-plane modules (faster, but dead code still ships
-in the tarball). Either way the published tarball is allowlisted and `npm pack --dry-run`-audited
-so no `.env.local`/seed data/fixtures leak.
+a packaging boundary).
+
+**Decision (2026-06-14): split, via an npm-workspace monorepo** — not a `files` allowlist.
+The repo becomes `packages/renderer` (→ **`@papervine/renderer`**, the shared renderer-core,
+published under the scope) consumed by two apps: `apps/cli` (→ the unscoped **`papervine`**,
+what `npx papervine` runs — a thin Next app with only the local-folder `(docs)` route + `bin/`)
+and `apps/web` (the private hosted control plane, today's app moved wholesale). The CLI's
+`package.json` lists `next` + `react` + `@papervine/renderer` and *nothing* control-plane, so
+better-auth/postgres/@aws-sdk/pusher/Drizzle/MCP are **physically absent** from the `npx`
+tarball — the wall a `files` allowlist couldn't give (one `package.json` still *installs* those
+deps even if their source files are excluded). The rationale is broader than CVEs: the control
+plane isn't on the code path `papervine dev` executes, so shipping it is pure install-weight +
+compile-surface + conceptual muddle regardless of security. **The boundary is already clean in
+the code** — the local-folder route `(docs)/[[...slug]]` never touches the DB; all
+DB/auth/assistant/analytics coupling lives in `render-tenant.tsx`, which backs the multi-tenant
+`sites/[site]` route — so the split is mostly *moving* files behind the existing `ContentSource`
+seam, not untangling logic. **Renderer-core** = lib `config`/`content`/`mdx`/`nav`/`openapi`/
+`theme`/`tenant-host`/`url-base`/`slug`/`utils`/`fonts`/`format-elapsed` + components
+`Navbar`/`Sidebar`/`TableOfContents`/`NavTabs`/`LucideIcon`/`Wordmark`/`ThemeToggle`/`mdx/*`/
+`api/*`. **Four edge couplings** get cut: the `(docs)` layout's `<Assistant/>` (→ optional
+slot the web app injects), `SearchDialog`→`search-track` (→ no-op without the endpoint), the
+227-line tenant `middleware.ts` (→ near-empty for the CLI, which serves docs at the apex in
+`PAPERVINE_CONTENT` mode), and local asset serving (→ a renderer-side route). The `.npmrc`
+`legacy-peer-deps=true` and `next.config` `serverExternalPackages` both carry to the workspace.
+Either published tarball is `npm pack --dry-run`-audited so no `.env.local`/seed/fixtures leak.
+
+**Execution is phased**, each phase keeping typecheck + smoke + a real-repo crawl green:
+(1) workspace scaffold + move today's app to `apps/web` unchanged; (2) extract
+`@papervine/renderer`, repoint `apps/web` at it (`@/` imports → package-relative); (3) sever
+the four couplings; (4) build `apps/cli`, tarball-audit; (5) ship `papervine@0.1.0` over the
+placeholder, from CI with `--provenance`. Phase 1 is the disruptive-but-mechanical one (the
+move touches every import path); 2–4 are contained; the destination is the full monorepo
+regardless of where we pause.
 
 **incumbent parity informs the surface.** `mint` has **no `deploy` and no `login`** —
 deployment is Git-based (push → their GitHub app builds it), and the CLI only reaches the
@@ -1234,9 +1262,42 @@ the hosted API over HTTPS, they don't embed it.
 > `private:true`/secrets couldn't leak; `npm pack --dry-run` confirmed the 3-file surface
 > before publish. The real CLI ships as `papervine@0.1.0` over the top, from CI with
 > `npm publish --provenance` (GitHub Actions OIDC + automation token) — supply-chain hardening
-> the placeholder didn't need. Packaging boundary (split vs `files` allowlist) still to decide.
-> Each `0.1.0` command earns a `docs/` page as it lands (the dogfooded CLI reference); the
-> placeholder, having no real behavior, doesn't.
+> the placeholder didn't need. Each `0.1.0` command earns a `docs/` page as it lands (the
+> dogfooded CLI reference); the placeholder, having no real behavior, doesn't.
+>
+> **Status (2026-06-14):** chose the packaging boundary — **split via npm-workspace monorepo**
+> (`packages/renderer` + `apps/cli` + `apps/web`), not a `files` allowlist. Rationale and the
+> renderer-vs-control-plane file boundary captured above; execution is the 5-phase plan. Not yet
+> started — the move (Phase 1) is next.
+>
+> **Status (2026-06-14):** built the split (Phases 1–4), reordering so the disruptive
+> app-relocation is deferred to last — the value path (extract renderer → build CLI) lands
+> first and the web app keeps working at the repo root for now (root `package.json` is both the
+> web app and the workspace manager; the cosmetic `apps/web` move is Phase 4-of-the-original,
+> still pending). What landed: **(1)** workspace scaffold (`workspaces: ["packages/*",
+> "apps/*"]`, root renamed `papervine-monorepo` so it won't collide with the CLI's `papervine`).
+> **(2)** `@papervine/renderer` extracted — the *exact* render closure, smaller than first
+> scoped: lib `config`/`content`/`mdx`/`nav`/`openapi`/`url-base`/`theme` + components
+> `Navbar`/`Sidebar`/`TableOfContents`/`NavTabs`/`LucideIcon`/`ThemeToggle`/`api/`/`mdx/*`.
+> `utils`(`cn`)/`tenant-host`/`slug`/`fonts`/`format-elapsed` proved **not** on the render path
+> (the first closure trace missed relative imports — Navbar pulled `./SearchDialog` +
+> `./assistant/AskAssistantButton` via non-`@/` specifiers; re-traced including those). Consumed
+> via `transpilePackages` + deep imports (`@papervine/renderer/lib/x`); no restrictive
+> `exports`. **(3)** the four edge couplings severed: `Navbar` now takes optional `search` +
+> `assistant` **slots** (web passes its real `SearchButton`/`AskAssistantButton`, the CLI passes
+> nothing); the CLI ships a near-empty `middleware.ts` (asset-rewrite only — no tenant routing)
+> and its own `dbasset` route to stream local images from `PAPERVINE_CONTENT`. **(4)**
+> `apps/cli` → **`papervine`**: a thin Next app (root layout + `(docs)` route + bin) depending
+> only on `next`/`react`/`@papervine/renderer`. Verified: web typecheck + smoke + unit (210) +
+> crawl (`large-docs` 881pp, **0×500**) all green; `papervine dev` renders the dogfood docs
+> (light **and** dark, browser-checked) and a real `starter` incl. asset serving
+> (`/logo/light.svg` → 200); **tarball audit** = 10 files / 15.5 kB, **dependency audit** = zero
+> control-plane packages (no better-auth/postgres/drizzle/@aws-sdk/pusher/mcp/ai-sdk). Remaining
+> (Phase 5): publish `@papervine/renderer` + `papervine@0.1.0` from CI with `--provenance`
+> (decision: publish the renderer vs. `bundledDependencies` — leaning publish, to keep the CLI
+> tarball lean and the renderer reusable); tighten the renderer's declared deps before publish;
+> the docs-CSS (`.prose`/shiki) is duplicated between web `globals.css` and the CLI's, to dedupe
+> into the package later; the cosmetic web→`apps/web` move.
 
 ---
 
