@@ -7,7 +7,8 @@
   "homepage": "https://github.com/phishy/papervine#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/phishy/papervine.git"
+    "url": "git+https://github.com/phishy/papervine.git",
+    "directory": "apps/cli"
   },
   "keywords": ["papervine", "docs", "documentation", "mdx", "docs.json"],
   "bin": {
@@ -26,7 +27,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@papervine/renderer": "0.0.0",
+    "@papervine/renderer": "^0.1.0",
     "next": "^15.5.19",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

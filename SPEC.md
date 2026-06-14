@@ -1298,6 +1298,27 @@ the hosted API over HTTPS, they don't embed it.
 > tarball lean and the renderer reusable); tighten the renderer's declared deps before publish;
 > the docs-CSS (`.prose`/shiki) is duplicated between web `globals.css` and the CLI's, to dedupe
 > into the package later; the cosmetic web→`apps/web` move.
+>
+> **Status (2026-06-14):** stripped the incumbent from all **user-facing** surfaces — the published
+> CLI (bin help, `package.json` description/keywords, the source comments) and the public docs
+> site (19 pages + `docs.json`): positioning prose ("docs.json-compatible docs platform", "docs.json-compatible",
+> "mirrors the incumbent") became neutral capability claims ("compatible with existing `docs.json`
+> projects"). Kept where factual/functional: the `@mintlify/mdx` dependency name, the `mint`
+> theme value, the broken-peer-dep gotcha — and **internal** design docs (this SPEC, CLAUDE.md,
+> GAP-REPORT.md, the crawl fixtures), where the incumbent is the legitimate "what we clone" reference.
+>
+> **Status (2026-06-14):** wired Phase 5 (publish), publish itself deferred. Versioned
+> `@papervine/renderer`→`0.1.0` and pointed the CLI's dep at `^0.1.0` (resolves to the local
+> workspace in dev); added the renderer's `repository`/`files` (provenance needs `repository`).
+> Renderer deps confirmed against actual imports (exact — clsx used, nothing missing/extra; no
+> tighten needed). Added `.github/workflows/publish.yml` — **dormant** until a `v*` tag (or
+> manual dispatch) *and* an `NPM_TOKEN` secret exist: it gates on typecheck+smoke, then
+> `npm publish --provenance --access public` the renderer first (the CLI depends on it) then the
+> CLI; `id-token: write` enables the OIDC build-provenance attestation. CI's `verify` job also
+> now typechecks `apps/cli` against its own tsconfig. Dry-run packs clean:
+> `@papervine/renderer@0.1.0` (26 files / 23.8 kB), `papervine@0.1.0` (12 files / 7.3 kB).
+> **Not done on purpose:** the actual `npm publish` (awaiting go) — `papervine@0.1.0` will land
+> over the `0.0.1` placeholder.
 
 ---
 

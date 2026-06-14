@@ -21,6 +21,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Typecheck CLI app (apps/cli — its own tsconfig + next plugin)
+        run: npx tsc --noEmit -p apps/cli/tsconfig.json
+
       - name: Unit tests (pure logic)
         run: npm run test:unit
 
