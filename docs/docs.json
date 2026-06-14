@@ -1,7 +1,7 @@
 {
   "$schema": "https://papervine.io/schema.json",
   "name": "Papervine",
-  "description": "Architecture and contributor reference for Papervine — the docs.json-compatible docs platform. These docs are written in Papervine's own format and render in Papervine itself.",
+  "description": "Architecture and contributor reference for Papervine — the open-source, self-hostable docs platform. These docs are written in Papervine's own format and render in Papervine itself.",
   "favicon": { "light": "/favicon.ico", "dark": "/favicon.ico" },
   "colors": { "primary": "#7C3AED", "light": "#A78BFA", "dark": "#5B21B6" },
   "navigation": {

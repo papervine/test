@@ -1,10 +1,10 @@
 ---
 title: docs.json config
-description: How Papervine parses docs.json as a docs.json-compatible compatibility layer and walks its recursive navigation tree.
+description: How Papervine parses docs.json as a lenient compatibility layer and walks its recursive navigation tree.
 ---
 
-A single `docs.json` at the repo root configures a Papervine site. It mirrors the incumbent's
-schema so an existing docs.json repo migrates unchanged. The core shape:
+A single `docs.json` at the repo root configures a Papervine site. It matches the established
+`docs.json` schema so an existing `docs.json` repo migrates unchanged. The core shape:
 
 ```jsonc
 {
@@ -42,7 +42,7 @@ Parsing lives in `src/lib/config.ts` and is deliberately lenient — every field
 forgiving Zod parse (`.catch`), and unknown top-level keys are **passed through with a
 warning** rather than rejected.
 
-This matters because real docs.json configs use keys and shapes Papervine has not implemented
+This matters because real-world `docs.json` configs use keys and shapes Papervine has not implemented
 yet. Strict validation is the wrong default for a compatibility layer: one over-strict field
 once took down an entire production docs site (a `favicon` declared as a `string` rejected
 the whole config when a repo supplied `{ light, dark }`). The fix — and the policy — is to
@@ -50,7 +50,7 @@ accept the union and warn on anything unrecognized, not hard-fail.
 
 <Warning>
   Do not "tighten" the config schema by making fields required or by rejecting unknown keys.
-  Lenient parsing is a feature: it is what lets unmodified docs repos render. Add support
+  Lenient parsing is a feature: it is what lets unmodified `docs.json` repos render. Add support
   for a field, or pass it through with a warning — never throw. See
   [gotchas](/contributing/gotchas).
 </Warning>
@@ -64,7 +64,7 @@ accept the union and warn on anything unrecognized, not hard-fail.
 
 ## The navigation tree
 
-`navigation` is **one recursive structure**, matching the incumbent's docs.json. It is not a flat
+`navigation` is **one recursive structure**, matching the `docs.json` schema. It is not a flat
 list of pages — it is a nested tree of *division* types, each of which can contain the next,
 bottoming out in page slugs:
 
@@ -95,7 +95,7 @@ empty sidebar even though its config parsed fine.
 ## Themes and appearance
 
 `theme` selects a named visual preset — `mint` (default), `maple`, `palm`, `willow`,
-`linden`, `almond`, `aspen`, `sequoia`, or `luma` (the incumbent's set). Each preset is a small
+`linden`, `almond`, `aspen`, `sequoia`, or `luma`. Each preset is a small
 token bundle (font stack, corner radius, …) defined in `src/lib/theme.ts` and applied as CSS
 variables on `<html data-theme="…">`, so the whole UI re-skins from one config value. An
 unknown theme name falls back to `mint`.
@@ -104,7 +104,7 @@ unknown theme name falls back to `mint`.
   theme preset.
 - **`appearance`** controls light/dark: `{ "default": "light" | "dark" | "system", "strict":
   boolean }`. `default` sets the initial mode (a stored reader toggle wins; `system` follows
-  the OS), and `strict` hides the light/dark switcher. The default is light, matching the incumbent.
+  the OS), and `strict` hides the light/dark switcher. The default is light.
 
 ## Related
 

@@ -1,6 +1,6 @@
 ---
 title: Reader auth
-description: A docs.json-compatible handshake that gates a customer's published docs for their own end users, without Papervine ever storing reader credentials.
+description: A standards-based handshake that gates a customer's published docs for their own end users, without Papervine ever storing reader credentials.
 ---
 
 Reader auth (Layer 2) gates a customer's *published docs pages* for *their* end users. The
@@ -9,8 +9,8 @@ reader credentials.** Instead, we **verify a signed assertion** produced by the 
 own login system, then mint a short-lived docs session. The customer's IdP does the hard
 part, so this is a much smaller security surface than real authentication.
 
-The model matches the incumbent's exactly, so an existing incumbent "Authentication &
-Personalization" configuration migrates unchanged. For how this differs from the dashboard
+The model matches the common "Authentication & Personalization" handshake, so an existing
+such configuration migrates unchanged. For how this differs from the dashboard
 account system, see [platform auth](/auth/platform-auth) and the
 [auth overview](/auth/overview).
 
@@ -40,7 +40,7 @@ docs site. Three methods are supported, in build order.
 
 ### The JWT payload
 
-The signed payload is docs.json-compatible:
+The signed payload is compatible with the standard reader-auth schema:
 
 ```ts
 type User = {

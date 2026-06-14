@@ -4,8 +4,8 @@ description: Model Context Protocol servers that let AI tools both read a docs s
 ---
 
 Papervine exposes [Model Context Protocol](https://modelcontextprotocol.io/) servers so AI
-tools can both **read** a docs site and **edit** it — mirroring the incumbent, which ships two
-distinct MCP servers. The two have very different maturity and trust models.
+tools can both **read** a docs site and **edit** it — two distinct MCP servers. The two have
+very different maturity and trust models.
 
 <Info>
   The **read MCP is shipped**. The **authoring (write) MCP is planned** — it depends on the
@@ -61,8 +61,8 @@ the assistant — published pages + OpenAPI specs, excluding hidden/`noindex`.
 
 ## Authoring MCP (admin / write)
 
-The authoring MCP lets a docs *owner* connect an AI tool to **edit their docs** (matching
-The incumbent's Admin MCP). It is the agent-native counterpart to the web editor: any action an
+The authoring MCP lets a docs *owner* connect an AI tool to **edit their docs** (an admin
+MCP). It is the agent-native counterpart to the web editor: any action an
 owner can take in the dashboard, an agent can take through this MCP.
 
 <Warning>

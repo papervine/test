@@ -22,7 +22,7 @@ layer's hard problem is the other layer's non-problem.
 | What it protects | The Papervine dashboard / control plane | Published docs *pages* (private, internal, or gated docs) |
 | Who owns identity | **We do** — we are the IdP | **The customer does** — we only *verify* an assertion |
 | Who needs it | Every tenant; a prerequisite for multi-tenancy | Only some tenants (typically enterprise) |
-| Maps to the incumbent | Their dashboard account | Their "Authentication & Personalization" |
+| Analogous concept | A hosted dashboard account | An "Authentication & Personalization" config |
 
 The asymmetry in the last two rows is why the layers stay separate. Platform auth is
 table stakes — nothing multi-tenant works until a customer can sign in, create an
@@ -36,7 +36,7 @@ the hard part.
     organizations, roles, and the host-only session cookie.
   </Card>
   <Card title="Reader auth" href="/auth/reader-auth">
-    The docs.json-compatible handshake that gates a customer's published docs for their own
+    The standards-based handshake that gates a customer's published docs for their own
     end users, without us ever storing reader credentials.
   </Card>
 </CardGroup>

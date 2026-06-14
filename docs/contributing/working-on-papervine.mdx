@@ -3,8 +3,8 @@ title: Working on Papervine
 description: The contributor contract — definition of done, how to drive the app, the GitOps migration flow, the command reference, and code conventions.
 ---
 
-Papervine is an open-source, multi-tenant **docs.json-compatible docs platform**: it renders a docs site from a
-Git repo of MDX + a `docs.json`. This page is the contract for how to work in the repo —
+Papervine is an open-source, multi-tenant, **self-hostable docs platform**: it renders a docs
+site from a Git repo of MDX + a `docs.json`. This page is the contract for how to work in the repo —
 follow it for every change. Start with the [architecture](/architecture) overview for the
 big picture, and [renderer internals](/rendering/internals) for how MDX actually renders.
 
@@ -28,8 +28,8 @@ what passed — if something is unverified, say so.
     Don't claim a UI change works from the DOM alone — layout bugs (e.g. the Card `h-full`
     height bug) only show visually.
   </Step>
-  <Step title="Renderer / config / nav changes: crawl a representative docs repo">
-    `node tests/crawl.mjs <cloned-incumbent-repo>` — expect 0 × HTTP 500.
+  <Step title="Renderer / config / nav changes: crawl a real-world docs repo">
+    `node tests/crawl.mjs <cloned-docs-repo>` — expect 0 × HTTP 500.
   </Step>
   <Step title="Control-plane / authed changes: e2e is green">
     `npm run test:e2e` (needs docker Postgres + MinIO up).
@@ -58,7 +58,7 @@ don't hand-walk signup → onboarding. Seed a known account and drive a real bro
     npm run db:seed
     ```
     `scripts/seed-dev.mjs` creates the login **`dev@papervine.local`** /
-    **`dev-password-123`**, an org, and a connected site `starter` (→ `papervine/starter`)
+    **`dev-password-123`**, an org, and a connected site `starter` (→ a real-world docs repo)
     with activity + analytics data. It is idempotent (re-run to refresh the password) and
     **prod-guarded** — it refuses any non-localhost `DATABASE_URL`.
   </Step>
@@ -132,7 +132,7 @@ npm run test:unit           # vitest — pure-logic unit tests
 npm run test:e2e            # playwright — authed journeys (needs docker Postgres + MinIO)
 npm run db:generate         # generate a versioned SQL migration from schema changes
 npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
-node bin/papervine.mjs dev <dir>     # preview any docs repo (docs dev analogue)
+node bin/papervine.mjs dev <dir>     # preview any docs repo locally
 node tests/crawl.mjs <dir>           # crawl a real repo, report rendered/degraded/500
 ```
 
@@ -151,6 +151,6 @@ node tests/crawl.mjs <dir>           # crawl a real repo, report rendered/degrad
   Two principles guide every renderer change: **never let one unsupported feature 500 a
   page** (unknown components degrade to their children; compile failures render an inline
   notice), and **config is a compatibility layer — warn, don't throw**. `docs.json` is
-  docs.json-compatible, so real repos migrate unchanged. When unsure how something should
-  behave, check against a representative docs repo rather than guess.
+  compatible with existing `docs.json` projects, so real repos migrate unchanged. When unsure
+  how something should behave, check against a real-world `docs.json` repo rather than guess.
 </Info>

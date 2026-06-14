@@ -1,11 +1,11 @@
 ---
 title: Introduction
-description: Papervine is an open-source, self-hostable docs.json-compatible docs platform — it renders a docs site from a Git repo of MDX + a docs.json.
+description: Papervine is an open-source, self-hostable docs platform — it renders a docs site from a Git repo of MDX + a docs.json.
 ---
 
 Papervine renders a fast, themeable documentation site from a folder of **MDX + a
-`docs.json`**, in a format that is **drop-in compatible with the incumbent**. Point it at an
-existing docs.json repo and it renders unchanged; self-host it anywhere.
+`docs.json`**, in a format that is a **drop-in for existing `docs.json` + MDX repos**. Point
+it at an existing `docs.json` repo and it renders unchanged; self-host it anywhere.
 
 <Note>
   These docs are written in Papervine's own format and render in Papervine itself. The
@@ -17,9 +17,9 @@ existing docs.json repo and it renders unchanged; self-host it anywhere.
 
 - **Own your docs.** MDX files in your repo, rendered by software you control. Your content
   is always just files — there is no proprietary store to get locked into.
-- **docs.json-compatible.** Papervine reads the same `docs.json` + MDX, matching the incumbent's
-  schema and behavior so real repos migrate unchanged. We smoke-test against real-world
-  repos like `papervine/starter`.
+- **Compatible with existing `docs.json` projects.** Papervine reads the same `docs.json` +
+  MDX, matching its navigation schema and behavior so real repos migrate unchanged. We
+  smoke-test against real-world docs repos.
 - **Multi-tenant.** One deployment serves many docs sites — each at `{slug}.papervine.io`,
   a custom domain, or a path-based fallback (`/sites/{slug}`).
 
@@ -36,9 +36,10 @@ These three rules drive most of the architecture. When in doubt, they win.
     A single unexpected `docs.json` field must never break the site. Every field is lenient;
     unknown keys pass through with a warning.
   </Card>
-  <Card title="Match the incumbent, don't guess">
-    `docs.json` is docs.json-compatible so real repos migrate unchanged. When unsure how
-    something should behave, check it against a representative docs repo.
+  <Card title="Match the source format, don't guess">
+    `docs.json` is compatible with existing `docs.json` projects so real repos migrate
+    unchanged. When unsure how something should behave, check it against a real-world
+    `docs.json` repo.
   </Card>
 </CardGroup>
 
@@ -65,5 +66,5 @@ These three rules drive most of the architecture. When in doubt, they win.
   These docs describe **how the system works** (evergreen reference). For the design
   *decisions*, dated status notes, and roadmap rationale, see
   [`SPEC.md`](https://github.com/papervine/papervine/blob/main/SPEC.md); for what does and
-  doesn't render yet versus representative docs repos, see `GAP-REPORT.md`.
+  doesn't render yet versus real-world `docs.json` repos, see `GAP-REPORT.md`.
 </Info>

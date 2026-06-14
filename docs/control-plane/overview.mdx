@@ -22,7 +22,7 @@ shares their namespace.
 
 ### Bare URLs, scoped by path
 
-The dashboard is **URL-scoped**, mirroring `app.example.com/{org}/{site}`. A site's home is
+The dashboard is **URL-scoped**, with a familiar `app.<your-domain>/{org}/{site}` shape. A site's home is
 the bare path **`app.papervine.io/:org/:site`** (in dev, `app.localhost:3000/dev-org/starter`).
 The active site is the **URL**, not a cookie — so dashboard URLs are shareable, bookmarkable,
 and work correctly across multiple tabs.
@@ -43,7 +43,7 @@ apex over to the app host, so the session cookie is always set on `app.`.
 ## The org / site switcher
 
 An organization can own several sites. The **top-left switcher** selects the active site that
-per-site pages (Overview, Analytics, Settings) scope to — mirroring the incumbent's switcher. It
+per-site pages (Overview, Analytics, Settings) scope to. It
 lists every site you can access plus a **New site** action.
 
 Because the active site is encoded in the URL, switching sites simply navigates: the switcher

@@ -77,10 +77,9 @@ session (storageState) so specs start authenticated.
 node tests/crawl.mjs <dir>
 ```
 
-The `papervine dev` analogue used to validate against representative docs repos. It reports
-rendered / degraded / 500 counts and exits non-zero on any 500 — run it for every renderer,
-config, or nav change. Compatibility findings vs. representative docs repos are tracked in
-`GAP-REPORT.md`.
+Used to validate against real-world `docs.json` repos. It reports rendered / degraded / 500
+counts and exits non-zero on any 500 — run it for every renderer, config, or nav change.
+Compatibility findings vs. real-world `docs.json` repos are tracked in `GAP-REPORT.md`.
 
 ## The CI gate
 

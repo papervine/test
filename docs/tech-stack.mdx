@@ -18,12 +18,12 @@ a multi-tenant platform.
 
 | Layer | Choice | Why |
 |---|---|---|
-| Framework | **Next.js** (App Router, RSC) | Matches the incumbent; multi-tenant middleware; streaming render |
+| Framework | **Next.js** (App Router, RSC) | Multi-tenant middleware; streaming render |
 | Language | **TypeScript**, strict | |
-| MDX | **Hybrid**: `@mintlify/mdx` `serialize` + `@mdx-js/mdx` `run` | the incumbent-fidelity highlighting/snippets, plus a catchable render that never 500s |
+| MDX | **Hybrid**: `@mintlify/mdx` `serialize` + `@mdx-js/mdx` `run` | High-fidelity highlighting/snippets, plus a catchable render that never 500s |
 | Syntax highlighting | **Shiki** (via `@mintlify/mdx`) | Fast, accurate, dual light/dark themes |
 | API reference | `@scalar/openapi-parser` + a native renderer | In-nav endpoint pages, not a foreign embed |
-| CLI | `papervine dev <dir>` (`bin/papervine.mjs`) | Preview any MDX + `docs.json` repo locally — the `docs dev` analogue |
+| CLI | `papervine dev <dir>` (`bin/papervine.mjs`) | Preview any MDX + `docs.json` repo locally |
 | Styling | **Tailwind CSS** + CSS variables | Theme tokens come from `docs.json` |
 | Search | **Orama** (Algolia optional) | Embeddable, multi-tenant |
 | Database | **Postgres** + `pgvector` (hosted: **Neon**) | Tenants, config, embeddings; serverless Postgres for the Vercel deploy |
@@ -32,14 +32,14 @@ a multi-tenant platform.
 | Queue / workers | **BullMQ** / serverless functions | Git sync jobs |
 | AI | **Vercel AI SDK** + `@ai-sdk/anthropic` (Claude) | The agentic [AI assistant](/features/ai-assistant) |
 | Platform auth | **Better Auth** (+ `organization`) | OSS, self-hostable; orgs + RBAC |
-| Hosting | Vercel (render) + workers elsewhere | Mirrors the incumbent's Vercel approach |
+| Hosting | Vercel (render) + workers elsewhere | Mirrors a standard Vercel deployment |
 | Monorepo | pnpm + Turborepo | Shared packages |
 
 A few choices are worth calling out:
 
 <CardGroup cols={2}>
   <Card title="Hybrid MDX, never MDXRemote">
-    Compile with `@mintlify/mdx`'s `serialize` (the third-party MDX serializer), then execute the
+    Compile with `@mintlify/mdx`'s `serialize`, then execute the
     compiled output with `@mdx-js/mdx`'s `run()` inside a `try/catch`. This keeps the whole
     step catchable, so an unsupported feature degrades to an inline notice instead of a 500.
     See [renderer internals](/rendering/internals).
@@ -99,5 +99,5 @@ store.
 
 - [Architecture](/architecture) — the two planes, tenant resolution, and custom domains.
 - [Content pipeline](/rendering/content-pipeline) — Git sync into the content store.
-- [`docs.json` config](/rendering/config) — the docs.json-compatible config schema.
+- [`docs.json` config](/rendering/config) — the `docs.json`-compatible config schema.
 - [Introduction](/) — the project at a glance.

@@ -14,9 +14,9 @@ MDX rendering (`src/lib/mdx.tsx`) is a deliberate **hybrid** of two libraries:
 
 <Steps>
   <Step title="Compile with @mintlify/mdx's serialize">
-    `serialize` is the third-party MDX serializer — it brings Shiki dual-theme syntax highlighting
-    and snippet handling, so highlighting matches the incumbent exactly. It produces compiled,
-    serializable output rather than a rendered element.
+    `serialize` brings Shiki dual-theme syntax highlighting and snippet handling, for
+    high-fidelity highlighting. It produces compiled, serializable output rather than a
+    rendered element.
   </Step>
   <Step title="Execute with @mdx-js/mdx's run(), inside a try/catch">
     The compiled output is executed with `@mdx-js/mdx`'s `run()` wrapped in our own
@@ -27,7 +27,7 @@ MDX rendering (`src/lib/mdx.tsx`) is a deliberate **hybrid** of two libraries:
 
 ### Why not MDXRemote
 
-The obvious simplification — the incumbent's `MDXRemote` — is wrong here. `MDXRemote` throws
+The obvious simplification — `MDXRemote` — is wrong here. `MDXRemote` throws
 compile errors **at RSC render time**, which cannot be caught without an error boundary, and
 an error boundary breaks RSC streaming. Running the compiled source ourselves keeps the
 entire compile-and-execute step inside a `try/catch`.
@@ -55,8 +55,8 @@ which is almost always the right thing.
 <Info>
   Alongside the component fallback, two more guards keep a bad page from crashing: frontmatter
   is parsed defensively (bad YAML does not throw), and a compile failure on the whole page
-  renders an **inline notice** instead of a 500. Layered together, these mean any real
-  docs.json repo renders without crashing — supported features render, unsupported ones
+  renders an **inline notice** instead of a 500. Layered together, these mean any real-world
+  `docs.json` repo renders without crashing — supported features render, unsupported ones
   degrade.
 </Info>
 

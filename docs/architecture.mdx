@@ -44,8 +44,8 @@ The two planes are deliberately **themed apart and must never leak into each oth
   (`src/lib/theme.ts`, `globals.css`) — see [config](/rendering/config).
 - The **control plane** shares one dark, luminous design language codified in
   `src/styles/platform.css` (scoped under `.db`) and applied via `<PlatformShell>`. Its UI
-  primitives are [shadcn/ui](https://ui.shadcn.com) mapped onto the `.db` palette — the
-  same choice the incumbent made for their own dashboard. The neutral tokens resolve only inside
+  primitives are [shadcn/ui](https://ui.shadcn.com) mapped onto the `.db` palette. The
+  neutral tokens resolve only inside
   the `.db` scope, so they cannot bleed into the renderer.
 
 <Note>

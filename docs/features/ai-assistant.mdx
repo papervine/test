@@ -4,8 +4,8 @@ description: A conversational assistant that answers questions over a tenant's d
 ---
 
 The AI assistant is a slide-out chat panel that answers reader questions from a tenant's own
-docs and OpenAPI spec. It is modeled on the incumbent's "Ask Assistant": the model *navigates*
-the docs to find answers, cites its sources, and admits when it doesn't know.
+docs and OpenAPI spec. It is an agentic "Ask Assistant": the model *navigates* the docs to
+find answers, cites its sources, and admits when it doesn't know.
 
 <Info>
   A first slice is built: an agentic `/api/assistant` route (Claude via the Vercel AI SDK,
@@ -20,8 +20,8 @@ the docs to find answers, cites its sources, and admits when it doesn't know.
 
 A naïve docs bot does one top-`k` vector lookup and stuffs the results into a prompt.
 Papervine's assistant instead **lets the model decide how to search**, iterating with tools
-until it can answer — the same shape the incumbent uses (they describe it as a "virtual
-filesystem over their vector DB" the model navigates with filesystem-like tools).
+until it can answer — effectively a virtual filesystem over the vector store that the model
+navigates with filesystem-like tools.
 
 This is cheap to build because the tools are thin wrappers over capabilities Papervine
 already has — the content loader, the navigation tree, [search](/features/search), and the
@@ -90,7 +90,7 @@ mistakes."
 
 ## Invocation
 
-The assistant matches the incumbent's invocation surfaces:
+The assistant offers several invocation surfaces:
 
 <CardGroup cols={2}>
   <Card title="Ask Assistant button">
@@ -116,15 +116,15 @@ The assistant retrieves over the same content the rest of the site indexes:
 - **Published pages + OpenAPI specs** are indexed at [sync time](/rendering/content-pipeline);
   changed pages are re-indexed on publish.
 - **Hidden / `noindex` pages are excluded** by default. Setting `docs.json`'s
-  `seo.indexing: "all"` includes them (this is the incumbent's exact toggle, and Papervine already
-  parses `hidden` / `noindex` frontmatter).
+  `seo.indexing: "all"` includes them (Papervine already parses `hidden` / `noindex`
+  frontmatter).
 
 ## Surfaces beyond the docs site
 
 The assistant is not confined to the docs panel:
 
-- **`/api/assistant`** is an SSE endpoint (AI SDK data stream), with a docs.json-compatible
-  alias path so existing integrations port over.
+- **`/api/assistant`** is an SSE endpoint (AI SDK data stream), with a compatible alias path
+  so existing integrations port over.
 - It is **embeddable** in external apps and portals; **Slack and Discord bots** are planned.
 - **The tool layer *is* the read MCP server.** `search_docs` / `read_page` / `list_pages` /
   `search_api` are exactly the tools a generated read-MCP exposes, so the in-docs assistant
@@ -132,7 +132,7 @@ The assistant is not confined to the docs panel:
 
 ## Assistant settings (control plane)
 
-Docs owners manage the assistant from a dashboard page (the incumbent's **Automate → Assistant**;
+Docs owners manage the assistant from a dashboard page (**Automate → Assistant**;
 see the [control plane overview](/control-plane/overview)). The top of the page shows three
 overview cards — *Total questions*, *Answered properly*, *Not answered* — each with a
 month-over-month delta, plus a link through to [Analytics](/control-plane/analytics).
