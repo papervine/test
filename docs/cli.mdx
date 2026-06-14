@@ -1,12 +1,12 @@
 ---
 title: CLI
-description: The papervine CLI is a local docs previewer — the mint dev analogue — that renders any MDX + docs.json repo on your machine.
+description: The papervine CLI is a local docs previewer that renders any MDX + docs.json repo on your machine.
 ---
 
-`papervine` is a **local development tool**, the analogue of the incumbent's `mint dev`. You run
-it inside a folder of MDX + a `docs.json` and it boots the Papervine renderer pointed at that
-folder, with live reload — the same renderer that powers hosted Papervine sites, so what you
-see locally is what you ship.
+`papervine` is a **local development tool**. You run it inside a folder of MDX + a
+`docs.json` and it boots the Papervine renderer pointed at that folder, with live reload —
+the same renderer that powers hosted Papervine sites, so what you see locally is what you
+ship.
 
 ```bash
 npx papervine dev          # preview ./ (must contain docs.json)
@@ -15,8 +15,8 @@ npx papervine dev -p 4000  # preview on a specific port
 ```
 
 <Note>
-  The CLI is a previewer, not a deployer. Like `mint`, it has **no `deploy` and no `login`** —
-  publishing happens through Git (push your repo) and the hosted control plane, not the CLI.
+  The CLI is a previewer, not a deployer — it has **no `deploy` and no `login`**. Publishing
+  happens through Git (push your repo) and the hosted control plane, not the CLI.
 </Note>
 
 ## What ships in the CLI
@@ -34,10 +34,9 @@ preview shows the docs chrome (logo, navigation, sidebar, table of contents) wit
 
 ## Trust and execution
 
-`papervine dev` **compiles and runs the repo's MDX**, which is arbitrary JSX/JavaScript —
-exactly like `mint dev`. That's expected for your own docs, but it means you should only run
-the CLI on docs repos you trust, the same way you'd only run `npm install` in a project you
-trust.
+`papervine dev` **compiles and runs the repo's MDX**, which is arbitrary JSX/JavaScript.
+That's expected for your own docs, but it means you should only run the CLI on docs repos you
+trust, the same way you'd only run `npm install` in a project you trust.
 
 ## How it relates to the renderer package
 

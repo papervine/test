@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// Papervine CLI — `papervine dev` previews any docs repo locally, the `mint dev`
-// analogue: run it in a folder of MDX + docs.json and it boots the Papervine
-// renderer pointed at that folder (SPEC §10.6). A local dev tool only — it ships
-// the renderer, never the hosted control plane.
+// Papervine CLI — `papervine dev` previews any docs repo locally: run it in a
+// folder of MDX + docs.json and it boots the Papervine renderer pointed at that
+// folder (SPEC §10.6). A local dev tool only — it ships the renderer, never the
+// hosted control plane.
 
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
@@ -21,7 +21,7 @@ function fail(msg) {
 }
 
 function printHelp() {
-  console.log(`papervine — open-source docs renderer (docs.json-compatible)
+  console.log(`papervine — open-source docs renderer
 
 Usage:
   papervine dev [dir]        Preview the docs in [dir] (default: current directory)
@@ -35,8 +35,8 @@ Examples:
   papervine dev ./docs       # preview ./docs
   papervine dev -p 4000      # preview on port 4000
 
-Note: papervine dev compiles and runs the repo's MDX (arbitrary JSX/JS), exactly
-like 'mint dev'. Only run it on docs repos you trust.
+Note: papervine dev compiles and runs the repo's MDX, which is arbitrary
+JSX/JavaScript. Only run it on docs repos you trust.
 `);
 }
 

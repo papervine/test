@@ -41,7 +41,7 @@ export default async function DocsPage({ params }: { params: Promise<Params> }) 
   // MDX page.
   if (page) {
     const toc = extractToc(page.body);
-    // Eyebrow: the group this page belongs to (the incumbent shows it above the title).
+    // Eyebrow: the group this page belongs to, shown above the title.
     const sections = await buildNav(config);
     const eyebrow = findGroupLabel(sections, "/" + (slugStr || "index"));
 
