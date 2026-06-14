@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PlatformShell } from "@/components/platform/PlatformShell";
-import { Wordmark } from "@/components/Wordmark";
+import { Brand } from "@/components/Brand";
 
 // Shared frame for the public legal pages (privacy / terms / refund). Wears the
 // platform atmosphere like the landing, with a readable centered prose column.
@@ -15,7 +15,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
       <div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col px-6">
         <header className="flex items-center justify-between py-6">
           <Link href="/" className="flex items-center">
-            <Wordmark className="text-lg" />
+            <Brand size="md" priority />
           </Link>
           <nav className="flex gap-5 text-sm text-[var(--muted)]">
             <Link href="/privacy" className="hover:text-[var(--fg)]">

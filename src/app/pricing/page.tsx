@@ -4,7 +4,7 @@ import Link from "next/link";
 import { cookies, headers } from "next/headers";
 import { Rocket, Briefcase, Plus, Check, ArrowRight } from "lucide-react";
 import { PlatformShell } from "@/components/platform/PlatformShell";
-import { Wordmark } from "@/components/Wordmark";
+import { Brand } from "@/components/Brand";
 import { appHostFor } from "@/lib/tenant-host";
 import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
 
@@ -168,7 +168,7 @@ export default async function PricingPage() {
       <header className="db-glass sticky top-0 z-30 border-b border-[rgba(var(--ink-rgb),0.06)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center">
-            <Wordmark className="text-lg" />
+            <Brand size="md" priority />
           </Link>
           <nav className="flex items-center gap-1 text-sm">
             <Link
@@ -397,7 +397,7 @@ export default async function PricingPage() {
       <footer className="border-t border-[rgba(var(--ink-rgb),0.06)]">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 text-sm text-[var(--muted)] sm:flex-row">
           <span className="flex items-center gap-1.5">
-            <Wordmark className="text-sm" />
+            <Brand size="sm" />
             <span>— open source</span>
           </span>
           <div className="flex gap-5">
