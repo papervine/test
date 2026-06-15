@@ -308,6 +308,8 @@ async function run() {
     // tools are listed and a tools/call returns real docs — body substrings only,
     // so SSE-vs-JSON framing and tool ordering don't make this brittle. Fixtures
     // include an OpenAPI spec, so search_api must also be present.
+    // Regression (PAPERVINE-3): this runs DB-free, so the connection-init tenant
+    // lookup (getSiteByHost) must no-op rather than reject on ECONNREFUSED :5432.
     const mcpPost = (body) =>
       fetch(`${BASE}/mcp`, {
         method: "POST",

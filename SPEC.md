@@ -708,6 +708,12 @@ tools (Claude, Cursor, Windsurf). Exposes the **same tool layer as the AI Assist
   serve on the tenant host (resolves the right content source per connection), and each
   connection logs agent analytics — `search_docs` → an MCP-search event, `read_page` → an
   agent page view (`source:"agent"`, named via UA, §10.1). This unblocks the Agents tab.
+- 🐛 **Fix (2026-06-15, PAPERVINE-3):** the per-connection tenant lookup (`getSiteByHost`)
+  now swallows DB-connection errors and returns `null` instead of rejecting the `/mcp`
+  request. It already no-ops on the apex/preview host; it must also no-op when the DB is
+  unreachable (the DB-free smoke job, a transient outage) so a tenant-resolution failure
+  never 500s an agent connection. Surfaced by Sentry as an `ECONNREFUSED :5432` unhandled
+  rejection on `POST /mcp` in CI; the DB-free smoke `/mcp` check is the regression guard.
 - ✅ **llms.txt (done, 2026-06-09):** `/llms.txt` + `/llms-full.txt` (`src/app/llms.txt/`,
   shared `src/lib/llms.ts`) — the llmstxt.org index of every page (full variant inlines page
   bodies), generated from the in-scope content source. Logged as agent traffic. Smoke-covered.

@@ -33,8 +33,15 @@ export const getSiteByCustomDomain = cache(async (host: string) => {
  */
 export async function getSiteByHost(host: string | null) {
   if (!host) return null;
-  const { resolveTenantSlug } = await import("./tenant-host");
-  const slug = resolveTenantSlug(host);
-  if (slug) return getSiteBySlug(slug);
-  return getSiteByCustomDomain(host);
+  try {
+    const { resolveTenantSlug } = await import("./tenant-host");
+    const slug = resolveTenantSlug(host);
+    if (slug) return await getSiteBySlug(slug);
+    return await getSiteByCustomDomain(host);
+  } catch {
+    // No reachable DB (e.g. the DB-free smoke job / a transient outage) → behave
+    // like "no tenant": callers no-op (logging off, default content source) rather
+    // than rejecting the request. Honors this function's documented no-op contract.
+    return null;
+  }
 }
