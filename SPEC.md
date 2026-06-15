@@ -1375,6 +1375,43 @@ the hosted API over HTTPS, they don't embed it.
 > **Not done on purpose:** the actual `npm publish` (awaiting go) — `papervine@0.1.0` will land
 > over the `0.0.1` placeholder.
 
+### 10.7 Error resilience (route boundaries)
+
+The dashboard must never go to a **black full-screen crash** on a transient hiccup. The
+control plane is a client-navigated App Router SPA: every tab switch fetches an RSC payload
+(`?…&_rsc=…`). When such a fetch is **dropped at the network layer** — `TypeError: Failed to
+fetch`, the browser saying it never got a response — React 19 surfaces the rejection as a
+throw *during render*. With no route-level `error.tsx`, that throw escalates all the way to
+the root `global-error.tsx` (bare `NextError`), which discards the whole app — on a dark-mode
+Mac that paints as a **black screen**. The trigger is unavoidable (real networks drop
+fetches, especially against a cold serverless/Neon path); the catastrophic UX is not.
+
+The fix is two route-level error boundaries:
+
+- **`src/app/app/[org]/error.tsx`** — the primary boundary. It renders *inside*
+  `[org]/layout.tsx`, so the `PlatformShell` + `AppRail` survive and only the content column
+  shows a recoverable, themed card with **Try again** (`reset()` re-renders just the failed
+  segment — on a transient blip the retry simply succeeds). This is what catches the actual
+  dashboard-navigation crash.
+- **`src/app/app/error.tsx`** — a backstop for the whole app-host mount, catching what the
+  per-org boundary can't (e.g. a throw in `[org]/layout.tsx` itself). It renders *above* that
+  layout, so it brings its own `PlatformShell` — otherwise the backstop would itself paint
+  unstyled/black, defeating the purpose. `redirect()`/`notFound()` from `requireOrg` are
+  re-thrown by the boundary (Next handles them), not swallowed.
+
+Both still `Sentry.captureException`, so we keep the report — but now as a *handled,
+recovered* error, not a dead page. The "is this a dropped fetch vs. a real app bug?" copy
+choice is a pure helper (`src/lib/dashboard-error.ts` `isNetworkError`), unit-tested, so the
+network-vs-generic branch can't silently regress.
+
+> **Status (2026-06-15):** landed after a production black-screen (Sentry PAPERVINE-4,
+> `TypeError: Failed to fetch` on the site-overview tab nav, one user on a cold backend — the
+> same trace showed a 1.6s session query, i.e. a cold Neon connection). Root cause of the
+> *severity* was the missing boundary, not the fetch: the trace logged **0 server errors** and
+> no server span for the failed request, confirming a network-layer drop, not a 5xx. Verified
+> in-browser (forced throw, light + dark) — chrome intact, themed card, no black screen.
+> Smoke's control-plane checks exercise the app-host gate around the new boundaries.
+
 ---
 
 ## 11. Authentication & Access Control

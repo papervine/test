@@ -199,3 +199,19 @@ ticking to infinity.
   The next step is *intra-sync* progress (per-file upload, streaming logs): now that the
   publish path exists, the sync runner can emit granular progress events on the same channel.
 </Tip>
+
+## When something goes wrong
+
+The dashboard is a client-navigated app: switching tabs fetches the next view in the
+background rather than reloading the page. If one of those fetches fails — a dropped
+connection, a momentary network blip — the affected view **degrades to a recoverable card
+inside the dashboard**, not a blank or broken page. The navigation rail and your session stay
+put; the content area shows a short explanation and a **Try again** button that re-loads just
+that view. For a transient hiccup, retrying simply works.
+
+<Note>
+  This is a route-level error boundary, scoped so a failure in one view never takes down the
+  whole app. A failed background navigation used to be able to escalate into a full-screen
+  crash; the boundary catches it first and keeps the chrome — light or dark — intact. The
+  error is still reported for monitoring, but as a handled, recovered event.
+</Note>
