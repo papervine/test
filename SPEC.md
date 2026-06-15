@@ -127,6 +127,18 @@ docs renderer. A `<EnvBadge>` (top-right, non-prod only — `local`/`preview`, h
 > reads correctly on a light page. Verified both themes in-browser across dashboard / settings
 > / analytics / the portalled delete dialog. **Next (Tier 2 idea):** per-org *brand* accent
 > on top of light/dark — now trivial, since the accent is already a token (`--blue`/`--violet`).
+>
+> **Fix (2026-06-15) — Tailwind `dark:` now follows the platform theme inside `.db`.** The
+> platform toggles `data-db-theme`, but Tailwind's `dark:` variant was `darkMode: "class"`,
+> keyed only on the `.dark` class (the *per-tenant docs* appearance, written from a different
+> key, `localStorage['theme']`). So platform chrome built with `dark:` utilities — the web
+> editor's nav tree, the Visual/Source toggle — rendered their **light** styles (`bg-neutral-200`,
+> white nested-block fills) on the dark platform: the "everything's white in the editor" report.
+> Fix: `darkMode` is now a two-selector variant — `.dark` (docs/marketing, unchanged) **plus**
+> `[data-db-theme="dark"] .db` (platform), so `dark:` fires inside the `.db` scope exactly when
+> the platform theme is dark, and turns off when it's light. Scoped to `.db`, so the docs renderer
+> and marketing pages are untouched. Verified both platform themes in-browser via computed styles
+> (editor + dashboard + analytics).
 
 ### Tenant resolution
 Next.js **middleware** (`src/middleware.ts`) inspects the `Host` header and rewrites
@@ -736,8 +748,50 @@ it matches their actual architecture.)*
 ### Status & sequencing
 
 The **read MCP is shipped** (§9.1 Slice 1) — it was a thin wrapper over the assistant tool
-layer. The **authoring MCP is still post-M5**: it follows the Git-sync (§3) + platform-auth
-(§11) foundations.
+layer.
+
+> **Authoring backend + editor — BUILT (2026-06-14).** The shared authoring backend and both
+> its front-ends shipped together. Architecture, as built:
+> - **One backend, two transports.** `authoring-core.ts` (`checkoutBranch` / `saveDraft` /
+>   `publishDraft` / `discardSession`) sits behind both the human editor's server actions
+>   (`actions/authoring.ts`) and the agent tools (`authoring-tools.ts`) — the editing-agent
+>   chat (`/api/editor-agent`) and the authoring MCP (`/authoring/mcp`). Human and agent write
+>   the **same Postgres draft buffer**, so there's no divergence. Mirrors the existing
+>   `docs-tools.ts` → {assistant, read-MCP} split.
+> - **Draft buffer is Postgres, not S3.** New tables `editor_session` + `draft_file` hold the
+>   per-(site,branch,path) MDX edits. S3 stays the immutable synced content; drafts are small,
+>   mutable, transactional. A `draftSource(siteId, branch)` overlay (`draft-source.ts`) reads
+>   drafts **live (un-cached)** so agent↔human edits are instant, and **falls through to the
+>   cached `s3Source`** for untouched files. The overlay is reachable only via an explicit
+>   `requestContentSource(slug, { draftBranch })` param on editor surfaces — the public render
+>   path and public `/mcp` are byte-for-byte unchanged, so a reader can never be served a draft.
+> - **Publish = commit or PR.** The git-write client lives in `github.ts` (`getRef` /
+>   `createBranch` / `commitFiles` / `updateRef` / `openPullRequest`, GitHub Git Data API).
+>   `publishDraft` checks `baseCommitSha` divergence (optimistic) and relies on
+>   `updateRef(force:false)` as the hard guard. **Commit mode delegates the re-sync to the
+>   existing push webhook** (single sync path, no torn-tree race); it only runs an inline
+>   `runSync` when the GitHub App isn't configured. PR mode creates the working branch,
+>   commits, and opens the PR.
+> - **Editing = Source + a real-renderer Preview** (revised 2026-06-15; superseded the original
+>   MDXEditor WYSIWYG). The pane toggles between raw MDX (Source) and a Preview that is an
+>   `<iframe>` onto `/app/preview/[org]/[site]`, which renders the current draft through THE REAL
+>   renderer (`<Mdx>`) — same compile path, component map, and theme that ship to readers. The
+>   preview route reads the draft via `requestContentSource(slug, {draftBranch})` (the overlay the
+>   editor already loads from) and lives *outside* the `[org]` dashboard layout so the iframe shows
+>   only the article, not the AppRail/PlatformShell — but still inherits `globals.css` (`.prose`,
+>   Shiki, MDX component styles). Switching to Preview flushes the debounced draft save first, then
+>   reloads the iframe, so it always reflects the latest keystroke.
+>   **Why we dropped MDXEditor:** a WYSIWYG is a *second* rendering engine that only approximates
+>   the MDX — real-world docs (a hand-coded hero with `<div>`/`<img>` layout and a grid of
+>   `<HeroCard>`s) collapsed to opaque "component" boxes and `⚠️` error blocks. Using our own
+>   renderer makes the preview byte-faithful to publish (what you see = what ships), removes the
+>   `@mdxeditor/editor` dependency, and leans on the asset Papervine is built around. Editing moves
+>   to source; git stays the source of truth, the draft buffer still stores one MDX string.
+> - **Gated** behind the `editor.workspace` feature (admin-only while we dogfood; flip to
+>   `everyone` to launch) at both the AppRail item (cosmetic) and `editor/layout.tsx` (real).
+>
+> Token-scoped *external* auth for the authoring MCP (a platform-auth PAT, §11) is the
+> follow-up; today it authenticates via the app-host session + `x-papervine-org/site` headers.
 
 ---
 
@@ -805,14 +859,15 @@ Minimum to operate the SaaS:
 - **MCP:** manage the per-docs read MCP and authoring MCP (enable, opt-in, tokens) — see **§9**.
 - **Analytics:** page views, top pages, search terms with no results, AI unanswered questions, plus the assistant deep-dive — expanded in **§10.1**. PostHog or a lightweight first-party events table.
 - **Billing (later):** Stripe; usage tiers (seats, AI tokens, page views).
-- **Web editor / live preview (later):** the incumbent has one; defer past v1. It is **the same
-  capability as the authoring MCP (§9.2), not a parallel one** — both write to one shared
-  session-branch + server-side draft buffer; the MCP's `checkout` even hands off an
-  `editorUrl` into this editor. So the long pole is the **shared authoring backend**
-  (GitHub-App write creds → session branch → draft buffer → `save` as commit-or-PR), not the
-  editor UI. The incumbent also auto-deploys a **per-branch preview** so reviewers see changes
-  before merging the PR — live preview of unsaved drafts needs compile-on-request (§3.1
-  "C-full"), still deferred.
+- **Web editor — BUILT (2026-06-14):** the 3-panel editor at `/:org/:site/editor` (editing-agent
+  chat · navigation · multi-modal editor with a Visual⇄Source toggle, branch switcher, and a
+  Publish→commit/PR button). It is **the same capability as the authoring MCP (§9.2), not a
+  parallel one** — both write to one shared session-branch + server-side draft buffer. See the
+  §9.2 build note for the architecture. The AppRail "Editor" item and the overview "Open editor"
+  button are now wired (gated on `editor.workspace`). **Live preview** of unsaved drafts via a
+  per-branch preview build (compile-on-request, §3.1 "C-full") is still deferred — today the
+  editor previews through the draft overlay + the existing renderer, and publish surfaces the
+  change through the normal sync/deploy on the deploy branch (or a PR).
 
 ### 10.1 Analytics
 
@@ -1579,13 +1634,13 @@ Org/auth/RBAC, custom domains + TLS, analytics views. Beta-ready.
 4. **Self-host story.** How easy must the OSS self-host path be vs. the hosted SaaS? Affects how much we hardwire to R2/Vercel/etc. **Resolved (2026-06-08):** code to portable interfaces, not vendors — Better Auth owns its schema in Postgres (§11.1), and storage is the **S3 API** (hosted default R2, local MinIO, self-host points `S3_ENDPOINT` anywhere; §3.1). Domain/TLS: **resolved (2026-06-09)** — `*.papervine.io` via host-platform wildcard cert; custom domains via the host-platform domains API, escaping the per-project cap with a SaaS-domains proxy (Approximated / Cloudflare-for-SaaS / Caddy) + `X-Forwarded-Host` when it nears (§2 → Custom domains). Self-host swaps the proxy or uses Caddy on-demand-TLS directly.
 5. **License & governance.** MIT vs. Apache-2.0; CLA; what (if anything) is SaaS-only (open-core) vs. fully open.
 6. **Pricing/limits** for the hosted version (out of scope for build, but shapes tenancy/metering design).
-7. **Web editor** — defer past v1? The incumbent treats it as a differentiator.
+7. ~~**Web editor** — defer past v1? The incumbent treats it as a differentiator.~~ **DECIDED & BUILT (2026-06-14): build it now, agent-native.** Shipped the full 3-panel editor (editing-agent chat · navigation · multi-modal editor) on a shared authoring backend — see §9.2's build note. We chose to lead with the differentiating axes (open-source + agent-native) rather than defer. Editing is **Source MDX + a Preview rendered by our own renderer** (revised 2026-06-15 — the original MDXEditor WYSIWYG was dropped because a second rendering engine only approximates real-world MDX; see §9.2). Git stays the source of truth and the preview is byte-faithful to publish.
 
 ---
 
 ## 17. Non-Goals (v1)
 
-- Visual/WYSIWYG web editor (fast-follow)
+- In-place WYSIWYG editing (we ship Source + a faithful real-renderer Preview instead; §9.2)
 - Migrating from non-hosted docs sources (Docusaurus/GitBook importers)
 - Embeddable AI on third-party sites
 - Marketplace / plugin ecosystem

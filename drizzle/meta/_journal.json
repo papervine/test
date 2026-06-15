@@ -71,6 +71,13 @@
       "when": 1781235317326,
       "tag": "0009_wild_amazoness",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781480136131,
+      "tag": "0010_elite_senator_kelly",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,122 @@
+"use client";
+
+import { useCallback, useState, useTransition } from "react";
+import { ChevronRight } from "lucide-react";
+import type { NavSection } from "@papervine/renderer/lib/nav";
+import { NavTree } from "./NavTree";
+import { BranchSwitcher } from "./BranchSwitcher";
+import { PublishButton } from "./PublishButton";
+import { EditorAgentPanel } from "./EditorAgentPanel";
+import { MdxEditorPane } from "./MdxEditorPane";
+import { readDraftPageAction, saveDraftAction } from "@/lib/actions/authoring";
+
+// The 3-panel editor (SPEC §9.2/§10): editing-agent chat | navigation | multi-modal editor.
+// Holds the active page + branch and routes every read/write through the authoring backend,
+// so the human and the agent share one draft buffer.
+export function EditorShell({
+  org,
+  site,
+  deployBranch,
+  initialBranch,
+  sections,
+  sessionBranches,
+  initialSlug,
+  initialPath,
+  initialMarkdown,
+}: {
+  org: string;
+  site: string;
+  deployBranch: string;
+  initialBranch: string;
+  sections: NavSection[];
+  sessionBranches: string[];
+  initialSlug: string;
+  initialPath: string;
+  initialMarkdown: string;
+}) {
+  const [branch, setBranch] = useState(initialBranch);
+  const [slug, setSlug] = useState(initialSlug);
+  const [path, setPath] = useState(initialPath);
+  const [markdown, setMarkdown] = useState(initialMarkdown);
+  // Bump to force the editor pane to remount with fresh content (page switch / agent edit).
+  const [docKey, setDocKey] = useState(0);
+  const [, start] = useTransition();
+
+  const loadPage = useCallback(
+    (nextSlug: string, nextBranch = branch) => {
+      start(async () => {
+        const res = await readDraftPageAction(org, site, nextBranch, nextSlug);
+        if ("error" in res) return;
+        setSlug(nextSlug);
+        setPath(res.path);
+        setMarkdown(res.markdown);
+        setDocKey((k) => k + 1);
+      });
+    },
+    [org, site, branch],
+  );
+
+  const switchBranch = (next: string) => {
+    setBranch(next);
+    loadPage(slug, next);
+  };
+
+  // The agent edited the draft — refetch the page the user is looking at.
+  const refreshActive = useCallback(() => loadPage(slug, branch), [loadPage, slug, branch]);
+
+  // Awaitable so the pane can flush a pending save before loading the preview iframe.
+  const save = async (md: string): Promise<void> => {
+    await saveDraftAction(org, site, branch, path, md);
+  };
+
+  return (
+    <div className="flex h-[calc(100dvh-0px)] min-h-0 w-full">
+      {/* Col 1 — editing agent */}
+      <aside className="flex w-80 shrink-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
+        <div className="border-b border-neutral-200 px-3 py-3 text-sm font-semibold dark:border-neutral-800">
+          New chat
+        </div>
+        <EditorAgentPanel org={org} site={site} branch={branch} onAgentWrite={refreshActive} />
+      </aside>
+
+      {/* Col 2 — navigation */}
+      <aside className="w-64 shrink-0 overflow-y-auto border-r border-neutral-200 dark:border-neutral-800">
+        <div className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Navigation</div>
+        <NavTree sections={sections} activeSlug={slug} onSelect={loadPage} />
+      </aside>
+
+      {/* Cols 3–4 — editor */}
+      <main className="flex min-w-0 flex-1 flex-col">
+        <header className="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 py-2 dark:border-neutral-800">
+          <div className="flex min-w-0 items-center gap-2">
+            <BranchSwitcher
+              org={org}
+              site={site}
+              branch={branch}
+              deployBranch={deployBranch}
+              sessionBranches={sessionBranches}
+              onSwitch={switchBranch}
+            />
+            <span className="flex min-w-0 items-center gap-1 text-sm text-neutral-500">
+              <ChevronRight className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{slug || "index"}</span>
+            </span>
+          </div>
+          <PublishButton org={org} site={site} branch={branch} />
+        </header>
+        <div className="min-h-0 flex-1">
+          <MdxEditorPane
+            key={docKey}
+            initialMarkdown={markdown}
+            path={path}
+            org={org}
+            site={site}
+            branch={branch}
+            slug={slug}
+            onSave={save}
+          />
+        </div>
+      </main>
+    </div>
+  );
+}

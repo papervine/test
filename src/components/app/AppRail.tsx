@@ -49,7 +49,7 @@ const NAV_SECTIONS: { heading?: string; items: RailItem[] }[] = [
   {
     items: [
       { sub: "", label: "Home", icon: Home },
-      { label: "Editor", icon: FileEdit, soon: true },
+      { sub: "editor", label: "Editor", icon: FileEdit, feature: "editor.workspace" },
       { sub: "analytics", label: "Analytics", icon: BarChart3 },
     ],
   },

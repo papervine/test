@@ -16,6 +16,9 @@ export const FEATURES = {
   "automate.workflows": "admin",
   "automate.agent": "admin",
   "automate.assistant": "admin",
+  // The web editor + authoring backend (SPEC §9.2/§10). Admin-only while we dogfood the
+  // write path; bump to "everyone" once it's hardened (RBAC ≥ editor in SPEC terms).
+  "editor.workspace": "admin",
 } satisfies Record<string, Audience>;
 
 export type FeatureKey = keyof typeof FEATURES;

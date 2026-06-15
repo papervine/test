@@ -1,0 +1,68 @@
+import { anthropic } from "@ai-sdk/anthropic";
+import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
+import { assistantTools } from "@/lib/assistant-tools";
+import { authoringTools, draftContentSource } from "@/lib/authoring-tools";
+import { contentContext, loadConfig } from "@papervine/renderer/lib/content";
+import { findSite } from "@/lib/dashboard-context";
+import { getSession, listOrganizations, getMemberRole } from "@/lib/session";
+import { canSeeFeature } from "@/lib/features";
+import { checkoutBranch } from "@/lib/authoring-core";
+
+/**
+ * The editor's left-panel agent (SPEC §9.2) — a read/WRITE assistant. It shares the read
+ * tools with the public assistant but adds the authoring write tools, all scoped to the
+ * site + edit branch and run inside the draft content context, so the agent reads and
+ * writes the SAME draft buffer the human editor uses. One backend, two front-ends.
+ */
+export async function POST(req: Request) {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return Response.json({ error: "ANTHROPIC_API_KEY is not set." }, { status: 503 });
+  }
+
+  const { messages, org, site, branch } = (await req.json()) as {
+    messages: UIMessage[];
+    org: string;
+    site: string;
+    branch?: string;
+  };
+
+  // Authorize: signed-in org member with the editor feature.
+  const session = await getSession();
+  if (!session) return Response.json({ error: "Signed out." }, { status: 401 });
+  const organization = (await listOrganizations())?.find((o) => o.slug === org);
+  if (!organization) return Response.json({ error: "Org not found." }, { status: 404 });
+  const role = await getMemberRole(organization.id, session.user.id);
+  if (!canSeeFeature("editor.workspace", role)) {
+    return Response.json({ error: "Editor not enabled." }, { status: 403 });
+  }
+  const siteRow = await findSite(org, site);
+  if (!siteRow) return Response.json({ error: "Site not found." }, { status: 404 });
+
+  // The agent always operates on an open session — auto-checkout if the client didn't
+  // pass a branch (or passed one with no open session yet).
+  const { branch: editBranch } = await checkoutBranch(siteRow, {
+    actorUserId: session.user.id,
+    branchName: branch,
+  });
+
+  // Scope every read AND write to the draft overlay for this branch.
+  return contentContext.run(draftContentSource(siteRow, editBranch), async () => {
+    const config = await loadConfig();
+    const system =
+      `You are the documentation editor agent for "${config.name}". You can read the docs ` +
+      `(searchDocs / readPage / listPages) and EDIT them (write_page, edit_page, delete_page). ` +
+      `You are editing the draft branch "${editBranch}"; edits buffer there and are not live. ` +
+      `Make the smallest change that satisfies the request, and explain what you changed. ` +
+      `NEVER publish or open a PR unless the user explicitly asks — only then call publish. ` +
+      `Use Markdown in your replies.`;
+
+    const result = streamText({
+      model: anthropic(process.env.PAPERVINE_AI_MODEL ?? "claude-sonnet-4-6"),
+      system,
+      messages: await convertToModelMessages(messages),
+      tools: { ...assistantTools, ...authoringTools(siteRow, editBranch) },
+      stopWhen: stepCountIs(12),
+    });
+    return result.toUIMessageStreamResponse();
+  });
+}

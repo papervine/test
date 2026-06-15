@@ -2,6 +2,7 @@ import "server-only";
 import { headers } from "next/headers";
 import { resolveTenantSlug, getSiteBySlug } from "./tenant";
 import { s3Source, isSynced } from "./s3-source";
+import { draftSource } from "./draft-source";
 import type { ContentSource } from "@papervine/renderer/lib/content";
 
 /**
@@ -23,8 +24,16 @@ import type { ContentSource } from "@papervine/renderer/lib/content";
  * Pass `slugOverride` when the route already knows its tenant (the `/sites/[site]`
  * param); otherwise we read it from the `x-papervine-site` header (set by middleware,
  * including apex path-mode `/sites/{slug}`) and fall back to the subdomain host.
+ *
+ * Pass `opts.draftBranch` ONLY from editor surfaces (the web editor, the editing-agent
+ * route, the authoring MCP). When present and an open edit session exists for that branch,
+ * reads come through the draft overlay (`draftSource`) so uncommitted edits are visible.
+ * The public render path and public `/mcp` never pass it, so live serving is unchanged.
  */
-export async function requestContentSource(slugOverride?: string): Promise<ContentSource | null> {
+export async function requestContentSource(
+  slugOverride?: string,
+  opts?: { draftBranch?: string },
+): Promise<ContentSource | null> {
   const h = await headers();
   const slug = slugOverride ?? h.get("x-papervine-site") ?? resolveTenantSlug(h.get("host"));
   if (!slug) return null;
@@ -43,5 +52,6 @@ export async function requestContentSource(slugOverride?: string): Promise<Conte
   // (`getSiteBySlug` is per-request `cache()`), so this sha advances the moment a sync lands.
   const version = record.lastSyncedCommitSha ?? "";
   if (!(await isSynced(record.id, version))) return null;
+  if (opts?.draftBranch) return draftSource(record.id, opts.draftBranch, version);
   return s3Source(record.id, version);
 }

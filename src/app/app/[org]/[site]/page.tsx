@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
 import { deployment } from "@/lib/db/app-schema";
 import { requireSite } from "@/lib/dashboard-context";
+import { canSeeFeature } from "@/lib/features";
 import { siteBase } from "@/lib/dashboard-nav";
 import { getActivityFeed } from "@/lib/activity-feed";
 import { feedParam, parseFeedTarget, timeAgo } from "@/lib/overview";
@@ -33,7 +34,7 @@ export default async function SiteOverview({
   searchParams: Promise<Search>;
 }) {
   const { org: orgSlug, site: siteSlug } = await params;
-  const { session, site: activeSite } = await requireSite(orgSlug, siteSlug);
+  const { session, role, site: activeSite } = await requireSite(orgSlug, siteSlug);
   const firstName = session.user.name.split(" ")[0];
   const base = siteBase(orgSlug, siteSlug);
 
@@ -136,14 +137,24 @@ export default async function SiteOverview({
 
           <div className="mt-4 flex items-center gap-2">
             <ResyncButton siteId={activeSite.id} />
-            {/* Editor is a "soon" surface (SPEC §10 web-editor) — disabled for now. */}
-            <button
-              disabled
-              className="db-ring inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--muted)] opacity-50"
-            >
-              <PenLine className="size-3.5" />
-              Open editor
-            </button>
+            {/* The web editor (SPEC §9.2/§10), gated by the editor feature like the rail item. */}
+            {canSeeFeature("editor.workspace", role) ? (
+              <Link
+                href={`${base}/editor`}
+                className="db-ring inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--fg)] hover:bg-[var(--surface-2)]"
+              >
+                <PenLine className="size-3.5" />
+                Open editor
+              </Link>
+            ) : (
+              <button
+                disabled
+                className="db-ring inline-flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs font-medium text-[var(--muted)] opacity-50"
+              >
+                <PenLine className="size-3.5" />
+                Open editor
+              </button>
+            )}
           </div>
 
           <dl className="mt-6 space-y-3 text-sm">

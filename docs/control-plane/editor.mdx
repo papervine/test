@@ -1,0 +1,77 @@
+---
+title: Editor
+description: The web editor — a three-panel workspace where you (and an AI agent) edit your docs on a branch and publish as a commit or pull request.
+---
+
+The **editor** is a three-panel workspace for editing a docs site directly in the dashboard:
+an AI editing agent, the navigation tree, and a multi-modal MDX editor. It opens at
+`/:org/:site/editor` (the **Editor** item in the rail, and **Open editor** on the site
+overview).
+
+<Info>
+  The editor and the [authoring MCP](/features/mcp-servers#authoring-mcp-admin-write) are the
+  **same write path**, not two parallel ones — both edit one server-side draft buffer on a
+  working branch and publish through one backend. Whatever the agent does, you can do by hand,
+  and vice versa.
+</Info>
+
+## The three panels
+
+<Steps>
+  <Step title="Editing agent (left)">
+    A read/write assistant. It can search and read your docs **and edit them** — ask it to
+    “rewrite the intro” or “add an FAQ entry” and it writes to the same draft you see. When it
+    finishes an edit, the editor pane refreshes to show the change. It never publishes unless
+    you ask.
+  </Step>
+  <Step title="Navigation (middle)">
+    Your `docs.json` navigation, rendered from the **draft** of the current branch. Click any
+    page to load it into the editor.
+  </Step>
+  <Step title="Editor (right)">
+    Edit the page in **Source** mode (raw MDX) and flip to **Preview** to see it rendered.
+    Edits autosave to the draft buffer; switching to Preview shows the latest.
+  </Step>
+</Steps>
+
+## Preview is your real site, not an approximation
+
+The **Preview** tab renders the page through the *same renderer that ships your docs* — the same
+MDX compilation, the same components (`<Card>`, `<Tabs>`, `<Frame>`, `<HeroCard>`…), the same
+theme. So what you see in Preview is exactly what readers get: what you see is what ships.
+
+Editing happens in **Source** (raw MDX), and that MDX string is exactly what gets committed —
+no conversion to a block model, no second source of truth. Git stays canonical. Preview reads
+your current draft, so unsaved-but-buffered edits appear the moment you switch to it.
+
+## Branches and the draft buffer
+
+Every edit happens on a **working branch**, not the live deploy branch. The branch switcher (top
+left of the editor) lists the deploy branch and your open edit sessions, and can **create a new
+branch**. Your edits buffer **server-side** per branch, so they persist across tabs, devices,
+and reloads — and the agent and you share that one buffer.
+
+Nothing is live until you publish.
+
+## Publishing
+
+The **Publish** button carries the draft to Git in one of two modes:
+
+<CardGroup cols={2}>
+  <Card title="Open a pull request">
+    Creates the working branch, commits your edits to it, and opens a PR into the deploy branch.
+    The safe default — review before it goes live.
+  </Card>
+  <Card title="Commit to the deploy branch">
+    Commits straight onto the deploy branch. The normal sync then redeploys the site.
+  </Card>
+</CardGroup>
+
+If the deploy branch moved since you started editing, Publish stops with a conflict rather than
+clobbering it — re-check-out to pick up the latest, then publish again.
+
+<Note>
+  The editor is gated behind the `editor.workspace` feature (admin-only while it’s dogfooded).
+  Preview renders your draft through the real renderer on the fly; publishing surfaces the change
+  through the normal deploy (or the PR).
+</Note>

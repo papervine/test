@@ -42,6 +42,18 @@ export function ghHeaders(token?: string): HeadersInit {
   return headers;
 }
 
+// Same as ghHeaders but for JSON-body writes (POST/PATCH to the Git Data API).
+function jsonHeaders(token?: string): Record<string, string> {
+  return { ...(ghHeaders(token) as Record<string, string>), "content-type": "application/json" };
+}
+
+// A branch name may contain slashes (e.g. "papervine/edit-ab12"). Encode each segment
+// but keep the slashes literal — the refs path is `…/git/refs/heads/{a}/{b}`, not a
+// single encoded component (encodeURIComponent would turn "/" into "%2F" and 404).
+function refPath(branch: string): string {
+  return branch.split("/").map(encodeURIComponent).join("/");
+}
+
 export type RepoMeta = { fullName: string; defaultBranch: string; private: boolean };
 
 export async function fetchRepo(
@@ -111,4 +123,147 @@ export async function fetchLatestCommit(
   if (!res.ok) return null;
   const data = await res.json();
   return { sha: data.sha, message: data.commit?.message ?? "" };
+}
+
+// ---- Write path (the authoring backend, SPEC §9.2) ----------------------------------
+// These power "edit docs on a branch → commit/PR". They use the same `token` seam as
+// the read calls above, but the token must carry **write** scope: a GitHub App
+// installation token for a repo the App can write, or a PAT with `contents` +
+// `pull_requests`. Every call returns a structured result instead of throwing, so the
+// editor / authoring MCP can surface a clean message rather than 500.
+
+export type GitRef = { commitSha: string; treeSha: string };
+
+// Resolve a branch's head commit sha + that commit's tree sha (the base for a new
+// commit). Null if the branch is missing or the call fails.
+export async function getRef(
+  owner: string,
+  name: string,
+  branch: string,
+  token?: string,
+): Promise<GitRef | null> {
+  const refRes = await fetch(`${API}/repos/${owner}/${name}/git/ref/heads/${refPath(branch)}`, {
+    headers: ghHeaders(token),
+  });
+  if (!refRes.ok) return null;
+  const commitSha: string | undefined = (await refRes.json()).object?.sha;
+  if (!commitSha) return null;
+  const commitRes = await fetch(`${API}/repos/${owner}/${name}/git/commits/${commitSha}`, {
+    headers: ghHeaders(token),
+  });
+  if (!commitRes.ok) return null;
+  const treeSha: string | undefined = (await commitRes.json()).tree?.sha;
+  if (!treeSha) return null;
+  return { commitSha, treeSha };
+}
+
+// Create a new branch ref at `fromSha`. A 422 "Reference already exists" is treated as
+// success (alreadyExists: true) so checkout is idempotent.
+export async function createBranch(
+  owner: string,
+  name: string,
+  newBranch: string,
+  fromSha: string,
+  token?: string,
+): Promise<{ ok: boolean; alreadyExists?: boolean; error?: string }> {
+  const res = await fetch(`${API}/repos/${owner}/${name}/git/refs`, {
+    method: "POST",
+    headers: jsonHeaders(token),
+    body: JSON.stringify({ ref: `refs/heads/${newBranch}`, sha: fromSha }),
+  });
+  if (res.ok) return { ok: true };
+  const body = await res.text();
+  if (res.status === 422 && /already exists/i.test(body)) return { ok: true, alreadyExists: true };
+  return { ok: false, error: `createBranch ${res.status}: ${body.slice(0, 200)}` };
+}
+
+// A single file change in a commit. `content: null` deletes the path (tree entry with a
+// null sha); otherwise the full new text. MDX/JSON are text, so content is inlined into
+// the tree (no separate blob POST).
+export type FileChange = { path: string; content: string | null };
+
+// Build one commit bearing N file changes on top of `baseCommitSha`/`baseTreeSha`.
+// Returns the new commit sha. Does NOT move any ref — call updateRef next.
+export async function commitFiles(
+  owner: string,
+  name: string,
+  opts: {
+    baseCommitSha: string;
+    baseTreeSha: string;
+    files: FileChange[];
+    message: string;
+    token?: string;
+  },
+): Promise<{ commitSha: string } | { error: string }> {
+  const { baseCommitSha, baseTreeSha, files, message, token } = opts;
+  if (files.length === 0) return { error: "commitFiles: no changes" };
+  const tree = files.map((f) =>
+    f.content === null
+      ? { path: f.path, mode: "100644", type: "blob", sha: null }
+      : { path: f.path, mode: "100644", type: "blob", content: f.content },
+  );
+  const treeRes = await fetch(`${API}/repos/${owner}/${name}/git/trees`, {
+    method: "POST",
+    headers: jsonHeaders(token),
+    body: JSON.stringify({ base_tree: baseTreeSha, tree }),
+  });
+  if (!treeRes.ok) return { error: `createTree ${treeRes.status}: ${(await treeRes.text()).slice(0, 200)}` };
+  const newTreeSha = (await treeRes.json()).sha;
+  const commitRes = await fetch(`${API}/repos/${owner}/${name}/git/commits`, {
+    method: "POST",
+    headers: jsonHeaders(token),
+    body: JSON.stringify({ message, tree: newTreeSha, parents: [baseCommitSha] }),
+  });
+  if (!commitRes.ok)
+    return { error: `createCommit ${commitRes.status}: ${(await commitRes.text()).slice(0, 200)}` };
+  return { commitSha: (await commitRes.json()).sha };
+}
+
+// Move a branch ref to `commitSha`. `force: false` (default) makes GitHub reject a
+// non-fast-forward — our real concurrency guard against clobbering a moved branch.
+export async function updateRef(
+  owner: string,
+  name: string,
+  branch: string,
+  commitSha: string,
+  token?: string,
+  opts: { force?: boolean } = {},
+): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch(`${API}/repos/${owner}/${name}/git/refs/heads/${refPath(branch)}`, {
+    method: "PATCH",
+    headers: jsonHeaders(token),
+    body: JSON.stringify({ sha: commitSha, force: opts.force ?? false }),
+  });
+  if (res.ok) return { ok: true };
+  return { ok: false, error: `updateRef ${res.status}: ${(await res.text()).slice(0, 200)}` };
+}
+
+// Open a PR head→base. A 422 "already exists" returns the existing open PR instead of
+// erroring (re-publishing the same branch is idempotent).
+export async function openPullRequest(
+  owner: string,
+  name: string,
+  opts: { head: string; base: string; title: string; body?: string; token?: string },
+): Promise<{ number: number; url: string } | { error: string }> {
+  const res = await fetch(`${API}/repos/${owner}/${name}/pulls`, {
+    method: "POST",
+    headers: jsonHeaders(opts.token),
+    body: JSON.stringify({ title: opts.title, head: opts.head, base: opts.base, body: opts.body ?? "" }),
+  });
+  if (res.ok) {
+    const pr = await res.json();
+    return { number: pr.number, url: pr.html_url };
+  }
+  const text = await res.text();
+  if (res.status === 422 && /already exists/i.test(text)) {
+    const listRes = await fetch(
+      `${API}/repos/${owner}/${name}/pulls?head=${encodeURIComponent(`${owner}:${opts.head}`)}&base=${encodeURIComponent(opts.base)}&state=open`,
+      { headers: ghHeaders(opts.token) },
+    );
+    if (listRes.ok) {
+      const list = (await listRes.json()) as Array<{ number: number; html_url: string }>;
+      if (list[0]) return { number: list[0].number, url: list[0].html_url };
+    }
+  }
+  return { error: `openPullRequest ${res.status}: ${text.slice(0, 200)}` };
 }

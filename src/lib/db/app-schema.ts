@@ -9,6 +9,7 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { organization, user } from "./schema";
 import type { ReaderAuthConfig } from "@/lib/reader-auth";
@@ -142,6 +143,64 @@ export const deployment = pgTable(
   (table) => [index("deployment_siteId_idx").on(table.siteId)],
 );
 
+// AUTHORING (SPEC §9.2 / §10) — the shared backend for the web editor and the authoring
+// MCP. An edit session is a working branch off the deploy branch; its draft files are a
+// server-side buffer that only reaches git on publish (commit or PR). Both the human
+// editor and the editing agent write the SAME draftFile rows, so there's one source of
+// truth and no divergence. Drafts live in Postgres (not S3, which holds immutable synced
+// content): they're small, mutable, need transactional dirty-state + cascade cleanup.
+export const editorSession = pgTable(
+  "editor_session",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    // The working branch these drafts target, e.g. "papervine/edit-ab12c3d4". Created
+    // remotely lazily (at publish), so a session can exist before the git branch does.
+    branch: text("branch").notNull(),
+    // The deploy branch this forked from (site.branch at checkout) — the PR base / commit
+    // target on publish.
+    baseBranch: text("base_branch").notNull(),
+    // Head of baseBranch at checkout. Publish compares it to the live head to detect the
+    // deploy branch moving under us (optimistic concurrency); updateRef(force:false) is
+    // the hard guard.
+    baseCommitSha: text("base_commit_sha"),
+    // 'open' | 'published' | 'discarded'
+    status: text("status").default("open").notNull(),
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    // One open session per (site, branch) — the editor + agent attach to the same one.
+    uniqueIndex("editorSession_site_branch_idx").on(table.siteId, table.branch),
+  ],
+);
+
+// A single buffered file in an edit session: the full MDX (or docs.json) text, keyed by
+// repo-relative path. `deleted` tombstones a page removed in the session so the overlay
+// hides it from the live S3 content until publish carries the delete to git.
+export const draftFile = pgTable(
+  "draft_file",
+  {
+    id: text("id").primaryKey(),
+    sessionId: text("session_id")
+      .notNull()
+      .references(() => editorSession.id, { onDelete: "cascade" }),
+    // Repo-relative docs path, e.g. "guides/intro.mdx" or "docs.json".
+    path: text("path").notNull(),
+    // Full buffered text (MDX/JSON). Postgres text handles MB-scale docs fine.
+    content: text("content").notNull(),
+    deleted: boolean("deleted").default(false).notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    // Upsert-on-save key: one row per path per session.
+    uniqueIndex("draftFile_session_path_idx").on(table.sessionId, table.path),
+  ],
+);
+
 // One row per tracked interaction — the first-party events table backing the
 // Analytics page (SPEC §10.1). Deliberately denormalized/append-only: every source
 // (page views, search, assistant) writes the same shape, aggregation reads it.
@@ -233,4 +292,17 @@ export const githubInstallationRelations = relations(githubInstallation, ({ one 
 export const deploymentRelations = relations(deployment, ({ one }) => ({
   site: one(site, { fields: [deployment.siteId], references: [site.id] }),
   actor: one(user, { fields: [deployment.actorUserId], references: [user.id] }),
+}));
+
+export const editorSessionRelations = relations(editorSession, ({ one, many }) => ({
+  site: one(site, { fields: [editorSession.siteId], references: [site.id] }),
+  createdByUser: one(user, { fields: [editorSession.createdBy], references: [user.id] }),
+  drafts: many(draftFile),
+}));
+
+export const draftFileRelations = relations(draftFile, ({ one }) => ({
+  session: one(editorSession, {
+    fields: [draftFile.sessionId],
+    references: [editorSession.id],
+  }),
 }));

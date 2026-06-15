@@ -127,6 +127,24 @@ const CONTROL_PLANE_CHECKS = [
     redirectTo: "/login",
   },
   {
+    // The web editor (SPEC §9.2/§10) is a bare /:org/:site/editor path — the edge gate must
+    // catch it like any dashboard page so an unauthenticated request never reaches the
+    // authoring backend (draft buffer / git write path).
+    host: "app.localhost",
+    path: "/acme/docs/editor",
+    desc: "unauthenticated app host editor redirects to /login (SPEC §9.2/§10)",
+    redirectTo: "/login",
+  },
+  {
+    // The editor's live preview (SPEC §9.2) renders the draft through the real renderer at
+    // /preview/:org/:site. It's a bare app-host path like any dashboard page, so the edge gate
+    // must catch it — an unauthenticated request must never render a tenant's draft content.
+    host: "app.localhost",
+    path: "/preview/acme/docs",
+    desc: "unauthenticated app host editor preview redirects to /login (SPEC §9.2)",
+    redirectTo: "/login",
+  },
+  {
     path: "/login",
     desc: "login page renders in the platform theme (shell + gradient CTA)",
     // `db-glow` proves PlatformShell wraps it; `db-cta` proves the shared Button is used.

@@ -1,7 +1,20 @@
 import type { Config } from "tailwindcss";
 
 const config: Config = {
-  darkMode: "class",
+  // Two independent dark triggers (SPEC §2 has two theme systems): the per-tenant docs
+  // appearance toggles the `.dark` class, while the control-plane platform toggles
+  // `data-db-theme` on <html> (read by the `.db` palette in platform.css). Platform chrome
+  // — the editor, dashboard — is built with Tailwind `dark:` utilities, so `dark:` must
+  // also fire inside the `.db` scope when the platform theme is dark; otherwise those
+  // components render their light styles on the dark platform (white boxes). Keeping the
+  // `.dark` selector first preserves docs/marketing behavior unchanged.
+  darkMode: [
+    "variant",
+    [
+      "&:where(.dark, .dark *)",
+      '&:where([data-db-theme="dark"] .db, [data-db-theme="dark"] .db *)',
+    ],
+  ],
   content: [
     "./src/**/*.{ts,tsx}",
     "./node_modules/streamdown/dist/**/*.js", // assistant markdown renderer classes

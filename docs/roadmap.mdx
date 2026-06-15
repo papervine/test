@@ -73,9 +73,13 @@ since been decided — captured here as the rationale.
   tenancy and metering design.
 </Info>
 
-<Info>
-  **Web editor.** Defer past v1? Often treated as a differentiator.
-</Info>
+<Note>
+  **Decided — built the web editor now, agent-native.** Rather than defer, we shipped the
+  three-panel [editor](/control-plane/editor) (editing agent · navigation · multi-modal MDX) on
+  a shared authoring backend, alongside the [authoring MCP](/features/mcp-servers). The editable
+  Visual mode keeps **MDX as the source of truth** (no lossy block-store round-trip), so Git
+  stays canonical.
+</Note>
 
 <Note>
   **Decided — build from scratch (not on Fumadocs).** Multi-tenancy and full architectural
@@ -95,7 +99,6 @@ since been decided — captured here as the rationale.
 
 Explicitly out of scope for the first version:
 
-- Visual / WYSIWYG web editor (fast-follow)
 - Migrating from other sources (Docusaurus / GitBook importers)
 - Embeddable AI on third-party sites
 - Marketplace / plugin ecosystem

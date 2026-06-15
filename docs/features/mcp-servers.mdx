@@ -8,9 +8,10 @@ tools can both **read** a docs site and **edit** it — two distinct MCP servers
 very different maturity and trust models.
 
 <Info>
-  The **read MCP is shipped**. The **authoring (write) MCP is planned** — it depends on the
-  Git-sync and [platform-auth](/auth/platform-auth) foundations and follows them on the
-  roadmap.
+  Both are **built**. The read MCP is auto-generated per site and needs no auth. The authoring
+  (write) MCP shares its backend with the [web editor](/control-plane/editor) and is
+  authenticated — today via the dashboard session; token-scoped external access
+  ([platform-auth](/auth/platform-auth)) is the follow-up.
 </Info>
 
 ## Generated read MCP (per docs site)
@@ -62,26 +63,27 @@ the assistant — published pages + OpenAPI specs, excluding hidden/`noindex`.
 ## Authoring MCP (admin / write)
 
 The authoring MCP lets a docs *owner* connect an AI tool to **edit their docs** (an admin
-MCP). It is the agent-native counterpart to the web editor: any action an
-owner can take in the dashboard, an agent can take through this MCP.
+MCP). It is the agent-native counterpart to the [web editor](/control-plane/editor): any
+action an owner can take in the editor, an agent can take through this MCP — they share one
+backend.
 
 <Warning>
-  All edits happen on a **session branch** and land via a **Pull Request** — never directly
-  on the deploy branch. The authoring MCP requires a [platform-auth](/auth/platform-auth)
-  token scoped to the org/repo, with a role of **editor or above**.
+  Edits happen on a **session branch** and land via **commit or Pull Request** — never silently
+  on the deploy branch. The authoring MCP is authenticated: it requires a dashboard session and
+  the `x-papervine-org` / `x-papervine-site` headers naming the target site, with the editor
+  feature enabled for your role. Token-scoped external access ([platform-auth](/auth/platform-auth))
+  is the follow-up.
 </Warning>
 
-The tools, grouped by what they touch:
+It serves at `/authoring/mcp`. The tools, grouped by what they touch:
 
-- **Content** — `read`, `write_page` (full MDX), `edit_page` (targeted), `search`.
-- **Structure** — `create_node` / `move_node` / `update_node` / `delete_node` / `list_nodes`,
-  operating on the recursive `navigation` tree (pages, groups, tabs, anchors, versions).
-- **Config** — `update_config` to edit `docs.json`.
-- **Git** — `checkout` (**must be the first call**), `diff`, `save` (`mode: "pr" | "commit"`),
-  and `discard_session`.
+- **Content** — `read`, `search`, `list_pages`, `write_page` (full MDX), `edit_page` (a
+  targeted find/replace on the raw MDX).
+- **Git** — `save` (`mode: "pr" | "commit"`). A working branch is checked out automatically on
+  first use (or named via the `x-papervine-branch` header).
 
-`checkout` opens a `papervine-mcp/<slug>-<sha>` branch off the deploy branch (or attaches to a
-named existing branch) and returns an `editorUrl`.
+Editing the `navigation` structure and `docs.json` from the MCP (`create_node` / `move_node` /
+`update_config`) is a planned extension.
 
 ### One backend, two front-ends
 
@@ -95,10 +97,9 @@ The authoring MCP and the web editor are **not separate write paths**. They oper
 - Nothing reaches the deploy branch until `save` / publish — a **direct commit** if you're on
   the deploy branch, otherwise a **PR** with a returned link.
 
-The draft buffer is real persistent state, not a commit-on-save shortcut. The build approach
-is to write the authoring layer once — GitHub-App write creds → session branch + draft buffer
-→ `save` as commit-or-PR — and put both the MCP and the [web editor](/control-plane/overview)
-on top of it.
+The draft buffer is real persistent state, not a commit-on-save shortcut. The authoring layer
+is written once — GitHub-App write creds → session branch + draft buffer → `save` as
+commit-or-PR — and both the MCP and the [web editor](/control-plane/editor) sit on top of it.
 
 ## Read vs. authoring at a glance
 
@@ -108,7 +109,7 @@ on top of it.
     `list_pages`, `search_api`). For docs *readers'* tools. **Shipped.**
   </Card>
   <Card title="Authoring MCP">
-    Owner-connected. Platform-auth token, editor+ role. Writes via session branch → PR.
-    For docs *owners*. **Planned.**
+    Owner-connected, authenticated. Reads + writes (`write_page`, `edit_page`, `save`) via a
+    session branch → commit/PR. Shares the editor's backend. For docs *owners*. **Built.**
   </Card>
 </CardGroup>

@@ -160,6 +160,15 @@ Core principles, in priority order:
   cookies, so the flag (and thus `www`'s Dashboard link) only works in prod (`.papervine.io`);
   the redirect-to-dashboard behavior works everywhere. Don't "fix" the missing dev label by
   sharing the real session cookie.
+- **Two theme systems — `dark:` only works in the platform via `.db`.** The *docs/marketing*
+  appearance toggles the `.dark` class (`localStorage['theme']`); the *platform* toggles
+  `data-db-theme` on `<html>` (`localStorage['pv-theme']`, default dark), read by the `.db`
+  palette in `platform.css`. Tailwind's `darkMode` is a two-selector variant: `.dark` **plus**
+  `[data-db-theme="dark"] .db` (`tailwind.config.ts`). So in platform components (dashboard,
+  editor) `dark:` utilities Just Work — but only because the element is inside a `.db` shell
+  (`PlatformShell`); a `dark:` utility on an element *outside* `.db` (e.g. on `<body>` itself)
+  won't see the platform theme. This is why the editor chrome once rendered all-white on the
+  dark platform. Don't add a global `.dark` sync — it would flip light-appearance docs pages.
 
 ## Commands
 
