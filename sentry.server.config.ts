@@ -7,6 +7,11 @@ import * as Sentry from "@sentry/nextjs";
 Sentry.init({
   dsn: "https://96dc558da051cb3d6548fed0494da935@o4504170566320128.ingest.us.sentry.io/4511570839535616",
 
+  // Only report from real deployments — see instrumentation-client.ts for why (local
+  // dev was polluting the prod project: PAPERVINE-5/6/7/8). Vercel prod + preview both
+  // run NODE_ENV=production and still report, tagged by environment.
+  enabled: process.env.NODE_ENV === "production",
+
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: 1,
 

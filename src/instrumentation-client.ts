@@ -7,6 +7,13 @@ import * as Sentry from "@sentry/nextjs";
 Sentry.init({
   dsn: "https://96dc558da051cb3d6548fed0494da935@o4504170566320128.ingest.us.sentry.io/4511570839535616",
 
+  // Only report from real deployments. `next dev` runs with NODE_ENV !== "production", so
+  // local development never ships events to the prod Sentry project — that noise (forced
+  // test throws + corrupted-.next chunk errors during dev) created PAPERVINE-5/6/7/8 and
+  // buried real signal. Vercel sets NODE_ENV=production for prod *and* preview builds, so
+  // those still report, distinguished by the auto-detected `environment` tag.
+  enabled: process.env.NODE_ENV === "production",
+
   // Add optional integrations for additional features.
   // Replays are UNMASKED: by default Replay masks all text and blocks all media, which is why
   // the PAPERVINE-4 black-screen replay showed only "••••••" and was hard to debug (SPEC §10.7).

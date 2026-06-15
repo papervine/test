@@ -860,6 +860,11 @@ Minimum to operate the SaaS:
   previously the reason was `console.error`'d only, lost to serverless logs the tenant
   can't reach. Operator-facing error tracking (Sentry) is a fast-follow: it complements,
   not replaces, the persisted per-deployment error, which is what the tenant sees.)*
+  *(Status 2026-06-15: Sentry is now **gated to real deployments** — `enabled:
+  process.env.NODE_ENV === "production"` across the client/server/edge configs. `next dev`
+  was shipping local events into the prod project (forced test throws + corrupted-`.next`
+  chunk errors → PAPERVINE-5/6/7/8), burying real signal. Vercel runs prod *and* preview at
+  `NODE_ENV=production`, so both still report, separated by the `environment` tag.)*
 - **Domains:** assign `*.papervine.io` subdomain (shipped); add custom domain — show the CNAME to set, attach via the host-platform domains API, poll until verified + TLS issued (**built** — `settings/domain` + `vercel-domains.ts`; see **§2 → Custom domains, Phase 1**). Architecture, the per-project domain cap, and the proxy escape hatch are in **§2 → Custom domains**.
 - **Assistant:** the AI assistant management page (enable/disable, deflection, search domains, bot protection, starter questions, credits) — specified in **§8.6**; its usage analytics live on the Analytics page (§10.1).
 - **MCP:** manage the per-docs read MCP and authoring MCP (enable, opt-in, tokens) — see **§9**.
