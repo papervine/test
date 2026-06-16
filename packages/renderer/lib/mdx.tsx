@@ -44,6 +44,15 @@ const Fallback: typeof FallbackComponent = new Proxy(FallbackComponent, {
 
 const warnedComponents = new Set<string>();
 
+// Literal `<img>` (HTML/JSX written in source) compiles to a bare `_jsx("img", …)`,
+// which bypasses the MDX components map — so the tenant <img> override below (lazy +
+// next/image) never sees it, unlike markdown `![]()` which compiles to
+// `_jsx(_components.img, …)`. `remarkLiteralImg` renames literal img elements to this
+// capitalized component name, which compiles to `_jsx(_components.PvImg, …)`; we
+// register it onto the same TenantImage path. (docs.json repos author images as <img>,
+// often inside <Frame> — see GAP-REPORT.) Unlikely to collide with an author component.
+const LITERAL_IMG_COMPONENT = "PvImg";
+
 /**
  * Real components + a passthrough Fallback for every component the *compiled*
  * source references. Scanning compiledSource (not the raw page) is authoritative:
@@ -52,7 +61,9 @@ const warnedComponents = new Set<string>();
  * (e.g. <Popup>) get a Fallback too and never throw at render.
  */
 function componentsForCompiled(compiledSource: string): MDXComponents {
-  const components: MDXComponents = { ...mdxComponents };
+  // Seed our synthetic literal-<img> component so the missing-reference scan below
+  // doesn't flag it as an unknown component; applyTenantUrls swaps in the real one.
+  const components: MDXComponents = { ...mdxComponents, [LITERAL_IMG_COMPONENT]: Fallback };
   for (const m of compiledSource.matchAll(/_missingMdxReference\("([A-Za-z][\w.]*)"/g)) {
     const name = m[1].split(".")[0]; // root of member expressions (Foo.Bar -> Foo)
     if (!/^[A-Z]/.test(name) || name in components) continue;
@@ -63,6 +74,30 @@ function componentsForCompiled(compiledSource: string): MDXComponents {
     }
   }
   return components;
+}
+
+/**
+ * Route literal `<img>` tags through the tenant image override. They parse to
+ * `mdxJsxFlowElement`/`mdxJsxTextElement` nodes whose lowercase `name` the MDX
+ * compiler emits as a literal `_jsx("img")` — skipping the components map. Renaming
+ * to a capitalized component name makes the compiler emit `_jsx(_components.PvImg)`,
+ * so the element takes the same TenantImage (lazy + next/image) path that markdown
+ * `![]()` images already do. Attributes (src/alt/width/height) ride along unchanged.
+ */
+function remarkLiteralImg() {
+  return (tree: { children?: unknown[] }) => {
+    const visit = (node: Record<string, unknown>) => {
+      if (
+        (node.type === "mdxJsxFlowElement" || node.type === "mdxJsxTextElement") &&
+        node.name === "img"
+      ) {
+        node.name = LITERAL_IMG_COMPONENT;
+      }
+      const children = node.children as Record<string, unknown>[] | undefined;
+      if (Array.isArray(children)) children.forEach(visit);
+    };
+    visit(tree as Record<string, unknown>);
+  };
 }
 
 /** the incumbent's bare code-title convention (```js Label) → rehype/highlighter title="Label". */
@@ -87,7 +122,7 @@ function remarkCodeTitles() {
 // bug that made us drop next-mdx-remote originally).
 const mdxOptions = {
   development,
-  remarkPlugins: [remarkGfm, remarkCodeTitles],
+  remarkPlugins: [remarkGfm, remarkCodeTitles, remarkLiteralImg],
   rehypePlugins: [rehypeSlug, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
 } as const;
 
@@ -126,7 +161,7 @@ const compileMdx = unstable_cache(
       return { error: err instanceof Error ? err.message : String(err) };
     }
   },
-  ["mdx-compile-v1"],
+  ["mdx-compile-v2"], // bump when the compile pipeline changes (v2: remarkLiteralImg)
   { revalidate: 86400 },
 );
 
@@ -217,6 +252,9 @@ function applyTenantUrls(
   out.img = (props: ComponentProps<"img">) => (
     <TenantImage {...props} assetBase={assetBase} dimensions={dimensions} />
   );
+  // Literal `<img>` tags, renamed by remarkLiteralImg, render through the same override
+  // so markdown and HTML images optimize identically (lazy + dimensions + next/image).
+  out[LITERAL_IMG_COMPONENT] = out.img;
   if (!linkBase && !assetBase) return out;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rewrite = (props: any) => {

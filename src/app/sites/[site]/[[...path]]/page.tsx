@@ -34,7 +34,13 @@ export default async function TenantDocsPage({ params }: { params: Promise<Param
   const hostSlug = resolveTenantSlug((await headers()).get("host"));
   if (hostSlug && hostSlug !== slug) notFound();
   const base = hostSlug ? "" : `/sites/${slug}`;
-  const assetBase = hostSlug ? "" : `/api/tenant-asset/${slug}`;
+  // Assets ALWAYS resolve through the slug-keyed asset route, even in subdomain mode
+  // where a bare `/img/…` would also work for a direct browser load. The next/image
+  // optimizer fetches the source URL server-side WITHOUT the tenant Host header, so a
+  // host-rewrite-dependent `/img/…` 404s in the optimizer (→ broken image). The
+  // `/api/tenant-asset/{slug}` route carries the slug in the path, so it resolves the
+  // same regardless of host — the one form both the browser and the optimizer can read.
+  const assetBase = `/api/tenant-asset/${slug}`;
 
   return renderTenantDocs({ slug, base, assetBase, path: path ?? [] });
 }

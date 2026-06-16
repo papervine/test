@@ -46,10 +46,19 @@ const CHECKS = [
   },
   {
     slug: "images",
-    desc: "content images get manifest dimensions + next/image (perf); external stays plain <img>",
-    // hero.png is 120x60 (tests/fixtures/img) → dims applied and routed through the optimizer;
-    // the external example.com image must NOT be optimized (no /_next/image for it).
-    include: ["IMAGES_PAGE_MARKER", 'width="120"', 'height="60"', "/_next/image", "https://example.com/remote.png"],
+    desc: "markdown AND literal <img> images get manifest dimensions + next/image; external stays plain",
+    // hero.png is 120x60 (markdown image) and wide.png is 200x100 (a LITERAL <img> in a <Frame>):
+    // both get dims applied + routed through the optimizer. The 200x100 assertion is the regression
+    // guard for literal <img> — it compiles to _jsx("img") and would bypass the components map
+    // (so no dims, no /_next/image) without remarkLiteralImg. The external example.com image must
+    // NOT be optimized.
+    include: [
+      "IMAGES_PAGE_MARKER",
+      'width="120"', 'height="60"', // markdown ![]() image
+      'width="200"', 'height="100"', // literal <img> in <Frame> — the regression guard
+      "/_next/image",
+      "https://example.com/remote.png",
+    ],
   },
   { slug: "badfrontmatter", desc: "malformed frontmatter doesn't crash", include: ["BAD_FRONTMATTER_MARKER"] },
   {
