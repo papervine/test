@@ -17,6 +17,11 @@ const config: Config = {
   ],
   content: [
     "./src/**/*.{ts,tsx}",
+    // The docs renderer is a workspace package; its components (Navbar logo, nav, MDX
+    // primitives) emit Tailwind classes too. Without this glob, classes used ONLY here
+    // (e.g. the logo's `h-7`) get purged from the docs CSS while shared ones survive via
+    // src/** — so the docs render mostly-styled but the logo collapses to 0×0.
+    "./packages/renderer/**/*.{ts,tsx}",
     "./node_modules/streamdown/dist/**/*.js", // assistant markdown renderer classes
   ],
   theme: {
