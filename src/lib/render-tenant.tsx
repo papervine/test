@@ -3,7 +3,12 @@ import { cookies } from "next/headers";
 import { getSiteBySlug } from "@/lib/tenant";
 import { READER_COOKIE, readerSessionValid } from "@/lib/reader-session";
 import { requestContentSource } from "@/lib/request-source";
-import { contentContext, loadConfig, loadPage } from "@papervine/renderer/lib/content";
+import {
+  contentContext,
+  loadConfig,
+  loadPage,
+  loadAssetDimensions,
+} from "@papervine/renderer/lib/content";
 import { buildNav, findGroupLabel } from "@papervine/renderer/lib/nav";
 import { Mdx, extractToc } from "@papervine/renderer/lib/mdx";
 import { resolveTheme, themeCssVars } from "@papervine/renderer/lib/theme";
@@ -65,6 +70,7 @@ export async function renderTenantDocs({
 
     const toc = extractToc(page.body);
     const eyebrow = findGroupLabel(sections, base + "/" + (slugStr || "index"));
+    const assetDimensions = await loadAssetDimensions();
 
     // Override the apex theme vars with this tenant's brand colors.
     const theme = resolveTheme(config.theme);
@@ -99,7 +105,12 @@ export async function renderTenantDocs({
                     {page.frontmatter.description}
                   </p>
                 )}
-                <Mdx source={page.body} linkBase={base} assetBase={assetBase} />
+                <Mdx
+                  source={page.body}
+                  linkBase={base}
+                  assetBase={assetBase}
+                  assetDimensions={assetDimensions}
+                />
               </article>
               <TableOfContents items={toc} />
             </div>

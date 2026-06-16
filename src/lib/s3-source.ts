@@ -1,7 +1,12 @@
 import "server-only";
 import { unstable_cache, revalidateTag } from "next/cache";
 import { parseDocsConfig } from "@papervine/renderer/lib/config";
-import { parsePage, PAGE_EXTS, type ContentSource } from "@papervine/renderer/lib/content";
+import {
+  parsePage,
+  PAGE_EXTS,
+  type AssetDimensions,
+  type ContentSource,
+} from "@papervine/renderer/lib/content";
 import { getObjectText, listKeys } from "./storage";
 
 /**
@@ -60,6 +65,14 @@ export function s3Source(siteId: string, version = ""): ContentSource {
     tags: [tag],
     ...CACHE,
   });
+  // The dimensions manifest the sync job wrote (sites/{id}/.dimensions.json) — read once per
+  // render through the same version-keyed cache as everything else, so a re-sync's fresh dims
+  // appear without a tag bust.
+  const readDimensions = unstable_cache(
+    () => getObjectText(`${prefix}.dimensions.json`),
+    ["s3-dimensions", siteId, version],
+    { tags: [tag], ...CACHE },
+  );
 
   return {
     async loadConfig() {
@@ -83,6 +96,16 @@ export function s3Source(siteId: string, version = ""): ContentSource {
         .filter((k) => PAGE_EXTS.some((e) => k.endsWith(e)))
         .map((k) => k.slice(prefix.length).replace(/\.mdx?$/, ""))
         .map((s) => (s === "index" ? "" : s));
+    },
+    async loadAssetDimensions() {
+      const raw = await readDimensions();
+      if (!raw) return {};
+      try {
+        const parsed = JSON.parse(raw);
+        return parsed && typeof parsed === "object" ? (parsed as AssetDimensions) : {};
+      } catch {
+        return {}; // a corrupt/absent manifest just means every image renders as a plain <img>
+      }
     },
   };
 }

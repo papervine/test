@@ -13,6 +13,12 @@ const nextConfig = {
   // The renderer core ships as TS/TSX source (workspace package), so Next must
   // compile it rather than treat it as a pre-built dependency.
   transpilePackages: ["@papervine/renderer"],
+  // Tenant content images render through next/image (packages/renderer/lib/mdx.tsx). They're
+  // same-origin (served by /api/tenant-asset/…, or the host-rewritten /img/… path), so the
+  // optimizer needs no remotePatterns — only AVIF added to the default WebP negotiation.
+  images: {
+    formats: ["image/avif", "image/webp"],
+  },
 };
 
 export default withSentryConfig(nextConfig, {

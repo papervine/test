@@ -4,6 +4,7 @@ import path from "node:path";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { cache } from "react";
 import matter from "gray-matter";
+import { imageSize } from "image-size";
 import { parseDocsConfig, type DocsConfig } from "./config";
 
 export type PageFrontmatter = {
@@ -29,16 +30,29 @@ export type Page = {
  * (which calls loadPage for sidebar titles), reads from it without threading a source
  * argument through every signature.
  */
+// Pixel dimensions for the rendered content's raster images, keyed by docs-relative path
+// (e.g. `images/hero.png`, no leading slash). The renderer hands these to next/image so
+// images load CLS-free and optimized; a path absent from the map degrades to a plain <img>.
+export type AssetDimensions = Record<string, { width: number; height: number }>;
+
 export type ContentSource = {
   loadConfig(): Promise<DocsConfig>;
   loadPage(slug: string): Promise<Page | null>;
   listPageSlugs(): Promise<string[]>;
+  // Optional: a source that can't supply dimensions (e.g. a draft/preview) just omits it,
+  // and every image falls back to a plain lazy <img>.
+  loadAssetDimensions?(): Promise<AssetDimensions>;
 };
 
 export const contentContext = new AsyncLocalStorage<ContentSource>();
 
 /** Page file extensions we serve, in resolution priority order. The incumbent ships both. */
 export const PAGE_EXTS = [".mdx", ".md"];
+
+/** Raster image extensions we measure for next/image — mirrors the sync-side RASTER_IMAGE_EXT
+ *  (gif/svg excluded: animation preserved / no raster dims). Kept here too so the renderer
+ *  package stays standalone (no import from the app's sync-plan). */
+const RASTER_EXTS = [".png", ".jpg", ".jpeg", ".webp", ".avif", ".bmp"];
 
 /** Parse raw file text into a Page; malformed frontmatter degrades to body-only (GAP-REPORT §S1). */
 export function parsePage(slug: string, raw: string): Page {
@@ -102,6 +116,33 @@ export function fsSource(dir: string): ContentSource {
       await walk(CONTENT_DIR);
       return slugs;
     },
+    async loadAssetDimensions() {
+      // Measure raster images straight off disk — cheap for a local preview, and it lets the
+      // dogfood `docs/` site (and the smoke fixtures) exercise the same next/image path the
+      // synced tenant sites take. Unreadable images are simply skipped (plain <img> fallback).
+      const dims: AssetDimensions = {};
+      async function walk(dir: string) {
+        const entries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) {
+            await walk(full);
+          } else if (RASTER_EXTS.some((ext) => entry.name.toLowerCase().endsWith(ext))) {
+            try {
+              const { width, height } = imageSize(await fs.readFile(full));
+              if (Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0) {
+                dims[path.relative(CONTENT_DIR, full)] = { width, height };
+              }
+            } catch {
+              // unreadable image — skip
+            }
+          }
+        }
+      }
+      await walk(CONTENT_DIR);
+      return dims;
+    },
   };
 }
 
@@ -116,3 +157,6 @@ function source(): ContentSource {
 export const loadConfig = cache((): Promise<DocsConfig> => source().loadConfig());
 export const loadPage = cache((slug: string): Promise<Page | null> => source().loadPage(slug));
 export const listPageSlugs = cache((): Promise<string[]> => source().listPageSlugs());
+export const loadAssetDimensions = cache(
+  (): Promise<AssetDimensions> => source().loadAssetDimensions?.() ?? Promise.resolve({}),
+);

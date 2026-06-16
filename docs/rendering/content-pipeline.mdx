@@ -142,6 +142,29 @@ cache header so the host CDN edge-caches it.
   optimization, not required at launch.
 </Note>
 
+### Image optimization
+
+Content images render through Next's `next/image`, so readers get format negotiation
+(AVIF/WebP), responsive `srcset`, and lazy-loading — without layout shift as each image loads.
+`next/image` needs an image's intrinsic width and height, and a markdown image (`![](…)`)
+carries none. Papervine captures them **at sync time, not per request**: as the sync copies
+each raster image into object storage it measures the pixel dimensions from the file header and
+records them in a `.dimensions.json` manifest alongside the content. Because sync is
+incremental, only changed images are re-measured; untouched ones keep their recorded
+dimensions and removed ones are dropped. The render path reads this manifest through the same
+cache as everything else and hands each image its dimensions.
+
+The image renderer degrades in tiers, so an image never breaks or jumps:
+
+- Every image is lazy-loaded and async-decoded.
+- When the dimensions are known, width and height are set to reserve layout space (no shift).
+- Same-origin raster images (PNG/JPEG/WebP/AVIF/BMP) are additionally routed through the
+  optimizer for format negotiation and `srcset`.
+
+Animated **GIFs** stay a plain image so their animation survives, and **SVGs** and
+**external-host** images stay plain too — the optimizer only handles images served from this
+origin. Everything still gets lazy-loading regardless.
+
 ## Related
 
 - [Renderer internals](/rendering/internals) — the hybrid MDX pipeline that compiles each page.

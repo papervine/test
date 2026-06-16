@@ -13,6 +13,7 @@ import { execFileSync } from "node:child_process";
 import postgres from "postgres";
 import { hashPassword } from "better-auth/crypto";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { imageSize } from "image-size";
 
 const DEV = {
   user: { name: "Dev User", email: "dev@papervine.local", password: "dev-password-123" },
@@ -77,6 +78,8 @@ const s3 = new S3Client({
 const S3_BUCKET = process.env.S3_BUCKET ?? "papervine-content";
 const TEXT_EXT = /\.(mdx?|json|ya?ml)$/i;
 const ASSET_EXT = /\.(png|jpe?g|gif|svg|webp|avif|ico|bmp|mp4|webm|pdf|woff2?)$/i;
+// Mirrors sync-plan.ts RASTER_IMAGE_EXT: the formats we measure for next/image.
+const RASTER_EXT = /\.(png|jpe?g|webp|avif|bmp)$/i;
 
 /** Copy a repo's docs (config + MDX + assets) into sites/{id}/… (mirrors syncSite). */
 async function syncToStorage({ id, repoOwner, repoName, branch }) {
@@ -95,15 +98,31 @@ async function syncToStorage({ id, repoOwner, repoName, branch }) {
 
   const rawBase = `https://raw.githubusercontent.com/${repoOwner}/${repoName}/${branch}`;
   let count = 0;
+  const dimensions = {};
   for (const f of files) {
     const res = await fetch(`${rawBase}/${f.path}`);
     if (!res.ok) continue;
     const isAsset = ASSET_EXT.test(f.path);
+    let body;
+    if (isAsset) {
+      const bytes = new Uint8Array(await res.arrayBuffer());
+      body = bytes;
+      if (RASTER_EXT.test(f.path)) {
+        try {
+          const { width, height } = imageSize(bytes);
+          if (width > 0 && height > 0) dimensions[f.path] = { width, height };
+        } catch {
+          // unreadable image — skip
+        }
+      }
+    } else {
+      body = await res.text();
+    }
     await s3.send(
       new PutObjectCommand({
         Bucket: S3_BUCKET,
         Key: `sites/${id}/${f.path}`,
-        Body: isAsset ? new Uint8Array(await res.arrayBuffer()) : await res.text(),
+        Body: body,
         ContentType: isAsset
           ? (res.headers.get("content-type") ?? undefined)
           : "text/plain; charset=utf-8",
@@ -111,6 +130,15 @@ async function syncToStorage({ id, repoOwner, repoName, branch }) {
     );
     count++;
   }
+  // The dimensions manifest the render path reads to give next/image real width/height.
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: `sites/${id}/.dimensions.json`,
+      Body: JSON.stringify(dimensions),
+      ContentType: "application/json",
+    }),
+  );
   return count;
 }
 

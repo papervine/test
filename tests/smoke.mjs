@@ -44,6 +44,13 @@ const CHECKS = [
     include: ["UNKNOWN_CHILD_MARKER", "MEMBER_EXPR_MARKER"],
     exclude: ["Expected component"],
   },
+  {
+    slug: "images",
+    desc: "content images get manifest dimensions + next/image (perf); external stays plain <img>",
+    // hero.png is 120x60 (tests/fixtures/img) → dims applied and routed through the optimizer;
+    // the external example.com image must NOT be optimized (no /_next/image for it).
+    include: ["IMAGES_PAGE_MARKER", 'width="120"', 'height="60"', "/_next/image", "https://example.com/remote.png"],
+  },
   { slug: "badfrontmatter", desc: "malformed frontmatter doesn't crash", include: ["BAD_FRONTMATTER_MARKER"] },
   {
     slug: "with-snippet",

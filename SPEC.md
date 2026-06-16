@@ -385,6 +385,28 @@ once C lands. We build C next. C ships in two steps so it's incremental, not a b
    that's effectively unlimited; the 60/hr *unauthenticated* dev ceiling only bites under heavy
    repeated local testing without a `GITHUB_TOKEN`.
 
+**Image dimensions captured at sync → `next/image` on the render path (landed 2026-06-16).**
+Tenant content images rendered as a raw `<img>`: no lazy-loading, no format negotiation, and —
+because markdown images carry no dimensions — layout shift as each one loaded. The fix routes
+eligible images through **`next/image`** (AVIF/WebP negotiation + responsive `srcset` +
+lazy-load), which needs intrinsic width/height. We capture those **once at sync time**, never
+per request: `syncSite` measures each raster image's pixels with `image-size` (header-only, no
+full decode, no native `sharp` dep) and writes a `sites/{id}/.dimensions.json` manifest beside
+`.manifest.json` (`mergeAssetDimensions` carries dims forward across the *incremental* sync —
+only refetched images are re-measured, vanished ones dropped). The render path reads it through
+the same version-keyed `s3Source` cache (`loadAssetDimensions` on `ContentSource`; `fsSource`
+measures from disk so the dogfood `docs/` and smoke fixtures exercise the identical path) and
+hands it to the renderer. The `img` override (`packages/renderer/lib/mdx.tsx`) is **three-tier**,
+so it never regresses: (1) *always* `loading="lazy" decoding="async"`; (2) set width/height
+whenever known (no CLS); (3) upgrade to `next/image` only for **same-origin raster** images —
+**gif** stays a plain `<img>` to keep animation, **svg** and **external-host** images stay plain
+because the optimizer can't enumerate arbitrary remote hosts (no `remotePatterns` guessing).
+Same-origin paths (`/api/tenant-asset/…`, or the host-rewritten `/img/…`) need no
+`remotePatterns`; `next.config.mjs` only adds AVIF to the default WebP negotiation. **Why a
+manifest, not a DB column:** it's migration-free, versioned with the synced commit, and
+invalidates with the existing content tag. The chosen raster set and the merge logic are pure
+helpers in `sync-plan.ts`, unit-tested.
+
 **Connect returns immediately; first sync runs in the background (landed 2026-06-15).** Even
 scoped+parallel, a big first sync is ~60s, and `connectRepo` used to `await runSync` inline —
 so the connect form sat on "Connecting…" for the whole sync. Now `connectRepo` pre-creates the

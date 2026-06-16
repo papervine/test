@@ -1,7 +1,17 @@
 import "server-only";
 import { putObject, getObjectText, deleteKeys } from "./storage";
 import { ghHeaders, getRef } from "./github";
-import { isSyncablePath, isAssetPath, mimeForPath, planSync, type Blob } from "./sync-plan";
+import { imageSize } from "image-size";
+import {
+  isSyncablePath,
+  isAssetPath,
+  isRasterImagePath,
+  mergeAssetDimensions,
+  mimeForPath,
+  planSync,
+  type Blob,
+  type ImageDim,
+} from "./sync-plan";
 
 const API = "https://api.github.com";
 
@@ -10,6 +20,27 @@ const API = "https://api.github.com";
 // vanished from the repo. The dot-name keeps it out of the render path (it's not a docs
 // file), and it lives under the site prefix so a site delete sweeps it with everything else.
 const manifestKey = (id: string) => `sites/${id}/.manifest.json`;
+
+// Sibling of the blob manifest: each raster image's pixel dimensions (docs-relative path →
+// {width,height}), measured once at sync time so the render path can give next/image real
+// dimensions without re-fetching every image per request. Same dot-name convention keeps it
+// out of the render path and under the site prefix (swept on site delete).
+const dimensionsKey = (id: string) => `sites/${id}/.dimensions.json`;
+
+// Read an image's pixel dimensions from its raw bytes. Header-only (image-size never decodes
+// the full image), and any failure — truncated/corrupt/unknown encoding — yields null so the
+// renderer falls back to a plain <img> rather than emitting a wrong width/height.
+function measureImage(data: Uint8Array): ImageDim | null {
+  try {
+    const { width, height } = imageSize(data);
+    if (Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0) {
+      return { width, height };
+    }
+  } catch {
+    // unreadable image — skip it
+  }
+  return null;
+}
 
 export type SyncResult = {
   // Total docs files now in the site (the full set, for the "N files" framing).
@@ -149,6 +180,17 @@ async function loadManifest(id: string): Promise<Record<string, string>> {
   }
 }
 
+async function loadDimensions(id: string): Promise<Record<string, ImageDim>> {
+  const text = await getObjectText(dimensionsKey(id));
+  if (!text) return {};
+  try {
+    const parsed = JSON.parse(text);
+    return parsed && typeof parsed === "object" ? (parsed as Record<string, ImageDim>) : {};
+  } catch {
+    return {}; // corrupt → next sync re-measures whatever it refetches; missing dims just mean plain <img>
+  }
+}
+
 /**
  * Copy a repo's docs (config + MDX + assets) into object storage under sites/{id}/… — the
  * copy-on-sync step of SPEC §3.
@@ -204,6 +246,9 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
   const CONCURRENCY = 12;
   let next = 0;
   let uploaded = 0;
+  // Pixel dimensions measured this sync (docs-relative path → {w,h}). Workers only write
+  // distinct keys and only between awaits, so the shared object is safe without a lock.
+  const measured: Record<string, ImageDim> = {};
   const worker = async () => {
     while (next < toFetch.length) {
       const b = toFetch[next++];
@@ -212,6 +257,10 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
       const key = `sites/${id}/${b.path}`;
       if (isAssetPath(b.path)) {
         await putObject(key, new Uint8Array(data), mimeForPath(b.path));
+        if (isRasterImagePath(b.path)) {
+          const dim = measureImage(data);
+          if (dim) measured[b.path] = dim;
+        }
       } else {
         await putObject(key, data.toString("utf8"), "text/plain; charset=utf-8");
       }
@@ -220,10 +269,14 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, toFetch.length) }, worker));
 
-  // 4) Sweep files that disappeared from the repo, then persist the manifest LAST — so a
+  // 4) Sweep files that disappeared from the repo, then persist the manifests LAST — so a
   //    crash mid-sync leaves the previous manifest and the next run re-reconciles in full.
   if (stale.length) await deleteKeys(stale.map((p) => `sites/${id}/${p}`));
+  const priorDims = await loadDimensions(id);
+  const fetchedRasterPaths = toFetch.filter((b) => isRasterImagePath(b.path)).map((b) => b.path);
+  const dimensions = mergeAssetDimensions(priorDims, fetchedRasterPaths, measured, stale);
   await putObject(manifestKey(id), JSON.stringify(manifest), "application/json");
+  await putObject(dimensionsKey(id), JSON.stringify(dimensions), "application/json");
 
   return { files: blobs.length, uploaded };
 }

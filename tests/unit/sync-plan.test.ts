@@ -1,5 +1,13 @@
 import { describe, it, expect } from "vitest";
-import { isSyncablePath, isAssetPath, mimeForPath, planSync, type Blob } from "@/lib/sync-plan";
+import {
+  isSyncablePath,
+  isAssetPath,
+  isRasterImagePath,
+  mergeAssetDimensions,
+  mimeForPath,
+  planSync,
+  type Blob,
+} from "@/lib/sync-plan";
 
 describe("isSyncablePath", () => {
   it("keeps docs config, pages, and assets", () => {
@@ -24,6 +32,53 @@ describe("isAssetPath / mimeForPath", () => {
     expect(mimeForPath("a/b.png")).toBe("image/png");
     expect(mimeForPath("a/b.SVG")).toBe("image/svg+xml");
     expect(mimeForPath("a/b.unknownext")).toBe("application/octet-stream");
+  });
+});
+
+describe("isRasterImagePath", () => {
+  it("matches the optimizer's raster set", () => {
+    for (const p of ["img/a.png", "b.jpg", "c.JPEG", "d.webp", "e.avif", "f.bmp"]) {
+      expect(isRasterImagePath(p)).toBe(true);
+    }
+  });
+  it("excludes gif (animation), svg/ico (no raster dims), and non-images", () => {
+    for (const p of ["anim.gif", "logo.svg", "fav.ico", "clip.mp4", "intro.mdx"]) {
+      expect(isRasterImagePath(p)).toBe(false);
+    }
+  });
+});
+
+describe("mergeAssetDimensions", () => {
+  const prior = {
+    "a.png": { width: 10, height: 20 },
+    "b.png": { width: 30, height: 40 },
+    "gone.png": { width: 1, height: 1 },
+  };
+
+  it("carries forward untouched dims, drops stale paths", () => {
+    const merged = mergeAssetDimensions(prior, [], {}, ["gone.png"]);
+    expect(merged).toEqual({
+      "a.png": { width: 10, height: 20 },
+      "b.png": { width: 30, height: 40 },
+    });
+  });
+
+  it("re-sets refetched images from freshly measured dims", () => {
+    const merged = mergeAssetDimensions(prior, ["a.png"], { "a.png": { width: 99, height: 88 } }, []);
+    expect(merged["a.png"]).toEqual({ width: 99, height: 88 });
+    expect(merged["b.png"]).toEqual({ width: 30, height: 40 }); // untouched
+  });
+
+  it("invalidates a refetched image we could not measure (no stale wrong dims)", () => {
+    // b.png changed but failed to measure → it must not keep its old dimensions.
+    const merged = mergeAssetDimensions(prior, ["b.png"], {}, []);
+    expect(merged).not.toHaveProperty("b.png");
+    expect(merged["a.png"]).toEqual({ width: 10, height: 20 });
+  });
+
+  it("adds brand-new measured images on a first sync", () => {
+    const merged = mergeAssetDimensions({}, ["new.png"], { "new.png": { width: 5, height: 6 } }, []);
+    expect(merged).toEqual({ "new.png": { width: 5, height: 6 } });
   });
 });
 

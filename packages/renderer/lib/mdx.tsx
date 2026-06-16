@@ -1,5 +1,6 @@
 import type { ComponentProps, ReactNode } from "react";
 import type { MDXComponents } from "mdx/types";
+import Image from "next/image";
 import { unstable_cache } from "next/cache";
 import { serialize } from "@mintlify/mdx/server";
 import { run } from "@mdx-js/mdx";
@@ -9,6 +10,7 @@ import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import { mdxComponents } from "../components/mdx";
+import type { AssetDimensions } from "./content";
 import { withBase } from "./url-base";
 
 /**
@@ -128,22 +130,94 @@ const compileMdx = unstable_cache(
   { revalidate: 86400 },
 );
 
+/** Coerce an author-supplied width/height (number or numeric string) to a positive int, else undefined. */
+function toPosInt(v: unknown): number | undefined {
+  const n = typeof v === "number" ? v : typeof v === "string" ? parseInt(v, 10) : NaN;
+  return Number.isInteger(n) && n > 0 ? n : undefined;
+}
+
+const RASTER_SRC_RE = /\.(png|jpe?g|webp|avif|bmp)(\?|#|$)/i;
+
 /**
- * Rewrite root-absolute links/images inside MDX to the tenant base — only for
- * path-based serving (`/sites/{slug}`). In host mode both bases are empty and we
- * return the components untouched, so the rendered output is byte-identical to before.
- *
- * Two emission points: raw markdown links/images (intrinsic `a`/`img`), and `href`/`src`
- * props passed to real components (e.g. `<Card href="/quickstart">`, which renders its
- * own anchor). We override the intrinsics and wrap each real component's href/src props.
- * Fallback proxies are left alone so member-expression components still degrade.
+ * The renderer for content images. Three tiers, so we add performance without ever regressing
+ * to a broken or wrongly-sized image:
+ *   1. always lazy-load + async-decode (the dominant perceived-perf win, every type/host);
+ *   2. when we know the dimensions (author-supplied or from the sync-time manifest), set
+ *      width/height to reserve layout space — no CLS;
+ *   3. when those dimensions exist AND the image is a same-origin raster, hand it to
+ *      next/image for format negotiation (AVIF/WebP) + responsive `srcset`. gif (animation),
+ *      svg, and external-host images deliberately fall through to a plain lazy <img>: next/image
+ *      can't enumerate arbitrary remote hosts and would freeze a gif's first frame.
+ * `dimensions` is keyed by the *original* (pre-rewrite) docs-relative path.
+ */
+function TenantImage({
+  src,
+  alt,
+  width,
+  height,
+  assetBase,
+  dimensions,
+  ...rest
+}: ComponentProps<"img"> & { assetBase: string; dimensions: AssetDimensions }) {
+  const original = typeof src === "string" ? src : undefined;
+  const rewritten = withBase(original, assetBase) ?? src;
+  const authorW = toPosInt(width);
+  const authorH = toPosInt(height);
+  const key = original?.replace(/^\//, "");
+  const manifest = key ? dimensions[key] : undefined;
+  const dims = authorW && authorH ? { width: authorW, height: authorH } : manifest;
+
+  const sameOrigin =
+    typeof rewritten === "string" && rewritten.startsWith("/") && !rewritten.startsWith("//");
+  const raster = !!original && RASTER_SRC_RE.test(original);
+
+  if (dims && sameOrigin && raster) {
+    return (
+      <Image
+        src={rewritten as string}
+        alt={alt ?? ""}
+        width={dims.width}
+        height={dims.height}
+        sizes="(max-width: 768px) 100vw, 768px"
+        style={{ width: "100%", height: "auto" }}
+        {...rest}
+      />
+    );
+  }
+  return (
+    // eslint-disable-next-line @next/next/no-img-element -- runtime-served content asset, not a build-time import
+    <img
+      src={(rewritten as string) ?? undefined}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      {...(dims ? { width: dims.width, height: dims.height } : {})}
+      {...rest}
+    />
+  );
+}
+
+/**
+ * Wire content links/images to the tenant. Two concerns:
+ *   • the `img` intrinsic is ALWAYS upgraded to `TenantImage` (lazy-load + next/image) —
+ *     this runs in host mode too, where `assetBase` is "" and the src rewrite is a no-op.
+ *   • root-absolute link/src rewriting (`/foo` → `{base}/foo`) only applies in path-based
+ *     serving (`/sites/{slug}`), where a base is set. Two emission points: raw markdown
+ *     links/images (intrinsic `a`/`img`), and `href`/`src` props passed to real components
+ *     (e.g. `<Card href="/quickstart">`). Fallback proxies are left alone so member-expression
+ *     components still degrade.
  */
 function applyTenantUrls(
   components: MDXComponents,
   linkBase: string,
   assetBase: string,
+  dimensions: AssetDimensions,
 ): MDXComponents {
-  if (!linkBase && !assetBase) return components;
+  const out: MDXComponents = { ...components };
+  out.img = (props: ComponentProps<"img">) => (
+    <TenantImage {...props} assetBase={assetBase} dimensions={dimensions} />
+  );
+  if (!linkBase && !assetBase) return out;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const rewrite = (props: any) => {
     if (typeof props?.href !== "string" && typeof props?.src !== "string") return props;
@@ -152,7 +226,6 @@ function applyTenantUrls(
     if (typeof props.src === "string") next.src = withBase(props.src, assetBase);
     return next;
   };
-  const out: MDXComponents = { ...components };
   // Wrap only the real (named) components — not the unknown-component Fallback proxies.
   for (const name of Object.keys(mdxComponents)) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -162,10 +235,6 @@ function applyTenantUrls(
     out[name] = (props: any) => <Comp {...rewrite(props)} />;
   }
   out.a = ({ href, ...rest }: ComponentProps<"a">) => <a href={withBase(href, linkBase)} {...rest} />;
-  out.img = ({ src, alt, ...rest }: ComponentProps<"img">) => (
-    // eslint-disable-next-line @next/next/no-img-element -- runtime-served content asset, not a build-time import
-    <img src={withBase(typeof src === "string" ? src : undefined, assetBase) ?? src} alt={alt} {...rest} />
-  );
   return out;
 }
 
@@ -173,10 +242,12 @@ export async function Mdx({
   source,
   linkBase = "",
   assetBase = "",
+  assetDimensions = {},
 }: {
   source: string;
   linkBase?: string;
   assetBase?: string;
+  assetDimensions?: AssetDimensions;
 }) {
   try {
     const result = await compileMdx(source, development);
@@ -186,6 +257,7 @@ export async function Mdx({
       componentsForCompiled(result.compiledSource),
       linkBase,
       assetBase,
+      assetDimensions,
     );
     const runtime = development ? devRuntime : prodRuntime;
     const { default: Content } = await run(result.compiledSource, {

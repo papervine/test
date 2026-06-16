@@ -16,6 +16,43 @@ export function isAssetPath(path: string): boolean {
   return ASSET_EXT.test(path);
 }
 
+// The raster formats whose pixel dimensions we measure at sync time so the renderer can
+// hand width/height to next/image (CLS-free, optimized + responsive `srcset`). Deliberately
+// narrower than ASSET_EXT: gif is excluded so animation survives (it renders as a plain
+// <img>, not a next/image static frame), and svg/ico/video/pdf/font carry no useful raster
+// dimensions. Anything outside this set just degrades to a lazy <img> at render time.
+export const RASTER_IMAGE_EXT = /\.(png|jpe?g|webp|avif|bmp)$/i;
+
+export function isRasterImagePath(path: string): boolean {
+  return RASTER_IMAGE_EXT.test(path);
+}
+
+// Pixel dimensions of one image, keyed by its docs-relative path in the dimensions manifest.
+export type ImageDim = { width: number; height: number };
+
+/**
+ * Reconcile the persisted dimensions manifest with what this (incremental) sync touched.
+ * Like the blob manifest, sync only refetched the *changed* blobs, so we carry forward dims
+ * for untouched images and only revise what moved:
+ *   - every refetched raster image is invalidated first (its old dims are stale) then…
+ *   - …re-set from `measured` if we could read it (a failed measure leaves it absent → the
+ *     renderer falls back to a plain <img>, never a wrong width/height), and
+ *   - paths that vanished from the repo (`stale`) are dropped.
+ * Pure so it can be unit-tested without S3 or GitHub.
+ */
+export function mergeAssetDimensions(
+  prior: Record<string, ImageDim>,
+  fetchedRasterPaths: string[],
+  measured: Record<string, ImageDim>,
+  stale: string[],
+): Record<string, ImageDim> {
+  const out = { ...prior };
+  for (const p of fetchedRasterPaths) delete out[p];
+  for (const p of stale) delete out[p];
+  Object.assign(out, measured);
+  return out;
+}
+
 // The tree/blob API gives raw bytes with no content-type, so we infer it from the
 // extension. The tenant-asset route serves whatever content-type we store, so getting it
 // right matters.

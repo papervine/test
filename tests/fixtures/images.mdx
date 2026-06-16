@@ -1,0 +1,14 @@
+---
+title: Images
+---
+
+IMAGES_PAGE_MARKER
+
+A markdown image with no author-supplied dimensions — the renderer should pull its
+width/height from the sync-time dimensions manifest and hand it to next/image.
+
+![Hero](/img/hero.png)
+
+An external image stays a plain lazy `<img>` (the optimizer can't enumerate remote hosts):
+
+![Remote](https://example.com/remote.png)
