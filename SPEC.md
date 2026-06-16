@@ -395,8 +395,12 @@ the in-flight build and polls it to live/failed. `runSync` gained an optional `d
 it resolves the pre-created row instead of inserting a second. Validation (repo exists, has a
 `docs.json`) stays synchronous so form errors still surface in place — only the slow copy defers.
 While that first build runs, the Overview swaps the live-preview iframe (which would 404 against
-an unsynced site) for `BuildingPreview` — an animated "assembling your docs" wireframe that
-self-refreshes to the real preview once the site goes live.
+an unsynced site) for `BuildingPreview` — an animated "assembling your docs" wireframe that swaps
+to the real preview the moment the sync finishes: instantly via the site's realtime channel (the
+same Pusher/Soketi channel the Activity feed uses), with a brisk poll backstop for a fast sync
+that finishes mid-redirect before the channel handshake completes. The realtime subscription +
+poll fallback is centralized in `useSiteRealtime` / `useRealtimeRefresh` (src/lib/use-site-realtime.ts),
+which the Activity feed also uses.
 
 **Push auto-sync (landed 2026-06-11).** A registered **GitHub App** delivers `push` events
 to `POST /api/github/webhook` (on the **apex** host — middleware passes `/api/` through

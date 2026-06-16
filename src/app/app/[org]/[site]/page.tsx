@@ -104,7 +104,7 @@ export default async function SiteOverview({
             the first sync runs, swap in the animated "building" state (it self-refreshes to the
             real preview once the site goes live). */}
         {isBuilding ? (
-          <BuildingPreview name={activeSite.name} />
+          <BuildingPreview name={activeSite.name} siteId={activeSite.id} />
         ) : (
           <SitePreview siteUrl={siteUrl} name={activeSite.name} />
         )}

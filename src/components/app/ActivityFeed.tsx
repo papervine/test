@@ -2,11 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import {
-  ACTIVITY_EVENT,
-  realtimeClientConfig,
-  siteChannel,
-} from "@/lib/realtime-client";
+import { useSiteRealtime } from "@/lib/use-site-realtime";
 import {
   type ActivityRow,
   type FeedTarget,
@@ -144,42 +140,10 @@ export function ActivityFeed({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [endpoint]);
 
-  // Realtime subscription (SPEC §10.3): when Pusher is configured, watch this site's private
-  // channel and refetch the moment a sync starts/finishes — faster than waiting for the poll.
-  // pusher-js is dynamically imported so it's out of the bundle (and never runs) when realtime
-  // is off. Errors here are non-fatal: the poll above keeps the feed live regardless.
-  useEffect(() => {
-    const config = realtimeClientConfig();
-    if (!config) return; // unconfigured → poll-only, exactly as before
-
-    let cancelled = false;
-    let cleanup: (() => void) | null = null;
-    const channelName = siteChannel(siteId);
-
-    import("pusher-js")
-      .then(({ default: Pusher }) => {
-        if (cancelled) return;
-        const pusher = new Pusher(
-          config.key,
-          config.options as ConstructorParameters<typeof Pusher>[1],
-        );
-        const channel = pusher.subscribe(channelName);
-        channel.bind(ACTIVITY_EVENT, () => refetchNow.current?.());
-        cleanup = () => {
-          channel.unbind_all();
-          pusher.unsubscribe(channelName);
-          pusher.disconnect();
-        };
-      })
-      .catch(() => {
-        /* pusher-js failed to load — stay on the poll fallback */
-      });
-
-    return () => {
-      cancelled = true;
-      cleanup?.();
-    };
-  }, [siteId]);
+  // Realtime subscription (SPEC §10.3): refetch the moment a sync starts/finishes — faster than
+  // waiting for the poll above, which still carries the feed when realtime is off. The poll
+  // exposes `refetchNow` for the event to call. (Centralized in useSiteRealtime.)
+  useSiteRealtime(siteId, () => refetchNow.current?.());
 
   if (rows.length === 0) {
     return (

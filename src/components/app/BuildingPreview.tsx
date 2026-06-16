@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { useRealtimeRefresh } from "@/lib/use-site-realtime";
 
 // Shown in place of the live SitePreview iframe while a site's FIRST sync is in flight (the
 // connect flow returns immediately and runs the copy-to-storage in the background, so the
 // user lands here on a site with no rendered content yet). Rather than iframe a not-yet-synced
 // site (a 404), we play a little "assembling your docs" animation: a faux docs page that
-// constructs itself piece-by-piece on a loop (keyframes in platform.css). It self-refreshes so
-// the moment the build lands and the site goes live, the real preview takes over.
+// constructs itself piece-by-piece on a loop (keyframes in platform.css). It swaps to the real
+// preview the moment the sync finishes — instantly via realtime, or via the poll fallback.
 //
 // Each "brick" is a wireframe bar; they share one infinite keyframe and differ only by
 // animation-delay (`d`), so the build staggers nav → sidebar → title → text → cards and the
@@ -20,16 +21,19 @@ function Brick({ className, d }: { className?: string; d: number }) {
 const bar = "rounded-full bg-[rgba(var(--ink-rgb),0.09)]";
 const grad = "rounded-full bg-gradient-to-r from-[var(--blue)] to-[var(--violet)]";
 
-export function BuildingPreview({ name }: { name: string }) {
+export function BuildingPreview({ name, siteId }: { name: string; siteId: string }) {
   const router = useRouter();
 
-  // Poll the server so the page swaps to the live preview as soon as the background sync
-  // promotes the site to 'live'. When that happens this component unmounts and the interval
-  // is cleared; until then each refresh just re-renders the same building state.
-  useEffect(() => {
-    const id = setInterval(() => router.refresh(), 4000);
-    return () => clearInterval(id);
-  }, [router]);
+  // Swap the page to the live preview as soon as the background sync promotes the site to
+  // 'live': realtime fires the refresh the instant runSync publishes; the poll backstops it if
+  // realtime is off or the socket drops. Once live, this component unmounts (its subscription +
+  // timer are cleaned up); until then a refresh just re-renders the same building state.
+  const refresh = useCallback(() => router.refresh(), [router]);
+  // Realtime gives the instant swap on a normal (slow) build, where the subscription is ready
+  // long before the sync finishes. But a *fast* first sync can finish during the redirect —
+  // before the channel's auth handshake completes — so realtime misses that event; keep the
+  // safety poll brisk (the building state is short-lived) so the swap is still prompt.
+  useRealtimeRefresh(siteId, refresh, { livePollMs: 4000, fallbackPollMs: 4000 });
 
   return (
     <div>
