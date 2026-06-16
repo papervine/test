@@ -351,6 +351,53 @@ once C lands. We build C next. C ships in two steps so it's incremental, not a b
   only executes (the §3 perf goal, still deferred), plus push webhooks for auto-sync.
   **Push auto-sync landed 2026-06-11** (below); precompile-on-sync remains the open piece.
 
+**Sync transfer: scoped + incremental + parallel (landed 2026-06-15).** How `syncSite`
+(`src/lib/sync.ts`) moves bytes has now been through three iterations, each fixing the last:
+1. **Per-file** (tree-walk + one blob/raw request per file) — N round-trips put a big private
+   repo at the function time limit; syncs *intermittently* timed out.
+2. **One tarball** (`GET …/tarball/{ref}`) — fixed the round-trip count but downloads and
+   gunzips the **entire repo** in memory to harvest a `docs/` subdir. A real private monorepo
+   (`Pixwel/platform`, docs in `docs/`) took **744 s** to sync 80 MB of docs — fine in dev (no
+   `maxDuration`), but in prod that blows the 300 s connect limit and leaves a stuck `building`
+   deployment with no error (the timeout kill is uncatchable). Measured, not theoretical.
+3. **Scoped tree + incremental diff + parallel content (now).** Enumerate **only the docs
+   subtree** via the Git tree API (walk to its tree SHA, one recursive listing — a handful of
+   REST calls regardless of repo size, never the whole monorepo). Diff the blobs' SHAs against
+   a per-site **manifest** (`sites/{id}/.manifest.json`, path→blobSHA) so only changed/new files
+   transfer and vanished ones are swept. Pull content in a bounded-concurrency pool that overlaps
+   download and upload. **Content source splits on visibility:** public repos read file bytes
+   from the **raw.githubusercontent CDN** (not REST-rate-limited, and safe under our concurrent
+   burst — an unauthenticated public repo over the REST blobs API 403s on GitHub's secondary
+   limit almost immediately); private repos use the authenticated REST blobs API (`raw` media
+   type, 5000/hr via the token). Cost scales with the **diff**, not repo size.
+   **Network resilience:** the per-file fetch retries not just rate-limit/5xx statuses but
+   *thrown* errors too — under the concurrent burst a keep-alive socket gets dropped or a body
+   stream aborted often enough that undici throws `TypeError: terminated` (seen on an
+   image-heavy private monorepo: the whole sync failed at ~40 s before this). The fetch+body
+   read sits in one try with a 60 s per-request timeout, retried with backoff, and concurrency
+   is held at 12 so the pool sheds fewer sockets in the first place.
+   Measured on `papervine/docs` (1269 files): first sync **66 s**, an unchanged re-sync **1.3 s**
+   (0 files moved). Pure planning logic (`src/lib/sync-plan.ts`: `planSync`, path filters) is
+   extracted and unit-tested. The pure helper `extractTarGz` (`src/lib/tar.ts`) stays as the
+   sparse-clone/Sandbox fallback for a pathological docs tree that exceeds the tree API's
+   100k-entry single-response cap (we throw loudly rather than sync a silent partial set).
+   **Note:** only the ~3-4 *enumeration* calls hit the REST budget now — at 5000/hr (prod token)
+   that's effectively unlimited; the 60/hr *unauthenticated* dev ceiling only bites under heavy
+   repeated local testing without a `GITHUB_TOKEN`.
+
+**Connect returns immediately; first sync runs in the background (landed 2026-06-15).** Even
+scoped+parallel, a big first sync is ~60s, and `connectRepo` used to `await runSync` inline —
+so the connect form sat on "Connecting…" for the whole sync. Now `connectRepo` pre-creates the
+`building` deployment row, schedules the sync via `after()` (the same deferral the push webhook
+uses, within the route's `maxDuration`), and returns the redirect target right away. The user
+lands on the site Overview in ~validation-time (a few REST calls), where the Activity feed shows
+the in-flight build and polls it to live/failed. `runSync` gained an optional `deploymentId` so
+it resolves the pre-created row instead of inserting a second. Validation (repo exists, has a
+`docs.json`) stays synchronous so form errors still surface in place — only the slow copy defers.
+While that first build runs, the Overview swaps the live-preview iframe (which would 404 against
+an unsynced site) for `BuildingPreview` — an animated "assembling your docs" wireframe that
+self-refreshes to the real preview once the site goes live.
+
 **Push auto-sync (landed 2026-06-11).** A registered **GitHub App** delivers `push` events
 to `POST /api/github/webhook` (on the **apex** host — middleware passes `/api/` through
 ungated there; the app host would redirect GitHub's unauthed POST to `/login`). The route

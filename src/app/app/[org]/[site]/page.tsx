@@ -13,6 +13,7 @@ import { siteBase } from "@/lib/dashboard-nav";
 import { getActivityFeed } from "@/lib/activity-feed";
 import { feedParam, parseFeedTarget, timeAgo } from "@/lib/overview";
 import { ActivityFeed } from "@/components/app/ActivityFeed";
+import { BuildingPreview } from "@/components/app/BuildingPreview";
 import { Greeting } from "@/components/app/Greeting";
 import { ResyncButton } from "@/components/app/ResyncButton";
 import { SitePreview } from "@/components/app/SitePreview";
@@ -70,6 +71,7 @@ export default async function SiteOverview({
   const [latest] = await db
     .select({
       createdAt: deployment.createdAt,
+      status: deployment.status,
       actorName: user.name,
       actorImage: user.image,
     })
@@ -85,6 +87,10 @@ export default async function SiteOverview({
   const feed = await getActivityFeed(activeSite.id, feedTarget);
 
   const isLive = activeSite.status === "live";
+  // First sync still in flight (connect runs it in the background): show the "assembling"
+  // animation instead of an iframe to a site that has no rendered content yet. A site that's
+  // already live keeps its real preview even during a re-sync (its current docs still render).
+  const isBuilding = !isLive && latest?.status === "building";
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
@@ -94,8 +100,14 @@ export default async function SiteOverview({
 
       <section className="mt-8 grid gap-6 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* Live preview — a real (scaled) iframe of the tenant's home page, with a
-            viewer-side load-time badge (SitePreview owns the timing, needs the client). */}
-        <SitePreview siteUrl={siteUrl} name={activeSite.name} />
+            viewer-side load-time badge (SitePreview owns the timing, needs the client). While
+            the first sync runs, swap in the animated "building" state (it self-refreshes to the
+            real preview once the site goes live). */}
+        {isBuilding ? (
+          <BuildingPreview name={activeSite.name} />
+        ) : (
+          <SitePreview siteUrl={siteUrl} name={activeSite.name} />
+        )}
 
         {/* Status & identity. */}
         <div className="flex flex-col">

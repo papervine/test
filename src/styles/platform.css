@@ -132,6 +132,37 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   color: transparent;
 }
 
+/* "Assembling your docs" building-state preview (BuildingPreview.tsx). A faux docs page
+   constructs itself piece-by-piece on a loop: each brick snaps into place (with a tiny
+   spring overshoot), the whole page holds, then resets and rebuilds. Every brick shares one
+   infinite keyframe and differs only by animation-delay, so the stagger persists each loop. */
+.pv-brick {
+  opacity: 0;
+  animation: pv-build var(--pv-cycle, 3.6s) cubic-bezier(0.22, 0.68, 0.2, 1) infinite;
+}
+@keyframes pv-build {
+  0% { opacity: 0; transform: translateY(9px) scale(0.96); }
+  6% { opacity: 1; transform: translateY(-2px) scale(1.015); } /* overshoot */
+  11% { opacity: 1; transform: translateY(0) scale(1); } /* settle */
+  80% { opacity: 1; transform: none; }
+  90%, 100% { opacity: 0; transform: translateY(-4px) scale(0.99); }
+}
+/* A diagonal light sweep across the assembled page, once per cycle (after it's built). */
+@keyframes pv-sheen {
+  0%, 60% { transform: translateX(-130%) skewX(-14deg); opacity: 0; }
+  72% { opacity: 0.55; }
+  86%, 100% { transform: translateX(240%) skewX(-14deg); opacity: 0; }
+}
+/* Indeterminate progress segment under the card. */
+@keyframes pv-progress {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+@keyframes pv-blink {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
 /* Primary action — the blue→violet gradient with an inset hairline + lift on hover. */
 .db-cta {
   background: linear-gradient(110deg, var(--blue), var(--violet));

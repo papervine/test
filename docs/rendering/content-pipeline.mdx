@@ -16,28 +16,45 @@ operator clicks **Re-sync**. All three paths call the same session-less core,
 a user session.
 
 <Steps>
-  <Step title="Fetch the repo at the target ref">
-    The sync fetches the whole repo as a **single tarball**
-    (`GET /repos/{owner}/{repo}/tarball/{ref}`) and untars it in memory
-    (`src/lib/tar.ts`, a minimal pax-aware reader — no tar dependency). One request beats
-    per-file fetching, whose N round-trips would push a large repo past the serverless time
-    limit. The same endpoint serves public and private repos; for a private repo the
-    installation token (or PAT) authenticates the request.
+  <Step title="Enumerate only the docs subtree">
+    The sync resolves the branch head, then walks to the **tree of the docs subdirectory**
+    and lists it recursively (`src/lib/sync.ts`, the Git tree API). This is a handful of
+    requests no matter how large the repo is, and it never reads the rest of a monorepo —
+    only the files under the docs path are enumerated, each with its content-addressed
+    blob SHA.
+  </Step>
+  <Step title="Diff against the last sync (incremental)">
+    Each blob's SHA is compared to a per-site **manifest** (`sites/{id}/.manifest.json`,
+    path → blob SHA, written by the previous sync). Only files whose content changed — or
+    are new — are fetched; files that vanished from the repo are swept from storage. An
+    unchanged re-sync moves nothing. The decision logic is pure and unit-tested
+    (`src/lib/sync-plan.ts`).
+  </Step>
+  <Step title="Pull content and copy it into object storage">
+    Changed files are downloaded and uploaded in one bounded-concurrency pool that overlaps
+    fetch and upload, with `Content-Type` inferred per extension. **Public** repos read file
+    bytes from the `raw.githubusercontent.com` CDN; **private** repos read them through the
+    authenticated blobs API, with the installation token (or PAT) authorizing the request.
+    Splitting on visibility keeps a large public repo off GitHub's REST rate limit, which a
+    burst of unauthenticated API calls would trip immediately.
   </Step>
   <Step title="Validate docs.json">
     The config is parsed against the schema. Because config is a compatibility layer,
     parsing **warns rather than throws** — see [config](/rendering/config).
   </Step>
-  <Step title="Copy content and assets into object storage">
-    `docs.json`, every `.md(x)` file, and all referenced assets are uploaded to the site's
-    storage prefix, pool-parallel, with `Content-Type` inferred per extension.
-  </Step>
   <Step title="Record the synced head">
     The site row is stamped with `lastSyncedCommitSha`, and a deployment row records the
-    outcome. The render plane keys its cache on that sha (below), so the new content is
-    served immediately.
+    outcome (including how many files actually moved). The render plane keys its cache on
+    that sha (below), so the new content is served immediately.
   </Step>
 </Steps>
+
+<Info>
+  Because sync cost scales with the **diff** rather than repo size, the heavy step is the
+  *first* sync of a site; subsequent pushes typically move only the handful of files that
+  changed. The whole-repo tarball reader (`src/lib/tar.ts`) is kept as a fallback for the
+  rare docs tree so large it exceeds the tree API's single-response cap.
+</Info>
 
 <Info>
   The long-term goal is to **precompile MDX → serializable bundles at sync time** so the

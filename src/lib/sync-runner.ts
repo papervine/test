@@ -26,6 +26,10 @@ export type RunSyncOptions = {
   // already fetched it. When omitted (manual re-sync) the runner fetches the latest so
   // commitSha / lastSyncedCommitSha stay accurate.
   commit?: CommitInfo | null;
+  // An already-inserted 'building' deployment row to resolve, instead of creating one. The
+  // connect flow pre-creates it so it can return immediately and run the (slow) sync in
+  // `after()` — the user lands on the site page and the row is already there to show/poll.
+  deploymentId?: string;
 };
 
 export type RunSyncOutcome = {
@@ -71,19 +75,23 @@ export async function runSync(
   // serverless timeout — no catch can run), the row simply STAYS 'building', which the
   // Activity feed shows as a stuck/in-progress sync — a visible signal instead of the old
   // silent nothing. Every attempt leaves a trace.
-  const deploymentId = randomUUID();
-  await db.insert(deployment).values({
-    id: deploymentId,
-    siteId: site.id,
-    status: "building",
-    target: "live",
-    commitMessage: trigger === "connect" ? "Connecting repository…" : "Syncing…",
-    trigger,
-    actorUserId,
-  });
-  // Nudge any open Activity feed to show the building row now, not on its next poll.
-  // Best-effort: unconfigured/failed realtime no-ops (the row is already durable in the DB).
-  await triggerActivity(site.id);
+  // When the caller pre-created the building row (connectRepo, so the user can be redirected
+  // immediately while this runs in after()), reuse it; otherwise insert one now.
+  const deploymentId = opts.deploymentId ?? randomUUID();
+  if (!opts.deploymentId) {
+    await db.insert(deployment).values({
+      id: deploymentId,
+      siteId: site.id,
+      status: "building",
+      target: "live",
+      commitMessage: trigger === "connect" ? "Connecting repository…" : "Syncing…",
+      trigger,
+      actorUserId,
+    });
+    // Nudge any open Activity feed to show the building row now, not on its next poll.
+    // Best-effort: unconfigured/failed realtime no-ops (the row is already durable in the DB).
+    await triggerActivity(site.id);
+  }
 
   let result: SyncResult | null = null;
   let error: string | null = null;
@@ -100,6 +108,7 @@ export async function runSync(
       repoName: site.repoName!,
       branch: site.branch,
       token,
+      isPrivate: site.isPrivate,
       docsPath: site.docsPath,
     });
     revalidateSite(site.id); // serve fresh content immediately, not the pre-sync copy
@@ -124,7 +133,9 @@ export async function runSync(
       commitMessage: deploymentMessage(trigger, commit, result),
       error,
       filesAdded: isConnect ? (result?.files ?? 0) : 0,
-      filesEdited: isConnect ? 0 : (result?.files ?? 0),
+      // Re-syncs now record what actually changed (the diff), not the whole file count —
+      // incremental sync only moves changed/new blobs (src/lib/sync.ts).
+      filesEdited: isConnect ? 0 : (result?.uploaded ?? 0),
       durationMs: Date.now() - startedAt,
     })
     .where(eq(deployment.id, deploymentId));

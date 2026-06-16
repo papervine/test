@@ -67,7 +67,15 @@ export async function getObjectBytes(
  * S3 DeleteObjects cap). Best-effort and idempotent: an empty prefix is a no-op.
  */
 export async function deletePrefix(prefix: string): Promise<void> {
-  const keys = await listKeys(prefix);
+  await deleteKeys(await listKeys(prefix));
+}
+
+/**
+ * Delete an explicit set of object keys. Used by the sync to sweep docs files that vanished
+ * from the repo (object storage has no cascade). Batches by 1000 (the S3 DeleteObjects cap).
+ * Best-effort and idempotent: an empty list is a no-op.
+ */
+export async function deleteKeys(keys: string[]): Promise<void> {
   for (let i = 0; i < keys.length; i += 1000) {
     await s3.send(
       new DeleteObjectsCommand({

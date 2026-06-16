@@ -1,6 +1,7 @@
 "use server";
 
 import { randomUUID } from "node:crypto";
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { and, desc, eq, like } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -115,16 +116,30 @@ export async function connectRepo(
     })
     .returning();
 
-  // Copy the repo's content into object storage so the render path reads from us, not
-  // GitHub (SPEC §3.1 model C). runSync records its own failed deployment and shouldn't
-  // throw, but guard anyway: the site row exists, so we ALWAYS redirect to it (where the
-  // Activity feed shows the sync's building/failed state) rather than bubble a raw error
-  // up as an opaque client-side exception.
-  try {
-    await runSync(created, { actorUserId: session.user.id, trigger: "connect" });
-  } catch (e) {
-    console.error(`[connect] runSync threw for site ${created.id}`, e);
-  }
+  // Pre-create the 'building' deployment row, then run the (slow) repo→storage copy in the
+  // BACKGROUND so the user isn't stuck on the form for the whole sync (a big repo is ~60s).
+  // The row exists before we return, so the site page they're redirected to immediately shows
+  // the in-progress sync and its Activity feed polls it to live/failed. `after` keeps the
+  // function alive past the response — the same deferral the push webhook uses — within the
+  // route's maxDuration. runSync records its own failed deployment and shouldn't throw, but
+  // we guard anyway (the row's there either way; orphan detection reaps a killed run).
+  const deploymentId = randomUUID();
+  await db.insert(deployment).values({
+    id: deploymentId,
+    siteId: created.id,
+    status: "building",
+    target: "live",
+    commitMessage: "Connecting repository…",
+    trigger: "connect",
+    actorUserId: session.user.id,
+  });
+  after(async () => {
+    try {
+      await runSync(created, { actorUserId: session.user.id, trigger: "connect", deploymentId });
+    } catch (e) {
+      console.error(`[connect] runSync threw for site ${created.id}`, e);
+    }
+  });
 
   return { redirectTo: siteBase(org.slug, slug) };
 }
