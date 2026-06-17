@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
-import { cookies } from "next/headers";
-import { getSiteBySlug } from "@/lib/tenant";
+import { cookies, headers } from "next/headers";
+import { getSiteBySlug, resolveTenantSlug } from "@/lib/tenant";
 import { READER_COOKIE, readerSessionValid } from "@/lib/reader-session";
 import { requestContentSource } from "@/lib/request-source";
 import {
@@ -22,41 +22,63 @@ import { AskAssistantButton } from "@/components/assistant/AskAssistantButton";
 import { SearchButton } from "@/components/SearchDialog";
 
 /**
- * Render one tenant docs page. Shared by both serving paths so they can't drift:
- *  • subdomain / custom-domain host: `base`/`assetBase` empty (root-absolute links).
- *  • apex path mode: `base = /sites/{slug}`, assets via `/api/tenant-asset/{slug}`.
- *  • custom domain "Host at /docs": `base = /docs`, assets via the by-host handler.
+ * Tenant docs render as a persistent SHELL (layout: navbar + tabs + sidebar + assistant)
+ * around a per-page ARTICLE (page: title + MDX + ToC). Splitting them into a layout/page
+ * pair is the whole point: navigating between pages of the same site re-renders only the
+ * article segment — the sidebar/navbar persist (no flash, scroll preserved) and only the
+ * small article RSC payload streams, the way the incumbent swaps content under a fixed chrome.
+ * Previously one component rendered the entire page per navigation.
  *
- * Resolves the tenant's content source from its slug — the same resolver the root
- * layout uses, so config + pages read from one source in a single render — and runs
- * the whole render inside `contentContext.run` so every content read hits that source.
+ * Both halves resolve the same content source from the slug (cheap: getSiteBySlug is a
+ * per-request cache(), the s3 reads are version-keyed + tagged) and run inside
+ * `contentContext.run` so every content read hits that source. They can't drift because the
+ * base/mode and the source come from the shared helpers below.
+ *
+ * Serving modes (see middleware): subdomain/custom-domain host → `base` empty (root-absolute
+ * links); apex path mode → `base = /sites/{slug}`. Assets ALWAYS go through the slug-keyed
+ * `/api/tenant-asset/{slug}` route (host-independent — the next/image optimizer fetches the
+ * source server-side without the tenant Host, so a host-rewrite-dependent `/img/…` 404s).
  */
-export async function renderTenantDocs({
+export async function sitesTenantTarget(slug: string): Promise<{ base: string; assetBase: string }> {
+  // A subdomain host must only ever address its own slug (defense against cross-tenant URLs);
+  // in path mode there's no host tenant, so any /sites/{slug} is addressable as intended.
+  const hostSlug = resolveTenantSlug((await headers()).get("host"));
+  if (hostSlug && hostSlug !== slug) notFound();
+  return { base: hostSlug ? "" : `/sites/${slug}`, assetBase: `/api/tenant-asset/${slug}` };
+}
+
+/**
+ * Layer 2 reader-auth gate (SPEC §11.2). A site with auth enabled only renders to a reader
+ * holding a valid docs session for it; everyone else is bounced to the site's login. Runs in
+ * the shell (layout) so it gates every page under it before any content renders; the login
+ * route lives outside the (docs) group, so it isn't gated — no redirect loop. Enforcement
+ * lives here, not in middleware, because the per-site config is a DB read the edge runtime
+ * can't do. The layout sees only the {site} param (not the deep path), so login round-trips
+ * to the site root rather than the exact page — acceptable for the v2/partial reader-auth.
+ */
+async function gateReaderAuth(slug: string, base: string): Promise<void> {
+  const record = await getSiteBySlug(slug);
+  if (!record?.authEnabled) return;
+  const cookie = (await cookies()).get(READER_COOKIE)?.value;
+  if (!readerSessionValid(cookie, record.id)) {
+    redirect(`${base}/login?redirect=${encodeURIComponent(base || "/")}`);
+  }
+}
+
+/** The persistent docs chrome (layout). Renders the tenant's navbar/tabs/sidebar/assistant
+ *  + theme once; `children` is the per-page article, which streams independently. */
+export async function TenantDocsShell({
   slug,
   base,
   assetBase,
-  path,
+  children,
 }: {
   slug: string;
   base: string;
   assetBase: string;
-  path: string[];
+  children: React.ReactNode;
 }) {
-  // Layer 2 reader-auth gate (SPEC §11.2). A site with auth enabled only renders to a
-  // reader holding a valid docs session for it; everyone else is bounced to the site's
-  // login, round-tripping the intended path so they land back here after signing in. This
-  // is the single chokepoint for all three serving modes (subdomain / path / custom
-  // domain), and the login route renders outside this function, so it isn't gated — no
-  // redirect loop. Enforcement lives here, not in middleware, because the per-site config
-  // is a DB read the edge runtime can't do (same reason custom-domain resolution is here).
-  const record = await getSiteBySlug(slug);
-  if (record?.authEnabled) {
-    const cookie = (await cookies()).get(READER_COOKIE)?.value;
-    if (!readerSessionValid(cookie, record.id)) {
-      const intended = `${base}/${path.join("/")}`;
-      redirect(`${base}/login?redirect=${encodeURIComponent(intended)}`);
-    }
-  }
+  await gateReaderAuth(slug, base);
 
   const src = await requestContentSource(slug);
   if (!src) notFound();
@@ -64,13 +86,6 @@ export async function renderTenantDocs({
   return contentContext.run(src, async () => {
     const config = await loadConfig();
     const sections = await buildNav(config, base);
-    const slugStr = path.join("/");
-    const page = await loadPage(slugStr);
-    if (!page) notFound();
-
-    const toc = extractToc(page.body);
-    const eyebrow = findGroupLabel(sections, base + "/" + (slugStr || "index"));
-    const assetDimensions = await loadAssetDimensions();
 
     // Override the apex theme vars with this tenant's brand colors.
     const theme = resolveTheme(config.theme);
@@ -93,34 +108,62 @@ export async function renderTenantDocs({
         <NavTabs sections={sections} />
         <div className="mx-auto flex max-w-7xl gap-8 pl-9 pr-6">
           <Sidebar sections={sections} />
-          <main className="min-w-0 flex-1">
-            <div className="flex items-start gap-10 px-8 py-10">
-              <article className="prose min-w-0 flex-1">
-                {eyebrow && (
-                  <div className="mb-2 text-sm font-semibold text-primary">{eyebrow}</div>
-                )}
-                {page.frontmatter.title && <h1>{page.frontmatter.title}</h1>}
-                {page.frontmatter.description && (
-                  <p className="!mt-2 text-lg text-zinc-500 dark:text-zinc-400">
-                    {page.frontmatter.description}
-                  </p>
-                )}
-                <Mdx
-                  source={page.body}
-                  linkBase={base}
-                  assetBase={assetBase}
-                  assetDimensions={assetDimensions}
-                />
-              </article>
-              <TableOfContents items={toc} />
-            </div>
-          </main>
+          <main className="min-w-0 flex-1">{children}</main>
         </div>
         {/* The navbar's "Ask Assistant" button (and Cmd-I) dispatch an event this
-            component listens for. The (docs)-group layout mounts it for apex docs;
-            tenant pages render outside that group, so mount it here too. */}
+            component listens for. Tenant pages render outside the apex (docs) group's
+            layout, so mount it here. */}
         <Assistant site={slug} />
       </>
+    );
+  });
+}
+
+/** One tenant docs page (the article inside the shell): eyebrow + title + MDX + ToC. */
+export async function TenantDocsArticle({
+  slug,
+  base,
+  assetBase,
+  path,
+}: {
+  slug: string;
+  base: string;
+  assetBase: string;
+  path: string[];
+}) {
+  const src = await requestContentSource(slug);
+  if (!src) notFound();
+
+  return contentContext.run(src, async () => {
+    const config = await loadConfig();
+    const sections = await buildNav(config, base);
+    const slugStr = path.join("/");
+    const page = await loadPage(slugStr);
+    if (!page) notFound();
+
+    const toc = extractToc(page.body);
+    const eyebrow = findGroupLabel(sections, base + "/" + (slugStr || "index"));
+    const assetDimensions = await loadAssetDimensions();
+
+    return (
+      <div className="flex items-start gap-10 px-8 py-10">
+        <article className="prose min-w-0 flex-1">
+          {eyebrow && <div className="mb-2 text-sm font-semibold text-primary">{eyebrow}</div>}
+          {page.frontmatter.title && <h1>{page.frontmatter.title}</h1>}
+          {page.frontmatter.description && (
+            <p className="!mt-2 text-lg text-zinc-500 dark:text-zinc-400">
+              {page.frontmatter.description}
+            </p>
+          )}
+          <Mdx
+            source={page.body}
+            linkBase={base}
+            assetBase={assetBase}
+            assetDimensions={assetDimensions}
+          />
+        </article>
+        <TableOfContents items={toc} />
+      </div>
     );
   });
 }
