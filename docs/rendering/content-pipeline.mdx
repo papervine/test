@@ -165,6 +165,24 @@ Animated **GIFs** stay a plain image so their animation survives, and **SVGs** a
 **external-host** images stay plain too — the optimizer only handles images served from this
 origin. Everything still gets lazy-loading regardless.
 
+Both image syntaxes optimize identically: a markdown image (`![](…)`) **and** a literal HTML
+`<img src="…">` (the form many docs use, often inside a `<Frame>`) take the same path. Authors
+don't have to choose one to get optimization.
+
+Images are always served through the slug-keyed asset route (`/api/tenant-asset/{slug}/…`),
+which identifies the site from the path rather than the host. This matters because the image
+optimizer fetches the original server-side, without the tenant's host — so a host-dependent URL
+would fail to resolve. The slug-keyed route resolves the same on a subdomain, a custom domain,
+or the apex, so optimization works everywhere.
+
+### Navigation
+
+A docs site renders as a persistent **shell** — the navbar, tabs, sidebar, and assistant —
+wrapping a per-page **article**. The shell is a layout that stays mounted as you move between
+pages of the same site, so only the article re-renders: the sidebar keeps its scroll and
+expanded groups, and a navigation swaps just the content (with an instant skeleton while it
+loads) rather than rebuilding the whole page.
+
 ## Related
 
 - [Renderer internals](/rendering/internals) — the hybrid MDX pipeline that compiles each page.

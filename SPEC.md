@@ -407,6 +407,42 @@ manifest, not a DB column:** it's migration-free, versioned with the synced comm
 invalidates with the existing content tag. The chosen raster set and the merge logic are pure
 helpers in `sync-plan.ts`, unit-tested.
 
+**Image optimization, completed — literal `<img>` + subdomain optimizer (landed 2026-06-16).**
+The first cut above only optimized *markdown* images. Two gaps surfaced on a real `<img>`-heavy
+repo (docs authors lean on `<img>`, usually inside `<Frame>`), both fixed:
+1. **Literal `<img>` bypassed the override.** MDX compiles a literal `<img>` to `_jsx("img", …)`
+   — a literal tag that skips the components map — while markdown `![]()` compiles to
+   `_jsx(_components.img, …)`. So `components.img = TenantImage` never saw HTML tags. A
+   `remarkLiteralImg` plugin renames literal `<img>` mdast nodes to a registered component
+   (`PvImg`), so they take the same `TenantImage` path. The `/images` smoke fixture only used
+   markdown syntax, which is why this slipped the gate — it now also asserts a literal `<img>`
+   in a `<Frame>` optimizes (distinct 200×100 fixture image as the guard).
+2. **`next/image` was broken on subdomain hosts.** The optimizer fetches the source URL
+   server-side *without* the tenant Host header, so a host-rewrite-dependent `/img/…` 404s in
+   the optimizer → broken image. Subdomain mode passed `assetBase=""` (bare `/img/…`); apex
+   path mode already used the host-independent `/api/tenant-asset/{slug}` route and worked. Both
+   serving paths now use that slug-keyed route as the asset base — it carries the slug in the
+   path, so browser and optimizer resolve it identically regardless of host. Result on a real
+   subdomain: a 5,106 KiB PNG hero now serves as a 207 KiB AVIF.
+
+**Persistent shell layout for tenant docs (landed 2026-06-16).** Every tenant page navigation
+re-rendered and re-streamed the *entire* page — navbar, tabs, sidebar, assistant, AND article —
+because `renderTenantDocs` was one page component with no layout; the sidebar flashed and lost
+its scroll/expanded state on every click, unlike the incumbent's fixed chrome. Split into a persistent
+**shell** (`TenantDocsShell` — chrome + reader-auth gate) and a per-page **article**
+(`TenantDocsArticle`), wired as a `layout.tsx`/`page.tsx` pair in a **`(docs)` route group at the
+`[site]` level** (NOT at `[[...path]]`, whose catch-all param changes every navigation and would
+re-render the shell). Same split for custom-domain docs. Added `loading.tsx` (a shared
+`ArticleSkeleton`) so a navigation shows an instant skeleton in the persisted shell. The
+reader-auth gate moved into the shell (param `{site}` only), so a gated login round-trips to the
+site root rather than the exact deep page — acceptable for the v2/partial reader-auth (§11.2).
+*Deferred:* full CDN/ISR caching of the render (the incumbent serves edge-cached, prefetchable RSC).
+Verified blocked by the reader-auth `cookies()` gate, which forces the whole route dynamic
+(`no-store`) even for public sites — Next classifies a route static-or-dynamic, and one possible
+`cookies()` taints it. Unblocking needs the gate in **Node.js middleware** (edge can't do the
+per-site DB read; that's why auth lives in the page today) with a cached `authEnabled` lookup —
+its own change, not yet done.
+
 **Connect returns immediately; first sync runs in the background (landed 2026-06-15).** Even
 scoped+parallel, a big first sync is ~60s, and `connectRepo` used to `await runSync` inline —
 so the connect form sat on "Connecting…" for the whole sync. Now `connectRepo` pre-creates the
