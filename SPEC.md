@@ -1671,12 +1671,33 @@ invariant that keeps it cacheable: **access controls visibility (allow/deny), no
 bytes** — a cached URL is one shared response, identical for everyone allowed. Per-user
 *personalization* (the `content`→`user` blob, line ~1616) genuinely varies bytes per reader, so
 those pages stay dynamic or split into per-audience URLs — already deferred to v2+ for exactly
-this reason. Prerequisite (separate, no-regression step): the route-mode separation so the
-render reads no `headers()` either (subdomain `base=""` vs apex path-mode `/p` `base=/sites/{slug}`
-as distinct routes), then `revalidate=60` ISR (content self-heals within a minute of a sync,
-sidestepping the `after()`/`revalidateTag` gap). Avoids the experimental Node-middleware runtime
-and the per-request Neon read entirely. Also covers the asset/agent-surface gating gap above
-(middleware sees those paths too).
+this reason. Then `revalidate=60` ISR makes the now-pure render edge-cacheable (content
+self-heals within a minute of a sync, sidestepping the `after()`/`revalidateTag` gap), and the
+edge gate avoids the experimental Node-middleware runtime and the per-request Neon read entirely.
+
+**Prerequisites — the full taint inventory (verified by a prod-build spike, 2026-06-17).** A
+route is cacheable only if *nothing* in its render tree calls a dynamic API. Four independent
+taints currently force tenant docs dynamic; **all** must go, and they're layered, so removing
+any subset still shows `ƒ` (`no-store`) in `next build`:
+1. **Route-file `headers()`** — `sitesTenantTarget` reads the Host to pick subdomain (`base=""`)
+   vs path-mode (`base=/sites/{slug}`). Fix: the route-mode separation (distinct `/sites` and
+   `/p` routes, base from the route).
+2. **`requestContentSource` `headers()`** — called unconditionally (`src/lib/request-source.ts`),
+   even when the route passes an explicit slug. Fix: only read headers when no slug is given.
+3. **Reader-auth `cookies()` gate** — the relocation this section is about (edge gate).
+4. **Root layout `requestContentSource()` `headers()`** — `src/app/layout.tsx` primes
+   `contentContext` from the Host for *every* request (the §2 per-request content-source fix), so
+   it taints the **entire app**, not just docs. Fix: move that priming out of the root layout into
+   the per-route layouts that already re-resolve the source (the tenant `(docs)` layout, the apex
+   `(docs)` layout) so the root layout is pure. **Highest-risk** of the four — it touches the
+   documented §2 priming model and affects every route — so it wants its own PR + verification.
+
+Net: this is a **multi-PR refactor** (root-layout priming → route-mode separation → edge gate →
+ISR flip), each independently shippable and verifiable, not a single change. Plus the edge gate
+needs **Vercel Edge Config provisioned** (and the reader-session crypto, today `node:crypto` +
+`server-only`, made edge-safe via Web Crypto) — infra that can't be exercised in a local build.
+The spike also confirmed the asset/agent-surface gating gap (above) is covered for free once the
+gate is middleware.
 
 ### 11.3 Sequencing (v1 → enterprise)
 
