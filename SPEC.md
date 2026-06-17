@@ -439,9 +439,11 @@ site root rather than the exact deep page — acceptable for the v2/partial read
 *Deferred:* full CDN/ISR caching of the render (the incumbent serves edge-cached, prefetchable RSC).
 Verified blocked by the reader-auth `cookies()` gate, which forces the whole route dynamic
 (`no-store`) even for public sites — Next classifies a route static-or-dynamic, and one possible
-`cookies()` taints it. Unblocking needs the gate in **Node.js middleware** (edge can't do the
-per-site DB read; that's why auth lives in the page today) with a cached `authEnabled` lookup —
-its own change, not yet done.
+`cookies()` taints it. Unblocking moves the gate to an **edge-native** chokepoint (Vercel Edge
+Config rules + a self-verifying signed reader cookie — no DB, no experimental Node-middleware
+runtime) so the render is pure and ISR-cacheable, while middleware — which Vercel runs on every
+request, *including cache hits* — still enforces fine-grained per-page/per-group access. Full
+design (and why fast + gated coexist) in **§11.2 → Planned**. Its own change, not yet done.
 
 **Connect returns immediately; first sync runs in the background (landed 2026-06-15).** Even
 scoped+parallel, a big first sync is ~60s, and `connectRepo` used to `await runSync` inline —
@@ -1641,6 +1643,40 @@ per-page `public:` / per-group `"public": true` exemptions (currently the gate i
 all-or-nothing per site); and gating of **assets + agent surfaces** (`/api/tenant-asset`,
 `llms.txt`, `/mcp`) — today only HTML pages are gated, so a private site's images and
 agent feeds remain reachable.
+
+**Planned — edge-native gate that unblocks CDN caching (resolves the §3 caching defer).**
+The §3 perf goal is incumbent-speed navigation: tenant docs served from **Vercel's edge cache**
+(`x-vercel-cache: HIT`, ~100 ms globally + prefetchable RSC) instead of a single-region
+serverless render + Neon round-trip per request (~1.6 s). The blocker is *this gate*: the
+reader-auth `cookies()` call in the node render forces the whole route dynamic (`no-store`)
+even for public sites — Next classifies a route static-or-dynamic, and one possible `cookies()`
+taints it. The render must be **pure** to be cacheable, which means the gate moves to where
+this section always wanted it (line ~1613, "Enforced in middleware") — but **edge-natively**,
+without the DB read that forced it into the node render:
+- **Gating rules → Vercel Edge Config**, keyed by slug (`{ authEnabled, rules: [{ pathPattern,
+  requires }] }`), written when a site's auth/access config changes. Sub-ms, globally replicated,
+  edge-readable — replaces the per-request `getSiteBySlug`.
+- **Reader identity → the existing signed, site-bound session** (`pv_docs_session`), made
+  self-verifying at the edge (verify signature + read `groups`/entitlements from the token, no
+  DB). The JWT handshake already carries `groups` (line ~1594) → this is the natural home for it.
+- **Middleware decision** = reader entitlements (cookie) × request **path** × rules (Edge Config)
+  → allow (rewrite to the cacheable docs route) or deny (404, line ~1612). This is *finer*-grained
+  than today's node gate, which only sees the site, not the page — it directly realizes the
+  per-page `public:` / per-group `groups:` model above.
+
+**Why fast + gated coexist:** Vercel runs middleware on **every** request, *including edge-cache
+hits* (middleware is in front of the CDN). So the gate is always enforced while the cache just
+holds the rendered bytes — the cache holds the content, middleware holds the door. The one
+invariant that keeps it cacheable: **access controls visibility (allow/deny), not content
+bytes** — a cached URL is one shared response, identical for everyone allowed. Per-user
+*personalization* (the `content`→`user` blob, line ~1616) genuinely varies bytes per reader, so
+those pages stay dynamic or split into per-audience URLs — already deferred to v2+ for exactly
+this reason. Prerequisite (separate, no-regression step): the route-mode separation so the
+render reads no `headers()` either (subdomain `base=""` vs apex path-mode `/p` `base=/sites/{slug}`
+as distinct routes), then `revalidate=60` ISR (content self-heals within a minute of a sync,
+sidestepping the `after()`/`revalidateTag` gap). Avoids the experimental Node-middleware runtime
+and the per-request Neon read entirely. Also covers the asset/agent-surface gating gap above
+(middleware sees those paths too).
 
 ### 11.3 Sequencing (v1 → enterprise)
 
