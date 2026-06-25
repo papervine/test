@@ -14,12 +14,23 @@ export const READER_COOKIE = "pv_docs_session";
 // enough not to nag readers every visit. Exposed in seconds for the Set-Cookie maxAge.
 export const READER_SESSION_TTL_S = 7 * 24 * 60 * 60;
 
-type ReaderClaims = { siteId: string; exp: number };
+// `groups` rides along only for the JWT/OAuth methods — it's the reader's group membership,
+// which the planned edge gate (SPEC §11.2 → Planned) reads to enforce per-group page access
+// without a DB round-trip. The password method has no per-user identity, so it omits it.
+type ReaderClaims = { siteId: string; exp: number; groups?: string[] };
 
 // Mint the cookie value, bound to one site and stamped with an absolute expiry. `now` is
-// injectable so the round-trip is unit-testable without faking the clock.
-export function mintReaderSession(siteId: string, now: number = Date.now()): string {
-  const claims: ReaderClaims = { siteId, exp: now + READER_SESSION_TTL_S * 1000 };
+// injectable so the round-trip is unit-testable without faking the clock. `opts.ttlMs` lets
+// the JWT handshake honor the token's `expiresAt` (capped by the caller); `opts.groups`
+// carries the reader's groups for access control.
+export function mintReaderSession(
+  siteId: string,
+  now: number = Date.now(),
+  opts: { ttlMs?: number; groups?: string[] } = {},
+): string {
+  const ttlMs = opts.ttlMs ?? READER_SESSION_TTL_S * 1000;
+  const claims: ReaderClaims = { siteId, exp: now + ttlMs };
+  if (opts.groups && opts.groups.length > 0) claims.groups = opts.groups;
   return encryptSecret(JSON.stringify(claims));
 }
 

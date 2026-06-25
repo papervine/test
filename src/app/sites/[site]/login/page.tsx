@@ -1,7 +1,11 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getSiteBySlug, resolveTenantSlug } from "@/lib/tenant";
-import { safeRedirect } from "@/lib/reader-auth";
+import {
+  safeRedirect,
+  customerLoginUrl,
+  type ReaderAuthConfig,
+} from "@/lib/reader-auth";
 import { ReaderLoginCard } from "@/components/reader/ReaderLoginCard";
 
 // Reader sign-in for a gated site in subdomain mode ({slug}.host/login, rewritten here)
@@ -29,6 +33,13 @@ export default async function ReaderLoginPage({
 
   // Auth off → nothing to sign into; send them on.
   if (!record.authEnabled) redirect(redirectTo);
+
+  // JWT method: there's no Papervine sign-in form — bounce the reader to the customer's own
+  // login flow (SPEC §11.2). Their backend signs a token and redirects to /login/jwt-callback.
+  const config = (record.authConfig as ReaderAuthConfig | null) ?? {};
+  if (record.authMethod === "jwt" && config.loginUrl) {
+    redirect(customerLoginUrl(config.loginUrl, redirectTo));
+  }
 
   return (
     <ReaderLoginCard

@@ -65,6 +65,37 @@ When an unauthenticated reader follows a deep link into a gated page, the flow r
 the intended path through `?redirect=%2Fintended-path` so they land where they meant to after
 the handshake completes.
 
+### Setting up JWT
+
+In **Settings → Authentication**, enable authentication and choose **JWT**. Papervine
+generates an **Ed25519 keypair** for the site: it shows you the **private key** to copy into
+your backend and keeps the matching public key to verify tokens with. Set your **Login URL**
+— the page where your own app signs readers in. (Regenerating the key invalidates the old
+one, so update your backend when you rotate.)
+
+Then, in your login flow, sign a token with that private key and redirect back to the docs:
+
+```ts
+import * as jose from "jose";
+
+const key = await jose.importPKCS8(PAPERVINE_PRIVATE_KEY, "EdDSA");
+const token = await new jose.SignJWT({
+  host: "docs.acme.com",          // must equal the docs domain
+  expiresAt: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 1 week
+  groups: ["admin"],
+})
+  .setProtectedHeader({ alg: "EdDSA" })
+  .setExpirationTime("10s")        // the handoff token itself is short-lived
+  .sign(key);
+
+// The token goes in the URL hash, never a query param.
+res.redirect(`https://docs.acme.com/login/jwt-callback?redirect=${dest}#${token}`);
+```
+
+Because verification needs only the **public** key — never a shared secret — a leak of
+Papervine's stored config can't forge reader tokens, and the same property lets the gate move
+to the edge in the future.
+
 ## Access control
 
 Gating is **default-deny**: every page requires a valid reader session unless explicitly

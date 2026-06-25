@@ -14,6 +14,7 @@ import {
 import {
   AUTH_METHODS,
   AUTH_METHOD_META,
+  JWT_CALLBACK_PATH,
   type AuthMethod,
   type ReaderAuthConfig,
 } from "@/lib/reader-auth";
@@ -22,7 +23,7 @@ import {
   setAuthEnabled,
   setAuthMethod,
   saveAuthConfig,
-  regenerateJwtSecret,
+  regenerateJwtKeypair,
   type AuthActionState,
   type SiteRef,
 } from "./actions";
@@ -159,42 +160,45 @@ export function AuthenticationForm({
                   />
                 </Field>
                 <Field
-                  label="Signing secret"
-                  hint="Your backend signs reader JWTs with this; we verify with it. Keep it secret."
+                  label="Private key (Ed25519)"
+                  hint="We generated this Ed25519 key. Your backend signs reader JWTs with it (EdDSA); we verify with the matching public key. Store it securely — it's shown here so you can copy it."
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-start gap-2">
                     <div className="flex flex-1 items-stretch overflow-hidden rounded-lg border border-[rgba(var(--ink-rgb),0.08)]">
-                      <input
+                      <textarea
                         readOnly
+                        rows={reveal ? 5 : 2}
                         value={reveal ? secretValue : mask(secretValue)}
                         spellCheck={false}
-                        className="min-w-0 flex-1 bg-[rgba(var(--ink-rgb),0.02)] px-3 py-2.5 font-mono text-xs text-[var(--fg)] outline-none"
+                        className="min-w-0 flex-1 resize-none bg-[rgba(var(--ink-rgb),0.02)] px-3 py-2.5 font-mono text-xs leading-relaxed text-[var(--fg)] outline-none"
                       />
-                      <button
-                        type="button"
-                        aria-label={reveal ? "Hide secret" : "Reveal secret"}
-                        onClick={() => setReveal((v) => !v)}
-                        className="flex items-center px-3 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
-                      >
-                        {reveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                      <button
-                        type="button"
-                        aria-label="Copy secret"
-                        onClick={copySecret}
-                        className="flex items-center border-l border-[rgba(var(--ink-rgb),0.08)] px-3 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
-                      >
-                        {copied ? (
-                          <Check className="h-4 w-4 text-emerald-400" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </button>
+                      <div className="flex flex-col border-l border-[rgba(var(--ink-rgb),0.08)]">
+                        <button
+                          type="button"
+                          aria-label={reveal ? "Hide private key" : "Reveal private key"}
+                          onClick={() => setReveal((v) => !v)}
+                          className="flex flex-1 items-center px-3 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
+                        >
+                          {reveal ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Copy private key"
+                          onClick={copySecret}
+                          className="flex flex-1 items-center border-t border-[rgba(var(--ink-rgb),0.08)] px-3 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
+                        >
+                          {copied ? (
+                            <Check className="h-4 w-4 text-emerald-400" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </button>
+                      </div>
                     </div>
                     <button
                       type="button"
                       disabled={pending}
-                      onClick={() => run(() => regenerateJwtSecret(siteRef))}
+                      onClick={() => run(() => regenerateJwtKeypair(siteRef))}
                       className="inline-flex items-center gap-1.5 rounded-lg border border-[rgba(var(--ink-rgb),0.08)] px-3 py-2.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)] disabled:opacity-50"
                     >
                       <RefreshCw className="h-3.5 w-3.5" />
@@ -202,6 +206,16 @@ export function AuthenticationForm({
                     </button>
                   </div>
                 </Field>
+                <p className="rounded-lg bg-[rgba(var(--ink-rgb),0.03)] px-4 py-3 text-xs leading-relaxed text-[var(--muted)]">
+                  After your user logs in, sign a JWT (header{" "}
+                  <code className="font-mono">{`{ alg: "EdDSA" }`}</code>, <code className="font-mono">exp</code>{" "}
+                  ≤ 10s) with this key. Include <code className="font-mono">host</code> (this docs
+                  domain), and optionally <code className="font-mono">expiresAt</code>,{" "}
+                  <code className="font-mono">groups</code>, and <code className="font-mono">content</code>.
+                  Redirect the browser to{" "}
+                  <code className="font-mono">{JWT_CALLBACK_PATH}#&#123;TOKEN&#125;</code> — the token
+                  goes in the URL hash.
+                </p>
               </>
             )}
 

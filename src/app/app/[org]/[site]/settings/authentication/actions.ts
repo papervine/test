@@ -1,6 +1,5 @@
 "use server";
 
-import { randomBytes } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
@@ -8,8 +7,10 @@ import { site } from "@/lib/db/app-schema";
 import { findSite } from "@/lib/dashboard-context";
 import { siteRoute } from "@/lib/dashboard-nav";
 import { encryptSecret } from "@/lib/crypto";
+import { generateEd25519Keypair } from "@/lib/reader-jwt";
 import {
   type AuthMethod,
+  type ReaderAuthConfig,
   isAuthMethod,
   validateAuthConfig,
 } from "@/lib/reader-auth";
@@ -25,14 +26,22 @@ export type SiteRef = { org: string; site: string };
 const authPath = (ref: SiteRef) =>
   siteRoute(ref.org, ref.site, "settings/authentication");
 
-// A shared HMAC signing secret the customer's backend uses to sign reader JWTs (SPEC
-// §11.2). Prefixed so it's recognizable in logs/config and base64url so it's copy-safe.
-function newJwtSecret(): string {
-  return `papervine_jwt_${randomBytes(32).toString("base64url")}`;
+// Mint a fresh per-site Ed25519 keypair (SPEC §11.2 — "EdDSA only") and return the row
+// fields to persist: the private key (PKCS#8 PEM) AES-GCM-encrypted for the customer to
+// sign with, and the public key (SPKI PEM) merged into authConfig for the verify path. We
+// merge into `existing` so regenerating/switching doesn't clobber a configured loginUrl.
+async function newJwtKeyFields(
+  existing: ReaderAuthConfig | null | undefined,
+): Promise<{ authSecretEnc: string; authConfig: ReaderAuthConfig }> {
+  const { privateKeyPem, publicKeyPem } = await generateEd25519Keypair();
+  return {
+    authSecretEnc: encryptSecret(privateKeyPem),
+    authConfig: { ...(existing ?? {}), publicKey: publicKeyPem },
+  };
 }
 
 // Master switch. Enabling for the first time seeds the JWT method (the spec's first
-// handshake) with a freshly minted signing secret so the surface is immediately usable.
+// handshake) with a freshly minted Ed25519 keypair so the surface is immediately usable.
 export async function setAuthEnabled(
   ref: SiteRef,
   enabled: boolean,
@@ -42,7 +51,10 @@ export async function setAuthEnabled(
 
   const seed =
     enabled && !active.authMethod
-      ? { authMethod: "jwt", authSecretEnc: encryptSecret(newJwtSecret()) }
+      ? {
+          authMethod: "jwt",
+          ...(await newJwtKeyFields(active.authConfig as ReaderAuthConfig | null)),
+        }
       : {};
 
   await db
@@ -53,10 +65,10 @@ export async function setAuthEnabled(
   return { ok: true };
 }
 
-// Switch the active handshake method. The stored secret is method-specific (a JWT
-// signing secret is meaningless as an OAuth client secret), so switching resets it:
-// JWT mints a fresh signing secret, the others clear it so their secret field starts
-// empty rather than inheriting the previous method's value.
+// Switch the active handshake method. The stored secret is method-specific (a JWT private
+// key is meaningless as an OAuth client secret), so switching resets it: JWT mints a fresh
+// Ed25519 keypair, the others clear it so their secret field starts empty rather than
+// inheriting the previous method's value.
 export async function setAuthMethod(
   ref: SiteRef,
   method: string,
@@ -67,7 +79,7 @@ export async function setAuthMethod(
 
   const secretReset =
     method === "jwt"
-      ? { authSecretEnc: encryptSecret(newJwtSecret()) }
+      ? await newJwtKeyFields(active.authConfig as ReaderAuthConfig | null)
       : { authSecretEnc: null };
 
   await db
@@ -101,11 +113,22 @@ export async function saveAuthConfig(
   const result = validateAuthConfig(input.method, input);
   if (!result.ok) return { error: result.error };
 
+  // The JWT public key is server-managed (minted with the keypair), not part of the form,
+  // so preserve it when the form saves loginUrl — otherwise editing the URL would wipe the
+  // verify key. The other methods have no such carried field.
+  const config: ReaderAuthConfig =
+    input.method === "jwt"
+      ? {
+          ...result.config,
+          publicKey: (active.authConfig as ReaderAuthConfig | null)?.publicKey,
+        }
+      : result.config;
+
   await db
     .update(site)
     .set({
       authMethod: input.method,
-      authConfig: result.config,
+      authConfig: config,
       ...(result.secret !== null
         ? { authSecretEnc: encryptSecret(result.secret) }
         : {}),
@@ -116,15 +139,18 @@ export async function saveAuthConfig(
   return { ok: true };
 }
 
-// Rotate the JWT signing secret. The customer must update their backend with the new
-// value; until they do, freshly signed tokens won't verify — hence an explicit action.
-export async function regenerateJwtSecret(ref: SiteRef): Promise<AuthActionState> {
+// Rotate the JWT keypair. The customer must update their backend with the new private key;
+// until they do, freshly signed tokens won't verify — hence an explicit action.
+export async function regenerateJwtKeypair(ref: SiteRef): Promise<AuthActionState> {
   const active = await findSite(ref.org, ref.site);
   if (!active) return { error: "No active site." };
 
   await db
     .update(site)
-    .set({ authSecretEnc: encryptSecret(newJwtSecret()), updatedAt: new Date() })
+    .set({
+      ...(await newJwtKeyFields(active.authConfig as ReaderAuthConfig | null)),
+      updatedAt: new Date(),
+    })
     .where(eq(site.id, active.id));
   revalidatePath(authPath(ref));
   return { ok: true };

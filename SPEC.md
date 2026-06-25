@@ -1625,10 +1625,48 @@ master enable toggle plus the JWT / OAuth 2.0 / Password method picker and per-m
 config. It persists to **`site` columns** (`authEnabled`, `authMethod`, `authConfig`
 jsonb, `authSecretEnc`), *not* docs.json — the incumbent configures this in the dashboard too,
 and we have no Git-write authoring backend (§9.2) yet to round-trip a docs.json
-`authentication` block. The one secret per method (JWT signing secret / OAuth client
+`authentication` block. The one secret per method (JWT private key / OAuth client
 secret / shared password) is AES-256-GCM-encrypted via `src/lib/crypto.ts`, same as
-`repoTokenEnc`; switching methods resets it (a JWT signing secret is meaningless as an
+`repoTokenEnc`; switching methods resets it (a JWT private key is meaningless as an
 OAuth client secret). Pure validation + types live in `src/lib/reader-auth.ts`.
+
+**Status (2026-06-25) — JWT handshake shipped (asymmetric EdDSA).** The JWT method is now
+wired end-to-end and uses **asymmetric Ed25519**, replacing the earlier symmetric
+`papervine_jwt_…` shared secret (which contradicted this section's "EdDSA only" mandate).
+Decisions: (a) **key custody** — Papervine generates a per-site Ed25519 keypair; the
+**private key** (PKCS#8 PEM) is shown to the customer to sign with and stored AES-GCM-
+encrypted in `authSecretEnc` (so the dashboard can reveal/copy/rotate it, matching the incumbent
+and the existing secret UX), while the **public key** (SPKI PEM) lives in plaintext
+`authConfig.publicKey`. The verify path uses **only** the public key — a config leak can't
+forge reader tokens, and only the public key needs to ship to the edge later (the planned
+gate below). (b) **No DB migration** — the public key rides in the existing jsonb
+`authConfig`; the private key reuses `authSecretEnc`. (c) **Library** — `jose` (now a direct
+dep) for keypair gen + verify; `jwtVerify` pins `algorithms:['EdDSA']` (no alg-confusion /
+`none`) and enforces `exp`; it's Web-Crypto/edge-portable, so the verifier is ready to move
+to middleware. Flow: an unauthenticated reader on a JWT site is redirected from `/login` to
+the customer's configured **login URL** (`?redirect=`); their backend signs an EdDSA JWT
+(`{alg:'EdDSA'}`, `exp`≤10s, `host` = docs domain) and redirects to
+`/login/jwt-callback?redirect=…#{JWT}` — token in the **hash** (client-only). A client
+component (`ReaderJwtCallback`) reads the hash and POSTs to `submitReaderJwt`, which verifies
+signature + `host`, then mints the site-bound `pv_docs_session` cookie honoring the token's
+`expiresAt` (capped at the 7-day ceiling) and carrying `groups` (forward-looking for the edge
+gate). Core crypto + the `User` type live in `src/lib/reader-jwt.ts`; callback routes exist
+for both subdomain/path (`sites/[site]/login/jwt-callback`) and custom-domain modes.
+Regression coverage: `tests/unit/reader-jwt.test.ts` (round-trip + wrong-host, expired,
+wrong-key, HS256-confusion, tampered, malformed-key negatives).
+
+**Fix (2026-06-25) — reader `/login` was hijacked on tenant subdomains.** The control-plane
+auth-path bounce in `middleware.ts` (apex `/login` → app host, so the session cookie is set
+on `app.{apex}`) was guarded only by `isPlatformHost`, which is **also true for tenant
+subdomains** (`{slug}.localhost` / `{slug}.papervine.io` are ours, not vanity domains). So a
+reader hitting `{slug}.papervine.io/login` was bounced to `app.{slug}.papervine.io/login` —
+the Papervine *account* login — instead of the tenant's own reader login card. This broke
+**both** password and JWT reader auth in **subdomain mode**; path mode (`/sites/{slug}/login`)
+was unaffected (that path isn't an auth path), which is why the shipped password method looked
+fine. Fix: guard the bounce with `!resolveTenantSlug(reqHost)` so it fires only on the true
+apex; on a tenant host `/login` falls through to the docs rewrite (→ `sites/{slug}/login`).
+Not catchable in smoke (it runs in single-repo preview mode, which disables the bounce) →
+regression lives in `tests/unit/middleware-routing.test.ts`.
 
 **Enforcement.** The gate is the **node** chokepoint `renderTenantDocs` (not edge
 middleware — the per-site config is a DB read the edge can't do, same constraint as
@@ -1637,12 +1675,13 @@ docs session for it, else it 307s to the site's `/login` round-tripping the inte
 The **password** method is wired end-to-end: a `/login` route per serving mode
 (`sites/[site]/login`, `custom-domain/login`) → `submitReaderPassword` constant-time-checks
 the shared secret → mints an encrypted, site-bound, 7-day session cookie (`pv_docs_session`,
-`src/lib/reader-session.ts`) → bounces back (open-redirect-guarded). **Still to build:** the
-**JWT** and **OAuth** handshakes (their `/login` shows a "not available yet" notice today);
-per-page `public:` / per-group `"public": true` exemptions (currently the gate is
-all-or-nothing per site); and gating of **assets + agent surfaces** (`/api/tenant-asset`,
-`llms.txt`, `/mcp`) — today only HTML pages are gated, so a private site's images and
-agent feeds remain reachable.
+`src/lib/reader-session.ts`) → bounces back (open-redirect-guarded). The **JWT** handshake
+is also wired (asymmetric EdDSA — see the 2026-06-25 status note above). **Still to build:**
+the **OAuth** handshake (its `/login` shows a "not available yet" notice today); per-page
+`public:` / per-group `"public": true` exemptions (the node gate is still all-or-nothing per
+site — the `groups` claim is now carried in the session but not yet enforced per page); and
+gating of **assets + agent surfaces** (`/api/tenant-asset`, `llms.txt`, `/mcp`) — today only
+HTML pages are gated, so a private site's images and agent feeds remain reachable.
 
 **Planned — edge-native gate that unblocks CDN caching (resolves the §3 caching defer).**
 The §3 perf goal is incumbent-speed navigation: tenant docs served from **Vercel's edge cache**

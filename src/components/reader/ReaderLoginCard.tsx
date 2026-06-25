@@ -77,11 +77,18 @@ export function ReaderLoginCard({
               <p className="mt-3 text-sm text-red-600 dark:text-red-400">{error}</p>
             )}
           </form>
+        ) : method === "jwt" ? (
+          // Reached only when JWT auth is on but no login URL is configured — with one set,
+          // the /login page redirects straight to the customer's flow (SPEC §11.2).
+          <p className="mt-6 rounded-lg bg-zinc-100 px-4 py-3 text-sm text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+            This site uses <span className="font-medium">JWT</span> authentication, but no
+            login URL has been configured yet. Contact the site owner.
+          </p>
         ) : (
           <p className="mt-6 rounded-lg bg-zinc-100 px-4 py-3 text-sm text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
             This site uses{" "}
             <span className="font-medium">
-              {method === "jwt" ? "JWT" : method === "oauth" ? "OAuth 2.0" : "custom"}
+              {method === "oauth" ? "OAuth 2.0" : "custom"}
             </span>{" "}
             authentication, which isn’t available yet.
           </p>

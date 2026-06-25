@@ -10,6 +10,11 @@
 export const AUTH_METHODS = ["jwt", "oauth", "password"] as const;
 export type AuthMethod = (typeof AUTH_METHODS)[number];
 
+// Where the customer's backend sends the browser after signing the reader JWT (token in the
+// URL hash). Lives here (not the server-only reader-jwt.ts) so the client dashboard form and
+// the verifier can both reference one source of truth without importing a server module.
+export const JWT_CALLBACK_PATH = "/login/jwt-callback";
+
 export function isAuthMethod(value: unknown): value is AuthMethod {
   return typeof value === "string" && (AUTH_METHODS as readonly string[]).includes(value);
 }
@@ -42,6 +47,11 @@ export type ReaderAuthConfig = {
   // JWT: where to send an unauthenticated reader to sign in. Their app signs a JWT and
   // redirects back to /login/jwt-callback#{token}.
   loginUrl?: string;
+  // JWT: the Ed25519 *public* key (SPKI PEM) we verify reader tokens with. Non-secret, so
+  // it lives here rather than in authSecretEnc (which holds the encrypted private key). The
+  // dashboard generates the keypair; this is set alongside the private key and preserved
+  // when the loginUrl is edited.
+  publicKey?: string;
   // OAuth 2.0 endpoints + public client id and scopes.
   authorizationUrl?: string;
   tokenUrl?: string;
@@ -128,6 +138,18 @@ export function validateAuthConfig(
   if (secret.length < 8)
     return { ok: false, error: "Password must be at least 8 characters." };
   return { ok: true, config: {}, secret };
+}
+
+/**
+ * Build the customer's login URL with the intended docs path appended as `?redirect=`, so
+ * their backend knows where to send the reader back after signing the JWT (it redirects to
+ * `{DOCS_HOST}/login/jwt-callback?redirect=…#{JWT}`). Preserves any query the customer
+ * already has on their login URL. Pure → unit-testable.
+ */
+export function customerLoginUrl(loginUrl: string, redirectPath: string): string {
+  const url = new URL(loginUrl);
+  url.searchParams.set("redirect", redirectPath);
+  return url.toString();
 }
 
 /**

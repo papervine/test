@@ -48,6 +48,7 @@
     "eslint-config-next": "^15.5.19",
     "gray-matter": "4.0.3",
     "image-size": "^2.0.2",
+    "jose": "^6.2.3",
     "lucide-react": "0.474.0",
     "mcp-handler": "^1.1.0",
     "next": "^15.5.19",

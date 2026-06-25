@@ -1,9 +1,10 @@
 "use server";
 
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { getSiteBySlug } from "@/lib/tenant";
 import { decryptSecret } from "@/lib/crypto";
-import { safeRedirect } from "@/lib/reader-auth";
+import { safeRedirect, type ReaderAuthConfig } from "@/lib/reader-auth";
+import { verifyReaderJwt } from "@/lib/reader-jwt";
 import {
   READER_COOKIE,
   READER_SESSION_TTL_S,
@@ -12,6 +13,19 @@ import {
 } from "@/lib/reader-session";
 
 export type ReaderLoginState = { ok?: boolean; error?: string; redirectTo?: string };
+
+// Set the site-bound, 7-day reader-session cookie. Shared by every handshake (password +
+// JWT) so the cookie flags stay identical: httpOnly (JS can't read it), Secure in prod
+// (browsers drop Secure over http://localhost), sameSite=lax, site-wide path.
+async function setReaderCookie(value: string): Promise<void> {
+  (await cookies()).set(READER_COOKIE, value, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    path: "/",
+    maxAge: READER_SESSION_TTL_S,
+  });
+}
 
 /**
  * Verify the shared docs password (SPEC §11.2, password method) and, on success, set the
@@ -50,15 +64,58 @@ export async function submitReaderPassword(input: {
     return { error: "Incorrect password." };
   }
 
-  (await cookies()).set(READER_COOKIE, mintReaderSession(record.id), {
-    httpOnly: true,
-    // Browsers drop Secure cookies over http://localhost in dev, so only set it in prod.
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    maxAge: READER_SESSION_TTL_S,
-  });
+  await setReaderCookie(mintReaderSession(record.id));
 
   // safeRedirect blocks an open-redirect via a crafted ?redirect= value.
+  return { ok: true, redirectTo: safeRedirect(input.redirectTo, "/") };
+}
+
+// The JWT session can't outlive a sane ceiling even if the customer sets a huge `expiresAt`
+// — keep it within the same 7-day window as the password method so a revoked reader loses
+// access within a week at most.
+const MAX_JWT_SESSION_MS = READER_SESSION_TTL_S * 1000;
+
+/**
+ * Complete the JWT handshake (SPEC §11.2, method 1). The customer's backend signed an
+ * EdDSA JWT after its own login and redirected the browser to `/login/jwt-callback#{JWT}`;
+ * the token rode in the URL hash (never sent to the server/logs), so a client component
+ * reads it and posts it here. We verify the signature with the site's public key and the
+ * `host` claim against the request host (anti-replay), then mint our own session carrying
+ * the asserted `groups`. Returns an error string (no throw) for inline display; like the
+ * password path we DON'T redirect() — the client hard-navigates so the tenant Host rewrite
+ * re-runs (see the CLAUDE.md gotcha).
+ */
+export async function submitReaderJwt(input: {
+  slug: string;
+  token: string;
+  redirectTo: string;
+}): Promise<ReaderLoginState> {
+  const record = await getSiteBySlug(input.slug);
+  const publicKey = (record?.authConfig as ReaderAuthConfig | null)?.publicKey;
+  if (!record?.authEnabled || record.authMethod !== "jwt" || !publicKey) {
+    return { error: "JWT sign-in isn't enabled for this site." };
+  }
+
+  // The token's `host` claim must equal the docs domain it's being presented to. Prefer
+  // `x-papervine-host` (the canonical tenant host the middleware stamps) over the raw Host
+  // header, matching the custom-domain routes — so the check stays correct for a custom
+  // domain (e.g. docs.acme.com) even if a SaaS-domains proxy ever rewrites Host (SPEC §2).
+  const h = await headers();
+  const host = h.get("x-papervine-host") ?? h.get("host") ?? "";
+  const result = await verifyReaderJwt(input.token, publicKey, host);
+  if (!result.ok) return { error: result.error };
+
+  // `expiresAt` (unix seconds) is the customer-controlled session length; honor it within
+  // our ceiling. Absent → default TTL (handled by mintReaderSession).
+  const now = Date.now();
+  const ttlMs =
+    typeof result.user.expiresAt === "number"
+      ? Math.min(Math.max(result.user.expiresAt * 1000 - now, 0), MAX_JWT_SESSION_MS)
+      : undefined;
+
+  await setReaderCookie(
+    mintReaderSession(record.id, now, { ttlMs, groups: result.user.groups }),
+  );
+
   return { ok: true, redirectTo: safeRedirect(input.redirectTo, "/") };
 }

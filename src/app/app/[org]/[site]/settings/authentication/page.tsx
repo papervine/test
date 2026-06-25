@@ -6,9 +6,9 @@ import { AuthenticationForm } from "./AuthenticationForm";
 
 // Concrete Authentication surface — overrides the settings/[section] placeholder for the
 // "authentication" slug. Configures Layer 2 reader-auth (SPEC §11.2): gate the published
-// docs behind the customer's own login. The secret is decrypted here (server-only) and
-// handed to the form so the site's own owner can read it back, the way the incumbent reveals
-// its signing secret. Enforcement (the middleware handshake) is the v2 follow-up.
+// docs behind the customer's own login. The secret (the JWT method's Ed25519 private key /
+// OAuth client secret / shared password) is decrypted here (server-only) and handed to the
+// form so the site's own owner can read it back, the way the incumbent reveals its key.
 export default async function AuthenticationSettingsPage({
   params,
 }: {

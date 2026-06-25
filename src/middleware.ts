@@ -123,8 +123,15 @@ export function middleware(req: NextRequest) {
   // (an old link, or /app typed directly), bounce to the app host so the session cookie
   // is set there, not on the marketing apex. Skipped in single-repo preview mode, which
   // has no control plane. Public URLs are bare, so strip the internal /app prefix.
+  //
+  // Guard with `!resolveTenantSlug`: `isPlatformHost` is true for tenant subdomains too
+  // (`{slug}.localhost` / `{slug}.papervine.io` — they're ours, not vanity domains), but on
+  // a tenant host `/login` is the *reader* login (→ sites/{slug}/login below), NOT a control-
+  // plane path. Without this guard the bounce hijacks it to `app.{slug}.localhost/login` (the
+  // Papervine account login), so reader auth never reaches its own login card in subdomain mode.
   if (
     isPlatformHost(reqHost) &&
+    !resolveTenantSlug(reqHost) &&
     !process.env.PAPERVINE_CONTENT &&
     (isAuthPath(pathname) || pathname === "/app" || pathname.startsWith("/app/"))
   ) {
