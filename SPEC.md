@@ -193,6 +193,19 @@ in-context read matches the existing `contentContext` design.) Regression guard:
 `tests/e2e/tenant-render.spec.ts` (seeds a tenant in Postgres+MinIO, asserts the sidebar is
 the tenant's, not the platform's).
 
+**Custom-domain gap in the above (fixed 2026-06-26).** `requestContentSource()` resolved the
+tenant from `x-papervine-site` / `resolveTenantSlug(host)` — but a **custom domain**
+(`doc.acme.com`) yields neither (middleware forwards the raw Host as `x-papervine-host`, and
+the slug resolvers return null for a non-papervine host). So on a custom domain the **root
+layout** got a null source and primed the React-`cache()`'d `loadConfig()` with the **default**
+content — re-triggering the exact memoization bug above, *only on custom domains*: pages read
+the tenant's S3 content (so they rendered) while the sidebar/tabs read the cached default
+docs.json (so they were wrong/empty — "it's like it's not reading docs.json"). Invisible on
+subdomains/apex and via `papervine dev` (single-repo `fsSource`); the `(docs)` layout already
+resolved correctly (it passes `record.slug` to `requestContentSource`). Fix:
+`requestContentSource` falls back to `getSiteByCustomDomain(x-papervine-host ?? host)` when
+there's no slug, so the root layout primes the tenant source on custom domains too.
+
 **Same trap on the API routes — `/api/search` and `/api/assistant` (fixed 2026-06-09).**
 Middleware deliberately does **not** rewrite `/api/*` (line ~38), so those handlers never
 ran inside `contentContext` and their `runSearch`/`loadConfig`/tool calls fell back to the

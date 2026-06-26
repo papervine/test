@@ -1,6 +1,6 @@
 import "server-only";
 import { headers } from "next/headers";
-import { resolveTenantSlug, getSiteBySlug } from "./tenant";
+import { resolveTenantSlug, getSiteBySlug, getSiteByCustomDomain } from "./tenant";
 import { s3Source, isSynced } from "./s3-source";
 import { draftSource } from "./draft-source";
 import type { ContentSource } from "@papervine/renderer/lib/content";
@@ -36,9 +36,18 @@ export async function requestContentSource(
 ): Promise<ContentSource | null> {
   const h = await headers();
   const slug = slugOverride ?? h.get("x-papervine-site") ?? resolveTenantSlug(h.get("host"));
-  if (!slug) return null;
 
-  const record = await getSiteBySlug(slug);
+  // A custom domain (docs.acme.com) carries no slug — middleware forwards the raw Host as
+  // `x-papervine-host` and the slug resolvers return null. We MUST still resolve the tenant
+  // here, because the ROOT layout calls requestContentSource() (no slugOverride) to prime
+  // the per-request React `cache()` entry for `loadConfig()`. Without this fallback it gets
+  // null → primes the DEFAULT content source → the memoized default config sticks for the
+  // whole render, so a custom-domain page's nav reads the wrong (default/empty) docs.json
+  // even though its PAGES read the tenant's S3 content (the "pages render, sidebar/tabs
+  // empty on a custom domain" bug). The slug paths (subdomain / apex `/sites`) prime fine.
+  const record = slug
+    ? await getSiteBySlug(slug)
+    : await getSiteByCustomDomain(h.get("x-papervine-host") ?? h.get("host") ?? "");
   if (!record?.repoOwner || !record.repoName) return null;
 
   // Everything serves from our own object storage (SPEC §3.1 model C). The sync job —
