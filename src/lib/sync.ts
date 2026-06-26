@@ -1,5 +1,5 @@
 import "server-only";
-import { putObject, getObjectText, deleteKeys } from "./storage";
+import { putObject, getObjectText, deleteKeys, listKeys } from "./storage";
 import { ghHeaders, getRef } from "./github";
 import { imageSize } from "image-size";
 import {
@@ -232,9 +232,15 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
     .filter((e) => e.type === "blob" && isSyncablePath(e.path))
     .map((e) => ({ path: e.path, sha: e.sha }));
 
-  // 2) Diff against the prior manifest: fetch only changed/new blobs, sweep vanished ones.
+  // 2) Diff against the prior manifest AND what's actually in storage: fetch changed/new
+  //    blobs plus anything the manifest claims is synced but the bucket is missing, and
+  //    sweep vanished ones. Listing the bucket (one paginated LIST) makes sync self-healing
+  //    — the manifest can never permanently hide a missing file (drift), so a plain re-sync
+  //    repairs storage with no manual manifest surgery.
   const prior = await loadManifest(id);
-  const { fetch: toFetch, manifest, stale } = planSync(blobs, prior);
+  const prefix = `sites/${id}/`;
+  const stored = new Set((await listKeys(prefix)).map((k) => k.slice(prefix.length)));
+  const { fetch: toFetch, manifest, stale } = planSync(blobs, prior, stored);
 
   // 3) Pipeline fetch→upload in one worker pool (not fixed batches, which stall on their
   //    slowest member). Each worker pulls the next changed blob raw and immediately PUTs it,

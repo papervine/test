@@ -148,9 +148,16 @@ export async function runSync(
   // On success: promote to live (the schema's "draft until first successful sync") and
   // stamp the synced head so a redelivered/duplicate push webhook can no-op.
   if (result) {
+    // Bump updatedAt on every success — the render's content-cache key folds it in (see
+    // request-source.ts), so a re-sync of the SAME commit still produces a fresh key and
+    // serves the new content instead of the pre-sync copy.
     await db
       .update(siteTable)
-      .set({ status: "live", lastSyncedCommitSha: commit?.sha ?? null })
+      .set({
+        status: "live",
+        lastSyncedCommitSha: commit?.sha ?? null,
+        updatedAt: new Date(),
+      })
       .where(eq(siteTable.id, site.id));
   }
 

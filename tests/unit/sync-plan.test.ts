@@ -117,4 +117,21 @@ describe("planSync", () => {
     expect(plan.stale).toEqual(["old/removed.mdx"]);
     expect(plan.fetch.map((b) => b.path)).toEqual(["img/logo.png"]); // only the new one
   });
+
+  // Self-heal: the manifest claims everything is synced (SHAs all match), but storage is
+  // MISSING intro.mdx. Manifest-only diffing would skip it forever (the drift bug — the
+  // missing-workflows.md prod incident). With the `stored` set, the missing file is refetched.
+  it("re-fetches a file the manifest claims but storage lacks (drift self-heal)", () => {
+    const prior = { "docs.json": "a", "intro.mdx": "b", "img/logo.png": "c" }; // claims all synced
+    const stored = new Set(["docs.json", "img/logo.png"]); // intro.mdx actually missing
+    const plan = planSync(blobs, prior, stored);
+    expect(plan.fetch.map((b) => b.path)).toEqual(["intro.mdx"]);
+  });
+
+  it("with a complete `stored` set, an unchanged sync is still a no-op", () => {
+    const prior = { "docs.json": "a", "intro.mdx": "b", "img/logo.png": "c" };
+    const stored = new Set(["docs.json", "intro.mdx", "img/logo.png"]);
+    const plan = planSync(blobs, prior, stored);
+    expect(plan.fetch).toEqual([]);
+  });
 });

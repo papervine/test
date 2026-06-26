@@ -84,10 +84,12 @@ export function parsePushPayload(payload: unknown): PushInfo | null {
   };
 }
 
-// Does this push touch the site's docs subtree? An optimization to skip syncs for pushes
-// that change only non-docs files (e.g. /src) in a repo where docs live under a subdir.
-// Conservative: an empty/unknown change list (truncated large push) → true (sync), and a
-// repo-root docs site (docsPath "") → true (the whole repo is its docs root).
+// Does this push *clearly* touch the site's docs subtree? ADVISORY only — see shouldSyncSite
+// for why this can't be a hard skip gate. The push payload's per-commit file lists are
+// lossy: GitHub truncates them on large pushes / merges (it caps commits and omits files on
+// big diffs), so a "no docs path here" result can be a false negative — exactly what dropped
+// a 200+ file docs-PR merge. Returns true on an empty/unknown list and for a repo-root docs
+// site (docsPath ""), where the whole repo is the docs root.
 export function pushTouchesDocs(changedPaths: string[], docsPath: string): boolean {
   if (changedPaths.length === 0) return true;
   if (!docsPath) return true;
@@ -102,10 +104,19 @@ export type SyncCandidate = {
   lastSyncedCommitSha: string | null;
 };
 
-// Of the sites backing the pushed repo, which actually need a sync: same branch, head
-// not already synced (idempotent across GitHub redeliveries), and docs actually touched.
+// Of the sites backing the pushed repo, which actually need a sync: same tracked branch,
+// and the head isn't already synced (idempotent across GitHub redeliveries).
+//
+// We deliberately do NOT gate on `pushTouchesDocs`: GitHub's push payload file lists are
+// truncated on large pushes/merges, so a "no docs changed" verdict can be a false negative
+// that silently drops a real docs change (it dropped a 200+ file docs-PR merge). Missing a
+// sync is far worse than running a redundant one — and a redundant sync is cheap and safe:
+// it lists the tree + storage, finds nothing to fetch, and no-ops (the reconcile in sync.ts
+// makes that a correctness backstop, not a guess). The path filter survives as an advisory
+// helper; if monorepo no-op syncs ever clutter the feed, suppress 0-change webhook
+// deployments rather than re-introducing a gate that can lose data.
 export function shouldSyncSite(push: PushInfo, site: SyncCandidate): boolean {
   if (site.branch !== push.branch) return false;
   if (site.lastSyncedCommitSha === push.headSha) return false;
-  return pushTouchesDocs(push.changedPaths, site.docsPath);
+  return true;
 }

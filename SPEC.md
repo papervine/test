@@ -385,6 +385,37 @@ once C lands. We build C next. C ships in two steps so it's incremental, not a b
    that's effectively unlimited; the 60/hr *unauthenticated* dev ceiling only bites under heavy
    repeated local testing without a `GITHUB_TOKEN`.
 
+**Sync reliability fixes (2026-06-26) — three bugs surfaced by a 231-file docs-PR merge that
+rendered stale on a tenant (`Pixwel/platform`, monorepo, docs under `docs/`).**
+1. **Manifest could drift ahead of storage with no self-heal.** The diff trusted
+   `.manifest.json` as the record of what's in object storage and only refetched when a blob's
+   SHA differed — never verifying the object exists. An interrupted/lost upload that still wrote
+   the manifest left a file recorded-but-missing, and every re-sync was a correct no-op against
+   the lying manifest (a real page, `workflows.md`, was missing from the bucket while re-syncs
+   reported "0 files"). Recovery required hand-deleting the manifest in R2. **Fix:** `syncSite`
+   now lists the bucket (`sites/{id}/`, one paginated LIST) and passes the present-paths set to
+   `planSync`, which refetches anything **missing from storage** regardless of the manifest. Sync
+   is now **self-healing**: the manifest is a fast-path hint, storage is the source of truth. (A
+   per-repo sync lock to prevent the concurrent webhook↔manual race that *creates* drift is the
+   remaining follow-up — flagged in `actions/sites.ts`.)
+2. **Push-trigger silently dropped large merges.** `shouldSyncSite` gated on `pushTouchesDocs`,
+   which reads the push payload's per-commit file lists — and GitHub **truncates** those on big
+   merges/pushes. A "no docs changed" verdict from a truncated list is a false negative that
+   skips the sync entirely (the merge never synced). **Fix:** the trigger no longer gates on the
+   path filter — it syncs on tracked-branch + not-already-synced. A redundant sync is a cheap
+   no-op (and now a correctness backstop via #1); a missed one strands a docs change. The path
+   filter stays as an advisory helper; if monorepo no-op syncs clutter the feed, suppress
+   0-change webhook deployments rather than re-introduce a data-losing gate.
+3. **Re-syncing the same commit didn't refresh the render.** The render's content Data Cache is
+   keyed on `lastSyncedCommitSha`; a re-sync of the *same* commit (force-push, manual re-pull, or
+   the drift repair above) left the cache serving the pre-sync copy — pages newly visited under
+   that sha read fresh while `docs.json` (sidebar + tabs) stayed cached, so a page rendered but
+   its nav was stale. **Fix:** every successful sync bumps the site row's `updatedAt`, and the
+   cache version folds it in (`request-source.ts`: `${sha}:${updatedAt}`), so any sync busts the
+   cache even at an unchanged commit — no migration, no reliance on cross-instance `revalidateTag`.
+   Regression tests: `tests/unit/sync-plan.test.ts` (storage-missing → refetch) and
+   `tests/unit/github-webhook.test.ts` (non-docs push still syncs).
+
 **Image dimensions captured at sync → `next/image` on the render path (landed 2026-06-16).**
 Tenant content images rendered as a raw `<img>`: no lazy-loading, no format negotiation, and —
 because markdown images carry no dimensions — layout shift as each one loaded. The fix routes

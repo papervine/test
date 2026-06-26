@@ -80,20 +80,35 @@ export type SyncPlan = {
 };
 
 /**
- * The incremental brain of the sync. Given the repo's current docs blobs (path → SHA)
- * and the manifest persisted by the previous sync, decide:
- *   - which blobs to (re)fetch (SHA changed or path is new — content-addressed, so an
- *     unchanged file is skipped no matter how the rest of the repo moved),
+ * The incremental brain of the sync. Given the repo's current docs blobs (path → SHA),
+ * the manifest persisted by the previous sync, and (optionally) the set of docs-relative
+ * paths actually present in object storage, decide:
+ *   - which blobs to (re)fetch (SHA changed, path is new, OR the object is missing from
+ *     storage — so an unchanged-and-present file is skipped no matter how the rest of the
+ *     repo moved),
  *   - the manifest to write back, and
  *   - which now-removed paths to sweep from storage.
  * So sync cost scales with the *diff*, not the repo (or even the docs tree) size.
+ *
+ * `stored` makes sync **self-healing**: the manifest is a fast-path hint, not the source of
+ * truth for what's in storage. If the manifest drifts ahead of storage (records a file as
+ * synced that isn't actually there — an interrupted/raced sync, a lost upload), a plain
+ * re-sync still re-fetches it, because we re-fetch anything storage lacks regardless of what
+ * the manifest claims. Omit `stored` (unit tests, or to skip the listing) for manifest-only
+ * diffing.
  */
-export function planSync(blobs: Blob[], prior: Record<string, string>): SyncPlan {
+export function planSync(
+  blobs: Blob[],
+  prior: Record<string, string>,
+  stored?: ReadonlySet<string>,
+): SyncPlan {
   const manifest: Record<string, string> = {};
   const fetch: Blob[] = [];
   for (const b of blobs) {
     manifest[b.path] = b.sha;
-    if (prior[b.path] !== b.sha) fetch.push(b);
+    const changed = prior[b.path] !== b.sha;
+    const missing = stored !== undefined && !stored.has(b.path);
+    if (changed || missing) fetch.push(b);
   }
   const present = new Set(blobs.map((b) => b.path));
   const stale = Object.keys(prior).filter((p) => !present.has(p));

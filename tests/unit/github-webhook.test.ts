@@ -129,8 +129,11 @@ describe("shouldSyncSite", () => {
   it("skips when the head sha is already synced (redelivery idempotency)", () => {
     expect(shouldSyncSite(push, { branch: "main", docsPath: "docs", lastSyncedCommitSha: "abc123" })).toBe(false);
   });
-  it("skips when the push misses the docs subdir", () => {
+  it("syncs even when the payload shows no docs paths (file lists are truncatable — never drop a sync)", () => {
+    // The push payload's file lists are lossy on large merges, so a "no docs here" verdict
+    // can be a false negative. We sync anyway; a redundant sync is a cheap no-op, a missed
+    // one silently strands a docs change (the 200+ file merge that didn't sync).
     const offDocs = { ...push, changedPaths: ["src/x.ts"] };
-    expect(shouldSyncSite(offDocs, { branch: "main", docsPath: "docs", lastSyncedCommitSha: null })).toBe(false);
+    expect(shouldSyncSite(offDocs, { branch: "main", docsPath: "docs", lastSyncedCommitSha: null })).toBe(true);
   });
 });

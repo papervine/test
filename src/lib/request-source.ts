@@ -46,11 +46,16 @@ export async function requestContentSource(
   // assets into sites/{id}/…, and the render path reads ONLY from there: no GitHub at
   // request time. A site that hasn't been synced yet has nothing to show → null (the
   // route 404s) rather than reaching back to the repo live.
-  // Key the content cache to the synced head sha so a new sync's content is served
-  // immediately. This is the real invalidation for the push webhook (its sync runs in
-  // `after()`, where `revalidateTag` doesn't reach the Data Cache). `record` is read live
-  // (`getSiteBySlug` is per-request `cache()`), so this sha advances the moment a sync lands.
-  const version = record.lastSyncedCommitSha ?? "";
+  // Key the content cache to the synced head sha AND the row's updatedAt, so the cache
+  // busts on EVERY successful sync — not only when the commit sha changes. Re-syncing the
+  // SAME commit (a force-push, a manual re-pull, or a reconcile that repaired drift) bumps
+  // updatedAt → a fresh key. Keying on the sha alone left the Data Cache serving the
+  // pre-sync content under the unchanged sha — the "page fresh but sidebar/tabs stale after
+  // a same-commit re-sync" bug, since docs.json (nav) stayed cached while newly-visited
+  // pages missed and read fresh. `record` is read live (`getSiteBySlug` is per-request
+  // `cache()`), and the sync runner bumps updatedAt on every success, so this is always current.
+  const syncedAt = record.updatedAt instanceof Date ? record.updatedAt.getTime() : 0;
+  const version = `${record.lastSyncedCommitSha ?? ""}:${syncedAt}`;
   if (!(await isSynced(record.id, version))) return null;
   if (opts?.draftBranch) return draftSource(record.id, opts.draftBranch, version);
   return s3Source(record.id, version);
