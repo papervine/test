@@ -7,6 +7,7 @@ import {
   type ReaderAuthConfig,
 } from "@/lib/reader-auth";
 import { ReaderLoginCard } from "@/components/reader/ReaderLoginCard";
+import { DevReaderSignIn } from "@/components/reader/DevReaderSignIn";
 
 // Reader sign-in for a gated site reached via its vanity host (docs.acme.com/login,
 // rewritten here by middleware). Static segment, so it wins over the custom-domain
@@ -30,10 +31,14 @@ export default async function CustomDomainLoginPage({
   const redirectTo = safeRedirect((await searchParams).redirect, "/");
   if (!record.authEnabled) redirect(redirectTo);
 
-  // JWT method: bounce to the customer's own login flow (SPEC §11.2); no Papervine form.
+  // JWT method: bounce to the customer's own login flow (SPEC §11.2); no Papervine form. In
+  // DEV, offer the dev sign-in (pick groups, no IdP) — hard-gated to non-production.
   const config = (record.authConfig as ReaderAuthConfig | null) ?? {};
-  if (record.authMethod === "jwt" && config.loginUrl) {
-    redirect(customerLoginUrl(config.loginUrl, redirectTo));
+  if (record.authMethod === "jwt") {
+    if (process.env.NODE_ENV !== "production") {
+      return <DevReaderSignIn siteName={record.name} slug={record.slug} redirectTo={redirectTo} />;
+    }
+    if (config.loginUrl) redirect(customerLoginUrl(config.loginUrl, redirectTo));
   }
 
   return (

@@ -14,6 +14,32 @@ import {
 
 export type ReaderLoginState = { ok?: boolean; error?: string; redirectTo?: string };
 
+/**
+ * DEV-ONLY: sign in as a test reader with chosen groups, no external IdP. A JWT/OAuth site has
+ * no Papervine login form (it bounces to the customer's IdP), so there's no in-browser way to
+ * exercise the gate + per-page `groups:` locally — `scripts/sign-reader-jwt.mjs` is the CLI
+ * workaround. This mints the docs session directly with the given groups so you can verify RBAC
+ * from the browser. **Hard-gated to non-production** (and the dev sign-in card only renders in
+ * dev) — it forges a reader session, so it must never be reachable in prod.
+ */
+export async function devReaderSignIn(input: {
+  slug: string;
+  groups: string;
+  redirectTo: string;
+}): Promise<ReaderLoginState> {
+  if (process.env.NODE_ENV === "production") {
+    return { error: "Dev reader sign-in is disabled in production." };
+  }
+  const record = await getSiteBySlug(input.slug);
+  if (!record?.authEnabled) return { error: "Authentication isn't enabled for this site." };
+  const groups = input.groups
+    .split(",")
+    .map((g) => g.trim())
+    .filter(Boolean);
+  await setReaderCookie(mintReaderSession(record.id, Date.now(), { groups }));
+  return { ok: true, redirectTo: safeRedirect(input.redirectTo, "/") };
+}
+
 // Set the site-bound, 7-day reader-session cookie. Shared by every handshake (password +
 // JWT) so the cookie flags stay identical: httpOnly (JS can't read it), Secure in prod
 // (browsers drop Secure over http://localhost), sameSite=lax, site-wide path.

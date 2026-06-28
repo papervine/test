@@ -89,10 +89,12 @@ hand-walk signup → onboarding. Seed a known account and drive a real browser:
   reader-auth test bed):
   - **`starter`** — reader-auth OFF: the public showcase.
   - **`starter-gated`** — reader-auth ON (JWT, with a real generated Ed25519 keypair): the RBAC
-    test bed. Its `internal/*` pages carry `groups:` frontmatter. Mint a reader token for a
-    group and watch the per-page gate + nav-hiding (SPEC §11.2):
-    `node --env-file=.env.local scripts/sign-reader-jwt.mjs --groups admin` prints a
-    `…/login/jwt-callback#…` URL to open at **`starter-gated.localhost:3000`**.
+    test bed. Its `internal/*` pages carry `groups:` frontmatter. To verify the per-page gate +
+    nav-hiding (SPEC §11.2), just open **`starter-gated.localhost:3000`** — a JWT site's `/login`
+    shows a **dev-only "sign in as a test reader"** card (a group picker; hard-gated to
+    non-production) so a gated site is testable in-browser without an IdP. (CLI alternative that
+    exercises the real EdDSA handshake: `node --env-file=.env.local scripts/sign-reader-jwt.mjs
+    --groups admin` prints a `…/login/jwt-callback#…` URL.)
   - **`large-docs`** (→ `papervine/docs`) — a large real repo for exercising the renderer at scale.
 - The **control plane lives on the `app.` host** (SPEC §10): log in at
   **`http://app.localhost:3000/login`**, and the dashboard is at bare

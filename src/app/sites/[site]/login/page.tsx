@@ -7,6 +7,7 @@ import {
   type ReaderAuthConfig,
 } from "@/lib/reader-auth";
 import { ReaderLoginCard } from "@/components/reader/ReaderLoginCard";
+import { DevReaderSignIn } from "@/components/reader/DevReaderSignIn";
 
 // Reader sign-in for a gated site in subdomain mode ({slug}.host/login, rewritten here)
 // and apex path mode (/sites/{slug}/login). A static segment, so it wins over the docs
@@ -36,9 +37,14 @@ export default async function ReaderLoginPage({
 
   // JWT method: there's no Papervine sign-in form — bounce the reader to the customer's own
   // login flow (SPEC §11.2). Their backend signs a token and redirects to /login/jwt-callback.
+  // In DEV, offer a dev sign-in (pick groups, no IdP) so a gated site is verifiable locally —
+  // it forges a session and is hard-gated to non-production (here AND in the server action).
   const config = (record.authConfig as ReaderAuthConfig | null) ?? {};
-  if (record.authMethod === "jwt" && config.loginUrl) {
-    redirect(customerLoginUrl(config.loginUrl, redirectTo));
+  if (record.authMethod === "jwt") {
+    if (process.env.NODE_ENV !== "production") {
+      return <DevReaderSignIn siteName={record.name} slug={slug} redirectTo={redirectTo} />;
+    }
+    if (config.loginUrl) redirect(customerLoginUrl(config.loginUrl, redirectTo));
   }
 
   return (
