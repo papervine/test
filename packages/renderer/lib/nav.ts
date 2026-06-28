@@ -128,6 +128,13 @@ async function collectItem(item: unknown, canAccess: PageAccess): Promise<(NavLe
     const children = await collectChildren(div, canAccess);
     const label = labelOf(div);
     if (label) {
+      // Prune a group with no surviving children — i.e. one whose every page was filtered
+      // out by `canAccess` (reader-auth groups) or `hidden`. Without this a fully-gated group
+      // renders as a bare label with nothing under it. Recurses naturally: an empty subgroup
+      // is dropped here, so its parent sees no child and is dropped in turn. This is also how
+      // a fully-gated *tab* disappears (buildNav drops a tab whose nodes are all gone) —
+      // access stays single-source-of-truth at the page, and containers derive from it.
+      if (children.length === 0) return [];
       const icon = typeof div.icon === "string" ? div.icon : undefined;
       return [{ group: label, icon, items: children }];
     }
@@ -219,10 +226,13 @@ export async function buildNav(
         };
       }),
     );
-    sections.push(...tabSections);
+    // Drop a tab with no reachable pages — every page in it was filtered out (reader-auth
+    // groups / hidden). A non-member never sees a teasing, empty "Internal" tab.
+    sections.push(...tabSections.filter((s) => s.hrefs.length > 0));
   } else {
     const nodes = await collectChildren(nav, canAccess);
-    sections.push({ hrefs: collectHrefs(nodes), nodes });
+    const hrefs = collectHrefs(nodes);
+    if (hrefs.length > 0) sections.push({ hrefs, nodes });
   }
 
   return base ? prefixSections(sections, base) : sections;

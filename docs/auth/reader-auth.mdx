@@ -140,6 +140,10 @@ of that you gate individual pages by group.
 - **Opt a page out of group gating** with `public: true` in its frontmatter — any reader who
   cleared the site's sign-in sees it, regardless of groups.
 
+A group or tab whose pages are **all** gated away from a reader disappears entirely — no empty
+heading, no teasing "Internal" tab. Access lives on the page; the sidebar and tabs are derived
+from what the reader can actually reach.
+
 <Note>
   Denial returns **404, not 403** — on purpose. A 403 would confirm that a protected page
   exists at that URL; a 404 leaks nothing. The sidebar hides restricted pages for the same

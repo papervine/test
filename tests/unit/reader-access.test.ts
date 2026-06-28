@@ -87,3 +87,67 @@ describe("buildNav hides pages the reader can't access", () => {
     expect(links).toHaveLength(4);
   });
 });
+
+// Container pruning: a group or tab whose every page is filtered out disappears entirely —
+// no bare label, no teasing empty "Internal" tab. Access stays at the page; containers derive.
+function tabsSource() {
+  const bodies: Record<string, string> = {
+    "intro": "---\ntitle: Intro\n---\nhi",
+    "internal/overview": "---\ntitle: Overview\ngroups: [admin]\n---\nx",
+    "internal/settings": "---\ntitle: Settings\ngroups: [admin]\n---\nx",
+  };
+  const { config } = parseDocsConfig({
+    name: "T",
+    navigation: {
+      tabs: [
+        { tab: "Docs", groups: [{ group: "Start", pages: ["intro"] }] },
+        { tab: "Internal", groups: [{ group: "Team", pages: ["internal/overview", "internal/settings"] }] },
+      ],
+    },
+  });
+  return {
+    config,
+    source: {
+      async loadConfig() {
+        return config;
+      },
+      async loadPage(slug: string) {
+        return bodies[slug] ? parsePage(slug, bodies[slug]) : null;
+      },
+      async listPageSlugs() {
+        return Object.keys(bodies);
+      },
+    } as ContentSource,
+  };
+}
+
+describe("buildNav prunes empty groups and tabs after access filtering", () => {
+  it("drops the whole Internal tab for a non-member (every page gated)", async () => {
+    const { source, config } = tabsSource();
+    const canAccess: PageAccess = (fm) => canAccessPage(fm.groups, fm.public, []); // no groups
+    const sections = await contentContext.run(source, () => buildNav(config, "", canAccess));
+    const tabs = sections.map((s) => s.tab);
+    expect(tabs).toContain("Docs");
+    expect(tabs).not.toContain("Internal"); // fully gated → tab pruned
+  });
+
+  it("keeps the Internal tab (and its group) for an admin", async () => {
+    const { source, config } = tabsSource();
+    const canAccess: PageAccess = (fm) => canAccessPage(fm.groups, fm.public, ["admin"]);
+    const sections = await contentContext.run(source, () => buildNav(config, "", canAccess));
+    const internal = sections.find((s) => s.tab === "Internal");
+    expect(internal).toBeDefined();
+    expect(hrefs(internal!.nodes)).toEqual(["/internal/overview", "/internal/settings"]);
+  });
+
+  it("prunes an empty group but keeps sibling non-empty groups", async () => {
+    // Non-member sees Docs/Start (intro) but the Internal tab is gone — so within a tab the
+    // empty group never renders as a bare 'Team' label.
+    const { source, config } = tabsSource();
+    const canAccess: PageAccess = (fm) => canAccessPage(fm.groups, fm.public, []);
+    const sections = await contentContext.run(source, () => buildNav(config, "", canAccess));
+    const groups = sections.flatMap((s) => s.nodes).flatMap((n) => ("group" in n ? [n.group] : []));
+    expect(groups).toContain("Start");
+    expect(groups).not.toContain("Team");
+  });
+});

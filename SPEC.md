@@ -1732,7 +1732,11 @@ session's groups) is used in **both** halves — the shell hides inaccessible pa
 can't even see one exists), and the article 404s a direct-URL hit to a page the reader can't
 access (**404, not 403** — a 403 leaks that a protected page exists). Pure helpers
 (`canAccessPage`, the nav predicate) are unit-tested; `readerSession` now returns the claims so
-`groups` can be read back. **Still to build:** the **OAuth** handshake (its `/login` shows a
+`groups` can be read back. `buildNav` also **prunes empty containers** after access filtering —
+a group or tab whose pages are all gated away vanishes entirely (no bare label, no empty
+"Internal" tab), which is why the incumbent needs no separate tab-level `groups` knob: access stays
+single-source-of-truth at the page, and containers (groups, tabs) derive their visibility from
+which leaves survive. **Still to build:** the **OAuth** handshake (its `/login` shows a
 "not available yet" notice today); the `public: true` *site-gate bypass* (a public page on an
 auth-enabled site still hits the site-wide shell gate first — full unauthenticated access to a
 public page needs the gate moved off the shell, i.e. the edge gate below); and gating of
