@@ -82,9 +82,18 @@ When a change needs hands-on verification (DoD #4, or the user says "go test thi
 hand-walk signup → onboarding. Seed a known account and drive a real browser:
 
 - `npm run db:seed` (`scripts/seed-dev.mjs`) creates a known login **`dev@papervine.local` /
-  `dev-password-123`**, an org, and a connected site `starter` (→ `papervine/starter`) with
-  activity + analytics data. Idempotent (re-run to refresh the password); **prod-guarded**
-  (refuses any non-localhost `DATABASE_URL`). Needs `docker compose up` (Postgres + MinIO).
+  `dev-password-123`**, an org, and connected sites with activity + analytics data. Idempotent
+  (re-run to reset); **prod-guarded** (refuses any non-localhost `DATABASE_URL`). Needs
+  `docker compose up` (Postgres + MinIO). Seeded sites (all from **`papervine/starter`** except
+  the scale test — one repo to rule them all: the forkable user example AND the renderer/
+  reader-auth test bed):
+  - **`starter`** — reader-auth OFF: the public showcase.
+  - **`starter-gated`** — reader-auth ON (JWT, with a real generated Ed25519 keypair): the RBAC
+    test bed. Its `internal/*` pages carry `groups:` frontmatter. Mint a reader token for a
+    group and watch the per-page gate + nav-hiding (SPEC §11.2):
+    `node --env-file=.env.local scripts/sign-reader-jwt.mjs --groups admin` prints a
+    `…/login/jwt-callback#…` URL to open at **`starter-gated.localhost:3000`**.
+  - **`large-docs`** (→ `papervine/docs`) — a large real repo for exercising the renderer at scale.
 - The **control plane lives on the `app.` host** (SPEC §10): log in at
   **`http://app.localhost:3000/login`**, and the dashboard is at bare
   **`app.localhost:3000/:org/:site`** (seed → `app.localhost:3000/dev-org/starter`). New

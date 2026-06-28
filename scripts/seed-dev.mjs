@@ -8,9 +8,33 @@
 // Idempotent: upserts by email / org slug / site slug, and rebuilds the activity feed.
 // PROD-GUARDED: refuses any non-local DATABASE_URL — a known password must never reach a
 // real database. After seeding, log in at /login with the printed credentials.
-import { randomUUID } from "node:crypto";
+import { randomUUID, generateKeyPairSync, createCipheriv, randomBytes } from "node:crypto";
 import { execFileSync } from "node:child_process";
 import postgres from "postgres";
+
+// Mirror src/lib/crypto.ts (AES-256-GCM, base64(iv|tag|ciphertext)) so the app can decrypt
+// what we seed. Only used for a JWT site's private key — returns null if the key is unset.
+function encryptSecret(plain) {
+  const raw = process.env.PAPERVINE_ENCRYPTION_KEY;
+  if (!raw) return null;
+  const key = Buffer.from(raw, "base64");
+  const iv = randomBytes(12);
+  const cipher = createCipheriv("aes-256-gcm", key, iv);
+  const ct = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
+  return Buffer.concat([iv, cipher.getAuthTag(), ct]).toString("base64");
+}
+
+// A per-site Ed25519 reader-auth keypair (SPEC §11.2): private (PKCS#8 PEM) encrypted into
+// auth_secret_enc, public (SPKI PEM) into auth_config.publicKey — exactly what the dashboard
+// generates, so the JWT handshake actually verifies. `scripts/sign-reader-jwt.mjs` reads the
+// private key back out to mint test tokens.
+function genReaderKeypair() {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  return {
+    privateKeyPem: privateKey.export({ type: "pkcs8", format: "pem" }),
+    publicKeyPem: publicKey.export({ type: "spki", format: "pem" }),
+  };
+}
 import { hashPassword } from "better-auth/crypto";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { imageSize } from "image-size";
@@ -18,19 +42,23 @@ import { imageSize } from "image-size";
 const DEV = {
   user: { name: "Dev User", email: "dev@papervine.local", password: "dev-password-123" },
   org: { name: "Dev Org", slug: "dev-org" },
-  // Both repos are synced into our object storage on seed (just like a real connect), so
-  // the render path reads only from us — config, pages, AND assets (logos/images). `starter`
-  // is the tiny canonical template; `large-docs` is a large real repo, good for exercising
-  // the renderer/nav at scale. The first site is the "primary" (gets analytics seeded).
-  // `starter` stays public (anyone can read); `large-docs` is the *gated* example — its
-  // reader-auth flag is on (JWT), so the dashboard shows the "Required · JWT" status and the
-  // docs enforce a reader login (render-tenant.tsx). No signing secret is seeded — that's
-  // enough to exercise the gate + the dashboard row; set a real one in Settings →
-  // Authentication. Re-seeding resets both to this known state.
+  // All repos are synced into our object storage on seed (just like a real connect), so the
+  // render path reads only from us — config, pages, AND assets. The canonical example/test
+  // repo is **papervine/starter** (one repo to rule them all: the forkable user example AND
+  // the renderer/reader-auth test bed). We point TWO sites at it:
+  //   • `starter`        — reader-auth OFF: the public showcase + how the docs look ungated.
+  //   • `starter-gated`  — reader-auth ON (JWT, with a REAL generated keypair): the RBAC test
+  //                        bed. Its `internal/*` pages carry `groups:` frontmatter, so you can
+  //                        mint a JWT for a given group (scripts/sign-reader-jwt.mjs) and watch
+  //                        the per-page gate + nav-hiding (SPEC §11.2). The keypair is fresh
+  //                        each seed; the sign script reads it back from the DB, so that's fine.
+  // `large-docs` stays as a large real repo for exercising the renderer/nav at scale. The
+  // first site is the "primary" (gets analytics seeded). Re-seeding resets all to this state.
   sites: [
     { name: "Starter Docs", slug: "starter", repoOwner: "papervine", repoName: "starter", branch: "main" },
-    { name: "Incumbent Docs", slug: "large-docs", repoOwner: "papervine", repoName: "docs", branch: "main",
+    { name: "Starter (gated)", slug: "starter-gated", repoOwner: "papervine", repoName: "starter", branch: "main",
       auth: { method: "jwt", config: { loginUrl: "https://app.acme.com/login" } } },
+    { name: "Incumbent Docs", slug: "large-docs", repoOwner: "papervine", repoName: "docs", branch: "main" },
   ],
 };
 
@@ -196,10 +224,19 @@ const feed = [
 ];
 
 for (const s of DEV.sites) {
-  // Reader-auth columns — set deterministically so re-seeding resets the known state.
+  // Reader-auth columns — set deterministically so re-seeding resets the known state. A JWT
+  // site gets a freshly generated Ed25519 keypair (public key into auth_config, private key
+  // encrypted into auth_secret_enc) so the handshake actually verifies.
   const authEnabled = !!s.auth;
   const authMethod = s.auth?.method ?? null;
-  const authConfig = s.auth?.config ? sql.json(s.auth.config) : null;
+  let configObj = s.auth?.config ?? null;
+  let authSecretEnc = null;
+  if (s.auth?.method === "jwt") {
+    const { privateKeyPem, publicKeyPem } = genReaderKeypair();
+    configObj = { ...(s.auth.config ?? {}), publicKey: publicKeyPem };
+    authSecretEnc = encryptSecret(privateKeyPem);
+  }
+  const authConfig = configObj ? sql.json(configObj) : null;
 
   let siteId = await findId("site", "slug", s.slug);
   if (siteId) {
@@ -207,15 +244,16 @@ for (const s of DEV.sites) {
               repo_owner = ${s.repoOwner}, repo_name = ${s.repoName},
               branch = ${s.branch}, status = 'live',
               auth_enabled = ${authEnabled}, auth_method = ${authMethod}, auth_config = ${authConfig},
+              auth_secret_enc = ${authSecretEnc},
               updated_at = ${now} where id = ${siteId}`;
     console.log(`• site ${s.slug} exists — updated${authEnabled ? ` (auth: ${authMethod})` : ""}`);
   } else {
     siteId = randomUUID();
     await sql`insert into site (id, organization_id, name, slug, repo_owner, repo_name, branch, status,
-                               auth_enabled, auth_method, auth_config, created_at, updated_at)
+                               auth_enabled, auth_method, auth_config, auth_secret_enc, created_at, updated_at)
               values (${siteId}, ${orgId}, ${s.name}, ${s.slug}, ${s.repoOwner},
                       ${s.repoName}, ${s.branch}, 'live',
-                      ${authEnabled}, ${authMethod}, ${authConfig}, ${now}, ${now})`;
+                      ${authEnabled}, ${authMethod}, ${authConfig}, ${authSecretEnc}, ${now}, ${now})`;
     console.log(`• created site ${s.slug} → ${s.repoOwner}/${s.repoName}${authEnabled ? ` (auth: ${authMethod})` : ""}`);
   }
 
