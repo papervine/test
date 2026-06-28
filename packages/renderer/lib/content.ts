@@ -44,6 +44,13 @@ export type ContentSource = {
   loadConfig(): Promise<DocsConfig>;
   loadPage(slug: string): Promise<Page | null>;
   listPageSlugs(): Promise<string[]>;
+  // Read a verbatim, docs-root-relative file the renderer needs as-is rather than as a parsed
+  // page — today the OpenAPI/AsyncAPI spec a `docs.json` nav division points at. Returns null
+  // if absent. Going through the source (instead of a direct `fs.readFile`) is what makes a
+  // spec resolve the SAME way for a local `papervine dev` preview (fsSource → disk) and a
+  // synced tenant (s3Source → storage); reading the filesystem directly only ever worked for
+  // the former. Optional so lightweight sources (test mocks) can omit it.
+  loadRaw?(relPath: string): Promise<string | null>;
   // Optional: a source that can't supply dimensions (e.g. a draft/preview) just omits it,
   // and every image falls back to a plain lazy <img>.
   loadAssetDimensions?(): Promise<AssetDimensions>;
@@ -104,6 +111,15 @@ export function fsSource(dir: string): ContentSource {
       if (!file) return null;
       return parsePage(slug, await fs.readFile(file, "utf8"));
     },
+    async loadRaw(relPath) {
+      const target = path.normalize(path.join(CONTENT_DIR, relPath.replace(/^\//, "")));
+      if (target !== CONTENT_DIR && !target.startsWith(CONTENT_DIR + path.sep)) return null; // no traversal
+      try {
+        return await fs.readFile(target, "utf8");
+      } catch {
+        return null;
+      }
+    },
     async listPageSlugs() {
       const slugs: string[] = [];
       async function walk(dir: string) {
@@ -162,6 +178,9 @@ function source(): ContentSource {
 export const loadConfig = cache((): Promise<DocsConfig> => source().loadConfig());
 export const loadPage = cache((slug: string): Promise<Page | null> => source().loadPage(slug));
 export const listPageSlugs = cache((): Promise<string[]> => source().listPageSlugs());
+export const loadRaw = cache(
+  (relPath: string): Promise<string | null> => source().loadRaw?.(relPath) ?? Promise.resolve(null),
+);
 export const loadAssetDimensions = cache(
   (): Promise<AssetDimensions> => source().loadAssetDimensions?.() ?? Promise.resolve({}),
 );

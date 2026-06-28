@@ -32,7 +32,13 @@ beforeEach(() => {
 describe("s3Source content cache is version-keyed", () => {
   it("includes the sync version in every cache key", () => {
     s3Source("site1", "shaA");
-    expect(keyParts.map((k) => k[0])).toEqual(["s3-config", "s3-page", "s3-keys", "s3-dimensions"]);
+    expect(keyParts.map((k) => k[0])).toEqual([
+      "s3-config",
+      "s3-page",
+      "s3-keys",
+      "s3-dimensions",
+      "s3-raw",
+    ]);
     for (const k of keyParts) expect(k).toContain("shaA");
   });
 

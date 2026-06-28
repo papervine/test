@@ -15,15 +15,20 @@ copy-paste code samples in several languages.
 
 ## Input
 
-The spec is referenced from your [`docs.json`](/rendering/config):
+The spec is referenced from your [`docs.json`](/rendering/config) by a path **relative to your
+docs root** — it lives in your repo alongside your MDX, and Papervine reads it through the same
+content layer it uses for every page:
 
 ```json docs.json
 {
-  "openapi": "https://api.example.com/openapi.yaml"
+  "openapi": "openapi.json"
 }
 ```
 
-Papervine accepts **OpenAPI 3.0+** (YAML or JSON) and **AsyncAPI**.
+Because the spec is loaded through that shared content layer — not fetched from a hardcoded
+location — it resolves identically whether you're previewing locally with the
+[CLI](/cli) or viewing a synced site served from storage. Papervine accepts **OpenAPI 3.0+**
+(YAML or JSON) and **AsyncAPI**.
 
 ## Generation (at sync time)
 

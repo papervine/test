@@ -1,18 +1,19 @@
 import "server-only";
-import { promises as fs } from "node:fs";
-import path from "node:path";
 import { cache } from "react";
 import { dereference, upgrade } from "@scalar/openapi-parser";
 import type { DocsConfig } from "./config";
+import { loadRaw } from "./content";
 
 /**
  * OpenAPI → endpoint pages (SPEC §7, incumbent model). A `docs.json` nav division
  * with an `openapi` property auto-generates one in-nav, in-theme page per operation.
  * We use Scalar's MIT parser to load + dereference the spec; rendering is ours.
+ *
+ * The spec is read through the active `ContentSource` (`loadRaw`), NOT a direct
+ * `fs.readFile` — so it resolves the same for a local `papervine dev` preview (fsSource →
+ * disk) and a synced tenant (s3Source → storage). Reading the filesystem directly only ever
+ * worked for the former, which is why OpenAPI silently failed for connected tenant sites.
  */
-const CONTENT_DIR = path.resolve(
-  process.env.PAPERVINE_CONTENT ?? path.join(process.cwd(), "content"),
-);
 
 // Minimal shapes we read off the dereferenced spec (it's fully resolved JSON).
 export type Schema = Record<string, unknown>;
@@ -54,19 +55,11 @@ function operationSlug(method: string, p: string, op: Record<string, unknown>): 
   return kebab(`${method}-${p}`);
 }
 
-function resolveSpecFile(specPath: string): string {
-  const rel = specPath.replace(/^\//, "");
-  return path.resolve(CONTENT_DIR, rel);
-}
-
-/** Load, upgrade (2.0→3), and dereference a spec. Cached per spec path. */
+/** Load, upgrade (2.0→3), and dereference a spec. Cached per spec path. Reads through the
+ *  active ContentSource so it works for both filesystem previews and synced tenants. */
 const loadSpec = cache(async (specPath: string): Promise<Schema | null> => {
-  let raw: string;
-  try {
-    raw = await fs.readFile(resolveSpecFile(specPath), "utf8");
-  } catch {
-    return null;
-  }
+  const raw = await loadRaw(specPath);
+  if (raw === null) return null;
   const parsed = raw.trimStart().startsWith("{") ? JSON.parse(raw) : raw;
   const upgraded = upgrade(parsed);
   const { schema } = await dereference(upgraded.specification ?? parsed);

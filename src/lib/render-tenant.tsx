@@ -12,6 +12,8 @@ import {
   loadAssetDimensions,
 } from "@papervine/renderer/lib/content";
 import { buildNav, findGroupLabel } from "@papervine/renderer/lib/nav";
+import { loadApiCatalog } from "@papervine/renderer/lib/openapi";
+import { EndpointReference } from "@papervine/renderer/components/api/EndpointReference";
 import { Mdx, extractToc } from "@papervine/renderer/lib/mdx";
 import { resolveTheme, themeCssVars } from "@papervine/renderer/lib/theme";
 import { Navbar } from "@papervine/renderer/components/Navbar";
@@ -159,7 +161,20 @@ export async function TenantDocsArticle({
     const sections = await buildNav(config, base, canAccess);
     const slugStr = path.join("/");
     const page = await loadPage(slugStr);
-    if (!page) notFound();
+    if (!page) {
+      // Not an MDX page — try an auto-generated OpenAPI endpoint page (SPEC §7). The spec is
+      // read through the active ContentSource (loadRaw), so a synced tenant's API Reference
+      // pages resolve the same way the apex `papervine dev` preview does.
+      const op = (await loadApiCatalog(config)).get(slugStr);
+      if (op) {
+        return (
+          <div className="flex items-start gap-10 px-8 py-10">
+            <EndpointReference op={op} baseUrl={op.baseUrl} />
+          </div>
+        );
+      }
+      notFound();
+    }
     // Per-page group gate (SPEC §11.2): a reader who isn't in the page's `groups` gets a 404,
     // NOT a 403 — a 403 would confirm a protected page exists at this URL. The shell already
     // hides it from the nav; this stops a direct-URL hit.

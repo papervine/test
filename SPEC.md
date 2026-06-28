@@ -67,9 +67,10 @@ They can be the same Next.js codebase (different route groups) or split later fo
 **Platform theme.** Every Control-Plane surface (landing, auth, dashboard) shares one
 dark, luminous design language — palette + Geist + atmosphere — codified in
 `src/styles/platform.css` (scoped under `.db`) and applied via
-`<PlatformShell variant="full" | "lite">` (`src/components/platform/`). `full` = glow +
-grid + grain (marketing/auth); `lite` = glow only (the data-dense app, so the grid/grain
-never sit behind tables). Brand accent is the blue→violet gradient; status colors
+`<PlatformShell variant="full" | "home" | "lite">` (`src/components/platform/`). `full` =
+glow + grid + grain (auth); `home` = glow + **growing vine** + grain (the marketing
+landing); `lite` = glow only (the data-dense app, so the grid/grain never sit behind
+tables). Brand accent is the blue→violet gradient; status colors
 (green = live/success, red = failed) stay semantic. Pages compose the shared `Button`
 and `Field` primitives — they don't redefine the look. This theme is deliberately
 **separate from the docs renderer**, which is light-first and themed per tenant from
@@ -79,6 +80,17 @@ and `Field` primitives — they don't redefine the look. This theme is deliberat
 session: a signed-in visitor gets a single **Dashboard** link instead of **Log in / Sign
 up** (which would dead-end them re-signing up). Reading the session opts the page into
 dynamic rendering — acceptable for the apex. Smoke covers the logged-out shape (`/home`).
+
+**Landing backdrop: a growing vine, not a grid (landed 2026-06-28).** The marketing
+landing swaps the static `.db-grid` for `VineField` (`src/components/platform/VineField.tsx`,
+the `"home"` variant) — three vines that slowly *draw* upward via an animated
+`stroke-dashoffset`, leaves unfurling in sequence as each strand climbs, glowing buds at
+the tips, then a near-imperceptible perpetual sway. It plays on the name (a vine sprouting
+from a page) and the motion leads the eye up to the headline. **Pure SVG + CSS** (keyframes
+in `platform.css`, `.db-vine*`), so the landing stays a server component — no JS ships — and
+it's masked like the grid and built from the same blue→violet brand gradient.
+`prefers-reduced-motion` collapses it to the fully-grown vine at rest. Auth pages keep the
+grid (`"full"`). Smoke asserts the landing renders `db-vine` and not `db-grid`.
 
 **UI primitives: shadcn/ui, mapped onto `.db` tokens.** The Control-Plane uses
 [shadcn/ui](https://ui.shadcn.com) for its component primitives (`src/components/ui/`,
@@ -712,6 +724,21 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 - **CORS/proxy:** requests can route through a Papervine proxy endpoint to avoid CORS and to inject secrets safely (optional per tenant).
 - **Code samples:** auto-generate curl/JS/Python/etc. snippets per endpoint.
 - Libraries to evaluate: `openapi-types`, `@scalar/*` (open-source API reference, worth studying/reusing), `openapi-sampler`.
+
+> **Status — endpoint pages render for synced tenants (2026-06-28).** The OpenAPI page
+> generator (`@scalar/openapi-parser` parse/dereference → one in-nav, in-theme page per
+> operation, our `EndpointReference` renderer) was reading the spec with a direct
+> `fs.readFile(CONTENT_DIR, …)`. That only ever resolved for a local `papervine dev` preview
+> (filesystem); a **connected tenant**, whose content lives in object storage, has no
+> `CONTENT_DIR`, so its API Reference pages silently 404'd. Fix: added `loadRaw(relPath)` to
+> the `ContentSource` seam (`fsSource` → disk with a traversal guard; `s3Source` → the same
+> version-keyed Data Cache as pages/config; `draftSource` → falls through to the synced base —
+> specs aren't draftable) and routed `openapi.ts`'s `loadSpec` through it, deleting the stray
+> `CONTENT_DIR`. The tenant render path (`TenantDocsArticle`) now mirrors the apex route: a
+> slug that isn't an MDX page falls through to `loadApiCatalog().get(slug)` → `EndpointReference`.
+> Verified in-browser on the synced `papervine/starter` site (Widgets API, four operations).
+> The lingering `PAPERVINE_CONTENT`/`CONTENT_DIR` concept is legitimate (it's how `fsSource`
+> roots a local preview); the bug was code reaching past the source abstraction to touch it.
 
 ---
 

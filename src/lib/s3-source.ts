@@ -73,6 +73,13 @@ export function s3Source(siteId: string, version = ""): ContentSource {
     ["s3-dimensions", siteId, version],
     { tags: [tag], ...CACHE },
   );
+  // Any verbatim docs-relative file (today: the OpenAPI spec a nav division points at) —
+  // read through the same version-keyed cache as everything else.
+  const readRaw = unstable_cache(
+    (key: string) => getObjectText(`${prefix}${key}`),
+    ["s3-raw", siteId, version],
+    { tags: [tag], ...CACHE },
+  );
 
   return {
     async loadConfig() {
@@ -89,6 +96,9 @@ export function s3Source(siteId: string, version = ""): ContentSource {
         if (raw !== null) return parsePage(slug, raw);
       }
       return null;
+    },
+    async loadRaw(relPath) {
+      return readRaw(relPath.replace(/^\//, ""));
     },
     async listPageSlugs() {
       const keys = await readKeys();

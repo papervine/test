@@ -86,5 +86,10 @@ export function draftSource(siteId: string, branch: string, baseVersion = ""): C
       for (const t of tombstoned) union.delete(t);
       return [...union];
     },
+
+    // Specs (OpenAPI etc.) aren't draftable — read from the synced base content.
+    loadRaw(relPath) {
+      return base.loadRaw?.(relPath) ?? Promise.resolve(null);
+    },
   };
 }
