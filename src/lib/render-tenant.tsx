@@ -1,8 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { getSiteBySlug, resolveTenantSlug } from "@/lib/tenant";
-import { READER_COOKIE, readerSessionValid } from "@/lib/reader-session";
+import { READER_COOKIE, readerSession, readerSessionValid } from "@/lib/reader-session";
+import { canAccessPage } from "@/lib/reader-auth";
 import { requestContentSource } from "@/lib/request-source";
+import type { PageAccess } from "@papervine/renderer/lib/nav";
 import {
   contentContext,
   loadConfig,
@@ -65,6 +67,22 @@ async function gateReaderAuth(slug: string, base: string): Promise<void> {
   }
 }
 
+/**
+ * The per-page access predicate for the current reader (SPEC §11.2 per-page `groups`). On a
+ * site with auth OFF, every page is public → allow all. With auth ON, gate each page by the
+ * reader's session groups (from the JWT/OAuth handshake; the password method carries none, so
+ * it can never satisfy a `groups:` page — by design). Both the shell (nav hiding) and the
+ * article (page gate → 404) use this, so the sidebar and the renderable pages agree. The site
+ * record + cookie are per-request `cache()`d, so resolving this in both halves is cheap.
+ */
+async function readerAccess(slug: string): Promise<PageAccess> {
+  const record = await getSiteBySlug(slug);
+  if (!record?.authEnabled) return () => true;
+  const cookie = (await cookies()).get(READER_COOKIE)?.value;
+  const groups = readerSession(cookie, record.id)?.groups ?? [];
+  return (fm) => canAccessPage(fm.groups, fm.public, groups);
+}
+
 /** The persistent docs chrome (layout). Renders the tenant's navbar/tabs/sidebar/assistant
  *  + theme once; `children` is the per-page article, which streams independently. */
 export async function TenantDocsShell({
@@ -83,9 +101,10 @@ export async function TenantDocsShell({
   const src = await requestContentSource(slug);
   if (!src) notFound();
 
+  const canAccess = await readerAccess(slug);
   return contentContext.run(src, async () => {
     const config = await loadConfig();
-    const sections = await buildNav(config, base);
+    const sections = await buildNav(config, base, canAccess);
 
     // Override the apex theme vars with this tenant's brand colors.
     const theme = resolveTheme(config.theme);
@@ -134,12 +153,17 @@ export async function TenantDocsArticle({
   const src = await requestContentSource(slug);
   if (!src) notFound();
 
+  const canAccess = await readerAccess(slug);
   return contentContext.run(src, async () => {
     const config = await loadConfig();
-    const sections = await buildNav(config, base);
+    const sections = await buildNav(config, base, canAccess);
     const slugStr = path.join("/");
     const page = await loadPage(slugStr);
     if (!page) notFound();
+    // Per-page group gate (SPEC §11.2): a reader who isn't in the page's `groups` gets a 404,
+    // NOT a 403 — a 403 would confirm a protected page exists at this URL. The shell already
+    // hides it from the nav; this stops a direct-URL hit.
+    if (!canAccess(page.frontmatter)) notFound();
 
     const toc = extractToc(page.body);
     const eyebrow = findGroupLabel(sections, base + "/" + (slugStr || "index"));

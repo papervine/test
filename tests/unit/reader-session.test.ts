@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import {
   mintReaderSession,
+  readerSession,
   readerSessionValid,
   passwordMatches,
   READER_SESSION_TTL_S,
@@ -43,6 +44,19 @@ describe("reader docs session", () => {
     data[data.length - 1] ^= 0xff;
     expect(readerSessionValid(data.toString("base64"), "site_123")).toBe(false);
     expect(readerSessionValid("not-even-base64-$$$", "site_123")).toBe(false);
+  });
+
+  it("readerSession returns the groups claim for the page gate", () => {
+    const cookie = mintReaderSession("site_123", Date.now(), { groups: ["admin", "beta"] });
+    expect(readerSession(cookie, "site_123")?.groups).toEqual(["admin", "beta"]);
+    // Same site-binding + expiry rules as readerSessionValid → null otherwise.
+    expect(readerSession(cookie, "site_OTHER")).toBeNull();
+    expect(readerSession(undefined, "site_123")).toBeNull();
+  });
+
+  it("readerSession omits groups for the password method (no per-user identity)", () => {
+    const cookie = mintReaderSession("site_123");
+    expect(readerSession(cookie, "site_123")?.groups).toBeUndefined();
   });
 });
 

@@ -1,8 +1,15 @@
 import "server-only";
 import type { DocsConfig } from "./config";
-import { loadPage } from "./content";
+import { loadPage, type PageFrontmatter } from "./content";
 import { apiOperations } from "./openapi";
 import { withBase } from "./url-base";
+
+// A predicate the caller supplies to keep pages the current reader can't access out of the
+// nav (SPEC §11.2 per-page `groups`). Defaults to allow-all; the tenant render passes one
+// derived from the reader's session groups. Pages it rejects are dropped entirely, so a
+// non-member never sees that a restricted page exists (no client-side leak).
+export type PageAccess = (frontmatter: PageFrontmatter) => boolean;
+const ALLOW_ALL: PageAccess = () => true;
 
 /** Serializable nav tree handed to the client Sidebar. */
 export type NavLeaf = { title: string; href: string };
@@ -24,10 +31,12 @@ function titleFromSlug(slug: string): string {
     .join(" ");
 }
 
-/** Resolve a page slug to a sidebar leaf, honoring sidebarTitle and hidden. Null = omit. */
-async function resolveLeaf(slug: string): Promise<NavLeaf | null> {
+/** Resolve a page slug to a sidebar leaf, honoring sidebarTitle, hidden, and reader access.
+ *  Null = omit (hidden, or the reader can't access it). */
+async function resolveLeaf(slug: string, canAccess: PageAccess): Promise<NavLeaf | null> {
   const page = await loadPage(slug);
   if (page?.frontmatter.hidden) return null;
+  if (page && !canAccess(page.frontmatter)) return null;
   return {
     title: page?.frontmatter.sidebarTitle ?? page?.frontmatter.title ?? titleFromSlug(slug),
     href: "/" + slug,
@@ -55,7 +64,7 @@ const OP_SELECTOR = /^(get|post|put|patch|delete|head|options)\s+\//i;
  * (incumbent model). `pages`, if present, selects/orders endpoints by "METHOD /path"
  * (other strings are treated as normal page slugs, so manual pages can mix in).
  */
-async function openapiLeaves(div: Division): Promise<(NavLeaf | NavNode)[]> {
+async function openapiLeaves(div: Division, canAccess: PageAccess): Promise<(NavLeaf | NavNode)[]> {
   const specPath = div.openapi as string;
   const ops = await apiOperations(specPath);
   const bySelector = new Map(ops.map((op) => [`${op.method} ${op.path}`, op]));
@@ -75,7 +84,7 @@ async function openapiLeaves(div: Division): Promise<(NavLeaf | NavNode)[]> {
         const op = bySelector.get(`${method.toUpperCase()} ${path}`);
         return Promise.resolve(op ? [leafFor(op)] : []);
       }
-      return collectItem(entry);
+      return collectItem(entry, canAccess);
     }),
   );
   return parts.flat();
@@ -90,33 +99,33 @@ async function openapiLeaves(div: Division): Promise<(NavLeaf | NavNode)[]> {
  * O(pages) round-trips (6–20s on large repos); Promise.all collapses that to a
  * handful of batches (bounded by the S3 client's socket pool) while preserving order.
  */
-async function collectChildren(div: Division): Promise<(NavLeaf | NavNode)[]> {
+async function collectChildren(div: Division, canAccess: PageAccess): Promise<(NavLeaf | NavNode)[]> {
   const branches: Promise<(NavLeaf | NavNode)[]>[] = [];
   if (typeof div.root === "string") {
-    branches.push(resolveLeaf(div.root).then((leaf) => (leaf ? [leaf] : [])));
+    branches.push(resolveLeaf(div.root, canAccess).then((leaf) => (leaf ? [leaf] : [])));
   }
   if (typeof div.openapi === "string") {
-    branches.push(openapiLeaves(div));
+    branches.push(openapiLeaves(div, canAccess));
     return (await Promise.all(branches)).flat(); // openapi division: `pages` are operation selectors
   }
   for (const key of CONTAINER_KEYS) {
     const value = div[key];
     if (Array.isArray(value)) {
-      branches.push(Promise.all(value.map(collectItem)).then((r) => r.flat()));
+      branches.push(Promise.all(value.map((it) => collectItem(it, canAccess))).then((r) => r.flat()));
     }
   }
   return (await Promise.all(branches)).flat();
 }
 
 /** Turn a single nav entry (slug string or division object) into nav items. */
-async function collectItem(item: unknown): Promise<(NavLeaf | NavNode)[]> {
+async function collectItem(item: unknown, canAccess: PageAccess): Promise<(NavLeaf | NavNode)[]> {
   if (typeof item === "string") {
-    const leaf = await resolveLeaf(item);
+    const leaf = await resolveLeaf(item, canAccess);
     return leaf ? [leaf] : [];
   }
   if (item && typeof item === "object") {
     const div = item as Division;
-    const children = await collectChildren(div);
+    const children = await collectChildren(div, canAccess);
     const label = labelOf(div);
     if (label) {
       const icon = typeof div.icon === "string" ? div.icon : undefined;
@@ -179,7 +188,11 @@ function prefixSections(sections: NavSection[], base: string): NavSection[] {
  * `base` prefixes every href for path-based tenant serving (`/sites/{slug}`); it's
  * empty in host mode (subdomain), where this is a no-op.
  */
-export async function buildNav(config: DocsConfig, base = ""): Promise<NavSection[]> {
+export async function buildNav(
+  config: DocsConfig,
+  base = "",
+  canAccess: PageAccess = ALLOW_ALL,
+): Promise<NavSection[]> {
   let nav = config.navigation as Division;
 
   // Descend through localization/version wrappers to the default (first) entry.
@@ -196,7 +209,7 @@ export async function buildNav(config: DocsConfig, base = ""): Promise<NavSectio
     // Resolve tabs concurrently — each descends into its own loadPage fan-out.
     const tabSections = await Promise.all(
       (nav.tabs as Division[]).map(async (tab) => {
-        const nodes = await collectChildren(tab);
+        const nodes = await collectChildren(tab, canAccess);
         const hrefs = collectHrefs(nodes);
         return {
           tab: typeof tab.tab === "string" ? tab.tab : undefined,
@@ -208,7 +221,7 @@ export async function buildNav(config: DocsConfig, base = ""): Promise<NavSectio
     );
     sections.push(...tabSections);
   } else {
-    const nodes = await collectChildren(nav);
+    const nodes = await collectChildren(nav, canAccess);
     sections.push({ hrefs: collectHrefs(nodes), nodes });
   }
 

@@ -14,6 +14,11 @@ export type PageFrontmatter = {
   sidebarTitle?: string; // nav label override (GAP-REPORT §3)
   hidden?: boolean; // reachable by URL, but omitted from the sidebar
   noindex?: boolean; // exclude from search/SEO
+  // Reader-auth access control (SPEC §11.2). `groups` gates the page to readers in ≥1 of the
+  // listed groups (from the auth handshake); `public` opts a page out of group gating.
+  // Enforced in the node render (page gate + nav hiding) — see render-tenant.tsx.
+  groups?: string[];
+  public?: boolean;
 };
 
 export type Page = {

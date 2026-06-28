@@ -96,19 +96,54 @@ Because verification needs only the **public** key — never a shared secret —
 Papervine's stored config can't forge reader tokens, and the same property lets the gate move
 to the edge in the future.
 
+### Setting up the password method
+
+The password method needs no backend integration — it's a single shared secret, so it's the
+fastest way to gate a site.
+
+<Steps>
+  <Step title="Configure it in the dashboard">
+    In **Settings → Authentication**, enable authentication and choose **Password**. Enter a
+    shared password (at least 8 characters) and save. The password is stored encrypted; the
+    dashboard can reveal it again to the site's own owner.
+  </Step>
+  <Step title="Share the password with your readers">
+    Distribute it however you like (a team channel, a welcome email). Everyone who should see
+    the docs uses the same one.
+  </Step>
+</Steps>
+
+When a reader hits a gated page, Papervine sends them to the site's `/login`, where they enter
+the password. On a correct, constant-time match it sets the same short-lived docs session
+cookie the JWT method uses, and bounces them back to the page they wanted. The login form
+renders on whichever host serves the site — a subdomain (`{slug}.papervine.io/login`), the
+apex path form (`/sites/{slug}/login`), or a custom domain (`docs.example.com/login`).
+
+<Note>
+  The password method has **no per-user identity** — there's one secret, not per-reader logins.
+  So it can't carry `groups` or `content`, which means per-group access control and
+  personalization are only available with the JWT or OAuth methods. Rotating the password (save
+  a new one) immediately invalidates the old one for future sign-ins.
+</Note>
+
 ## Access control
 
-Gating is **default-deny**: every page requires a valid reader session unless explicitly
-opened up.
+Gating is **default-deny**: an auth-enabled site requires a valid reader session, and on top
+of that you gate individual pages by group.
 
-- **Make a page public** with `public: true` in its frontmatter, or open a whole nav group
-  with `"public": true` in `docs.json`.
-- **Gate by group** with `groups: ["admin"]` in frontmatter — the reader must belong to at
-  least one listed group (groups come from the handshake's `groups` claim).
+- **Gate by group** with `groups: ["admin"]` in a page's frontmatter — the reader must belong
+  to at least one listed group (groups come from the handshake's `groups` claim). A reader
+  who isn't in any listed group can't reach the page **and never sees it in the sidebar** —
+  it's dropped from the nav entirely, so its existence doesn't leak. Because groups come from
+  the handshake, the **password** method (which has no per-user identity) can't satisfy a
+  `groups:` page — group gating needs the JWT or OAuth method.
+- **Opt a page out of group gating** with `public: true` in its frontmatter — any reader who
+  cleared the site's sign-in sees it, regardless of groups.
 
 <Note>
   Denial returns **404, not 403** — on purpose. A 403 would confirm that a protected page
-  exists at that URL; a 404 leaks nothing.
+  exists at that URL; a 404 leaks nothing. The sidebar hides restricted pages for the same
+  reason.
 </Note>
 
 Enforcement happens at the node-level render chokepoint that serves tenant docs, *before* a

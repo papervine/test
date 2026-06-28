@@ -1720,12 +1720,25 @@ The **password** method is wired end-to-end: a `/login` route per serving mode
 (`sites/[site]/login`, `custom-domain/login`) → `submitReaderPassword` constant-time-checks
 the shared secret → mints an encrypted, site-bound, 7-day session cookie (`pv_docs_session`,
 `src/lib/reader-session.ts`) → bounces back (open-redirect-guarded). The **JWT** handshake
-is also wired (asymmetric EdDSA — see the 2026-06-25 status note above). **Still to build:**
-the **OAuth** handshake (its `/login` shows a "not available yet" notice today); per-page
-`public:` / per-group `"public": true` exemptions (the node gate is still all-or-nothing per
-site — the `groups` claim is now carried in the session but not yet enforced per page); and
-gating of **assets + agent surfaces** (`/api/tenant-asset`, `llms.txt`, `/mcp`) — today only
-HTML pages are gated, so a private site's images and agent feeds remain reachable.
+is also wired (asymmetric EdDSA — see the 2026-06-25 status note above).
+
+**Per-page group access control wired (2026-06-28).** A page's `groups: [...]` frontmatter now
+gates it to readers in ≥1 listed group; `public: true` opts a page out of group gating. The
+reader's groups come from the handshake (carried in the `pv_docs_session` cookie; the password
+method has none, so it can never satisfy a `groups:` page — by design). Enforced in the **node
+render** (`render-tenant.tsx`): a `readerAccess(slug)` predicate (pure `canAccessPage` over the
+session's groups) is used in **both** halves — the shell hides inaccessible pages from the nav
+(`buildNav` takes a `PageAccess` predicate; rejected pages never enter the tree, so a non-member
+can't even see one exists), and the article 404s a direct-URL hit to a page the reader can't
+access (**404, not 403** — a 403 leaks that a protected page exists). Pure helpers
+(`canAccessPage`, the nav predicate) are unit-tested; `readerSession` now returns the claims so
+`groups` can be read back. **Still to build:** the **OAuth** handshake (its `/login` shows a
+"not available yet" notice today); the `public: true` *site-gate bypass* (a public page on an
+auth-enabled site still hits the site-wide shell gate first — full unauthenticated access to a
+public page needs the gate moved off the shell, i.e. the edge gate below); and gating of
+**assets + agent surfaces** (`/api/tenant-asset`, `llms.txt`, `/mcp`, the export route) — they
+build nav/content without the reader predicate, so a private site's images and agent feeds
+remain reachable.
 
 **Planned — edge-native gate that unblocks CDN caching (resolves the §3 caching defer).**
 The §3 perf goal is incumbent-speed navigation: tenant docs served from **Vercel's edge cache**

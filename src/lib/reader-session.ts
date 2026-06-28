@@ -34,26 +34,35 @@ export function mintReaderSession(
   return encryptSecret(JSON.stringify(claims));
 }
 
-// True iff the cookie decrypts cleanly, is bound to THIS site, and hasn't expired. A
-// forged/tampered cookie fails the GCM auth tag (decryptSecret throws) → invalid. Binding
-// to siteId matters in apex path mode, where one host's cookie is visible to every
-// path-mode site; a cookie minted for site A must not unlock site B.
+// Decrypt + validate the cookie, returning its claims (incl. `groups`) iff it's bound to
+// THIS site and hasn't expired — else null. A forged/tampered cookie fails the GCM auth tag
+// (decryptSecret throws) → null. Binding to siteId matters in apex path mode, where one
+// host's cookie is visible to every path-mode site; a cookie minted for site A must not
+// unlock site B. The per-page group gate (SPEC §11.2) reads `groups` from here.
+export function readerSession(
+  cookieValue: string | undefined,
+  siteId: string,
+  now: number = Date.now(),
+): ReaderClaims | null {
+  if (!cookieValue) return null;
+  try {
+    const claims = JSON.parse(decryptSecret(cookieValue)) as ReaderClaims;
+    if (claims.siteId !== siteId || typeof claims.exp !== "number" || claims.exp <= now) {
+      return null;
+    }
+    return claims;
+  } catch {
+    return null;
+  }
+}
+
+// True iff the cookie is a valid, unexpired session for this site — the site-level gate.
 export function readerSessionValid(
   cookieValue: string | undefined,
   siteId: string,
   now: number = Date.now(),
 ): boolean {
-  if (!cookieValue) return false;
-  try {
-    const claims = JSON.parse(decryptSecret(cookieValue)) as ReaderClaims;
-    return (
-      claims.siteId === siteId &&
-      typeof claims.exp === "number" &&
-      claims.exp > now
-    );
-  } catch {
-    return false;
-  }
+  return readerSession(cookieValue, siteId, now) !== null;
 }
 
 // Constant-time password check. Both sides are SHA-256'd first so the compare is over

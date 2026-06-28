@@ -153,6 +153,24 @@ export function customerLoginUrl(loginUrl: string, redirectPath: string): string
 }
 
 /**
+ * Per-page group access control (SPEC §11.2). A page with no `groups` (or `public: true`) is
+ * open to any reader who cleared the site gate; a page with `groups` requires the reader to
+ * be in **at least one** listed group. `readerGroups` comes from the auth handshake (the
+ * password method has none, so it can never satisfy a `groups:` page — by design). Pure so it
+ * unit-tests without a session; the caller turns a `false` into a 404 (not 403 — don't leak
+ * that a protected page exists) and hides the page from the nav.
+ */
+export function canAccessPage(
+  pageGroups: string[] | undefined,
+  isPublic: boolean | undefined,
+  readerGroups: readonly string[],
+): boolean {
+  if (isPublic) return true;
+  if (!pageGroups || pageGroups.length === 0) return true;
+  return pageGroups.some((g) => readerGroups.includes(g));
+}
+
+/**
  * Sanitize a `?redirect=` target before sending a reader there post-login. Only same-site
  * relative paths (a single leading "/") are allowed — this blocks open-redirects via a
  * crafted `//evil.com` or `https://evil.com` value. Anything else falls back to `fallback`.
