@@ -1,7 +1,7 @@
 import "server-only";
 
 // Vercel domains client for BYO custom domains (SPEC §2 → Custom domains, Phase 1).
-// Attaching a customer's host (docs.acme.com) to our Vercel project is what makes the
+// Attaching a customer's host (docs.example.com) to our Vercel project is what makes the
 // platform issue a per-host TLS cert (HTTP-01) and route the host to us — DNS pointing
 // here is necessary but NOT sufficient. Without an attach call the TLS handshake to the
 // vanity host never completes, so the "Connected" check (which fetches https://{host}/…)
@@ -30,7 +30,7 @@ export function vercelDomainsConfigured(): boolean {
 }
 
 // What we tell customers to CNAME their vanity host at, in precedence order:
-//  1. CUSTOM_DOMAIN_CNAME_TARGET — an operator-owned branded host (e.g. cname.acme.com,
+//  1. CUSTOM_DOMAIN_CNAME_TARGET — an operator-owned branded host (e.g. cname.example.com,
 //     itself a CNAME to the provider's edge). SHOULD be set in any multi-tenant prod: it's
 //     the stable, provider-agnostic contract that survives the Phase 2 cap escape (SPEC §2)
 //     — the provider's real edge moves behind this one record we control, so no customer
@@ -140,12 +140,32 @@ export async function addProjectDomain(domain: string): Promise<AddDomainResult>
     error?: { code?: string; message?: string };
   } | null;
   const code = body?.error?.code;
-  // Already on this project — fine. (Vercel returns 409 domain_already_in_use; when it's
-  // ours the add is a no-op we can treat as success.)
+  // Vercel returns `409 domain_already_in_use` whether the host is already attached to OUR
+  // project (so the add is a harmless no-op → success) or to a DIFFERENT one (a real failure).
+  // The error body doesn't distinguish them, so confirm by reading our own project's domains:
+  // a 200 means it's ours, and the attach is idempotent. Without this, re-saving an unchanged
+  // domain (e.g. just toggling the /docs subpath) wrongly errors in prod. (SPEC §2 reconciler.)
   if (res.status === 409 && code === "domain_already_in_use") {
+    if (await projectOwnsDomain(domain)) return { ok: true };
     return { ok: false, error: "That domain is already attached to another project." };
   }
   return { ok: false, error: body?.error?.message ?? "Couldn't attach the domain." };
+}
+
+/** Is this host already attached to *our* Vercel project? Used to make `addProjectDomain`
+ *  idempotent on a 409. A network error reads as "not confirmed ours" (caller surfaces the
+ *  conflict) rather than a false success. */
+async function projectOwnsDomain(domain: string): Promise<boolean> {
+  try {
+    const res = await fetch(url(`/v9/projects/${projectId()}/domains/${domain}`), {
+      headers: authHeaders(),
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
 }
 
 // Detach the host from our project (frees the project-domain slot). Best-effort: a 404

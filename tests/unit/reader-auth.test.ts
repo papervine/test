@@ -30,17 +30,17 @@ describe("AUTH_METHOD_META", () => {
 
 describe("validateAuthConfig — jwt", () => {
   it("requires an https login URL and trims it", () => {
-    const res = validateAuthConfig("jwt", { loginUrl: "  https://app.acme.com/login  " });
+    const res = validateAuthConfig("jwt", { loginUrl: "  https://app.example.com/login  " });
     expect(res).toEqual({
       ok: true,
-      config: { loginUrl: "https://app.acme.com/login" },
+      config: { loginUrl: "https://app.example.com/login" },
       secret: null,
     });
   });
 
   it("rejects missing / non-https / malformed login URLs", () => {
     expect(validateAuthConfig("jwt", { loginUrl: "" }).ok).toBe(false);
-    expect(validateAuthConfig("jwt", { loginUrl: "http://app.acme.com" }).ok).toBe(false);
+    expect(validateAuthConfig("jwt", { loginUrl: "http://app.example.com" }).ok).toBe(false);
     expect(validateAuthConfig("jwt", { loginUrl: "not a url" }).ok).toBe(false);
   });
 
@@ -54,9 +54,9 @@ describe("validateAuthConfig — jwt", () => {
 
 describe("validateAuthConfig — oauth", () => {
   const valid = {
-    authorizationUrl: "https://auth.acme.com/authorize",
-    tokenUrl: "https://auth.acme.com/token",
-    userInfoUrl: "https://auth.acme.com/userinfo",
+    authorizationUrl: "https://auth.example.com/authorize",
+    tokenUrl: "https://auth.example.com/token",
+    userInfoUrl: "https://auth.example.com/userinfo",
     clientId: "acme-docs",
     scopes: "openid profile",
   };

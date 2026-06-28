@@ -4,7 +4,7 @@ import { getSiteByCustomDomain } from "@/lib/tenant";
 import { TenantDocsArticle } from "@/lib/render-tenant";
 import { resolveCustomDomainPage } from "../resolve";
 
-// Custom-domain docs (docs.acme.com). The middleware can't DB-resolve a vanity host at the
+// Custom-domain docs (docs.example.com). The middleware can't DB-resolve a vanity host at the
 // edge, so it forwards the raw Host (x-papervine-host) and rewrites here (note: this segment
 // is deliberately NOT `_`-prefixed — Next treats those as unrouted private folders); we
 // resolve the site by that host. Dynamic for the same reason /sites is. The persistent

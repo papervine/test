@@ -156,7 +156,7 @@ export function AuthenticationForm({
                   <UrlInput
                     value={loginUrl}
                     onChange={setLoginUrl}
-                    placeholder="https://app.acme.com/login"
+                    placeholder="https://app.example.com/login"
                   />
                 </Field>
                 <Field
@@ -225,21 +225,21 @@ export function AuthenticationForm({
                   <UrlInput
                     value={authorizationUrl}
                     onChange={setAuthorizationUrl}
-                    placeholder="https://auth.acme.com/oauth/authorize"
+                    placeholder="https://auth.example.com/oauth/authorize"
                   />
                 </Field>
                 <Field label="Token URL">
                   <UrlInput
                     value={tokenUrl}
                     onChange={setTokenUrl}
-                    placeholder="https://auth.acme.com/oauth/token"
+                    placeholder="https://auth.example.com/oauth/token"
                   />
                 </Field>
                 <Field label="User info URL" hint="Returns the reader's groups and personalization JSON.">
                   <UrlInput
                     value={userInfoUrl}
                     onChange={setUserInfoUrl}
-                    placeholder="https://auth.acme.com/userinfo"
+                    placeholder="https://auth.example.com/userinfo"
                   />
                 </Field>
                 <Field label="Client ID">

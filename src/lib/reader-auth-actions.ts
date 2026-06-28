@@ -125,7 +125,7 @@ export async function submitReaderJwt(input: {
   // The token's `host` claim must equal the docs domain it's being presented to. Prefer
   // `x-papervine-host` (the canonical tenant host the middleware stamps) over the raw Host
   // header, matching the custom-domain routes — so the check stays correct for a custom
-  // domain (e.g. docs.acme.com) even if a SaaS-domains proxy ever rewrites Host (SPEC §2).
+  // domain (e.g. docs.example.com) even if a SaaS-domains proxy ever rewrites Host (SPEC §2).
   const h = await headers();
   const host = h.get("x-papervine-host") ?? h.get("host") ?? "";
   const result = await verifyReaderJwt(input.token, publicKey, host);

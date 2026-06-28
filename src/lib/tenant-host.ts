@@ -23,7 +23,7 @@ export function resolveTenantSlug(host: string | null): string | null {
 }
 
 // Hosts Papervine itself answers on — the apex marketing/control plane and every
-// preview/dev surface — as opposed to a tenant's own vanity domain (docs.acme.com).
+// preview/dev surface — as opposed to a tenant's own vanity domain (docs.example.com).
 const PLATFORM_APEXES = new Set(["papervine.io"]);
 const PLATFORM_SUFFIXES = [".localhost", ".papervine.io", ".vercel.app"];
 
@@ -47,7 +47,7 @@ export function isPlatformHost(host: string | null): boolean {
  * The control-plane host — the authenticated app (dashboard + auth), kept off the apex/
  * docs namespace the way the incumbent uses app.example.com. `app.localhost` in dev,
  * `app.papervine.io` in prod. Requiring a platform host stops a tenant's own
- * `app.acme.com` vanity domain from being mistaken for ours. Pure + import-free so it's
+ * `app.example.com` vanity domain from being mistaken for ours. Pure + import-free so it's
  * safe in the edge middleware.
  */
 export function isAppHost(host: string | null): boolean {

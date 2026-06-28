@@ -16,7 +16,7 @@ export type ParsedDomain =
 /**
  * Normalize an owner-entered domain to a bare lowercase hostname, or explain why it's
  * rejected. Strips a leading scheme, any path/query, a port, and a trailing dot — so
- * `https://Docs.Acme.com/guides` → `docs.acme.com`. Platform hosts (papervine.io,
+ * `https://Docs.Example.com/guides` → `docs.example.com`. Platform hosts (papervine.io,
  * *.localhost, …) are refused: a tenant can't claim one of ours.
  */
 export function parseCustomDomain(input: string): ParsedDomain {

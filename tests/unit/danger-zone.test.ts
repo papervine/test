@@ -53,10 +53,10 @@ describe("planResourceCleanup", () => {
 
   it("detaches the custom domain when one is set (the deletion-leak regression)", () => {
     expect(
-      planResourceCleanup([{ id: "abc", customDomain: "docs.acme.com" }]),
+      planResourceCleanup([{ id: "abc", customDomain: "docs.example.com" }]),
     ).toEqual({
       storagePrefixes: ["sites/abc/"],
-      domainsToDetach: ["docs.acme.com"],
+      domainsToDetach: ["docs.example.com"],
     });
   });
 

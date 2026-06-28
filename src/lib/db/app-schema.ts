@@ -15,7 +15,7 @@ import { organization, user } from "./schema";
 import type { ReaderAuthConfig } from "@/lib/reader-auth";
 
 // A tenant's docs site. One organization can own several. `slug` is the
-// *.papervine.io subdomain; `customDomain` is the optional vanity host (docs.acme.com).
+// *.papervine.io subdomain; `customDomain` is the optional vanity host (docs.example.com).
 export const site = pgTable(
   "site",
   {
@@ -267,6 +267,24 @@ export const deletionFeedback = pgTable(
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [index("deletionFeedback_createdAt_idx").on(table.createdAt)],
+);
+
+// Durable "always delete a domain when asked" (SPEC §2 reconciler). Freeing a host — changing
+// a site's domain, removing it, or deleting the site — enqueues the host here AND attempts the
+// Vercel detach inline; on success the row is deleted immediately, but if that one call fails
+// (API down, timeout) the row survives and the reconcile cron drains it, retrying until Vercel
+// confirms the detach (or 404s). So a transient failure can never orphan a host on the project.
+// Keyed by the host so duplicate requests collapse (ON CONFLICT DO NOTHING).
+export const domainRemoval = pgTable(
+  "domain_removal",
+  {
+    domain: text("domain").primaryKey(),
+    attempts: integer("attempts").default(0).notNull(),
+    lastAttemptAt: timestamp("last_attempt_at"),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("domainRemoval_createdAt_idx").on(table.createdAt)],
 );
 
 export const siteRelations = relations(site, ({ one, many }) => ({

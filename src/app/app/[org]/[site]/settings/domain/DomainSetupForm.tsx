@@ -70,7 +70,7 @@ export function DomainSetupForm({
           <input
             value={domain}
             onChange={(e) => setDomain(e.target.value)}
-            placeholder="docs.acme.com"
+            placeholder="docs.example.com"
             spellCheck={false}
             autoCapitalize="none"
             className="min-w-0 flex-1 bg-transparent px-3 py-2.5 text-sm text-[var(--fg)] outline-none placeholder:text-[var(--muted)]/60"

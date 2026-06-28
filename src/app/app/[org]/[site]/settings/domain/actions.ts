@@ -7,7 +7,8 @@ import { site } from "@/lib/db/app-schema";
 import { findSite } from "@/lib/dashboard-context";
 import { siteRoute } from "@/lib/dashboard-nav";
 import { parseCustomDomain } from "@/lib/custom-domain";
-import { addProjectDomain, removeProjectDomain } from "@/lib/vercel-domains";
+import { addProjectDomain } from "@/lib/vercel-domains";
+import { releaseDomain } from "@/lib/domain-reconcile";
 
 export type DomainActionState = { ok?: boolean; error?: string };
 
@@ -90,9 +91,10 @@ export async function setCustomDomain(
     throw e;
   }
 
-  // If the owner pointed the site at a *different* host, free the old one's project slot.
+  // If the owner pointed the site at a *different* host, free the old one's project slot —
+  // durably, so a failed detach is retried by the reconcile cron rather than orphaned (SPEC §2).
   if (active.customDomain && active.customDomain !== parsed.domain) {
-    await removeProjectDomain(active.customDomain);
+    await releaseDomain(active.customDomain);
   }
 
   // Try once now so a domain whose DNS is already pointed shows "Connected" immediately.
@@ -105,9 +107,10 @@ export async function removeCustomDomain(ref: SiteRef): Promise<DomainActionStat
   const active = await findSite(ref.org, ref.site);
   if (!active) return { error: "No active site." };
 
-  // Detach from the Vercel project (best-effort) before clearing it locally, so the
-  // project-domain slot is freed (SPEC §2 — the per-project cap is finite).
-  if (active.customDomain) await removeProjectDomain(active.customDomain);
+  // Detach from the Vercel project before clearing it locally, so the project-domain slot is
+  // freed (SPEC §2 — the per-project cap is finite). Durable: a failed detach is retried by the
+  // reconcile cron, so a removed domain never lingers attached.
+  if (active.customDomain) await releaseDomain(active.customDomain);
 
   await db
     .update(site)

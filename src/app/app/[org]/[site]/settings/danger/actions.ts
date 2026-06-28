@@ -8,7 +8,7 @@ import { db } from "@/lib/db";
 import { site, deletionFeedback } from "@/lib/db/app-schema";
 import { getSession, listOrganizations, getMemberRole } from "@/lib/session";
 import { deletePrefix } from "@/lib/storage";
-import { removeProjectDomain } from "@/lib/vercel-domains";
+import { releaseDomain } from "@/lib/domain-reconcile";
 import { isReasonValid, planResourceCleanup } from "@/lib/danger-zone";
 import type { SiteResources } from "@/lib/danger-zone";
 
@@ -56,9 +56,11 @@ async function cleanupSiteResources(sites: SiteResources[]): Promise<void> {
   const { storagePrefixes, domainsToDetach } = planResourceCleanup(sites);
   for (const domain of domainsToDetach) {
     try {
-      await removeProjectDomain(domain);
+      // Durable detach (SPEC §2): enqueues a tombstone + tries inline, so a failed call is
+      // retried by the reconcile cron instead of orphaning the host on the deleted site.
+      await releaseDomain(domain);
     } catch (e) {
-      console.error(`[danger] failed to detach domain ${domain} (continuing)`, e);
+      console.error(`[danger] failed to enqueue domain detach ${domain} (continuing)`, e);
     }
   }
   for (const prefix of storagePrefixes) {

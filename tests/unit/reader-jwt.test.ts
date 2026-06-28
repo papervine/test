@@ -7,7 +7,7 @@ import {
 } from "@/lib/reader-jwt";
 import { customerLoginUrl } from "@/lib/reader-auth";
 
-const HOST = "docs.acme.com";
+const HOST = "docs.example.com";
 
 describe("reader JWT handshake (EdDSA / Ed25519)", () => {
   it("round-trips a token signed with the private key", async () => {
@@ -99,13 +99,13 @@ describe("reader JWT handshake (EdDSA / Ed25519)", () => {
 
 describe("customerLoginUrl", () => {
   it("appends the intended path as ?redirect=", () => {
-    expect(customerLoginUrl("https://app.acme.com/login", "/guides/intro")).toBe(
-      "https://app.acme.com/login?redirect=%2Fguides%2Fintro",
+    expect(customerLoginUrl("https://app.example.com/login", "/guides/intro")).toBe(
+      "https://app.example.com/login?redirect=%2Fguides%2Fintro",
     );
   });
 
   it("preserves an existing query on the login URL", () => {
-    const out = customerLoginUrl("https://app.acme.com/login?source=docs", "/");
+    const out = customerLoginUrl("https://app.example.com/login?source=docs", "/");
     expect(out).toContain("source=docs");
     expect(out).toContain("redirect=%2F");
   });

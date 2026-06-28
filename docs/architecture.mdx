@@ -106,7 +106,7 @@ inside that scope. In path mode the request hits the apex with no tenant in the 
 client passes the active slug explicitly (`?site=` / body `site`). See
 [search](/features/search) and the [AI assistant](/features/ai-assistant).
 
-## Custom domains (BYO `docs.acme.com`)
+## Custom domains (BYO `docs.example.com`)
 
 There are two **independent** domain systems. Don't conflate them.
 
@@ -117,10 +117,10 @@ There are two **independent** domain systems. Don't conflate them.
     challenge for `*.papervine.io`. A wildcard CNAME at a registrar is **not** enough — the
     wildcard cert only issues when the host controls DNS.
   </Step>
-  <Step title="docs.acme.com — the customer's domain, a cert per host">
+  <Step title="docs.example.com — the customer's domain, a cert per host">
     A custom domain lives under the **customer's** nameservers, which we never control, so
     the wildcard trick can't apply — each custom domain needs its own cert. The customer adds
-    a `CNAME docs.acme.com → {branded target}` (apex domains use an `A` record, since you
+    a `CNAME docs.example.com → {branded target}` (apex domains use an `A` record, since you
     can't CNAME an apex); we attach the domain to the project; the platform issues a per-host
     cert via HTTP-01, with no nameserver change from the customer.
   </Step>

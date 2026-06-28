@@ -6,7 +6,7 @@ import { DomainSetupForm } from "./DomainSetupForm";
 
 // Concrete Domain setup surface — overrides the settings/[section] placeholder for the
 // "domain" slug (a static segment wins over the dynamic one). Lets an owner map a vanity
-// host (docs.acme.com) to the site in the URL and serve it at the root or under /docs.
+// host (docs.example.com) to the site in the URL and serve it at the root or under /docs.
 export default async function DomainSettingsPage({
   params,
 }: {

@@ -37,7 +37,7 @@ test.describe("custom domain setup", () => {
     ).toBeVisible();
 
     // Enter a domain and connect it.
-    await page.getByPlaceholder("docs.acme.com").fill(DOMAIN);
+    await page.getByPlaceholder("docs.example.com").fill(DOMAIN);
     await page.getByRole("button", { name: "Connect domain" }).click();
 
     // It persists: the value sticks, and the (unreachable) domain shows Pending DNS
@@ -64,7 +64,7 @@ test.describe("custom domain setup", () => {
 
     // Remove clears it.
     await page.getByRole("button", { name: "Remove domain" }).click();
-    await expect(page.getByPlaceholder("docs.acme.com")).toHaveValue("");
+    await expect(page.getByPlaceholder("docs.example.com")).toHaveValue("");
     await expect
       .poll(async () => {
         const [r] = await sql`select custom_domain from site where id = ${SITE.id}`;

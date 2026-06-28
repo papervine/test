@@ -37,7 +37,7 @@ export async function requestContentSource(
   const h = await headers();
   const slug = slugOverride ?? h.get("x-papervine-site") ?? resolveTenantSlug(h.get("host"));
 
-  // A custom domain (docs.acme.com) carries no slug — middleware forwards the raw Host as
+  // A custom domain (docs.example.com) carries no slug — middleware forwards the raw Host as
   // `x-papervine-host` and the slug resolvers return null. We MUST still resolve the tenant
   // here, because the ROOT layout calls requestContentSource() (no slugOverride) to prime
   // the per-request React `cache()` entry for `loadConfig()`. Without this fallback it gets

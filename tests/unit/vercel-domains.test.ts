@@ -17,7 +17,7 @@ describe("parseDomainStatus", () => {
       {
         verified: false,
         verification: [
-          { type: "TXT", domain: "_vercel.acme.com", value: "vc-domain-verify=…" },
+          { type: "TXT", domain: "_vercel.example.com", value: "vc-domain-verify=…" },
           { nope: true }, // malformed — must be filtered out
         ],
       },
@@ -26,7 +26,7 @@ describe("parseDomainStatus", () => {
     expect(status.verified).toBe(false);
     expect(status.misconfigured).toBe(true);
     expect(status.verification).toEqual([
-      { type: "TXT", domain: "_vercel.acme.com", value: "vc-domain-verify=…" },
+      { type: "TXT", domain: "_vercel.example.com", value: "vc-domain-verify=…" },
     ]);
   });
 

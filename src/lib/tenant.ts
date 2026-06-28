@@ -12,7 +12,7 @@ export const getSiteBySlug = cache(async (slug: string) => {
 });
 
 // Resolve a site by its vanity domain (the host the owner pointed at us, e.g.
-// docs.acme.com). Cached per-request like getSiteBySlug, since the _domain render,
+// docs.example.com). Cached per-request like getSiteBySlug, since the _domain render,
 // its assets, and instrumentation all look the same site up in one request.
 export const getSiteByCustomDomain = cache(async (host: string) => {
   const name = host.split(":")[0].toLowerCase();
@@ -27,7 +27,7 @@ export const getSiteByCustomDomain = cache(async (host: string) => {
 /**
  * Resolve the site a request is for from its Host header — a tenant subdomain
  * ({slug}.papervine.io / {slug}.localhost) or a connected custom domain
- * (docs.acme.com). Returns null on the apex/preview host (PAPERVINE_CONTENT
+ * (docs.example.com). Returns null on the apex/preview host (PAPERVINE_CONTENT
  * single-repo mode) and for an unknown host, so callers (the /mcp + llms surfaces,
  * analytics instrumentation) safely no-op when there's no tenant.
  */

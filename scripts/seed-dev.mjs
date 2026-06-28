@@ -57,7 +57,7 @@ const DEV = {
   sites: [
     { name: "Starter Docs", slug: "starter", repoOwner: "papervine", repoName: "starter", branch: "main" },
     { name: "Starter (gated)", slug: "starter-gated", repoOwner: "papervine", repoName: "starter", branch: "main",
-      auth: { method: "jwt", config: { loginUrl: "https://app.acme.com/login" } } },
+      auth: { method: "jwt", config: { loginUrl: "https://app.example.com/login" } } },
     { name: "Incumbent Docs", slug: "large-docs", repoOwner: "papervine", repoName: "docs", branch: "main" },
   ],
 };

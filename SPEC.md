@@ -313,6 +313,50 @@ the platform never needs to know individual customer domains:
   `A`-record customers still re-point.) Build the proxy only when the cap is in sight, not
   before.
 
+#### Durability: intent in Postgres, Vercel as a projection (reconciler)
+
+The Phase-1 client made the Vercel calls **synchronously and best-effort**: a failed detach
+silently orphaned a host on the project (finite-slot leak), and `addProjectDomain` errored when
+re-attaching a host already on *our* project (Vercel's `409 domain_already_in_use` doesn't say
+*which* project), so re-saving an unchanged domain — e.g. toggling `/docs` — failed in prod. The
+durable model treats **the database row as desired state and Vercel as a projection** driven toward
+it by a reconcile loop. Both hard requirements — *a domain is always eventually deleted when asked*,
+and *a new site can take over a domain from an old one if it proves DNS control* — are
+state-convergence problems, so a reconciler (idempotent, self-healing) is the right shape, not a
+fire-and-forget queue (the same reconcile-against-reality pattern the sync uses).
+
+> **Status — slice 1 shipped (2026-06-28): idempotent attach + durable deletion.**
+> (1) `addProjectDomain` is now idempotent — on a 409 it reads our own project's domains
+> (`projectOwnsDomain`) and treats an already-ours host as success, fixing the same-domain
+> re-save. (2) Durable deletion via a `domain_removal` **tombstone** table (`domain` PK so
+> duplicate requests collapse): `releaseDomain` (`src/lib/domain-reconcile.ts`) enqueues a
+> tombstone, attempts the detach inline, and drops it only on success — every place that frees a
+> host (change domain, remove domain, delete site) now calls it instead of a bare
+> `removeProjectDomain`. (3) `reconcileDomainRemovals` drains the tombstones — drop on Vercel's
+> confirm/404, bump `attempts`/`lastError` otherwise — driven by a `/api/reconcile/domains`
+> route (`CRON_SECRET`-gated; allowed locally when unset) on a **Vercel Cron** (`*/10 * * * *`
+> in `vercel.json`). So a transient Vercel failure can never strand a domain — the next sweep
+> retries until it's gone. Reconciler + idempotency are unit-tested with an injectable store
+> (`tests/unit/domain-reconcile.test.ts`, `vercel-domain-idempotent.test.ts`), no DB needed.
+>
+> **Executor choice (is it time for trigger.dev?):** not yet. Vercel Cron + the Postgres state
+> machine delivers durable deletion with no new vendor, and — because intent lives in Postgres —
+> the executor is swappable later (cron → trigger.dev/Inngest) with no change to the correctness
+> model. Adopt a durable workflow engine when the *second/third* background-job use case lands or
+> per-domain timed workflows (attach → wait → poll DNS with backoff) outgrow a coarse sweep; on
+> Vercel an external runner is then the only option (functions are short-lived, `after()` is
+> best-effort).
+>
+> **Planned — slice 2 (verify reconciliation):** fold the `customDomainVerifiedAt` live check
+> into the reconciler on a backoff (a `domain_status` lifecycle on `site`) instead of the one-shot
+> check at save time. **Slice 3 (ownership override):** a `domain_claim` table + a DNS **TXT
+> challenge** (`_papervine-challenge.{domain}` bound to the claiming site) the reconciler resolves,
+> then **atomically transfers** the domain (clear the old owner's `customDomain`, set the new one's,
+> keep the Vercel attachment, revalidate both, notify the displaced owner). Keep the `unique`
+> constraint on `site.customDomain` — claims live in their own table so the incumbent keeps serving
+> until the verified flip. Open policy call: whether a *live, verified* domain can be claimed away,
+> or only a stale/pending one.
+
 ---
 
 ## 3. Content Pipeline (Git Sync)

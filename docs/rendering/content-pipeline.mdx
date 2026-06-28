@@ -137,7 +137,7 @@ cache header so the host CDN edge-caches it.
 <Note>
   Proxying works transparently on custom domains because the page's hostname and the asset's
   hostname are independent — both resolve to our origin as same-origin `/img/…`, whether the
-  docs live on `{slug}.papervine.io` or a tenant's own `docs.acme.com`, so there is never a
+  docs live on `{slug}.papervine.io` or a tenant's own `docs.example.com`, so there is never a
   CORS step. Serving assets directly from a dedicated bucket-backed host is a possible future
   optimization, not required at launch.
 </Note>

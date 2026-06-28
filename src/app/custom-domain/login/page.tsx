@@ -9,7 +9,7 @@ import {
 import { ReaderLoginCard } from "@/components/reader/ReaderLoginCard";
 import { DevReaderSignIn } from "@/components/reader/DevReaderSignIn";
 
-// Reader sign-in for a gated site reached via its vanity host (docs.acme.com/login,
+// Reader sign-in for a gated site reached via its vanity host (docs.example.com/login,
 // rewritten here by middleware). Static segment, so it wins over the custom-domain
 // [[...path]] catch-all and renders outside renderTenantDocs (not self-gated). Root
 // hosting only for now — subpath mode ({domain}/docs) login is a follow-up.

@@ -80,7 +80,7 @@ import * as jose from "jose";
 
 const key = await jose.importPKCS8(PAPERVINE_PRIVATE_KEY, "EdDSA");
 const token = await new jose.SignJWT({
-  host: "docs.acme.com",          // must equal the docs domain
+  host: "docs.example.com",          // must equal the docs domain
   expiresAt: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 7, // 1 week
   groups: ["admin"],
 })
@@ -89,7 +89,7 @@ const token = await new jose.SignJWT({
   .sign(key);
 
 // The token goes in the URL hash, never a query param.
-res.redirect(`https://docs.acme.com/login/jwt-callback?redirect=${dest}#${token}`);
+res.redirect(`https://docs.example.com/login/jwt-callback?redirect=${dest}#${token}`);
 ```
 
 Because verification needs only the **public** key — never a shared secret — a leak of

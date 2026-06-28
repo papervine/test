@@ -37,7 +37,7 @@ describe("isPlatformHost", () => {
     expect(isPlatformHost(null)).toBe(true);
   });
   it("is false for tenant vanity domains (custom-domain candidates)", () => {
-    expect(isPlatformHost("docs.acme.com")).toBe(false);
+    expect(isPlatformHost("docs.example.com")).toBe(false);
     expect(isPlatformHost("help.example.io")).toBe(false);
   });
 });

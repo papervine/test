@@ -3,16 +3,16 @@ import { parseCustomDomain } from "@/lib/custom-domain";
 
 describe("parseCustomDomain", () => {
   it("normalizes scheme, case, path, port and trailing dot to a bare host", () => {
-    expect(parseCustomDomain("docs.acme.com")).toEqual({ ok: true, domain: "docs.acme.com" });
-    expect(parseCustomDomain("https://Docs.Acme.com/guides/intro")).toEqual({
+    expect(parseCustomDomain("docs.example.com")).toEqual({ ok: true, domain: "docs.example.com" });
+    expect(parseCustomDomain("https://Docs.Example.com/guides/intro")).toEqual({
       ok: true,
-      domain: "docs.acme.com",
+      domain: "docs.example.com",
     });
-    expect(parseCustomDomain("  http://docs.acme.com:443/  ")).toEqual({
+    expect(parseCustomDomain("  http://docs.example.com:443/  ")).toEqual({
       ok: true,
-      domain: "docs.acme.com",
+      domain: "docs.example.com",
     });
-    expect(parseCustomDomain("docs.acme.com.")).toEqual({ ok: true, domain: "docs.acme.com" });
+    expect(parseCustomDomain("docs.example.com.")).toEqual({ ok: true, domain: "docs.example.com" });
   });
 
   it("rejects empty / malformed input", () => {
@@ -20,7 +20,7 @@ describe("parseCustomDomain", () => {
     expect(parseCustomDomain("   ").ok).toBe(false);
     expect(parseCustomDomain("not a domain").ok).toBe(false);
     expect(parseCustomDomain("acme").ok).toBe(false); // single label, not fully-qualified
-    expect(parseCustomDomain("-bad.acme.com").ok).toBe(false); // leading hyphen
+    expect(parseCustomDomain("-bad.example.com").ok).toBe(false); // leading hyphen
   });
 
   it("refuses Papervine-owned hosts", () => {
