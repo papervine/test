@@ -11,8 +11,9 @@ import { withBase } from "./url-base";
 export type PageAccess = (frontmatter: PageFrontmatter) => boolean;
 const ALLOW_ALL: PageAccess = () => true;
 
-/** Serializable nav tree handed to the client Sidebar. */
-export type NavLeaf = { title: string; href: string };
+/** Serializable nav tree handed to the client Sidebar. `method` is set only for OpenAPI
+ *  operation leaves, so the sidebar can render a colored HTTP-method badge beside them. */
+export type NavLeaf = { title: string; href: string; method?: string };
 export type NavNode = { group: string; icon?: string; items: (NavLeaf | NavNode)[] };
 export type NavSection = {
   tab?: string;
@@ -71,6 +72,7 @@ async function openapiLeaves(div: Division, canAccess: PageAccess): Promise<(Nav
   const leafFor = (op: (typeof ops)[number]): NavLeaf => ({
     title: op.summary ?? `${op.method} ${op.path}`,
     href: "/" + op.slug,
+    method: op.method,
   });
 
   if (!Array.isArray(div.pages)) return ops.map(leafFor);

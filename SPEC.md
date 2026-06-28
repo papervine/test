@@ -11,7 +11,7 @@ An open-source, multi-tenant documentation platform — a faithful clone of [the
 ## 1. Vision & Principles
 
 - **Docs-as-code.** Source of truth is MDX + `docs.json` in the user's Git repo. The platform is a renderer + control plane, never the source of truth.
-- **Multi-tenant from day one.** A single app instance serves all customer doc sites, addressable by subdomain (`acme.papervine.io`) and custom domain (`docs.acme.com`).
+- **Multi-tenant from day one.** A single app instance serves all customer doc sites, addressable by subdomain (`acme.papervine.io`) and custom domain (`docs.example.com`).
 - **`docs.json`-compatible.** Adopt the incumbent's `docs.json` schema so existing docs.json projects migrate with minimal changes. This is our primary adoption hook.
 - **Runtime rendering, no content at build time.** Like the incumbent, the deployed app has no tenant content baked in. Content is fetched + rendered on demand (with aggressive caching). New deploys don't require rebuilding every tenant.
 - **Fast by default.** React Server Components, edge caching, minimal client JS.
@@ -49,7 +49,7 @@ An open-source, multi-tenant documentation platform — a faithful clone of [the
                                     ▼
 ┌──────────────────────────────────────────────────────────────────┐
 │            Render Plane — single Next.js app (multi-tenant)         │
-│  Request: docs.acme.com/guides/intro                                │
+│  Request: docs.example.com/guides/intro                                │
 │   1. Resolve host → tenant (middleware)                             │
 │   2. Load tenant docs.json + page bundle from cache/store           │
 │   3. Render RSC: nav tree + MDX + components                        │
@@ -90,7 +90,12 @@ from a page) and the motion leads the eye up to the headline. **Pure SVG + CSS**
 in `platform.css`, `.db-vine*`), so the landing stays a server component — no JS ships — and
 it's masked like the grid and built from the same blue→violet brand gradient.
 `prefers-reduced-motion` collapses it to the fully-grown vine at rest. Auth pages keep the
-grid (`"full"`). Smoke asserts the landing renders `db-vine` and not `db-grid`.
+grid (`"full"`). Behind the vines, `SproutField` lays a whisper-faint, full-viewport bed of
+tiny seedlings that grow → hold → wither → regrow on staggered loops (a jittered, seeded
+grid — deterministic, no `Math.random`, so SSR is stable; keyed off `--ink-rgb` like the
+grid, so it's theme-adaptive and stays barely-there) — ambient "little things growing"
+texture in place of the flat grid. Smoke asserts the landing renders `db-vine` + `pv-sprouts`
+and not `db-grid`.
 
 **UI primitives: shadcn/ui, mapped onto `.db` tokens.** The Control-Plane uses
 [shadcn/ui](https://ui.shadcn.com) for its component primitives (`src/components/ui/`,
@@ -156,7 +161,7 @@ docs renderer. A `<EnvBadge>` (top-right, non-prod only — `local`/`preview`, h
 Next.js **middleware** (`src/middleware.ts`) inspects the `Host` header and rewrites
 internally to `/sites/[tenant]/[...slug]`:
 - `*.papervine.io` subdomain → tenant by **slug** (`resolveTenantSlug`, `src/lib/tenant-host.ts`) — **shipped**.
-- custom domain (`docs.acme.com`) → tenant by **host** (`site.customDomain`, unique) — **shipped**. Owners connect/remove a domain and pick root vs `/docs` hosting at Settings → Domain setup (`customDomainSubpath`); connecting attaches the host to the Vercel project so its per-host cert issues (`vercel-domains.ts`, env-gated — see §2 → Custom domains), and a live check (`GET {domain}/api/site-identity`) flips the badge to Connected and stamps `customDomainVerifiedAt`.
+- custom domain (`docs.example.com`) → tenant by **host** (`site.customDomain`, unique) — **shipped**. Owners connect/remove a domain and pick root vs `/docs` hosting at Settings → Domain setup (`customDomainSubpath`); connecting attaches the host to the Vercel project so its per-host cert issues (`vercel-domains.ts`, env-gated — see §2 → Custom domains), and a live check (`GET {domain}/api/site-identity`) flips the badge to Connected and stamps `customDomainVerifiedAt`.
 - apex / `www` / reserved labels → the platform landing + control plane, never a tenant.
 
 Keep the DB **out of edge middleware**: middleware classifies by suffix only (`isPlatformHost`).
@@ -207,7 +212,7 @@ the tenant's, not the platform's).
 
 **Custom-domain gap in the above (fixed 2026-06-26).** `requestContentSource()` resolved the
 tenant from `x-papervine-site` / `resolveTenantSlug(host)` — but a **custom domain**
-(`doc.acme.com`) yields neither (middleware forwards the raw Host as `x-papervine-host`, and
+(`doc.example.com`) yields neither (middleware forwards the raw Host as `x-papervine-host`, and
 the slug resolvers return null for a non-papervine host). So on a custom domain the **root
 layout** got a null source and primed the React-`cache()`'d `loadConfig()` with the **default**
 content — re-triggering the exact memoization bug above, *only on custom domains*: pages read
@@ -236,7 +241,7 @@ without it, search would index nothing for such a source. Regression guards:
 `tests/unit/search-nav-fallback.test.ts` (nav fallback) and a search-scoping case in
 `tests/e2e/tenant-render.spec.ts`.
 
-### Custom domains (BYO `docs.acme.com`)
+### Custom domains (BYO `docs.example.com`)
 
 Two **independent** domain systems — don't conflate them:
 
@@ -249,9 +254,9 @@ Two **independent** domain systems — don't conflate them:
    cert bug). Moving nameservers requires re-creating non-platform records in Vercel DNS —
    notably Namecheap email-forwarding **MX + SPF** — or inbound mail breaks.
 
-2. **`docs.acme.com` (customer's domain).** Lives under the **customer's** nameservers,
+2. **`docs.example.com` (customer's domain).** Lives under the **customer's** nameservers,
    which we never control, so the wildcard trick can't apply — each custom domain needs its
-   **own** cert. Customer adds a `CNAME docs.acme.com → {branded target}` (apex → `A`,
+   **own** cert. Customer adds a `CNAME docs.example.com → {branded target}` (apex → `A`,
    can't CNAME); we attach the domain to the project; the platform issues a per-host cert via
    HTTP-01 (no nameserver change from the customer); we poll until verified; our middleware
    maps host → site. **Why a branded target, not `cname.vercel-dns.com` directly:** the branded
@@ -596,7 +601,7 @@ already get most of the CDN win, and the bucket stays **private with no CORS**.
 - **Why this works on custom domains:** the page's hostname and the asset's hostname
   are independent. Today both are our app's origin (same-origin `/img/…`), so it works
   transparently whether the docs are on `{slug}.papervine.io` or a tenant's own
-  `docs.acme.com` — no CORS ever.
+  `docs.example.com` — no CORS ever.
 - **Scale-up (deferred, 2026-06-09):** when Vercel function invocations / egress on
   assets show up as cost, serve assets **directly from R2** via a dedicated asset host
   — `assets.papervine.io`, a *Cloudflare custom domain bound to the bucket* (DNS →
@@ -739,6 +744,34 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 > Verified in-browser on the synced `papervine/starter` site (Widgets API, four operations).
 > The lingering `PAPERVINE_CONTENT`/`CONTENT_DIR` concept is legitimate (it's how `fsSource`
 > roots a local preview); the bug was code reaching past the source abstraction to touch it.
+
+> **Status — reference page reshaped into a incumbent-style three-pane (2026-06-28).** The
+> endpoint page now matches the incumbent's API reference layout: (1) **left-nav method badges** —
+> each operation leaf carries its HTTP method (`NavLeaf.method`, stamped in `openapiLeaves`) and
+> the sidebar renders a colored verb beside it, sharing one `method-colors.ts` map with the
+> endpoint header so a `GET` reads the same green everywhere; (2) a **language-tabbed request
+> panel** (cURL / JavaScript / Python) plus a **per-status response panel**, both highlighted
+> server-side with Shiki (`highlight.ts`, a standalone `github-dark` highlighter — the right
+> column is always dark, the incumbent's model — kept off the client so the highlighter never ships
+> in the bundle); (3) a read-only right rail (`ApiPlayground.tsx`) showing those samples + a
+> per-status response tab. The `papervine/starter` Widgets spec points `servers` at an echo
+> (`httpbin.org/anything`) so the live demo returns a real 200 you can see.
+
+> **Status — "Try it" promoted to a full modal playground (2026-06-28).** The interactive
+> playground moved off the right rail onto a **green trigger on the center endpoint bar** that
+> opens a modal (`ApiTryItModal.tsx`, the one client island; portaled to `<body>`, Esc/backdrop
+> close, scroll-locked), matching the incumbent's full-screen Try-it. The modal **encompasses every
+> OpenAPI input class**: an editable URL (server base + path), and collapsible **Authorization /
+> Headers / Path / Query / Body** sections. Auth required extending the `Operation` model with a
+> resolved `auth: AuthScheme[]` (`resolveAuth` reads `components.securitySchemes` against the
+> op's `security`, falling back to the root): basic → username + password, bearer/oauth2 → a
+> token, apiKey → a header/query value — folded into the request at send time (basic → base64
+> `Authorization`, bearer → `Bearer …`, apiKey → its header/query). The right half shows a
+> **live** request sample (cURL / JS / Python, regenerated from the inputs and lightly colorized
+> client-side — no Shiki on the client) and the response (status + colorized JSON). An operation
+> switcher (top-left) lists sibling ops on the same spec. `fetch` is real; CORS still degrades to
+> an inline notice. Verified in-browser on `starter` (bearer-auth section, live send echoing
+> `color=red`, 200).
 
 ---
 
@@ -1205,7 +1238,7 @@ domains/§2, workflows/§10.2), not new capability. Layout, top to bottom:
   {relative} by {avatar} {name}** (from the latest `deployment`), and quick actions:
   **Sync** (trigger a manual sync — same path as §10 Projects "manual sync") and **Open
   editor** (→ §10 web-editor / §9.2 shared authoring backend). Below: **Domain**
-  (`docs.acme.com ↗`, §2 custom domains), the **repo** (`org/repo ↗`), and the **branch**.
+  (`docs.example.com ↗`, §2 custom domains), the **repo** (`org/repo ↗`), and the **branch**.
 - **Workflow upsell banner** — a dismissible CTA ("Keep your site up to date, automatically
   · Set up your first Workflow in minutes" → **Start setup**) linking into **Automate ›
   Workflows (§10.2)**. Shows until the org has configured a workflow.

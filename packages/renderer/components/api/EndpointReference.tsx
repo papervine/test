@@ -1,15 +1,11 @@
 import clsx from "clsx";
-import { sampleFromSchema, type Operation, type Schema } from "../../lib/openapi";
+import { apiOperations, sampleFromSchema, type Operation, type Param, type Schema } from "../../lib/openapi";
+import { methodColor } from "../../lib/method-colors";
+import { highlightToHtml } from "../../lib/highlight";
 import { ApiField, FieldSection } from "../mdx/ApiField";
 import { Expandable } from "../mdx/Expandable";
-
-const METHOD_COLORS: Record<string, string> = {
-  GET: "bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300",
-  POST: "bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300",
-  PUT: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  PATCH: "bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300",
-  DELETE: "bg-red-100 text-red-700 dark:bg-red-950 dark:text-red-300",
-};
+import { ApiPlayground, type CodeSample, type ResponseExample } from "./ApiPlayground";
+import { ApiTryItModal, type TryItAuth, type TryItParam, type TryItSibling } from "./ApiTryItModal";
 
 function typeLabel(schema?: Schema): string | undefined {
   if (!schema) return undefined;
@@ -64,49 +60,140 @@ function SchemaFields({ schema }: { schema?: Schema }) {
   );
 }
 
-/** Dark code panel (request/response example) for the sticky right column. */
-function CodePanel({ label, badge, code }: { label: string; badge?: string; code: string }) {
-  return (
-    <div className="overflow-hidden rounded-xl border border-zinc-800 bg-zinc-900 text-zinc-100">
-      <div className="flex items-center justify-between border-b border-zinc-800 px-4 py-2">
-        <span className="text-xs font-medium text-zinc-400">{label}</span>
-        {badge && (
-          <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[0.65rem] font-medium text-zinc-300">
-            {badge}
-          </span>
-        )}
-      </div>
-      <pre className="m-0 overflow-x-auto bg-transparent p-4 text-xs leading-relaxed">
-        <code>{code}</code>
-      </pre>
-    </div>
-  );
+// ---- Request code samples (cURL / JavaScript / Python) ----
+// Generated from the spec and Shiki-highlighted server-side, then handed to the client
+// playground as HTML. The auth header (if the spec declares one) shows a placeholder token.
+
+function authHeader(op: Operation): string | undefined {
+  const p = op.parameters.find((x) => x.in === "header" && /authorization/i.test(x.name));
+  return p ? "Bearer <token>" : undefined;
+}
+
+function bodyObject(op: Operation): unknown | undefined {
+  return op.requestBody ? sampleFromSchema(op.requestBody) : undefined;
 }
 
 function curlSample(op: Operation): string {
   const url = `${op.baseUrl}${op.path}`;
-  const lines = [`curl -X ${op.method} ${url}`];
-  const auth = op.parameters.find((p) => p.in === "header" && /authorization/i.test(p.name));
-  if (auth) lines[lines.length - 1] += " \\";
-  if (auth) lines.push(`  -H "Authorization: Bearer $TOKEN"${op.requestBody ? " \\" : ""}`);
-  if (op.requestBody) {
-    if (!auth) lines[lines.length - 1] += " \\";
-    lines.push('  -H "Content-Type: application/json" \\');
-    lines.push(`  -d '${JSON.stringify(sampleFromSchema(op.requestBody), null, 2)}'`);
+  const auth = authHeader(op);
+  const body = bodyObject(op);
+  const parts = [`curl -X ${op.method} ${url}`];
+  if (auth) parts.push(`  -H "Authorization: ${auth}"`);
+  if (body !== undefined) {
+    parts.push(`  -H "Content-Type: application/json"`);
+    parts.push(`  -d '${JSON.stringify(body, null, 2)}'`);
   }
-  return lines.join("\n");
+  return parts.join(" \\\n");
 }
 
-export function EndpointReference({ op, baseUrl }: { op: Operation; baseUrl: string }) {
+function jsSample(op: Operation): string {
+  const url = `${op.baseUrl}${op.path}`;
+  const auth = authHeader(op);
+  const body = bodyObject(op);
+  const headers: string[] = [];
+  if (auth) headers.push(`    "Authorization": "${auth}",`);
+  if (body !== undefined) headers.push(`    "Content-Type": "application/json",`);
+  const opts = [`  method: "${op.method}",`];
+  if (headers.length) opts.push(`  headers: {\n${headers.join("\n")}\n  },`);
+  if (body !== undefined) opts.push(`  body: JSON.stringify(${JSON.stringify(body, null, 2)}),`);
+  return (
+    `const response = await fetch("${url}", {\n${opts.join("\n")}\n});\n` +
+    `const data = await response.json();`
+  );
+}
+
+function pythonSample(op: Operation): string {
+  const url = `${op.baseUrl}${op.path}`;
+  const auth = authHeader(op);
+  const body = bodyObject(op);
+  const args = [`    "${url}",`];
+  if (auth) args.push(`    headers={"Authorization": "${auth}"},`);
+  if (body !== undefined) args.push(`    json=${JSON.stringify(body, null, 2)},`);
+  return (
+    `import requests\n\n` +
+    `response = requests.${op.method.toLowerCase()}(\n${args.join("\n")}\n)\n` +
+    `print(response.json())`
+  );
+}
+
+function paramExample(p: Param): string | undefined {
+  const s = p.schema;
+  if (!s) return undefined;
+  if (s.example !== undefined) return String(s.example);
+  if (Array.isArray(s.enum) && s.enum.length) return String(s.enum[0]);
+  return undefined;
+}
+
+export async function EndpointReference({ op, baseUrl }: { op: Operation; baseUrl: string }) {
   const groups: { title: string; params: typeof op.parameters }[] = [
     { title: "Path parameters", params: op.parameters.filter((p) => p.in === "path") },
     { title: "Query parameters", params: op.parameters.filter((p) => p.in === "query") },
     { title: "Headers", params: op.parameters.filter((p) => p.in === "header") },
   ];
+
+  // Request samples (highlighted server-side) + response examples per status.
+  const samples: CodeSample[] = await Promise.all(
+    (
+      [
+        { label: "cURL", code: curlSample(op), lang: "bash" as const },
+        { label: "JavaScript", code: jsSample(op), lang: "javascript" as const },
+        { label: "Python", code: pythonSample(op), lang: "python" as const },
+      ]
+    ).map(async (s) => ({ label: s.label, html: await highlightToHtml(s.code, s.lang) })),
+  );
+
+  // One response tab per documented status (2xx first); each is a Shiki-highlighted JSON sample.
+  const ordered = [...op.responses].sort((a, b) =>
+    a.status.startsWith("2") === b.status.startsWith("2") ? 0 : a.status.startsWith("2") ? -1 : 1,
+  );
+  const responses: ResponseExample[] = await Promise.all(
+    (ordered.length ? ordered : [{ status: "200", schema: undefined as Schema | undefined }]).map(
+      async (r) => ({
+        status: r.status,
+        html: await highlightToHtml(
+          r.schema ? JSON.stringify(sampleFromSchema(r.schema), null, 2) : "{}",
+          "json",
+        ),
+      }),
+    ),
+  );
+
+  const tryItParams: TryItParam[] = op.parameters.map((p) => ({
+    name: p.name,
+    in: p.in === "cookie" ? "header" : p.in,
+    required: p.required,
+    example: paramExample(p),
+    type: typeLabel(p.schema),
+    description: p.description,
+  }));
+  const tryItAuth: TryItAuth[] = op.auth.map((a) => ({
+    key: a.key,
+    type: a.type,
+    in: a.in,
+    name: a.name,
+    description: a.description,
+  }));
+  const bodySample =
+    op.requestBody !== undefined
+      ? JSON.stringify(sampleFromSchema(op.requestBody), null, 2)
+      : undefined;
   const ok = op.responses.find((r) => r.status.startsWith("2")) ?? op.responses[0];
-  const responseExample = ok?.schema
-    ? JSON.stringify(sampleFromSchema(ok.schema), null, 2)
-    : "{}";
+
+  // Sibling operations on the same spec feed the modal's operation switcher.
+  const siblings: TryItSibling[] = (await apiOperations(op.specPath))
+    .filter((o) => o.slug !== op.slug)
+    .map((o) => ({ slug: o.slug, method: o.method, summary: o.summary ?? `${o.method} ${o.path}` }));
+
+  const tryItProps = {
+    method: op.method,
+    baseUrl,
+    path: op.path,
+    summary: op.summary ?? `${op.method} ${op.path}`,
+    params: tryItParams,
+    auth: tryItAuth,
+    bodySample,
+    siblings,
+  };
 
   return (
     <>
@@ -114,31 +201,19 @@ export function EndpointReference({ op, baseUrl }: { op: Operation; baseUrl: str
         {op.tag && <div className="mb-2 text-sm font-semibold text-primary">{op.tag}</div>}
         <h1 className="!mb-3">{op.summary ?? `${op.method} ${op.path}`}</h1>
 
-        {/* Endpoint bar: method + full URL + Try it */}
+        {/* Endpoint bar: method + full URL + the Try it trigger (opens the modal playground) */}
         <div className="not-prose mb-6 flex flex-wrap items-center gap-2 rounded-xl border border-zinc-200 p-2 dark:border-zinc-800">
-          <span
-            className={clsx(
-              "rounded-md px-2 py-1 text-xs font-bold",
-              METHOD_COLORS[op.method] ?? "bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300",
-            )}
-          >
+          <span className={clsx("rounded-md px-2 py-1 text-xs font-bold", methodColor(op.method))}>
             {op.method}
           </span>
           <code className="min-w-0 flex-1 truncate text-sm text-zinc-600 dark:text-zinc-300">
             {baseUrl}
             {op.path}
           </code>
-          <button
-            type="button"
-            className="rounded-md bg-primary px-3 py-1 text-sm font-semibold text-white hover:opacity-90"
-          >
-            Try it
-          </button>
+          <ApiTryItModal {...tryItProps} />
         </div>
 
-        {op.description && (
-          <p className="text-zinc-600 dark:text-zinc-400">{op.description}</p>
-        )}
+        {op.description && <p className="text-zinc-600 dark:text-zinc-400">{op.description}</p>}
 
         {groups.map(
           (g) =>
@@ -171,11 +246,10 @@ export function EndpointReference({ op, baseUrl }: { op: Operation; baseUrl: str
         )}
       </article>
 
-      {/* Sticky right column: request + response code examples (incumbent layout) */}
+      {/* Sticky right column: read-only language-tabbed request + response tabs (incumbent layout) */}
       <aside className="hidden w-[26rem] shrink-0 lg:block">
-        <div className="sticky top-24 space-y-4">
-          <CodePanel label="Request" badge="cURL" code={curlSample(op)} />
-          <CodePanel label="Response" badge={ok?.status ?? "200"} code={responseExample} />
+        <div className="sticky top-24">
+          <ApiPlayground samples={samples} responses={responses} />
         </div>
       </aside>
     </>

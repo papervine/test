@@ -24,6 +24,17 @@ export type Param = {
   description?: string;
   schema?: Schema;
 };
+// A resolved security requirement for an operation (from `components.securitySchemes` + the
+// operation's `security`, falling back to the root `security`). The Try-it playground turns each
+// into the right input(s): basic → username + password, bearer/oauth2 → a token, apiKey → a
+// single header/query value. This is how the playground "encompasses" auth, not just params.
+export type AuthScheme = {
+  key: string; // the scheme's name in components.securitySchemes
+  type: "basic" | "bearer" | "apiKey" | "oauth2" | "other";
+  in?: "header" | "query" | "cookie"; // apiKey location
+  name?: string; // apiKey header/query name
+  description?: string;
+};
 export type Operation = {
   slug: string; // URL slug for the generated page
   method: string; // GET, POST, …
@@ -35,6 +46,7 @@ export type Operation = {
   parameters: Param[];
   requestBody?: Schema;
   responses: { status: string; description?: string; schema?: Schema }[];
+  auth: AuthScheme[];
   baseUrl: string;
   specPath: string;
 };
@@ -65,6 +77,42 @@ const loadSpec = cache(async (specPath: string): Promise<Schema | null> => {
   const { schema } = await dereference(upgraded.specification ?? parsed);
   return (schema as Schema) ?? null;
 });
+
+/** Resolve an operation's security requirement into the auth inputs the playground renders.
+ *  Reads `components.securitySchemes`, preferring the op's `security` over the spec root's. */
+function resolveAuth(schema: Schema | null, op: Record<string, unknown>): AuthScheme[] {
+  const schemes = (schema?.components as { securitySchemes?: Record<string, Record<string, unknown>> })
+    ?.securitySchemes;
+  if (!schemes) return [];
+  const requirement = (op.security ?? schema?.security) as
+    | Record<string, unknown>[]
+    | undefined;
+  if (!Array.isArray(requirement) || requirement.length === 0) return [];
+  // Each requirement object ANDs its keys; take the first requirement's schemes (the common case).
+  const keys = Object.keys(requirement[0] ?? {});
+  return keys.flatMap((key): AuthScheme[] => {
+    const s = schemes[key];
+    if (!s) return [];
+    const type = s.type as string;
+    const scheme = (s.scheme as string | undefined)?.toLowerCase();
+    const description = s.description as string | undefined;
+    if (type === "http" && scheme === "basic") return [{ key, type: "basic", description }];
+    if (type === "http") return [{ key, type: "bearer", description }]; // bearer + other http
+    if (type === "apiKey")
+      return [
+        {
+          key,
+          type: "apiKey",
+          in: (s.in as AuthScheme["in"]) ?? "header",
+          name: (s.name as string) ?? key,
+          description,
+        },
+      ];
+    if (type === "oauth2" || type === "openIdConnect")
+      return [{ key, type: "oauth2", description }];
+    return [{ key, type: "other", description }];
+  });
+}
 
 /** Extract the ordered list of operations from a spec. Cached per spec path. */
 export const apiOperations = cache(async (specPath: string): Promise<Operation[]> => {
@@ -107,6 +155,7 @@ export const apiOperations = cache(async (specPath: string): Promise<Operation[]
         parameters: params,
         requestBody,
         responses,
+        auth: resolveAuth(schema, op),
         baseUrl,
         specPath,
       });

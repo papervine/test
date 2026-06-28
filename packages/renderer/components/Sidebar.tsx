@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import clsx from "clsx";
 import { ChevronRight } from "lucide-react";
 import { LucideIcon } from "./LucideIcon";
+import { methodAbbrev, methodTextColor } from "../lib/method-colors";
 import type { NavLeaf, NavNode, NavSection } from "../lib/nav";
 
 function isLeaf(n: NavLeaf | NavNode): n is NavLeaf {
@@ -23,13 +24,23 @@ function Leaf({ node }: { node: NavLeaf }) {
     <Link
       href={node.href}
       className={clsx(
-        "block rounded-[var(--db-radius)] px-3 py-1.5 text-sm transition-colors",
+        "flex items-center gap-2 rounded-[var(--db-radius)] px-3 py-1.5 text-sm transition-colors",
         active
           ? "bg-zinc-100 font-medium text-primary dark:bg-white/10"
           : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200",
       )}
     >
-      {node.title}
+      <span className="min-w-0 flex-1 truncate">{node.title}</span>
+      {node.method && (
+        <span
+          className={clsx(
+            "shrink-0 font-mono text-[0.625rem] font-bold uppercase tracking-wider",
+            methodTextColor(node.method),
+          )}
+        >
+          {methodAbbrev(node.method)}
+        </span>
+      )}
     </Link>
   );
 }

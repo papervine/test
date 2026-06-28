@@ -8,9 +8,10 @@ reference: one page per operation, request/response schema docs, runnable reques
 copy-paste code samples in several languages.
 
 <Note>
-  The API playground is part of the v1 feature set. The generation pipeline and component
-  output described here are the target shape; treat live "Try it" execution and the optional
-  request proxy as the maturing edges.
+  Generation, the three-pane layout, and an interactive **Try it** all work today. The optional
+  server-side request proxy (for CORS and secret injection) is the maturing edge — until it
+  lands, "Try it" sends the request straight from the browser, so it succeeds against any API
+  that permits cross-origin calls and shows a friendly notice when one doesn't.
 </Note>
 
 ## Input
@@ -45,10 +46,43 @@ Because generation happens at sync time, the reference is just more pages in you
 searchable, themeable, and indexed for the [AI assistant](/features/ai-assistant) like any
 other content.
 
+Each operation also gets a **colored HTTP-method badge** in the left sidebar (a green `GET`,
+a blue `POST`, a red `DEL`), so readers can scan the API surface at a glance.
+
+## The three-pane layout
+
+An endpoint page mirrors the familiar API-reference shape:
+
+- The **center column** documents the operation — method + URL, description, and the parameter
+  and request/response schema fields.
+- The **right column** is a sticky code panel with **language tabs** — cURL, JavaScript, and
+  Python samples, syntax-highlighted — above a response panel with one tab per documented
+  status code.
+
 ## Try it
 
-Each operation page carries an interactive **"Try it"** panel: the reader fills in params,
-headers, and body, sends the request, and sees the live response inline.
+A green **Try it** button sits on the endpoint bar in the center column. It opens a full-screen
+playground that covers **every kind of input an OpenAPI operation can take**, organized into
+collapsible sections:
+
+- **Authorization** — derived from the spec's security schemes: HTTP Basic shows username +
+  password fields, Bearer (and OAuth2) a token field, and an API key its header or query value.
+  Whatever you enter is folded into the request the right way (Basic base64, `Bearer …`, or the
+  named header/query) at send time.
+- **Headers**, **Path**, and **Query** — one input per parameter, pre-filled from the spec's
+  examples, with the parameter's type and description inline.
+- **Body** — a JSON editor for write operations, seeded from the request schema.
+
+The top bar carries an **editable URL** (server base + path) and an operation switcher for
+jumping to sibling endpoints. The right half shows a **live** request sample — cURL, JavaScript,
+or Python, regenerated as you type — and, once you press **Send**, the response status and JSON.
+
+<Note>
+  "Try it" sends straight from the reader's browser, so the API must allow cross-origin (CORS)
+  requests for a live call to succeed; otherwise the response panel shows a friendly notice and
+  you can copy the request sample instead. The optional [request proxy](#cors-and-the-request-proxy)
+  is what removes that constraint.
+</Note>
 
 ### Auth methods
 
