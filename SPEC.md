@@ -710,9 +710,29 @@ The `navigation` field is **one recursive tree** — tabs contain groups/anchors
 Each preset is a small token bundle (font stacks, corner radius, …) applied as CSS variables
 on `<html data-theme="…">`; unknown names fall back to `mint`. `appearance` controls
 light/dark — `{ "default": "light" | "dark" | "system", "strict": boolean }`: `default` sets
-the initial mode (a stored user toggle wins; `system` follows the OS), and `strict` (later)
-hides the light/dark switcher. `colors` (`primary`/`light`/`dark`) drives the brand accent
-independently of the theme.
+the initial mode (a stored user toggle wins; `system` follows the OS), and `strict` hides the
+light/dark switcher. `colors` (`primary`/`light`/`dark`) drives the brand accent independently
+of the theme.
+
+> **Landed (2026-06-28) — `favicon` + `appearance.strict` are now applied, not just parsed.**
+> The `docs.json` schema always *tolerated* these fields (warn-don't-throw), but two were
+> parsed and then ignored. Now:
+> - **`favicon`** is emitted as `<link rel="icon">` from the **root layout's `<head>`**, which
+>   already loads the per-request tenant config (so it covers apex docs + every tenant mode).
+>   A `{ light, dark }` pair emits one link per `prefers-color-scheme` (the incumbent's convention);
+>   a single string emits one. Paths resolve through the tenant asset proxy via a new
+>   `requestAssetBase()` (mirrors `requestContentSource`'s resolution, gated on a non-null
+>   source so the slug is guaranteed — the path must match the config source or it 404s).
+> - **`appearance.strict`** hides the `<ThemeToggle>` (Navbar) **and** makes the pre-paint
+>   theme script ignore the stored choice, pinning the mode to `default`. The pre-paint script
+>   and the toggle-visibility rule now share one pure module (`appearance.ts`,
+>   `appearanceInitScript` + `themeToggleHidden`) so they can't drift and are unit-tested.
+>
+> Verified: smoke home check asserts the favicon links + toggle; unit tests cover the script
+> + predicate; in-browser the favicon links resolve through `/api/tenant-asset/…` (200,
+> `image/*`) and a temporarily-strict config dropped the toggle. Real docs.json repo (string
+> favicon) + dogfood docs crawl clean (0 × HTTP 500). Still unapplied (parsed-only):
+> `fonts`, `icons`, `background`, `styling`, `logo.href`, `thumbnails`.
 
 ---
 

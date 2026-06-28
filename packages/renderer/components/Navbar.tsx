@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "./ThemeToggle";
 import type { DocsConfig } from "../lib/config";
+import { themeToggleHidden } from "../lib/appearance";
 import { withBase } from "../lib/url-base";
 
 /**
@@ -87,7 +88,8 @@ export function Navbar({
               {primary.label}
             </Link>
           )}
-          <ThemeToggle />
+          {/* `appearance.strict` locks the site to its default mode — hide the toggle. */}
+          {!themeToggleHidden(config.appearance) && <ThemeToggle />}
         </div>
       </div>
     </header>

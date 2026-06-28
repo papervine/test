@@ -2,18 +2,25 @@ import type { Metadata } from "next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { platformFontVars } from "@/lib/fonts";
+import type { DocsConfig } from "@papervine/renderer/lib/config";
 import { contentContext, loadConfig } from "@papervine/renderer/lib/content";
-import { requestContentSource } from "@/lib/request-source";
+import { requestContentSource, requestAssetBase } from "@/lib/request-source";
 import { resolveTheme, themeCssVars } from "@papervine/renderer/lib/theme";
+import { appearanceInitScript } from "@papervine/renderer/lib/appearance";
+import { Favicon } from "@papervine/renderer/components/Favicon";
 import { EnvBadge } from "@/components/platform/EnvBadge";
 
 // The root layout renders for every host, including tenant docs. Read config within
-// the request's tenant content source (if any) so the title/theme — and, crucially,
+// the request's tenant content source (if any) so the title/theme/favicon — and, crucially,
 // the per-request React `cache()` entry for loadConfig — come from the same source the
-// page will read, not the default content/ repo. See requestContentSource().
-async function loadRequestConfig() {
+// page will read, not the default content/ repo. See requestContentSource(). `assetBase`
+// comes from the SAME tenant (and only when a source exists), so a tenant favicon path
+// resolves through its asset proxy instead of escaping to the apex.
+async function loadRequestConfig(): Promise<{ config: DocsConfig; assetBase: string }> {
   const src = await requestContentSource();
-  return src ? contentContext.run(src, () => loadConfig()) : loadConfig();
+  if (!src) return { config: await loadConfig(), assetBase: "" };
+  const config = await contentContext.run(src, () => loadConfig());
+  return { config, assetBase: await requestAssetBase() };
 }
 
 // Modern geometric display face for the Papervine wordmark (see <Wordmark>).
@@ -26,17 +33,10 @@ const brandFont = Space_Grotesk({
 });
 
 export async function generateMetadata(): Promise<Metadata> {
-  const config = await loadRequestConfig();
+  const { config } = await loadRequestConfig();
   return {
     title: { default: config.name, template: `%s · ${config.name}` },
   };
-}
-
-// Set the dark class before paint to avoid a flash of the wrong appearance. A
-// stored user choice wins; otherwise we honor docs.json `appearance.default`
-// (light | dark | system) — `system` follows the OS preference.
-function buildThemeScript(defaultAppearance: "light" | "dark" | "system") {
-  return `(function(){try{var d=${JSON.stringify(defaultAppearance)};var s=localStorage.getItem('theme');var m=window.matchMedia('(prefers-color-scheme: dark)').matches;if(s?s==='dark':(d==='dark'||(d==='system'&&m)))document.documentElement.classList.add('dark');}catch(e){}})();`;
 }
 
 // Platform (control-plane) light/dark, independent of the per-tenant docs theme above. Sets
@@ -48,18 +48,19 @@ function buildPlatformThemeScript() {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const config = await loadRequestConfig();
+  const { config, assetBase } = await loadRequestConfig();
 
   const theme = resolveTheme(config.theme);
   const colors = config.colors;
   const themeVars = `:root{--color-primary:${colors.primary};--color-primary-light:${
     colors.light ?? colors.primary
   };--color-primary-dark:${colors.dark ?? colors.primary};${themeCssVars(theme.tokens)};}`;
-  const themeScript = buildThemeScript(config.appearance?.default ?? "light");
+  const themeScript = appearanceInitScript(config.appearance);
 
   return (
     <html lang="en" data-theme={theme.name} suppressHydrationWarning>
       <head>
+        <Favicon favicon={config.favicon} assetBase={assetBase} />
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <script dangerouslySetInnerHTML={{ __html: buildPlatformThemeScript() }} />

@@ -69,3 +69,20 @@ export async function requestContentSource(
   if (opts?.draftBranch) return draftSource(record.id, opts.draftBranch, version);
   return s3Source(record.id, version);
 }
+
+/**
+ * The public asset base for the current request's tenant — the slug-keyed
+ * `/api/tenant-asset/{slug}` proxy that streams the tenant's synced static files (favicon,
+ * logo, images) on ANY host. Empty string on the apex/preview host, where assets are
+ * root-absolute. Mirrors requestContentSource's tenant resolution (subdomain / apex path
+ * `x-papervine-site` / custom-domain Host) so the asset base always matches the config
+ * source. Call it only once you know there IS a tenant (e.g. requestContentSource returned
+ * non-null), so the slug is guaranteed resolvable.
+ */
+export async function requestAssetBase(): Promise<string> {
+  const h = await headers();
+  const slug = h.get("x-papervine-site") ?? resolveTenantSlug(h.get("host"));
+  if (slug) return `/api/tenant-asset/${slug}`;
+  const record = await getSiteByCustomDomain(h.get("x-papervine-host") ?? h.get("host") ?? "");
+  return record ? `/api/tenant-asset/${record.slug}` : "";
+}

@@ -104,7 +104,12 @@ unknown theme name falls back to `mint`.
   theme preset.
 - **`appearance`** controls light/dark: `{ "default": "light" | "dark" | "system", "strict":
   boolean }`. `default` sets the initial mode (a stored reader toggle wins; `system` follows
-  the OS), and `strict` hides the light/dark switcher. The default is light.
+  the OS), and `strict` hides the light/dark switcher *and* pins the mode to `default`,
+  ignoring any stored choice. The default is light.
+- **`favicon`** is emitted as `<link rel="icon">` in the document head. A single path applies
+  everywhere; a `{ "light": …, "dark": … }` pair emits one link per OS `prefers-color-scheme`,
+  so the tab icon tracks light/dark. Favicon paths are served from the site's own assets, the
+  same as logos and images.
 
 ## Related
 

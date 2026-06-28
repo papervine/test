@@ -26,9 +26,15 @@ const nextBin = path.join(PKG_ROOT, "node_modules", ".bin", "next");
 const CHECKS = [
   {
     slug: "",
-    desc: "home renders (object favicon + languages nav + lenient config)",
+    desc: "home renders (favicon links + object favicon + languages nav + lenient config)",
     // theme tokens wired: no `theme` in fixtures → default "mint", token vars injected.
-    include: ["Fixtures Home", "Components &amp; Code", "Guide (md)", 'data-theme="mint"', "--db-radius"],
+    // favicon: fixtures set `{ light, dark }` → a <link rel="icon"> per scheme (apex, so the
+    // path is root-absolute, assetBase empty). appearance is unset → the theme toggle shows.
+    include: [
+      "Fixtures Home", "Components &amp; Code", "Guide (md)", 'data-theme="mint"', "--db-radius",
+      'rel="icon"', 'href="/favicon.ico"', "prefers-color-scheme: dark",
+      'aria-label="Toggle theme"',
+    ],
     exclude: ["Hidden Page"], // hidden:true → not in sidebar
   },
   { slug: "guide", desc: ".md files are served", include: ["PLAIN_MD_MARKER"] },
