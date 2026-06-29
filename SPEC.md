@@ -1750,6 +1750,17 @@ land back on accept); signed-in as the wrong account → switch-account prompt.
 > (`parseInviteEmails`) + smoke + crawl green. Follow-ups: real email (Resend, seam ready),
 > per-invite role picker (v1 invites as `member`).
 
+### 10.9 Settings → General (rename a site)
+
+The **General** surface (`settings/general/`) replaces the placeholder with a single editable
+field — the site's **display name** (`site.name`), the label shown across the dashboard (switcher
++ breadcrumb). Owner/admin only; `setSiteName` validates via the pure, unit-tested
+`normalizeSiteName` (trim, non-empty, ≤100), then busts the cached site row (the name rides it,
+move ①) and `revalidatePath(..., "layout")` so the switcher/breadcrumb update across pages.
+Deliberately *not* editable here: the **slug** (the stable URL id) and the **rendered docs title**
+(from the repo's `docs.json`). Status 2026-06-29: built + browser-verified (rename persists +
+reflects in the switcher); typecheck + unit (`normalizeSiteName`) + smoke + crawl green.
+
 ### 10.x Instant settings navigation (Router-Cache reuse)
 
 The dashboard is a Next App Router SPA: the rail/subnav persist and only the content segment

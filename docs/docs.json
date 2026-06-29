@@ -32,6 +32,7 @@
         "group": "Control plane",
         "pages": [
           "control-plane/overview",
+          "control-plane/general",
           "control-plane/members",
           "control-plane/editor",
           "control-plane/analytics",
