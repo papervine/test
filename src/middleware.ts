@@ -95,6 +95,13 @@ export function middleware(req: NextRequest) {
     ) {
       return syncFlag(NextResponse.next());
     }
+    // Accept-invitation keeps its own bare URL and is reachable signed-OUT (to view it / sign
+    // up) AND signed-IN (you accept WITH a session) — so unlike the auth pages it neither
+    // bounces a signed-in user to the dashboard nor rewrites onto /app. The page handles each
+    // state itself (SPEC §10 invitations).
+    if (pathname === "/accept-invite") {
+      return syncFlag(NextResponse.next());
+    }
     if (isAuthPath(pathname)) {
       // Already logged in? Skip the auth form and go to the dashboard — the way
       // app.example.com/signup bounces a signed-in user straight to their workspace.

@@ -25,5 +25,22 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
   emailAndPassword: { enabled: true },
   trustedOrigins,
-  plugins: [organization(), nextCookies()],
+  plugins: [
+    organization({
+      // Invitation delivery seam (SPEC §10). v1 has NO email infra — the Members settings
+      // action surfaces a shareable accept link directly (Copy-link UI), so a real send isn't
+      // required to invite. This callback just records the link server-side; it's the single
+      // place a real provider (e.g. Resend) slots in later — send `acceptUrl` to `data.email`
+      // with `data.inviter`/`data.organization` for the template. No throw → never blocks the
+      // createInvitation the action awaits.
+      sendInvitationEmail: async (data) => {
+        const origin = process.env.BETTER_AUTH_URL ?? "https://app.papervine.io";
+        const acceptUrl = `${origin}/accept-invite?id=${data.id}`;
+        console.log(
+          `[invite] ${data.email} → ${data.organization.name} (${data.role}) — ${acceptUrl}`,
+        );
+      },
+    }),
+    nextCookies(),
+  ],
 });

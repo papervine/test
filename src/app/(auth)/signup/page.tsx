@@ -1,14 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { signUp } from "@/lib/auth-client";
 import { Button } from "@/components/platform/Button";
 import { Field } from "@/components/platform/Field";
+import { invitedEmailFromUrl, postAuthDest } from "../post-auth-dest";
 
 export default function SignupPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  // Prefill from a `?email=` invite param after mount (not a useState initializer — that runs
+  // during SSR with no `window`, and the client reuses that empty value).
+  useEffect(() => {
+    const invited = invitedEmailFromUrl();
+    if (invited) setEmail(invited);
+  }, []);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -23,9 +30,10 @@ export default function SignupPage() {
       setError(error.message ?? "Sign up failed");
       return;
     }
-    // Hard nav to the app-host root resolver (forwards to onboarding for a brand-new
-    // account with no org yet). A soft push would skip the app-host Host rewrite.
-    window.location.assign("/");
+    // Hard nav to the app-host root resolver (forwards to onboarding for a brand-new account
+    // with no org yet, or to the accept page when an invite is pending). A soft push would
+    // skip the app-host Host rewrite.
+    window.location.assign(postAuthDest());
   }
 
   return (

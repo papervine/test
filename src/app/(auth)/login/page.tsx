@@ -1,13 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { signIn } from "@/lib/auth-client";
 import { Button } from "@/components/platform/Button";
 import { Field } from "@/components/platform/Field";
+import { invitedEmailFromUrl, postAuthDest } from "../post-auth-dest";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
+  // Prefill from a `?email=` invite param after mount (a useState initializer runs during SSR
+  // with no `window`, and the client reuses that empty value).
+  useEffect(() => {
+    const invited = invitedEmailFromUrl();
+    if (invited) setEmail(invited);
+  }, []);
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -22,9 +29,10 @@ export default function LoginPage() {
       setError(error.message ?? "Sign in failed");
       return;
     }
-    // Hard nav to the app-host root resolver — it forwards to the user's first site. A
-    // soft router.push into the Host-rewritten /app mount would skip the rewrite.
-    window.location.assign("/");
+    // Hard nav to the app-host root resolver — it forwards to the user's first site (or the
+    // accept page when an invite is pending). A soft router.push into the Host-rewritten /app
+    // mount would skip the rewrite.
+    window.location.assign(postAuthDest());
   }
 
   return (

@@ -1,0 +1,50 @@
+---
+title: Members
+description: Invite teammates to your organization, manage roles, and revoke access — from the Members settings page.
+---
+
+The **Members** page (**Settings → Members**) manages who can access your organization. Members
+are **organization-scoped**, not per-site: a member of the org can reach every site under it, so
+the page lists everyone in the organization even though it opens from inside a site's settings.
+
+## Roles
+
+Every member has one of three roles:
+
+- **Owner** — full control, including deleting the organization. The creator is the first owner.
+- **Admin** — can manage sites, settings, and members.
+- **Member** — can access the org's sites.
+
+Only **owners and admins** can invite or remove members. Invitations default to the **member**
+role.
+
+## Inviting people
+
+In **Invite member**, enter one or more email addresses separated by commas or spaces, then
+**Send Invite**. Each address becomes a **pending invitation**. Papervine reports the result per
+address — newly invited, already a member, or already invited — so a partly-duplicate paste still
+sends the new ones.
+
+Each pending invitation has a **shareable accept link**. Use **Copy link** and send it to the
+invitee however you like (chat, your own email). The link is the invitation: anyone who opens it
+is taken to an **accept** page for your organization.
+
+A pending invitation expires after a couple of days. You can **Cancel** it any time before it's
+accepted, which immediately invalidates its link.
+
+## Accepting an invitation
+
+When someone opens an invite link:
+
+- If they're **signed in to Papervine with the invited email**, they see the organization and an
+  **Accept** button — accepting adds them as a member and drops them into the dashboard.
+- If they **aren't signed in**, they're prompted to **sign up or log in with the invited email**
+  first, then returned to the accept page. An account is required to join — the email they use
+  must match the one the invitation was sent to.
+- If they're signed in as a **different** account, Papervine asks them to switch to the invited
+  email.
+
+## Removing members
+
+The trash control beside a member removes them from the organization (you can't remove yourself
+this way). Removing a member revokes their access to every site in the org.

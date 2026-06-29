@@ -1717,6 +1717,39 @@ network-vs-generic branch can't silently regress.
 > in-browser (forced throw, light + dark) — chrome intact, themed card, no black screen.
 > Smoke's control-plane checks exercise the app-host gate around the new boundaries.
 
+### 10.8 Settings → Members (team invitations)
+
+The **Members** surface (`settings/members/`) replaces the placeholder with team management built
+**entirely on Better Auth's `organization` plugin** — the `member` (owner/admin/member) and
+`invitation` tables already ship + are migrated, so this is wiring (`auth.api.createInvitation` /
+`listMembers` / `listInvitations` / `cancelInvitation` / `removeMember`), not a new data model.
+Members are **org-scoped** (the tables key on `organizationId`); the surface lives under the site
+shell but resolves `org.id` from the URL and gates invite/remove to **owner/admin** (Better Auth
+re-checks server-side). Batch invites parse a comma/space-separated textarea via the pure,
+unit-tested `parseInviteEmails` (`src/lib/invite-emails.ts`) and report a per-address outcome
+(sent / already-member / already-invited) rather than failing the whole paste.
+
+**Delivery — shareable link, not email (decision 2026-06-29).** There's no email infra in the
+repo, and `acceptInvitation` already requires the invitee to be **signed in with the matching
+email** (Better Auth does *not* create the account). So v1 surfaces a **Copy-link** for each
+pending invite (the action builds `{appHost}/accept-invite?id=…` from the request Host); the admin
+shares it. The `sendInvitationEmail` callback in `auth.ts` is wired as the **seam** — it records
+the link today and is the single place a provider (Resend) slots in later, no action/UI change.
+
+**Accept flow.** A bare `/accept-invite` route on the app host (in the `(auth)` shell, with a
+middleware passthrough so it's reachable signed-out *and* signed-in, and not rewritten onto
+`/app`). It reads the invitation **directly from the DB** (to show the org name even to a
+signed-out invitee — the id is an unguessable token), then: signed-in + matching email → **Accept**
+(`authClient.organization.acceptInvitation`) → dashboard; signed-out → sign-up/login carrying
+`?invite=<id>&email=` (the auth pages read it from `window`, no `useSearchParams`/Suspense, and
+land back on accept); signed-in as the wrong account → switch-account prompt.
+
+> **Status (2026-06-29):** built + verified on a local prod build (seeded `dev-org`) — invite →
+> Pending with a working Copy-link → accept via a fresh signup with the invited email → appears in
+> Active members; cancel + remove work; owner/admin gate enforced. typecheck + unit
+> (`parseInviteEmails`) + smoke + crawl green. Follow-ups: real email (Resend, seam ready),
+> per-invite role picker (v1 invites as `member`).
+
 ### 10.x Instant settings navigation (Router-Cache reuse)
 
 The dashboard is a Next App Router SPA: the rail/subnav persist and only the content segment
