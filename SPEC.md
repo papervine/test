@@ -766,9 +766,25 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 | Code blocks | Shiki syntax highlighting, copy button, titles, line highlights |
 | `<Frame>` | image/embed framing w/ caption |
 | `<Tooltip>` `<Expandable>` `<Icon>` | inline helpers |
-| Mermaid | diagrams |
+| Mermaid | diagrams — ```mermaid fences → client-rendered SVG (BUILT 2026-06-29) |
 | `<ParamField>` `<ResponseField>` | API param docs |
 | `<Update>` | changelog entries |
+
+> **Mermaid — BUILT (2026-06-29).** A ```mermaid fence renders as a diagram, not a highlighted
+> code block. A remark plugin (`remarkMermaid` in `packages/renderer/lib/mdx.tsx`) rewrites the
+> mdast `code` node to a `<Mermaid chart="…">` JSX element **before** @mintlify/mdx's Shiki pass,
+> so Shiki never touches it; the raw source rides as a string attribute, which MDX lowers to a JS
+> string literal (`_jsx(Mermaid, { chart: "…" })`), escaping newlines/`<br/>`/quotes for free.
+> `<Mermaid>` (`components/mdx/Mermaid.tsx`) is a `"use client"` component that **dynamic-imports
+> mermaid inside its effect** — the heavy lib loads only on pages that actually have a diagram, not
+> in every page's bundle — and re-renders on the docs light/dark toggle (a MutationObserver on the
+> `.dark` class). `securityLevel: "antiscript"` keeps htmlLabels (so `<br/>`/`<i>` node labels
+> render, matching the incumbent) while stripping `<script>`, so a diagram can't introduce a script
+> vector the rest of the renderer disallows. A parse failure degrades to the diagram source in a
+> `<pre>` — never a 500. Added as a **direct** dependency (was only transitive via `streamdown`).
+> Cache key bumped `mdx-compile-v2` → `v3`. Guard: a `mermaid` smoke fixture asserts the page SSRs
+> an `aria-label="Diagram"` container and that the chart source is absent from the HTML (i.e. not
+> a code block).
 
 - **Theming:** named theme presets (`theme` in docs.json — `mint`/`maple`/`palm`/`willow`/`linden`/`almond`/`aspen`/`sequoia`/`luma`, the incumbent's set) defined as token bundles in `src/lib/theme.ts` and applied as CSS variables on `<html data-theme="…">`, so the whole UI re-skins from one config value. Adding/tuning a theme = one registry entry (+ optional CSS keyed on `[data-theme="…"]`). Brand accent from `docs.json` `colors`; light/dark default from `appearance.default`.
 - **Markdown features:** GFM, footnotes, auto-linked headings, frontmatter (title, description, icon, sidebar overrides), `og:` image generation per page.

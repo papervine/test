@@ -90,6 +90,17 @@ const CHECKS = [
     desc: "OpenAPI: path parameter rendered",
     include: ["The user ID"],
   },
+  {
+    slug: "mermaid",
+    desc: "```mermaid renders as a <Mermaid> diagram, not a highlighted code block",
+    // The client <Mermaid> SSRs an aria-label="Diagram" container (positive proof the fence was
+    // transformed — a code block would instead emit Shiki markup). We can't assert the chart text
+    // is absent: it's a client-component prop, so Next serializes it into the RSC flight payload
+    // in the HTML. Instead, since this page has no other fenced code, the ABSENCE of "shiki" markup
+    // is the clean signal the fence didn't fall through to the highlighter.
+    include: ["MERMAID_PAGE_MARKER", 'aria-label="Diagram"'],
+    exclude: ["shiki"],
+  },
 ];
 
 // Full-text search (SPEC.md §6) via /api/search. Backed by search-fixture.mdx

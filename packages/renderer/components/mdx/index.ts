@@ -8,6 +8,7 @@ import { CodeGroup } from "./CodeGroup";
 import { Accordion, AccordionGroup } from "./Accordion";
 import { ParamField, ResponseField } from "./ApiField";
 import { Expandable } from "./Expandable";
+import { Mermaid } from "./Mermaid";
 
 /** The component set available inside every MDX page (SPEC.md §5). */
 export const mdxComponents: MDXComponents = {
@@ -30,4 +31,5 @@ export const mdxComponents: MDXComponents = {
   ParamField,
   ResponseField,
   Expandable,
+  Mermaid,
 };

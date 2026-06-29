@@ -109,12 +109,37 @@ reader expands it.
 `<Frame>` wraps an image or embed in a bordered container with an optional caption. Use it to
 present screenshots and diagrams consistently, with framing and centering handled for you.
 
+## Mermaid diagrams
+
+A fenced code block tagged `mermaid` renders as a diagram, not as highlighted code:
+
+````md
+```mermaid
+graph TD
+  Studio["Studio"] --> Project["Project"]
+  Project -->|has many| Asset["Asset"]
+```
+````
+
+Which renders as:
+
+```mermaid
+graph TD
+  Studio["Studio"] --> Project["Project"]
+  Project -->|has many| Asset["Asset"]
+```
+
+The diagram is drawn in the browser and follows the page's light/dark appearance — toggle the
+theme and it redraws to match. Node labels may use simple inline HTML (`<br/>`, `<i>`); scripts
+are stripped. A diagram that fails to parse falls back to showing its source, so a typo never
+breaks the page.
+
 ## Beyond v1
 
 Larger docs repos use more components — `<ParamField>` / `<ResponseField>` for API docs,
-`<Expandable>`, `<Update>`, `<Icon>`, `<Tooltip>`, Mermaid diagrams, and others. Coverage
-expands over time; until a component is implemented, it degrades gracefully to its children
-rather than failing the page.
+`<Expandable>`, `<Update>`, `<Icon>`, `<Tooltip>`, and others. Coverage expands over time;
+until a component is implemented, it degrades gracefully to its children rather than failing
+the page.
 
 ## Related
 

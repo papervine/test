@@ -100,6 +100,34 @@ function remarkLiteralImg() {
   };
 }
 
+/**
+ * ```mermaid fences → `<Mermaid chart="…">` so they render as diagrams, not as a highlighted
+ * code block. Runs at the mdast stage, BEFORE @mintlify/mdx's Shiki highlighting, so Shiki
+ * never sees the fence. The raw source rides as a string attribute, which the MDX compiler
+ * lowers to a JS string literal (`_jsx(Mermaid, { chart: "…" })`) — so arbitrary content
+ * (newlines, `<br/>`, quotes, `&amp;`) is escaped for free, no JSX-in-text hazards.
+ */
+function remarkMermaid() {
+  return (tree: { children?: unknown[] }) => {
+    const visit = (node: Record<string, unknown>, index: number, parent: Record<string, unknown>) => {
+      if (node.type === "code" && node.lang === "mermaid") {
+        (parent.children as unknown[])[index] = {
+          type: "mdxJsxFlowElement",
+          name: "Mermaid",
+          attributes: [{ type: "mdxJsxAttribute", name: "chart", value: node.value }],
+          children: [],
+        };
+        return;
+      }
+      const children = node.children as Record<string, unknown>[] | undefined;
+      // Snapshot before iterating so an in-place replacement above is safe.
+      if (Array.isArray(children)) children.slice().forEach((child, i) => visit(child, i, node));
+    };
+    const roots = tree.children as Record<string, unknown>[] | undefined;
+    if (Array.isArray(roots)) roots.slice().forEach((child, i) => visit(child, i, tree as Record<string, unknown>));
+  };
+}
+
 /** the incumbent's bare code-title convention (```js Label) → rehype/highlighter title="Label". */
 function remarkCodeTitles() {
   return (tree: { children?: unknown[] }) => {
@@ -122,7 +150,7 @@ function remarkCodeTitles() {
 // bug that made us drop next-mdx-remote originally).
 const mdxOptions = {
   development,
-  remarkPlugins: [remarkGfm, remarkCodeTitles, remarkLiteralImg],
+  remarkPlugins: [remarkGfm, remarkCodeTitles, remarkLiteralImg, remarkMermaid],
   rehypePlugins: [rehypeSlug, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
 } as const;
 
@@ -161,7 +189,7 @@ const compileMdx = unstable_cache(
       return { error: err instanceof Error ? err.message : String(err) };
     }
   },
-  ["mdx-compile-v2"], // bump when the compile pipeline changes (v2: remarkLiteralImg)
+  ["mdx-compile-v3"], // bump when the compile pipeline changes (v2: remarkLiteralImg; v3: remarkMermaid)
   { revalidate: 86400 },
 );
 

@@ -13,7 +13,7 @@
             "tab": "Docs",
             "groups": [
               { "group": "Start", "pages": ["index", "guide", "components", "cards", "images"] },
-              { "group": "Edge cases", "pages": ["unknowns", "badfrontmatter", "with-snippet"] }
+              { "group": "Edge cases", "pages": ["unknowns", "badfrontmatter", "with-snippet", "mermaid"] }
             ]
           },
           {

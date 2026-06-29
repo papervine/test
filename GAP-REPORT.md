@@ -75,6 +75,7 @@ Frontmatter keys we ignore but should honor: `sidebarTitle` (130×), `keywords`/
 3. ✅ **Graceful unknown-component fallback** — passthrough `Fallback` (Proxy-based, so `<Color.Item>` member components degrade too); defensive components (`Card` icon accepts JSX nodes); safe frontmatter YAML parsing; compile-time try/catch → inline notice.
 4. ⏳ **Snippet/import resolution** (`/snippets`, `/shared`) — the only remaining cause of degraded pages.
 5. ⏳ **Core component coverage** — `Update`, `Expandable`, `Columns`/`Column`, `Icon`, `Tooltip`, `Badge`, `Tile`, `Panel`. *(API + changelog-heavy components defer to M4.)*
+6. ✅ **Mermaid diagrams** (2026-06-29) — ```mermaid fences rendered as highlighted code, not diagrams (real repos like Pixwel use them). Now client-rendered to SVG via `remarkMermaid` → `<Mermaid>` (theme-synced, htmlLabels, parse-error fallback). See SPEC §5.
 
 ### Result of items 1–3 (measured on a 125-page sample of `papervine/docs`)
 
