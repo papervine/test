@@ -2015,6 +2015,108 @@ needs **Vercel Edge Config provisioned** (and the reader-session crypto, today `
 The spike also confirmed the asset/agent-surface gating gap (above) is covered for free once the
 gate is middleware.
 
+**Planned — authed-docs speed via per-entitlement-class caching (extends the edge gate above).**
+The edge gate makes *public* sites edge-cacheable (one shared response). Gated sites look
+uncacheable — `force-dynamic`, `no-store`, ~1.6 s every hit — but that's an over-correction:
+**gated content varies by *group set*, not per *user*.** `accessForRecord`
+(`src/lib/reader-access.ts`) gates each page by the reader's session `groups`; two `admin`
+readers see byte-identical pages *and* identical group-filtered nav. So a gated page needs one
+cached variant per **entitlement class** (distinct group set), not one per reader — and a real
+site has a handful of groups, so a handful of variants. That recovers most of the public-site
+cache win for gated sites. Five moves — the **first is independent of the edge gate and ships
+now** (it's the Neon-round-trip fix); the rest build on the gate:
+
+*Ships now, no edge gate needed (pure latency wins on the current dynamic render):*
+- **① Kill the per-request Neon read (the measured ~195 ms villain) — the FIRST PR.** Today
+  `getSiteBySlug` *and* `getSiteByCustomDomain` (`src/lib/tenant.ts`) are a Neon `select` on
+  *every* tenant request — only React `cache()`'d *per-request* (one memo per request), so a cold
+  serverless invocation always pays the full round-trip. They're called from ~20 sites
+  (`requestContentSource`, `render-tenant.tsx`, the docs route, login, export, reader actions), so
+  the fix lives in **one place** and is transparent to all of them: make those two functions a
+  **read-through cache** — Redis/KV keyed by slug + by custom-domain (the §12 "domain→tenant map"
+  Redis line is exactly this), **write-through** at the mutation points (`sync-runner.ts` on every
+  sync, connect, and the auth/domain settings actions, which already bust caches) with a short TTL
+  backstop and Neon read-through on miss. Removes the round-trip from *every* tenant request
+  **today**, independent of everything below. Correctness: the record's `version` (`sha:syncedAt`)
+  already keys the content Data Cache, and write-through fires on every sync, so a cache entry is
+  never staler than the content it gates; read-through + TTL bound any miss.
+- **② Cache `buildNav` per `(contentVersion, groupSet)`.** Recomputed on every request today
+  (`packages/renderer/lib/nav.ts`, no cache wrapper) yet it's a pure function of
+  `(config, base, accessPredicate)`. On a large site this is a real chunk; memoize it in the Data
+  Cache keyed by content version + class. The MDX compile and S3 reads are already cached.
+
+*Needs the §11.2 edge gate first (adds the edge cache on top):*
+- **③ Cache key carries the entitlement class.** Middleware already verifies the JWT and reads
+  `groups` (no DB). It derives a stable class id = hash of the sorted group set, then rewrites to
+  an internal path that encodes it (e.g. `/_ent/{classHash}/{slug}/{path}`), so the CDN cache key
+  is naturally *(page × class)*. The gate still runs in front of the cache on every request
+  (allow → serve the class's cached bytes; deny → 404), so visibility is always enforced live
+  while the bytes are shared within a class. The article body is identical within a class, so it
+  rides this cache. Public is just the single-class case.
+- **④ Edge-gate subset → Edge Config.** The middleware gate needs only a *small, hot* slice —
+  `{ authEnabled, rules }` per slug — at the **edge** (sub-ms, before the cache). That slice goes
+  to **Vercel Edge Config** (§11.2), written on auth/access changes. Distinct from ①'s Redis
+  record: Redis serves the *node render's* fuller record at scale (thousands of tenants); Edge
+  Config serves the *edge gate's* tiny rule set with sub-ms edge reads. Hot-path end-state:
+  JWT-verify (CPU) + Edge Config read (edge) / Redis read (node) + Data-Cache content — no Neon on
+  the read path, cached *or not*.
+- **⑤ Optional — Partial Prerendering instead of the ③ path rewrite.** Next 15 PPR serves a cached
+  shell (article + nav skeleton) with the per-reader gate as a dynamic hole, keeping a single
+  route instead of `/_ent/…`. The more elegant form of the same idea; adopt if PPR is stable
+  enough for us.
+
+The client-side win already shipped (SPEC §10.x: `staleTimes.dynamic` + `prefetch`) stacks on
+top — once gated renders are cheap, a reader's prefetched pages reuse from the Router Cache, so
+authed nav goes instant like the dashboard.
+
+**Two axes, two mechanisms — don't conflate them.** Reader auth has *two* independent kinds of
+per-reader variation, and only one is server-side:
+- **Visibility** — *which* pages/nav a reader sees — varies by **group**. Server-side, the gate;
+  cached per entitlement class as above.
+- **Content values** — per-*user* personalization (`{user.firstName}`, a prefilled/user-scoped
+  API key, user-specific snippets — a real incumbent feature, the `user` blob in v2 sequencing
+  below, *not* a negligible edge case) — varies by **individual**. Resolve it **client-side**, so
+  the cached bytes stay a shared template: the edge serves one cached page with **placeholders**
+  (`<span data-pv-user="firstName">`, a key field flagged for fill), and client JS fills them from
+  the reader's token, which already lives in the browser from the auth handshake (user-scoped
+  *secrets* come from an authenticated client call, never the cached HTML). Cache hit *and*
+  personalized — no per-user server render. This is almost certainly how the incumbent reconciles its
+  measured edge-caching with its documented personalization (inferred, not confirmed from their
+  internals).
+
+So personalization does **not** force a page dynamic — it moves to the client. The genuine
+dynamic exception is only content that must be **server-authoritative in the first byte** (rare
+for docs, which are behind auth and not SEO-indexed); those few pages opt out of the cache.
+
+Sequencing maps to the ①–⑤ above: **① then ②** ship now (pure latency wins on the current dynamic
+render, no gate) — **start with ①, the Neon-round-trip fix**. Then the **§11.2 multi-PR refactor**
+(root-layout priming → route-mode separation → edge gate → ISR flip) is the prerequisite that adds
+the edge cache and the ④ Edge Config slice; on top of it land **③ entitlement-class cache key**
+then **⑤ (optional) PPR**.
+
+**Decisions (caching infra + ordering), settled 2026-06-29:**
+- **CDN = Vercel native cache, not Cloudflare (for now).** We're already all-in on Vercel (origin,
+  custom-domain management, Neon). Vercel's cache works uniformly across *all* tenant domains —
+  subdomains, apex path mode, *and* customer custom domains — with zero extra infra, whereas
+  fronting arbitrary customer domains with Cloudflare needs **Cloudflare for SaaS** (custom
+  hostnames), a paid, more involved layer that also reshapes the Vercel-based custom-domain
+  onboarding. And **tag-based on-demand purge** (`revalidateTag(siteId)` from the sync runner) gives
+  precise per-tenant invalidation on publish — clumsy on Cloudflare (cache-tags are Enterprise).
+  Cloudflare's real win is cheaper egress / bigger edge at scale; it's **additive later** (drop it
+  in front of Vercel without redoing any app-level cache semantics — which we need either way), and
+  it likely ties into the `custom-domain-cap` thread (the Vercel max-domains limit) when revisited.
+  Note the incumbent runs Vercel origin + Cloudflare in front — that's their *scale/cost* layer, not a
+  capability we lack.
+- **Cache before prefetch for docs — don't prefetch doc content yet.** Tempting to copy the §10.x
+  dashboard prefetch onto the docs sidebar, but a docs sidebar has *hundreds* of links and each
+  page render is expensive *and uncached* today, so `prefetch={true}` would fire dozens-to-hundreds
+  of full origin renders per page view — a load multiplier, the opposite of faster. Prefetch is a
+  **complement to caching, not a substitute**: the incumbent can prefetch aggressively *because* their
+  pages are edge-cached (a prefetch is a cheap CDN hit). So docs prefetch waits until the edge cache
+  (steps 3–5) lands; *then* it's cheap and gives instant nav. (The docs sidebar is already `<Link>`
+  soft-nav, and `staleTimes.dynamic: 30` already ships, so revisiting an already-opened page within
+  the window is already reused from the Router Cache — a free partial win.)
+
 ### 11.3 Sequencing (v1 → enterprise)
 
 1. **v1 (now):** Layer 1 only — Better Auth + `organization` plugin, **email/password**
@@ -2023,7 +2125,10 @@ gate is middleware.
    Deploy sequencing: ship the public renderer first (single-tenant, already live on
    Vercel + git-connected), then layer auth on — auth does not block going online.
 2. **v2 (first paying customers ask):** Layer 2 **JWT** handshake + `public:`/`groups:`
-   page gating. Personalization (`user` in MDX) after that.
+   page gating. Personalization (`user` in MDX) after that — **build it client-side from day one**
+   (`{user.x}` compiles to a client-filled placeholder, values injected from the reader's token in
+   the browser), so personalized pages stay edge-cacheable. Server-interpolating user data would
+   bake it into the HTML and make every personalized page uncacheable — see §11.2 "two axes."
 3. **Enterprise (when a deal demands it):** WorkOS SAML/SSO into the platform; OAuth-2.0
    reader handshake; per-user personalization at scale.
 
