@@ -156,6 +156,28 @@ auth config is a database read the edge can't do, the same constraint that gover
 custom-domain resolution. A gated site renders only to a reader holding a valid, site-bound
 docs session; otherwise it redirects to that site's `/login`, carrying the intended path.
 
+### Search, the AI assistant, and MCP respect the same gate
+
+A page's content can leave the renderer through three other doors — full-text **search**
+(Cmd-K), the **AI assistant** (which retrieves pages to ground its answers), and the generated
+**MCP server** (which exposes the docs as tools to external AI clients). All three honor the
+same per-page access as the sidebar, so a reader can never pull — or have the assistant cite —
+a page they couldn't open directly:
+
+- **Search** returns only pages the reader can access; gated hits are filtered out of results.
+- The **assistant** retrieves and reads only accessible pages, so its answers and citations
+  stay within what the reader is allowed to see.
+- **MCP** clients connect without a reader session, so on a gated site they see only the
+  **public** (un-gated) subset — group-restricted pages are invisible to search, reading, and
+  listing over MCP. Reading a restricted page returns the same "not found" as a missing one.
+- **`llms.txt` / `llms-full.txt`** (the AI-discovery feed) is likewise anonymous, so a gated
+  site publishes only its public pages there — the full-corpus dump never includes gated bodies.
+- The **export-all view** requires a signed-in reader, and the exported document contains only
+  the pages that reader can access — a reader without a group can't export the pages it covers.
+
+On a site without reader auth, none of this changes anything: every page is public, so all of
+these behave exactly as before.
+
 ## Personalization
 
 The `content` blob from the handshake is exposed as a `user` variable in MDX scope (threaded

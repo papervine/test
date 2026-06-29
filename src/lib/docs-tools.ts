@@ -1,5 +1,6 @@
 import "server-only";
 import { runSearch } from "./search";
+import { currentPageAccess } from "./reader-access";
 import { loadPage, loadConfig } from "@papervine/renderer/lib/content";
 import { buildNav, type NavLeaf, type NavNode } from "@papervine/renderer/lib/nav";
 import { loadApiCatalog } from "@papervine/renderer/lib/openapi";
@@ -26,7 +27,11 @@ export async function searchDocs(query: string) {
 export async function readPage(slug: string) {
   const clean = slug.replace(/^\//, "");
   const page = await loadPage(clean);
-  if (!page) return { error: `No page found for slug "${slug}".` };
+  // A page the reader can't access reads as "not found" — same response as a missing page,
+  // so retrieval (RAG/MCP/search) never confirms a gated page even exists (SPEC §11.2).
+  if (!page || !currentPageAccess()(page.frontmatter)) {
+    return { error: `No page found for slug "${slug}".` };
+  }
   return {
     title: page.frontmatter.title,
     description: page.frontmatter.description,
@@ -36,7 +41,9 @@ export async function readPage(slug: string) {
 }
 
 export async function listPages() {
-  const sections = await buildNav(await loadConfig());
+  // Pass the reader's access predicate so gated pages are dropped from the listing the same
+  // way they're dropped from the sidebar (buildNav already honors it) — SPEC §11.2.
+  const sections = await buildNav(await loadConfig(), "", currentPageAccess());
   const out: { title: string; href: string }[] = [];
   const walk = (nodes: (NavLeaf | NavNode)[]) => {
     for (const n of nodes) {

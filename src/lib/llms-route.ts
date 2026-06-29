@@ -1,6 +1,7 @@
 import "server-only";
 import { type NextRequest } from "next/server";
-import { requestContentSource } from "./request-source";
+import { requestContentSource, requestReaderAccess } from "./request-source";
+import { withReaderAccess } from "./reader-access";
 import { contentContext } from "@papervine/renderer/lib/content";
 import { getSiteByHost } from "./tenant";
 import { detectAgent } from "./ua-detect";
@@ -21,7 +22,11 @@ export async function handleLlmsRequest(req: NextRequest, full: boolean): Promis
   const origin = host ? `${proto}://${host}` : "";
 
   const src = await requestContentSource();
-  const render = () => renderLlmsTxt(origin, full);
+  // llms.txt is an agent surface with no reader session (like MCP), so on a gated site it
+  // lists/inlines only the public subset — gated pages never leak through the corpus dump
+  // (SPEC §11.2). The whole render flows through the now-gated `listPages`.
+  const access = await requestReaderAccess(undefined, { anonymous: true });
+  const render = () => withReaderAccess(access, () => renderLlmsTxt(origin, full));
   let body: string;
   try {
     body = src ? await contentContext.run(src, render) : await render();

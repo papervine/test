@@ -1,0 +1,50 @@
+import "server-only";
+import { AsyncLocalStorage } from "node:async_hooks";
+import type { PageAccess } from "@papervine/renderer/lib/nav";
+import type { PageFrontmatter } from "@papervine/renderer/lib/content";
+import { canAccessPage } from "./reader-auth";
+import { readerSession } from "./reader-session";
+
+/**
+ * Per-request reader access, shared by every surface that exposes page content (SPEC §11.2).
+ *
+ * The renderer/nav already gate pages by the reader's session `groups`; retrieval surfaces
+ * (Cmd-K search, the AI assistant's RAG, the MCP server) must apply the SAME predicate or a
+ * reader can pull gated content they can't open. Rather than thread a predicate through every
+ * call signature, we carry it in an AsyncLocalStorage the way the renderer carries its content
+ * source (`contentContext`): routes set it, `docs-tools`/`search` read it. The default is
+ * ALLOW_ALL, so the apex, `papervine dev`, non-gated sites, and any path that doesn't set it
+ * are unchanged.
+ */
+const ALLOW_ALL: PageAccess = () => true;
+
+const accessContext = new AsyncLocalStorage<PageAccess>();
+
+/** The current request's access predicate, or ALLOW_ALL when none is set. */
+export function currentPageAccess(): PageAccess {
+  return accessContext.getStore() ?? ALLOW_ALL;
+}
+
+/** Run `fn` with `access` as the current predicate (nest inside `contentContext.run`). */
+export function withReaderAccess<T>(access: PageAccess, fn: () => Promise<T> | T): Promise<T> | T {
+  return accessContext.run(access, fn);
+}
+
+/**
+ * Build the access predicate from a site record + reader cookie. Mirrors the renderer's
+ * `readerAccess`:
+ *  - auth OFF → ALLOW_ALL (no gating; the site renders every page publicly).
+ *  - auth ON  → gate each page by the reader's session groups.
+ *  - `anonymous` → ignore the cookie and use NO groups. This is the MCP case: external
+ *    agents carry no reader session, so they only ever see the public/un-gated subset
+ *    (a gated page is indistinguishable from a missing one to them).
+ */
+export function accessForRecord(
+  record: { authEnabled?: boolean | null; id: string } | null | undefined,
+  cookieValue: string | undefined,
+  opts?: { anonymous?: boolean },
+): PageAccess {
+  if (!record?.authEnabled) return ALLOW_ALL;
+  const groups = opts?.anonymous ? [] : readerSession(cookieValue, record.id)?.groups ?? [];
+  return (fm: PageFrontmatter) => canAccessPage(fm.groups, fm.public, groups);
+}

@@ -1864,9 +1864,52 @@ which leaves survive. **Still to build:** the **OAuth** handshake (its `/login` 
 "not available yet" notice today); the `public: true` *site-gate bypass* (a public page on an
 auth-enabled site still hits the site-wide shell gate first — full unauthenticated access to a
 public page needs the gate moved off the shell, i.e. the edge gate below); and gating of
-**assets + agent surfaces** (`/api/tenant-asset`, `llms.txt`, `/mcp`, the export route) — they
-build nav/content without the reader predicate, so a private site's images and agent feeds
-remain reachable.
+**agent + asset surfaces** that build nav/content without the reader predicate (search, the
+assistant, `/mcp`, `llms.txt`, the export route, and `/api/tenant-asset`) — see the status
+notes below for which of these are now closed and why `/api/tenant-asset` is deferred.
+
+**Retrieval surfaces gated (2026-06-28) — search, AI assistant, MCP.** The per-page gate now
+reaches the three surfaces that expose page *content* outside the renderer, closing the leak
+where a reader could pull a gated page via Cmd-K, the assistant's RAG, or the MCP server even
+though the renderer 404s it. One mechanism: a `PageAccess` predicate carried in an
+`AsyncLocalStorage` (`src/lib/reader-access.ts`), mirroring how the renderer carries its
+content source (`contentContext`) — routes set it, `docs-tools`/`search` read it, and it
+propagates into the assistant's *streamed* tool calls the same way the content source already
+does. **Default is ALLOW_ALL**, so the apex, `papervine dev`, and non-gated sites are byte-for-
+byte unchanged. Applied at the choke points: `runSearch` carries each section's `groups`/`public`
+in the (reader-independent, still-memoized) index and drops inaccessible hits at query time
+(over-fetching first so the list stays full); `readPage` returns the **same "not found"** as a
+missing page (no existence leak); `listPages` passes the predicate to `buildNav`. Reader identity
+per transport: the browser surfaces (Cmd-K, assistant) derive groups from the `pv_docs_session`
+cookie via `requestReaderAccess`; **MCP is anonymous** — external agents carry no reader session,
+so on a gated site they see only the public/un-gated subset (per-reader authenticated MCP is a
+later follow-up). The shell's `readerAccess` was refactored onto the shared `accessForRecord`, so
+nav, render, and retrieval are one source of truth. Verified end-to-end on the seeded
+`starter-gated` tenant: anonymous search/MCP return no `internal/*`, an `admin` reader sees the
+`admin` pages but **not** the `beta`-only page, and MCP `read_page` of a gated slug is denied
+while a public page still reads. Unit-tested (`docs-tools-access.test.ts`).
+
+**Extended to `llms.txt` + the export route (2026-06-28).** Same predicate, same `listPages`
+choke point. `llms.txt`/`llms-full.txt` are agent surfaces with no reader session, so (like
+MCP) they're **anonymous** → a gated site's index and full-corpus dump carry only the public
+subset. The **export-all** view (`/sites/{slug}/export`) already had the site-level session
+gate (anonymous → login); it now also installs the reader's **own** group predicate
+(`requestReaderAccess(slug)`, cookie-based — it's a browser surface), so a signed-in reader
+without a group can't export the pages it covers. Verified on `starter-gated`: anonymous
+`llms-full.txt` has zero `internal/*`; a `beta` reader's export contains the beta + shared
+pages but not the admin-only ones, and an `admin` reader's export is the inverse. Unit-tested
+(llms render under access).
+
+**Still deferred — `/api/tenant-asset` (needs a real design, not a cookie gate).** Assets carry
+no per-asset `groups`, so the most a gate could do is site-level (any valid reader session). But
+tenant raster images render through the **next/image optimizer**, which fetches the asset route
+**server-side without the reader's cookie** — so a cookie gate would either 404 every optimized
+image on gated sites, or be trivially bypassed via `/_next/image?url=…` (the optimizer is itself
+a cookieless proxy to the asset). Properly gating assets needs either **unoptimized images on
+gated sites** (browser fetches directly, with the cookie) or **signed asset URLs** — a deliberate
+change, out of scope here. Mitigation already in place: the content gating above removes the
+*discoverability* of a gated page's asset URLs (they appear only in gated MDX, no longer
+retrievable via search/RAG/MCP/llms/export), so an attacker would have to guess storage paths.
 
 **Planned — edge-native gate that unblocks CDN caching (resolves the §3 caching defer).**
 The §3 perf goal is incumbent-speed navigation: tenant docs served from **Vercel's edge cache**

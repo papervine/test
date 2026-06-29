@@ -1,9 +1,12 @@
 import "server-only";
-import { headers } from "next/headers";
+import { headers, cookies } from "next/headers";
 import { resolveTenantSlug, getSiteBySlug, getSiteByCustomDomain } from "./tenant";
 import { s3Source, isSynced } from "./s3-source";
 import { draftSource } from "./draft-source";
+import { READER_COOKIE } from "./reader-session";
+import { accessForRecord } from "./reader-access";
 import type { ContentSource } from "@papervine/renderer/lib/content";
+import type { PageAccess } from "@papervine/renderer/lib/nav";
 
 /**
  * The content source for the current request's tenant, or null on the apex/preview
@@ -79,6 +82,29 @@ export async function requestContentSource(
  * source. Call it only once you know there IS a tenant (e.g. requestContentSource returned
  * non-null), so the slug is guaranteed resolvable.
  */
+/**
+ * The reader access predicate for the current request's tenant (SPEC §11.2), resolving the
+ * tenant the SAME way `requestContentSource` does so the gate matches the content it filters.
+ * Used by the retrieval surfaces — Cmd-K search, the AI assistant, the MCP server — to drop
+ * pages the reader can't open. Returns ALLOW_ALL when there's no tenant or the site isn't
+ * gated (see `accessForRecord`).
+ *
+ * Pass `{ anonymous: true }` for transports with no reader session — the MCP server, where
+ * external agents carry no docs cookie, so they see only the public/un-gated subset.
+ */
+export async function requestReaderAccess(
+  slugOverride?: string,
+  opts?: { anonymous?: boolean },
+): Promise<PageAccess> {
+  const h = await headers();
+  const slug = slugOverride ?? h.get("x-papervine-site") ?? resolveTenantSlug(h.get("host"));
+  const record = slug
+    ? await getSiteBySlug(slug)
+    : await getSiteByCustomDomain(h.get("x-papervine-host") ?? h.get("host") ?? "");
+  const cookieValue = opts?.anonymous ? undefined : (await cookies()).get(READER_COOKIE)?.value;
+  return accessForRecord(record, cookieValue, opts);
+}
+
 export async function requestAssetBase(): Promise<string> {
   const h = await headers();
   const slug = h.get("x-papervine-site") ?? resolveTenantSlug(h.get("host"));

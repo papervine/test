@@ -2,7 +2,8 @@ import { headers, cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getSiteBySlug, resolveTenantSlug } from "@/lib/tenant";
 import { READER_COOKIE, readerSessionValid } from "@/lib/reader-session";
-import { requestContentSource } from "@/lib/request-source";
+import { requestContentSource, requestReaderAccess } from "@/lib/request-source";
+import { withReaderAccess } from "@/lib/reader-access";
 import { contentContext } from "@papervine/renderer/lib/content";
 import { renderExportDoc } from "@/lib/export-doc";
 import { PrintControls } from "@/components/export/PrintControls";
@@ -43,8 +44,12 @@ export default async function ExportAllPage({ params }: { params: Promise<Params
   const src = await requestContentSource(slug);
   if (!src) notFound();
 
+  // Site-level session above proves the reader is signed in; this gates the corpus to the
+  // reader's own group access (SPEC §11.2), so a reader without a group can't export the
+  // pages it covers. `collectExportPages` flows through the now-gated `listPages`.
+  const access = await requestReaderAccess(slug);
   const doc = await contentContext.run(src, () =>
-    renderExportDoc({ linkBase: base, assetBase }),
+    withReaderAccess(access, () => renderExportDoc({ linkBase: base, assetBase })),
   );
 
   return (

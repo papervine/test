@@ -3,7 +3,8 @@ import { z } from "zod";
 import { headers } from "next/headers";
 import { searchDocs, readPage, listPages, searchApi, apiEnabled } from "@/lib/docs-tools";
 import { contentContext } from "@papervine/renderer/lib/content";
-import { requestContentSource } from "@/lib/request-source";
+import { requestContentSource, requestReaderAccess } from "@/lib/request-source";
+import { withReaderAccess } from "@/lib/reader-access";
 import { getSiteByHost } from "@/lib/tenant";
 import { detectAgent } from "@/lib/ua-detect";
 import { agentSessionId, firstForwardedIp } from "@/lib/agent-session";
@@ -33,6 +34,12 @@ const handler = createMcpHandler(
     const h = await headers();
     const src = await requestContentSource();
     const site = await getSiteByHost(h.get("host"));
+    // External agents carry no reader session, so on a gated site (SPEC §11.2) the MCP server
+    // exposes only the public/un-gated subset — a group-gated page is invisible to search,
+    // read_page, and list_pages, exactly as it is to an anonymous browser. (Per-reader
+    // authenticated MCP — passing a reader token over MCP — is a separate follow-up.) On a
+    // non-gated site this is ALLOW_ALL, so behavior there is unchanged.
+    const access = await requestReaderAccess(undefined, { anonymous: true });
     // Anything reaching /mcp is an agent; name it when we can, else "Other".
     const agentName = detectAgent(h.get("user-agent")).name || "Other";
     // Stable per-client id so a connection's many tool calls count as ONE visitor,
@@ -45,8 +52,10 @@ const handler = createMcpHandler(
       ip: firstForwardedIp(h.get("x-forwarded-for")) ?? h.get("x-real-ip"),
     });
 
-    const run = <T>(fn: () => Promise<T>): Promise<T> =>
-      src ? contentContext.run(src, fn) : fn();
+    const run = <T>(fn: () => Promise<T>): Promise<T> => {
+      const inner = (): Promise<T> => Promise.resolve(withReaderAccess(access, fn));
+      return src ? contentContext.run(src, inner) : inner();
+    };
 
     const track = (type: EventType, fields: { query?: string; path?: string }) => {
       if (!site) return;

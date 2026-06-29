@@ -2,7 +2,8 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
 import { assistantTools } from "@/lib/assistant-tools";
 import { contentContext, loadConfig, loadPage } from "@papervine/renderer/lib/content";
-import { requestContentSource } from "@/lib/request-source";
+import { requestContentSource, requestReaderAccess } from "@/lib/request-source";
+import { withReaderAccess, currentPageAccess } from "@/lib/reader-access";
 import { getSiteByHost } from "@/lib/tenant";
 import { logEvent } from "@/lib/track";
 
@@ -42,8 +43,15 @@ export async function POST(req: Request) {
   // `site` (sent by the client in path mode) wins; otherwise fall back to the Host
   // header (subdomain mode), since middleware doesn't rewrite `/api/*`.
   const src = await requestContentSource(site);
-  const run = <T,>(fn: () => Promise<T> | T): Promise<T> | T =>
-    src ? contentContext.run(src, fn) : fn();
+  // Gate every retrieval (searchDocs / readPage / listPages) by the reader's per-page access
+  // (SPEC §11.2), so the assistant can't RAG over — or cite — pages the reader can't open.
+  // The predicate rides an AsyncLocalStorage that propagates into the streamed tool calls
+  // (same mechanism by which `contentContext` reaches them). Resolved from the reader cookie.
+  const access = await requestReaderAccess(site);
+  const run = <T,>(fn: () => Promise<T> | T): Promise<T> | T => {
+    const inner = () => withReaderAccess(access, fn);
+    return src ? contentContext.run(src, inner) : inner();
+  };
 
   return run(async () => {
     const config = await loadConfig();
@@ -58,10 +66,12 @@ export async function POST(req: Request) {
     }
 
     // Current-page context: ground answers in what the reader is looking at (SPEC §8.1).
+    // `pageSlug` is client-supplied, so gate it by the reader's access (it runs inside `run`,
+    // which set the predicate) — a spoofed slug must not even leak a gated page's title.
     let pageContext = "";
     if (pageSlug) {
       const page = await loadPage(pageSlug.replace(/^\//, ""));
-      if (page) {
+      if (page && currentPageAccess()(page.frontmatter)) {
         pageContext = ` The user is currently on the page "${
           page.frontmatter.title ?? pageSlug
         }" (${pageSlug}); prefer it when the question is about "this".`;

@@ -1,8 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { getSiteBySlug, resolveTenantSlug } from "@/lib/tenant";
-import { READER_COOKIE, readerSession, readerSessionValid } from "@/lib/reader-session";
-import { canAccessPage } from "@/lib/reader-auth";
+import { READER_COOKIE, readerSessionValid } from "@/lib/reader-session";
+import { accessForRecord } from "@/lib/reader-access";
 import { requestContentSource } from "@/lib/request-source";
 import type { PageAccess } from "@papervine/renderer/lib/nav";
 import {
@@ -79,10 +79,8 @@ async function gateReaderAuth(slug: string, base: string): Promise<void> {
  */
 async function readerAccess(slug: string): Promise<PageAccess> {
   const record = await getSiteBySlug(slug);
-  if (!record?.authEnabled) return () => true;
   const cookie = (await cookies()).get(READER_COOKIE)?.value;
-  const groups = readerSession(cookie, record.id)?.groups ?? [];
-  return (fm) => canAccessPage(fm.groups, fm.public, groups);
+  return accessForRecord(record, cookie);
 }
 
 /** The persistent docs chrome (layout). Renders the tenant's navbar/tabs/sidebar/assistant

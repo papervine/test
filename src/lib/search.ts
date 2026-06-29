@@ -3,6 +3,7 @@ import { cache } from "react";
 import { create, insertMultiple, search as oramaSearch } from "@orama/orama";
 import { listPageSlugs, loadPage, loadConfig } from "@papervine/renderer/lib/content";
 import { buildNav, findGroupLabel } from "@papervine/renderer/lib/nav";
+import { currentPageAccess } from "./reader-access";
 
 /**
  * Full-text search index (SPEC.md §6). Each docs page is split into heading
@@ -18,6 +19,12 @@ const schema = {
   heading: "string",
   content: "string",
   href: "string",
+  // Reader-auth gating (SPEC §11.2). The index is reader-INDEPENDENT (one per content
+  // source, memoized below); we carry each section's gate here and filter per request in
+  // `runSearch` against the reader's access predicate, so gated pages never leak through
+  // search/RAG/MCP to a reader who can't open them. `groups` is JSON; `public` is "1"/"".
+  groups: "string",
+  public: "string",
 } as const;
 
 export type SearchHit = {
@@ -107,16 +114,19 @@ const buildIndex = cache(async () => {
     const baseHref = "/" + (slug || "index");
     const title = page.frontmatter.title ?? titleFromSlug(slug);
     const section = findGroupLabel(nav, baseHref) ?? "";
+    // Per-page gate, carried on every section of the page (filtered in runSearch).
+    const groups = JSON.stringify(page.frontmatter.groups ?? []);
+    const isPublic = page.frontmatter.public ? "1" : "";
 
     for (const part of splitSections(page.body)) {
       const text = stripMarkdown(part.lines.join("\n"));
       if (part.heading) {
-        docs.push({ title, section, heading: part.heading, content: text, href: `${baseHref}#${part.id}` });
+        docs.push({ title, section, heading: part.heading, content: text, href: `${baseHref}#${part.id}`, groups, public: isPublic });
       } else {
         // Intro section carries the page title + description so a page is findable
         // by name even when its first prose is thin.
         const content = [page.frontmatter.description, text].filter(Boolean).join(" ");
-        docs.push({ title, section, heading: "", content, href: baseHref });
+        docs.push({ title, section, heading: "", content, href: baseHref, groups, public: isPublic });
       }
     }
   }
@@ -139,21 +149,30 @@ function makeSnippet(content: string, term: string, len = 140): string {
 export async function runSearch(term: string, limit = 8): Promise<SearchHit[]> {
   if (!term.trim()) return [];
   const db = await buildIndex();
+  // Over-fetch so the reader-access filter below can drop gated hits without under-filling
+  // the result list (a reader who can see most pages should still get `limit` hits).
+  const access = currentPageAccess();
   const res = await oramaSearch(db, {
     term,
     properties: ["title", "heading", "content"],
     boost: { title: 4, heading: 2 },
     tolerance: 1, // typo tolerance
-    limit,
+    limit: limit * 6,
   });
-  return res.hits.map((h) => {
+  const out: SearchHit[] = [];
+  for (const h of res.hits) {
     const d = h.document as Record<string, string>;
-    return {
+    // Reconstruct just the gate fields `canAccessPage` reads, then apply the request's
+    // predicate — gated pages never surface to a reader without the group (SPEC §11.2).
+    if (!access({ groups: JSON.parse(d.groups || "[]"), public: d.public === "1" })) continue;
+    out.push({
       title: d.title,
       section: d.section,
       heading: d.heading,
       href: d.href,
       snippet: makeSnippet(d.content, term),
-    };
-  });
+    });
+    if (out.length >= limit) break;
+  }
+  return out;
 }
