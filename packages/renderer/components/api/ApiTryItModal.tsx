@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import clsx from "clsx";
-import { Play, Loader2, X, ChevronDown, ChevronRight, Copy, Check } from "lucide-react";
+import { Play, Loader2, X, ChevronDown, ChevronRight, Copy, Check, Eye, EyeOff } from "lucide-react";
 import { methodColor } from "../../lib/method-colors";
 
 /**
@@ -128,6 +128,7 @@ function Field({
   onChange,
   placeholder,
   mono,
+  secret,
 }: {
   label: string;
   type?: string;
@@ -137,7 +138,10 @@ function Field({
   onChange: (v: string) => void;
   placeholder?: string;
   mono?: boolean;
+  // Credential field (password / token / api key): mask the value as dots with an eye toggle.
+  secret?: boolean;
 }) {
+  const [show, setShow] = useState(false);
   return (
     <div>
       <div className="mb-1.5 flex flex-wrap items-center gap-2">
@@ -150,15 +154,29 @@ function Field({
         )}
       </div>
       {description && <p className="mb-1.5 text-xs text-zinc-400">{description}</p>}
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className={clsx(
-          "w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-primary focus:outline-none",
-          mono && "font-mono",
+      <div className="relative">
+        <input
+          type={secret && !show ? "password" : "text"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          className={clsx(
+            "w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600 focus:border-primary focus:outline-none",
+            secret && "pr-10",
+            mono && "font-mono",
+          )}
+        />
+        {secret && (
+          <button
+            type="button"
+            onClick={() => setShow((s) => !s)}
+            className="absolute inset-y-0 right-0 flex items-center px-3 text-zinc-400 hover:text-zinc-200"
+            aria-label={show ? "Hide value" : "Show value"}
+          >
+            {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
         )}
-      />
+      </div>
     </div>
   );
 }
@@ -562,6 +580,7 @@ function AuthFields({
           label={`${auth.key}.password`}
           type="string"
           required
+          secret
           value={values[`${auth.key}.password`] ?? ""}
           onChange={upd(`${auth.key}.password`)}
           placeholder="password"
@@ -580,6 +599,7 @@ function AuthFields({
         onChange={upd(`${auth.key}.value`)}
         placeholder="key"
         mono
+        secret
       />
     );
   }
@@ -594,6 +614,7 @@ function AuthFields({
       onChange={upd(`${auth.key}.token`)}
       placeholder="token"
       mono
+      secret
     />
   );
 }

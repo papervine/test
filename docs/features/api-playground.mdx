@@ -70,6 +70,7 @@ collapsible sections:
 
 - **Authorization** — derived from the spec's security schemes: HTTP Basic shows username +
   password fields, Bearer (and OAuth2) a token field, and an API key its header or query value.
+  Credential values (password, token, API key) are **masked**, with an eye toggle to reveal them.
   Whatever you enter is folded into the request the right way (Basic base64, `Bearer …`, or the
   named header/query) at send time.
 - **Headers**, **Path**, and **Query** — one input per parameter, pre-filled from the spec's
