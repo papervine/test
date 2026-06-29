@@ -18,7 +18,7 @@
           },
           {
             "tab": "API",
-            "groups": [{ "group": "Endpoints", "openapi": "openapi.json" }]
+            "openapi": "openapi.json"
           }
         ]
       }

@@ -55,6 +55,8 @@ describe("OpenAPI nav groups operations by tag", () => {
 
     const groups = api.items.filter(isNode);
     expect(groups.map((g) => g.group)).toEqual(["Assets", "Assettypes"]);
+    // Tag groups are collapsible so a long API can be folded by tag in the sidebar.
+    expect(groups.every((g) => g.collapsible === true)).toBe(true);
 
     const assets = groups.find((g) => g.group === "Assets")!;
     expect((assets.items as NavLeaf[]).map((l) => l.title)).toEqual([

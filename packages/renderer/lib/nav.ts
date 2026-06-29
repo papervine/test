@@ -14,7 +14,15 @@ const ALLOW_ALL: PageAccess = () => true;
 /** Serializable nav tree handed to the client Sidebar. `method` is set only for OpenAPI
  *  operation leaves, so the sidebar can render a colored HTTP-method badge beside them. */
 export type NavLeaf = { title: string; href: string; method?: string };
-export type NavNode = { group: string; icon?: string; items: (NavLeaf | NavNode)[] };
+export type NavNode = {
+  group: string;
+  icon?: string;
+  // When true, the sidebar renders this group collapsible (chevron toggle) even at the top
+  // level — used for OpenAPI tag groups, which can be long. Nested groups are always
+  // collapsible regardless; this only changes the otherwise-static top-level header.
+  collapsible?: boolean;
+  items: (NavLeaf | NavNode)[];
+};
 export type NavSection = {
   tab?: string;
   href?: string; // landing page for the tab (its first leaf) — what the tab links to
@@ -92,7 +100,7 @@ async function openapiLeaves(div: Division, canAccess: PageAccess): Promise<(Nav
       }
     }
     if (groups.size === 0) return untagged;
-    const tagNodes: NavNode[] = [...groups].map(([group, items]) => ({ group, items }));
+    const tagNodes: NavNode[] = [...groups].map(([group, items]) => ({ group, items, collapsible: true }));
     return [...untagged, ...tagNodes];
   }
 

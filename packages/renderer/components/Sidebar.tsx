@@ -45,15 +45,38 @@ function Leaf({ node }: { node: NavLeaf }) {
   );
 }
 
-/** Top-level group: a static icon + bold header (Introduction, Concepts, …). */
+/** Top-level group: an icon + bold header (Introduction, Concepts, …). Static by default;
+ *  `collapsible` groups (OpenAPI tag groups) add a chevron toggle, starting expanded. */
 function TopGroup({ node }: { node: NavNode }) {
+  const [open, setOpen] = useState(true);
+  const header = (
+    <>
+      {node.icon && <LucideIcon name={node.icon} className="h-4 w-4 text-zinc-400" />}
+      {node.group}
+    </>
+  );
+  if (!node.collapsible) {
+    return (
+      <>
+        <p className="mb-2 flex items-center gap-2 px-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          {header}
+        </p>
+        <NodeList nodes={node.items} depth={1} />
+      </>
+    );
+  }
   return (
     <>
-      <p className="mb-2 flex items-center gap-2 px-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-        {node.icon && <LucideIcon name={node.icon} className="h-4 w-4 text-zinc-400" />}
-        {node.group}
-      </p>
-      <NodeList nodes={node.items} depth={1} />
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+        className="mb-2 flex w-full items-center justify-between px-3 text-sm font-semibold text-zinc-900 transition-colors hover:text-zinc-600 dark:text-zinc-100 dark:hover:text-zinc-300"
+      >
+        <span className="flex items-center gap-2">{header}</span>
+        <ChevronRight className={clsx("h-4 w-4 text-zinc-400 transition-transform", open && "rotate-90")} />
+      </button>
+      {open && <NodeList nodes={node.items} depth={1} />}
     </>
   );
 }

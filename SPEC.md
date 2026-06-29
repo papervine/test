@@ -824,13 +824,17 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 > **Status — left-nav groups operations by tag (2026-06-28).** Auto-generated OpenAPI nav
 > (`openapiLeaves`, no explicit `pages`) was a **flat** list of every operation — a 40-endpoint
 > spec was 40 ungrouped rows. It now mirrors the incumbent: operations are bucketed by their first
-> OpenAPI `tag` into one collapsible `NavNode` per tag (tags in first-encounter = spec order;
-> untagged operations stay as bare leaves above the groups). A spec with **no** tags falls
-> through to the old flat list, so nothing regresses for untagged specs. The grouping reuses the
-> existing `Sidebar` group rendering (collapsible `SubGroup` + the method badges above), so no
-> renderer change was needed beyond emitting the nodes. Unit-tested (`nav-openapi-tags.test.ts`:
-> grouping, order, untagged-leaves, no-tags fallback) and exercised in the fixtures smoke (the
-> `Users`-tagged spec). Verified the rendered nesting via DOM (`Endpoints › Users › [ops]`).
+> OpenAPI `tag` into one `NavNode` per tag (tags in first-encounter = spec order; untagged
+> operations stay as bare leaves above the groups). A spec with **no** tags falls through to the
+> old flat list, so nothing regresses for untagged specs. The tag nodes are marked
+> `collapsible: true`, so each tag is **collapse/expand-able by chevron** even at the top level
+> (a long API folds by tag) — `Sidebar`'s `TopGroup` gained a collapsible variant (expanded by
+> default, keeping its bold top-level styling) since these groups commonly render at depth 0
+> (`openapi` referenced directly on a tab); nested groups were already collapsible. Method badges
+> render on each leaf as before. Unit-tested (`nav-openapi-tags.test.ts`: grouping, order,
+> untagged-leaves, no-tags fallback, `collapsible` flag) and exercised in the fixtures smoke.
+> Verified in-browser: the tag group is a chevron toggle that hides/shows its operations (DOM
+> op-count 4 → 1 → 4 across collapse/expand, `aria-expanded` flips).
 
 > **Status — "Try it" promoted to a full modal playground (2026-06-28).** The interactive
 > playground moved off the right rail onto a **green trigger on the center endpoint bar** that
