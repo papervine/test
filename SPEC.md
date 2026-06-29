@@ -814,6 +814,16 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 - **Code samples:** auto-generate curl/JS/Python/etc. snippets per endpoint.
 - Libraries to evaluate: `openapi-types`, `@scalar/*` (open-source API reference, worth studying/reusing), `openapi-sampler`.
 
+> **`Accept` header (2026-06-29).** "Try it" (and the static cURL/JS/Python samples) now send an
+> `Accept` header derived from what the operation **produces** — the union of media types under
+> its responses' `content`, deduped, preferring `application/json` (new `op.produces` in the
+> parser). Many real APIs (e.g. Pixwel's) return 406 / HTML without it, yet specs almost never
+> declare `Accept` as an explicit parameter, so the playground sent no `Accept` and the request
+> failed. It's injected as a normal, pre-filled + editable header field (so it shows in the
+> Headers section and the samples), and skipped when the spec already declares its own `Accept`.
+> Unit-tested (`openapi-produces`); verified in-browser against the real Pixwel spec
+> (`GET /assets` → `Accept: application/json` in the modal + cURL).
+
 > **Status — endpoint pages render for synced tenants (2026-06-28).** The OpenAPI page
 > generator (`@scalar/openapi-parser` parse/dereference → one in-nav, in-theme page per
 > operation, our `EndpointReference` renderer) was reading the spec with a direct

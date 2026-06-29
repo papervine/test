@@ -73,7 +73,10 @@ collapsible sections:
   Whatever you enter is folded into the request the right way (Basic base64, `Bearer …`, or the
   named header/query) at send time.
 - **Headers**, **Path**, and **Query** — one input per parameter, pre-filled from the spec's
-  examples, with the parameter's type and description inline.
+  examples, with the parameter's type and description inline. An **`Accept`** header is added
+  automatically from what the operation produces (preferring `application/json`) — many APIs
+  reject a request or return HTML without it, and specs rarely declare `Accept` as a parameter.
+  It's editable like any other header, and skipped if the spec already declares its own.
 - **Body** — a JSON editor for write operations, seeded from the request schema.
 
 The top bar carries an **editable URL** (server base + path) and an operation switcher for

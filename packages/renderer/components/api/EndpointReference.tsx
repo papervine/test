@@ -69,6 +69,13 @@ function authHeader(op: Operation): string | undefined {
   return p ? "Bearer <token>" : undefined;
 }
 
+// The Accept header the operation expects, from what it `produces` (preferring JSON). Many APIs
+// 406 / return HTML without it. Skip when the spec already declares its own Accept parameter.
+function acceptHeader(op: Operation): string | undefined {
+  if (op.parameters.some((x) => x.in === "header" && /^accept$/i.test(x.name))) return undefined;
+  return op.produces.includes("application/json") ? "application/json" : op.produces[0];
+}
+
 function bodyObject(op: Operation): unknown | undefined {
   return op.requestBody ? sampleFromSchema(op.requestBody) : undefined;
 }
@@ -77,8 +84,10 @@ function curlSample(op: Operation): string {
   const url = `${op.baseUrl}${op.path}`;
   const auth = authHeader(op);
   const body = bodyObject(op);
+  const accept = acceptHeader(op);
   const parts = [`curl -X ${op.method} ${url}`];
   if (auth) parts.push(`  -H "Authorization: ${auth}"`);
+  if (accept) parts.push(`  -H "Accept: ${accept}"`);
   if (body !== undefined) {
     parts.push(`  -H "Content-Type: application/json"`);
     parts.push(`  -d '${JSON.stringify(body, null, 2)}'`);
@@ -90,8 +99,10 @@ function jsSample(op: Operation): string {
   const url = `${op.baseUrl}${op.path}`;
   const auth = authHeader(op);
   const body = bodyObject(op);
+  const accept = acceptHeader(op);
   const headers: string[] = [];
   if (auth) headers.push(`    "Authorization": "${auth}",`);
+  if (accept) headers.push(`    "Accept": "${accept}",`);
   if (body !== undefined) headers.push(`    "Content-Type": "application/json",`);
   const opts = [`  method: "${op.method}",`];
   if (headers.length) opts.push(`  headers: {\n${headers.join("\n")}\n  },`);
@@ -105,9 +116,13 @@ function jsSample(op: Operation): string {
 function pythonSample(op: Operation): string {
   const url = `${op.baseUrl}${op.path}`;
   const auth = authHeader(op);
+  const accept = acceptHeader(op);
   const body = bodyObject(op);
   const args = [`    "${url}",`];
-  if (auth) args.push(`    headers={"Authorization": "${auth}"},`);
+  const hdrs: string[] = [];
+  if (auth) hdrs.push(`"Authorization": "${auth}"`);
+  if (accept) hdrs.push(`"Accept": "${accept}"`);
+  if (hdrs.length) args.push(`    headers={${hdrs.join(", ")}},`);
   if (body !== undefined) args.push(`    json=${JSON.stringify(body, null, 2)},`);
   return (
     `import requests\n\n` +
@@ -166,6 +181,23 @@ export async function EndpointReference({ op, baseUrl }: { op: Operation; baseUr
     type: typeLabel(p.schema),
     description: p.description,
   }));
+  // Seed an Accept header from what the operation produces (preferring JSON) — many APIs return
+  // 406 / HTML without it, yet specs rarely declare it as an explicit parameter. Shown pre-filled
+  // + editable in the Headers section and sent with the request. Skip if the spec already declares
+  // its own Accept header, or the operation declares no response media type.
+  const accept = op.produces.includes("application/json")
+    ? "application/json"
+    : op.produces[0];
+  if (accept && !tryItParams.some((p) => p.in === "header" && /^accept$/i.test(p.name))) {
+    tryItParams.push({
+      name: "Accept",
+      in: "header",
+      required: false,
+      example: accept,
+      type: "string",
+      description: "Response media type to request.",
+    });
+  }
   const tryItAuth: TryItAuth[] = op.auth.map((a) => ({
     key: a.key,
     type: a.type,

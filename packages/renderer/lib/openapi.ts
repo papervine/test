@@ -46,6 +46,9 @@ export type Operation = {
   parameters: Param[];
   requestBody?: Schema;
   responses: { status: string; description?: string; schema?: Schema }[];
+  // Response media types the operation can return (the keys under each response's `content`),
+  // deduped. Drives the "Try it" Accept header — many APIs 406/return HTML without it.
+  produces: string[];
   auth: AuthScheme[];
   baseUrl: string;
   specPath: string;
@@ -136,13 +139,19 @@ export const apiOperations = cache(async (specPath: string): Promise<Operation[]
         ?.content;
       const requestBody = content?.["application/json"]?.schema;
 
-      const responses = Object.entries(
+      const responseEntries = Object.entries(
         (op.responses ?? {}) as Record<string, { description?: string; content?: Record<string, { schema?: Schema }> }>,
-      ).map(([status, r]) => ({
+      );
+      const responses = responseEntries.map(([status, r]) => ({
         status,
         description: r?.description,
         schema: r?.content?.["application/json"]?.schema,
       }));
+      // Union of response media types (e.g. application/json) across all responses — what the
+      // operation `produces`, used to seed the Accept header in the playground.
+      const produces = Array.from(
+        new Set(responseEntries.flatMap(([, r]) => Object.keys(r?.content ?? {}))),
+      );
 
       ops.push({
         slug: operationSlug(method, p, op),
@@ -155,6 +164,7 @@ export const apiOperations = cache(async (specPath: string): Promise<Operation[]
         parameters: params,
         requestBody,
         responses,
+        produces,
         auth: resolveAuth(schema, op),
         baseUrl,
         specPath,
