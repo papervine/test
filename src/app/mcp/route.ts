@@ -3,8 +3,13 @@ import { z } from "zod";
 import { headers } from "next/headers";
 import { searchDocs, readPage, listPages, searchApi, apiEnabled } from "@/lib/docs-tools";
 import { contentContext } from "@papervine/renderer/lib/content";
-import { requestContentSource, requestReaderAccess } from "@/lib/request-source";
+import {
+  requestContentSource,
+  requestReaderAccess,
+  requestSearchIndexKey,
+} from "@/lib/request-source";
 import { withReaderAccess } from "@/lib/reader-access";
+import { withSearchIndexKey } from "@/lib/search";
 import { getSiteByHost } from "@/lib/tenant";
 import { detectAgent } from "@/lib/ua-detect";
 import { agentSessionId, firstForwardedIp } from "@/lib/agent-session";
@@ -40,6 +45,8 @@ const handler = createMcpHandler(
     // authenticated MCP — passing a reader token over MCP — is a separate follow-up.) On a
     // non-gated site this is ALLOW_ALL, so behavior there is unchanged.
     const access = await requestReaderAccess(undefined, { anonymous: true });
+    // Version key so search_docs reuses the cached index across tool calls (live content; SPEC §6).
+    const indexKey = await requestSearchIndexKey();
     // Anything reaching /mcp is an agent; name it when we can, else "Other".
     const agentName = detectAgent(h.get("user-agent")).name || "Other";
     // Stable per-client id so a connection's many tool calls count as ONE visitor,
@@ -53,7 +60,8 @@ const handler = createMcpHandler(
     });
 
     const run = <T>(fn: () => Promise<T>): Promise<T> => {
-      const inner = (): Promise<T> => Promise.resolve(withReaderAccess(access, fn));
+      const inner = (): Promise<T> =>
+        Promise.resolve(withReaderAccess(access, () => withSearchIndexKey(indexKey, fn)));
       return src ? contentContext.run(src, inner) : inner();
     };
 

@@ -791,9 +791,13 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 > in-process `Map` (LRU, 32 entries), not the Data Cache. No version key (apex / `papervine dev`,
 > edited live) keeps the per-request build so edits stay fresh. Measured on papervine/docs (local
 > prod build): first query 735 ms (build) → subsequent ~8 ms (reuse), vs 735 ms *every* query
-> before. Deferred (still): build the index at sync time + persist it, so even the first query is
-> warm. Assistant/MCP RAG (`docs-tools.searchDocs`) still rebuilds per call — same fix applies
-> once the index key is threaded through those routes.
+> before. The assistant + public-MCP RAG (`docs-tools.searchDocs`) get the same cache: the version
+> key also rides an AsyncLocalStorage (`withSearchIndexKey`, set by those live routes alongside
+> `contentContext`/`accessContext`), so a nested `runSearch` reuses the index without threading the
+> key through every streamed tool call. The **draft** routes (editor/authoring agents) deliberately
+> don't set it — their content changes live, so they stay per-request. Deferred (still): build the
+> index at sync time + persist it (Orama persistence plugin → S3), so even the first query on a cold
+> serverless instance is warm — its own scoped task, marginal over the in-process cache.
 
 ---
 

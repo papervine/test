@@ -2,8 +2,13 @@ import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
 import { assistantTools } from "@/lib/assistant-tools";
 import { contentContext, loadConfig, loadPage } from "@papervine/renderer/lib/content";
-import { requestContentSource, requestReaderAccess } from "@/lib/request-source";
+import {
+  requestContentSource,
+  requestReaderAccess,
+  requestSearchIndexKey,
+} from "@/lib/request-source";
 import { withReaderAccess, currentPageAccess } from "@/lib/reader-access";
+import { withSearchIndexKey } from "@/lib/search";
 import { getSiteByHost } from "@/lib/tenant";
 import { logEvent } from "@/lib/track";
 
@@ -48,8 +53,11 @@ export async function POST(req: Request) {
   // The predicate rides an AsyncLocalStorage that propagates into the streamed tool calls
   // (same mechanism by which `contentContext` reaches them). Resolved from the reader cookie.
   const access = await requestReaderAccess(site);
+  // Version key so the assistant's searchDocs reuses the cached index instead of rebuilding it
+  // on every retrieval (live content; SPEC §6). Drafts are a different route and stay per-request.
+  const indexKey = await requestSearchIndexKey(site);
   const run = <T,>(fn: () => Promise<T> | T): Promise<T> | T => {
-    const inner = () => withReaderAccess(access, fn);
+    const inner = () => withReaderAccess(access, () => withSearchIndexKey(indexKey, fn));
     return src ? contentContext.run(src, inner) : inner();
   };
 

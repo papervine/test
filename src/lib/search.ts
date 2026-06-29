@@ -1,5 +1,6 @@
 import "server-only";
 import { cache } from "react";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { create, insertMultiple, search as oramaSearch } from "@orama/orama";
 import { listPageSlugs, loadPage, loadConfig } from "@papervine/renderer/lib/content";
 import { buildNav, findGroupLabel } from "@papervine/renderer/lib/nav";
@@ -148,22 +149,36 @@ const perRequestIndex = cache(buildIndexUncached);
 const indexByVersion = new Map<string, ReturnType<typeof buildIndexUncached>>();
 const MAX_CACHED_INDEXES = 32; // bound a long-lived multi-tenant process; evict the oldest
 
+// The version key also rides an AsyncLocalStorage so the retrieval surfaces that call `runSearch`
+// indirectly (the assistant + MCP, via docs-tools.searchDocs) get the cross-request cache too,
+// without threading the key through every tool call — mirroring how `contentContext`/the reader
+// `accessContext` reach those same streamed tool calls. Live routes set it; DRAFT routes (the
+// editor/authoring agents, whose content changes live) deliberately don't, so they stay per-request.
+const searchKeyContext = new AsyncLocalStorage<string | null>();
+
+/** Run `fn` with `key` as the search index version for any nested `runSearch` (set by live RAG
+ *  routes alongside `contentContext`). Pass null to force the per-request build (drafts). */
+export function withSearchIndexKey<T>(key: string | null, fn: () => T): T {
+  return searchKeyContext.run(key, fn);
+}
+
 function getIndex(indexKey: string | null | undefined): ReturnType<typeof buildIndexUncached> {
-  if (!indexKey) return perRequestIndex();
-  const hit = indexByVersion.get(indexKey);
+  const key = indexKey ?? searchKeyContext.getStore() ?? null;
+  if (!key) return perRequestIndex();
+  const hit = indexByVersion.get(key);
   if (hit) {
-    indexByVersion.delete(indexKey); // re-insert to mark most-recently-used (LRU)
-    indexByVersion.set(indexKey, hit);
+    indexByVersion.delete(key); // re-insert to mark most-recently-used (LRU)
+    indexByVersion.set(key, hit);
     return hit;
   }
   if (indexByVersion.size >= MAX_CACHED_INDEXES) {
     indexByVersion.delete(indexByVersion.keys().next().value as string);
   }
   const built = buildIndexUncached().catch((err) => {
-    indexByVersion.delete(indexKey); // never cache a failed build
+    indexByVersion.delete(key); // never cache a failed build
     throw err;
   });
-  indexByVersion.set(indexKey, built);
+  indexByVersion.set(key, built);
   return built;
 }
 

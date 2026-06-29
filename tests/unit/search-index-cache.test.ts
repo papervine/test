@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { parseDocsConfig } from "@papervine/renderer/lib/config";
 import { contentContext, parsePage, type ContentSource } from "@papervine/renderer/lib/content";
-import { runSearch } from "@/lib/search";
+import { runSearch, withSearchIndexKey } from "@/lib/search";
 
 // The search index is rebuilt by re-reading every page, so doing it per request made Cmd-K slow
 // (a full rebuild on each keystroke). runSearch now reuses the built index across calls, keyed by
@@ -55,5 +55,21 @@ describe("search index is cached per content-version key", () => {
       runSearch("betamarker", { indexKey: "site_x:shaB" }),
     );
     expect(beta.length).toBeGreaterThan(0);
+  });
+
+  it("picks up the version key from withSearchIndexKey (the assistant/MCP RAG path)", async () => {
+    // searchDocs calls runSearch with NO explicit key, but the live RAG routes wrap it in
+    // withSearchIndexKey — so the cache must key off the ALS value.
+    const key = "site_y:shaA";
+    const built = await contentContext.run(markerSource("alphaals"), () =>
+      withSearchIndexKey(key, () => runSearch("alphaals")),
+    );
+    expect(built.length).toBeGreaterThan(0);
+
+    // Same ALS key, new content → served from the cached (alpha) index, not rebuilt.
+    const noBeta = await contentContext.run(markerSource("betaals"), () =>
+      withSearchIndexKey(key, () => runSearch("betaals")),
+    );
+    expect(noBeta.length).toBe(0);
   });
 });
