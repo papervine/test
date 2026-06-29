@@ -223,6 +223,21 @@ resolved correctly (it passes `record.slug` to `requestContentSource`). Fix:
 `requestContentSource` falls back to `getSiteByCustomDomain(x-papervine-host ?? host)` when
 there's no slug, so the root layout primes the tenant source on custom domains too.
 
+**Same trap on the web editor — but the layout can't pre-resolve it (fixed 2026-06-29).** The
+editor (`/app/:org/:site/editor`, §9.2/§10) lives on the **app host**, which has no tenant slug
+and no custom domain — so `requestContentSource()` (no args) returns null and the **root layout**
+primes the React-`cache()`'d `loadConfig()` with the **default** `content/` config, exactly as
+above. But the layout-priming fix doesn't apply here: the layout can't resolve the editor's source
+because that source is a **draft overlay keyed on a branch** the layout never sees (and an app-host
+page legitimately wants default branding). So the editor's `contentContext.run(draftSrc, …)`
+couldn't override the already-poisoned memo, and `buildNav` built the **navigation from our own
+docs.json** — the editor sidebar showed Papervine's pages, not the edited site's (only `loadConfig`
+was poisoned; the layout never calls `loadPage`, so page bodies read the draft correctly). Fix: the
+editor reads config **straight from its resolved `src`** (`src.loadConfig()`), bypassing the
+per-request memo entirely — the in-context read is unavailable here, so we sidestep the memo rather
+than prime it. Regression guard: `tests/unit/editor-config-source.test.ts` models the request-scoped
+memo over the real `buildNav` and asserts the editor's nav is the edited site's, not the default's.
+
 **Same trap on the API routes — `/api/search` and `/api/assistant` (fixed 2026-06-09).**
 Middleware deliberately does **not** rewrite `/api/*` (line ~38), so those handlers never
 ran inside `contentContext` and their `runSearch`/`loadConfig`/tool calls fell back to the
@@ -1119,6 +1134,37 @@ layer.
 >   to source; git stays the source of truth, the draft buffer still stores one MDX string.
 > - **Gated** behind the `editor.workspace` feature (admin-only while we dogfood; flip to
 >   `everyone` to launch) at both the AppRail item (cosmetic) and `editor/layout.tsx` (real).
+>
+> **Editor opens on the deploy branch by default (2026-06-29).** The editor landed each session
+> on a freshly-minted `papervine/edit-xxxx` branch (the top-left picker showed a random working
+> branch). The incumbent instead opens on the configured deploy branch shown as **"Default"** — you
+> edit it directly and Publish commits straight to it; a working branch is an explicit
+> "Create new branch" action that publishes as a PR. We match that now: `editor/page.tsx`
+> defaults `branch` to `siteRow.branch` (no eager `checkoutBranch`), so a clean load creates no
+> branch and reads the synced content; the draft session is created lazily on the first edit
+> (`saveDraft` auto-checks-out), keyed on the deploy branch. The branch only matters at publish,
+> where the existing two modes already fit: on the deploy branch Publish **commits** (the
+> `publishModeForBranch` rule, `src/lib/publish-mode.ts`), on a working branch it opens a **PR**.
+> No backend change — sessions were always keyed by an arbitrary branch name; the deploy branch
+> is just another valid key, and commit-mode publish already targets `session.baseBranch`. Guard:
+> `tests/unit/publish-mode.test.ts` + the e2e editor spec now asserts the default landing is `main`.
+>
+> **Source/Preview mode persists across page switches (2026-06-29).** The editor pane is `key`ed
+> by page, so it remounts on every nav click — and its mode was pane-local `useState`, snapping
+> back to Source each time you clicked another page. Lifted the `Source ⇄ Preview` state up to
+> `EditorShell` (passed to `MdxEditorPane` as `mode`/`onModeChange`), so the chosen mode survives
+> the remount: click a page in Preview and you stay in rendered Preview, in Source you stay in
+> source. Safe because Preview never holds an unsaved edit (entering it flushes; the textarea
+> isn't mounted there). Guard: the e2e editor spec switches pages in each mode and asserts it sticks.
+>
+> **Flush the draft before switching pages (2026-06-29).** Same remount: a keystroke still inside
+> the pane's 700ms autosave debounce was *dropped* on a fast nav click — the unmount cleanup cleared
+> the timer without saving. The pane now exposes an imperative `flush()` (`MdxEditorHandle`), and
+> `EditorShell` awaits it before a **user-initiated** switch (nav click / branch switch) so the
+> pending edit lands on the *current* page's path (the pane's `onSave` is still bound to it at that
+> point). The agent-write refresh deliberately passes `flush:false` — there the agent's just-written
+> draft is the newer content and must win, not the human's stale buffer. Guard: the e2e editor spec
+> types and switches pages faster than the debounce, asserting the edit survives.
 >
 > Token-scoped *external* auth for the authoring MCP (a platform-auth PAT, §11) is the
 > follow-up; today it authenticates via the app-host session + `x-papervine-org/site` headers.

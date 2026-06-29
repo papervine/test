@@ -30,7 +30,10 @@ overview).
   </Step>
   <Step title="Editor (right)">
     Edit the page in **Source** mode (raw MDX) and flip to **Preview** to see it rendered.
-    Edits autosave to the draft buffer; switching to Preview shows the latest.
+    Edits autosave to the draft buffer; switching to Preview shows the latest. Your chosen view
+    **stays put as you move between pages** — pick another page in Preview and it opens rendered;
+    in Source it opens as raw MDX. Switching pages also **saves your in-progress edit first**, so a
+    quick click away never loses what you just typed.
   </Step>
 </Steps>
 
@@ -46,24 +49,30 @@ your current draft, so unsaved-but-buffered edits appear the moment you switch t
 
 ## Branches and the draft buffer
 
-Every edit happens on a **working branch**, not the live deploy branch. The branch switcher (top
-left of the editor) lists the deploy branch and your open edit sessions, and can **create a new
-branch**. Your edits buffer **server-side** per branch, so they persist across tabs, devices,
-and reloads — and the agent and you share that one buffer.
+The editor opens on your site's **deploy branch** — the one marked **Default** in the branch
+switcher (top left). You edit it directly; the switcher also lists your open edit sessions and
+can **create a new branch** for changes you'd rather land through review.
+
+Wherever you edit, your changes buffer **server-side** per branch — they never touch the live
+branch until you publish. Buffered edits persist across tabs, devices, and reloads, and the
+agent and you share that one buffer. A clean session that you haven't typed into yet creates no
+branch and shows the live content as-is.
 
 Nothing is live until you publish.
 
 ## Publishing
 
-The **Publish** button carries the draft to Git in one of two modes:
+The **Publish** button carries the draft to Git. Its action follows the branch you're on, and the
+caret menu lets you pick either mode explicitly:
 
 <CardGroup cols={2}>
-  <Card title="Open a pull request">
-    Creates the working branch, commits your edits to it, and opens a PR into the deploy branch.
-    The safe default — review before it goes live.
+  <Card title="On the Default branch → commit">
+    Publish commits your edits straight onto the deploy branch. The normal sync then redeploys
+    the site. This is the default when you're editing the Default branch.
   </Card>
-  <Card title="Commit to the deploy branch">
-    Commits straight onto the deploy branch. The normal sync then redeploys the site.
+  <Card title="On a working branch → pull request">
+    Publish commits to the working branch and opens a PR into the deploy branch — review before
+    it goes live. Use **Create new branch** in the switcher when you want this flow.
   </Card>
 </CardGroup>
 

@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useRef, useState, useTransition } from "react";
 import { ChevronRight } from "lucide-react";
 import type { NavSection } from "@papervine/renderer/lib/nav";
 import { NavTree } from "./NavTree";
 import { BranchSwitcher } from "./BranchSwitcher";
 import { PublishButton } from "./PublishButton";
 import { EditorAgentPanel } from "./EditorAgentPanel";
-import { MdxEditorPane } from "./MdxEditorPane";
+import { MdxEditorPane, type Mode, type MdxEditorHandle } from "./MdxEditorPane";
 import { readDraftPageAction, saveDraftAction } from "@/lib/actions/authoring";
 
 // The 3-panel editor (SPEC §9.2/§10): editing-agent chat | navigation | multi-modal editor.
@@ -38,13 +38,23 @@ export function EditorShell({
   const [slug, setSlug] = useState(initialSlug);
   const [path, setPath] = useState(initialPath);
   const [markdown, setMarkdown] = useState(initialMarkdown);
+  // Source ⇄ Preview lives here, not in the pane: the pane is `key`ed by page so it remounts
+  // on every nav click, and pane-local mode would snap back to Source each time. Holding it in
+  // the shell makes the chosen mode persist across page switches.
+  const [mode, setMode] = useState<Mode>("source");
   // Bump to force the editor pane to remount with fresh content (page switch / agent edit).
   const [docKey, setDocKey] = useState(0);
   const [, start] = useTransition();
+  // The pane remounts per page, so a keystroke still inside its 700ms autosave debounce would be
+  // lost on a fast nav click. We flush it through this handle BEFORE a user-initiated switch.
+  const paneRef = useRef<MdxEditorHandle>(null);
 
   const loadPage = useCallback(
-    (nextSlug: string, nextBranch = branch) => {
+    (nextSlug: string, nextBranch = branch, opts: { flush?: boolean } = {}) => {
       start(async () => {
+        // Persist the current page's pending edit first — except on the agent-write refresh
+        // (flush:false), where the agent's freshly-written draft must win, not the human's stale buffer.
+        if (opts.flush ?? true) await paneRef.current?.flush();
         const res = await readDraftPageAction(org, site, nextBranch, nextSlug);
         if ("error" in res) return;
         setSlug(nextSlug);
@@ -61,8 +71,9 @@ export function EditorShell({
     loadPage(slug, next);
   };
 
-  // The agent edited the draft — refetch the page the user is looking at.
-  const refreshActive = useCallback(() => loadPage(slug, branch), [loadPage, slug, branch]);
+  // The agent edited the draft — refetch the page the user is looking at. Don't flush: the agent's
+  // write is the newer content; flushing the human's buffer here would clobber it.
+  const refreshActive = useCallback(() => loadPage(slug, branch, { flush: false }), [loadPage, slug, branch]);
 
   // Awaitable so the pane can flush a pending save before loading the preview iframe.
   const save = async (md: string): Promise<void> => {
@@ -102,11 +113,12 @@ export function EditorShell({
               <span className="truncate">{slug || "index"}</span>
             </span>
           </div>
-          <PublishButton org={org} site={site} branch={branch} />
+          <PublishButton org={org} site={site} branch={branch} deployBranch={deployBranch} />
         </header>
         <div className="min-h-0 flex-1">
           <MdxEditorPane
             key={docKey}
+            ref={paneRef}
             initialMarkdown={markdown}
             path={path}
             org={org}
@@ -114,6 +126,8 @@ export function EditorShell({
             branch={branch}
             slug={slug}
             onSave={save}
+            mode={mode}
+            onModeChange={setMode}
           />
         </div>
       </main>

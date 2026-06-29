@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { Code2, Eye, RefreshCw } from "lucide-react";
 
-type Mode = "source" | "preview";
+export type Mode = "source" | "preview";
 
 /**
  * The editor pane (SPEC §9.2): a Source (raw MDX) ⇄ Preview toggle over ONE MDX string.
@@ -17,15 +17,11 @@ type Mode = "source" | "preview";
  * Edits debounce-save to the draft buffer via `onSave`; switching to Preview flushes any
  * pending save first so the iframe reflects the latest keystroke, then reloads.
  */
-export function MdxEditorPane({
-  initialMarkdown,
-  path,
-  org,
-  site,
-  branch,
-  slug,
-  onSave,
-}: {
+// Imperative handle: EditorShell calls `flush()` to force-persist a pending edit before a
+// user-initiated page/branch switch (this pane is `key`ed by page, so the next page remounts it).
+export type MdxEditorHandle = { flush: () => Promise<void> };
+
+type MdxEditorPaneProps = {
   initialMarkdown: string;
   path: string;
   org: string;
@@ -33,9 +29,18 @@ export function MdxEditorPane({
   branch: string;
   slug: string;
   onSave: (markdown: string) => void | Promise<void>;
-  // `key`ed by the parent on page switch, so this remounts with fresh content per page.
-}) {
-  const [mode, setMode] = useState<Mode>("source");
+  // Source ⇄ Preview is owned by the parent (EditorShell), NOT local state: this pane is
+  // `key`ed by page so it remounts with fresh content on every nav click, and a local mode
+  // would reset to Source each time. Lifting it makes the mode persist across page switches —
+  // click another page in Preview and you stay in Preview (rendered), in Source you stay in Source.
+  mode: Mode;
+  onModeChange: (mode: Mode) => void;
+};
+
+export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(function MdxEditorPane(
+  { initialMarkdown, path, org, site, branch, slug, onSave, mode, onModeChange },
+  ref,
+) {
   const [value, setValue] = useState(initialMarkdown);
   const [savedAt, setSavedAt] = useState<"idle" | "saving" | "saved">("idle");
   // Bump to force the preview iframe to reload (after a flush, or a manual refresh).
@@ -57,6 +62,10 @@ export function MdxEditorPane({
     }
   };
 
+  // Exposed so EditorShell can flush before a user switches pages/branches. `onSave` is bound to
+  // THIS page's path, so the pending edit lands on the right file even as the parent moves on.
+  useImperativeHandle(ref, () => ({ flush }));
+
   const change = (md: string) => {
     setValue(md);
     if (md === savedValue.current) return;
@@ -73,7 +82,7 @@ export function MdxEditorPane({
   const showPreview = async () => {
     await flush(); // persist the latest edit before the iframe reads the draft
     setPreviewNonce((n) => n + 1);
-    setMode("preview");
+    onModeChange("preview");
   };
 
   const previewSrc = `/preview/${org}/${site}?branch=${encodeURIComponent(
@@ -104,7 +113,7 @@ export function MdxEditorPane({
               type="button"
               aria-label="Source mode"
               aria-pressed={mode === "source"}
-              onClick={() => setMode("source")}
+              onClick={() => onModeChange("source")}
               className={`px-2 py-1 ${mode === "source" ? "bg-neutral-200 dark:bg-neutral-700" : ""}`}
             >
               <Code2 className="h-4 w-4" />
@@ -141,4 +150,4 @@ export function MdxEditorPane({
       </div>
     </div>
   );
-}
+});

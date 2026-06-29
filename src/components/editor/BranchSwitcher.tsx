@@ -62,7 +62,11 @@ export function BranchSwitcher({
               >
                 <span className="w-4">{b === branch && <Check className="h-3.5 w-3.5" />}</span>
                 <span className="truncate">{b}</span>
-                {b === deployBranch && <span className="ml-auto text-[10px] text-neutral-400">default</span>}
+                {b === deployBranch && (
+                  <span className="ml-auto rounded bg-neutral-100 px-1.5 py-0.5 text-[10px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                    Default
+                  </span>
+                )}
               </button>
             ))}
             <button

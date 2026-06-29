@@ -3,13 +3,29 @@
 import { useState, useTransition } from "react";
 import { ChevronDown, GitPullRequest, GitCommit } from "lucide-react";
 import { publishDraftAction } from "@/lib/actions/authoring";
+import { publishModeForBranch } from "@/lib/publish-mode";
 
-// The Publish control: open a PR (safe default) or commit straight to the deploy branch —
-// the two modes the authoring backend supports (SPEC §9.2). Surfaces the PR link / conflict.
-export function PublishButton({ org, site, branch }: { org: string; site: string; branch: string }) {
+// The Publish control. The primary action follows the selected branch, mirroring the incumbent:
+// on the deploy ("Default") branch Publish commits straight to it; on a working branch it
+// opens a PR. The caret menu always offers both modes explicitly. Surfaces the PR link / conflict.
+export function PublishButton({
+  org,
+  site,
+  branch,
+  deployBranch,
+}: {
+  org: string;
+  site: string;
+  branch: string;
+  deployBranch: string;
+}) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
   const [result, setResult] = useState<string | null>(null);
+
+  // On the deploy branch, the natural publish is a direct commit (the incumbent's Publish on Default);
+  // on a working branch it's a PR into the deploy branch.
+  const primaryMode = publishModeForBranch(branch, deployBranch);
 
   const publish = (mode: "pr" | "commit") =>
     start(async () => {
@@ -27,10 +43,10 @@ export function PublishButton({ org, site, branch }: { org: string; site: string
         <button
           type="button"
           disabled={pending}
-          onClick={() => publish("pr")}
+          onClick={() => publish(primaryMode)}
           className="flex items-center gap-1.5 rounded-l-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-60"
         >
-          <GitPullRequest className="h-4 w-4" />
+          {primaryMode === "commit" ? <GitCommit className="h-4 w-4" /> : <GitPullRequest className="h-4 w-4" />}
           {pending ? "Publishing…" : "Publish"}
         </button>
         <button

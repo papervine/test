@@ -42,10 +42,11 @@ test.describe("web editor @external", () => {
     const prefix = `sites/${SITE_ID}/`;
     await put(
       `${prefix}docs.json`,
-      JSON.stringify({ name: "Editor E2E", navigation: { pages: ["index"] } }),
+      JSON.stringify({ name: "Editor E2E", navigation: { pages: ["index", "second"] } }),
       "application/json",
     );
     await put(`${prefix}index.mdx`, "---\ntitle: Home\n---\n\nOriginal body text.\n");
+    await put(`${prefix}second.mdx`, "---\ntitle: Second Page\n---\n\nThe second page body.\n");
   });
 
   test.afterAll(async () => {
@@ -56,9 +57,10 @@ test.describe("web editor @external", () => {
   test("renders the 3-panel editor and persists a source edit to the draft buffer", async ({ page }) => {
     await page.goto(sitePath(SLUG, "editor"));
 
-    // The 3-panel shell: agent composer, nav, branch switcher.
+    // The 3-panel shell: agent composer, nav, branch switcher. The editor opens on the site's
+    // configured deploy branch ("main") by default — not a freshly-minted edit-* branch.
     await expect(page.getByPlaceholder('Try "expand more about…"')).toBeVisible();
-    await expect(page.getByRole("button", { name: /papervine\/edit-|main/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "main", exact: true })).toBeVisible();
 
     // Switch to Source mode and type into the raw MDX.
     await page.getByRole("button", { name: "Source mode" }).click();
@@ -81,5 +83,51 @@ test.describe("web editor @external", () => {
         { timeout: 10_000 },
       )
       .toContain("Added by the e2e editor test.");
+  });
+
+  // The editor pane is `key`ed by page, so it remounts on every nav click. The Source/Preview
+  // mode must survive that remount: switch pages in Preview and you stay in Preview (rendered),
+  // in Source and you stay in Source. (Mode lives in EditorShell, not pane-local state.)
+  test("keeps the Source/Preview mode when switching pages in the nav", async ({ page }) => {
+    await page.goto(sitePath(SLUG, "editor"));
+    await expect(page.getByRole("button", { name: "main", exact: true })).toBeVisible();
+
+    // Source mode (the default): clicking another page shows that page's raw MDX, still in Source.
+    await page.getByRole("button", { name: "Source mode" }).click();
+    await page.getByRole("button", { name: "Second Page" }).click();
+    await expect(page.locator("textarea").last()).toContainText("The second page body", {
+      timeout: 10_000,
+    });
+    // The "Refresh preview" control is mounted only in Preview mode — absent confirms Source.
+    await expect(page.getByRole("button", { name: "Refresh preview" })).toHaveCount(0);
+
+    // Now enter Preview, switch back to the first page, and confirm we stay in Preview (render).
+    await page.getByRole("button", { name: "Preview mode" }).click();
+    await expect(page.getByRole("button", { name: "Refresh preview" })).toBeVisible();
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Refresh preview" })).toBeVisible();
+    await expect(page.locator('iframe[title="Live preview"]')).toBeVisible();
+  });
+
+  // A keystroke still inside the 700ms autosave debounce must not be lost when you switch pages —
+  // EditorShell flushes the pane before the remount. (Without the flush the debounce timer is
+  // cleared on unmount and the edit vanishes.) We switch immediately, faster than the debounce.
+  test("flushes a pending edit when switching pages before autosave fires", async ({ page }) => {
+    await page.goto(sitePath(SLUG, "editor"));
+    await page.getByRole("button", { name: "Source mode" }).click();
+
+    const textarea = page.locator("textarea").last();
+    await expect(textarea).toContainText("Original body text", { timeout: 10_000 });
+    await textarea.click();
+    await textarea.press("End");
+    await textarea.pressSequentially("\n\nFlushed on switch.");
+
+    // No debounce wait: jump to the second page and straight back. The edit must have been
+    // flushed to the draft buffer on the way out, so it's still here on return.
+    await page.getByRole("button", { name: "Second Page" }).click();
+    await page.getByRole("button", { name: "Home", exact: true }).click();
+    await expect(page.locator("textarea").last()).toContainText("Flushed on switch.", {
+      timeout: 10_000,
+    });
   });
 });

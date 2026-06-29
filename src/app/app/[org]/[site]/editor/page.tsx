@@ -1,8 +1,8 @@
 import { requireSite } from "@/lib/dashboard-context";
 import { requestContentSource } from "@/lib/request-source";
-import { contentContext, loadConfig } from "@papervine/renderer/lib/content";
+import { contentContext } from "@papervine/renderer/lib/content";
 import { buildNav, type NavSection, type NavLeaf, type NavNode } from "@papervine/renderer/lib/nav";
-import { checkoutBranch, resolvePagePath, listSessions } from "@/lib/authoring-core";
+import { resolvePagePath, listSessions } from "@/lib/authoring-core";
 import { EditorShell } from "@/components/editor/EditorShell";
 
 // The first page slug in the nav (the editor opens on it). Empty string → index.
@@ -34,13 +34,14 @@ export default async function EditorPage({
   const ctx = await requireSite(org, site);
   const siteRow = ctx.site;
 
-  // Resolve the working branch: an explicit ?branch=, else the most recent open session,
-  // else mint one (only when none exists, so a refresh doesn't spawn branches).
+  // Open on the site's configured deploy branch by default (the incumbent's "Default"), NOT a
+  // freshly-minted edit branch — landing the editor on the live branch the way the incumbent does.
+  // Drafts buffer in a session keyed on this branch, created lazily on the first edit
+  // (saveDraft auto-checks-out), so a clean load creates no branch and reads the synced
+  // content; Publish then commits straight to the deploy branch. An explicit ?branch= (or
+  // "Create new branch" in the switcher) opens a working branch instead, which publishes as a PR.
   const sessions = await listSessions(siteRow);
-  let branch = branchParam || sessions[sessions.length - 1]?.branch;
-  if (!branch) {
-    branch = (await checkoutBranch(siteRow, { actorUserId: ctx.session.user.id })).branch;
-  }
+  const branch = branchParam || siteRow.branch;
   const sessionBranches = [...new Set([...sessions.map((s) => s.branch), branch])];
 
   // Build the nav + initial page from the DRAFT overlay for this branch.
@@ -54,7 +55,14 @@ export default async function EditorPage({
   }
 
   const { sections, initialSlug, initialPath, initialMarkdown } = await contentContext.run(src, async () => {
-    const config = await loadConfig();
+    // Read config straight from `src`, NOT the memoized `loadConfig()`. The root layout renders
+    // first on this app host, finds no tenant source (no slug/custom-domain — see
+    // requestContentSource), and primes the per-request React `cache()` for `loadConfig` with the
+    // DEFAULT content/ repo. That memo is keyed only on args (none), so our `contentContext.run`
+    // here can't override it — `loadConfig()` would return Papervine's own docs.json and the
+    // sidebar would show OUR pages, not the edited site's. `loadPage` (used by buildNav) isn't
+    // primed by the layout, so it reads the draft correctly; only config needs the direct read.
+    const config = await src.loadConfig();
     const sections = await buildNav(config, "");
     const initialSlug = slugParam ?? firstSlug(sections);
     const { path, raw } = await resolvePagePath(siteRow, branch, initialSlug);
