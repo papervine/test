@@ -48,3 +48,21 @@ export function accessForRecord(
   const groups = opts?.anonymous ? [] : readerSession(cookieValue, record.id)?.groups ?? [];
   return (fm: PageFrontmatter) => canAccessPage(fm.groups, fm.public, groups);
 }
+
+/**
+ * A stable cache-key string for the reader's *entitlement class* — the dimension a gated page's
+ * rendered output (and its group-filtered nav) varies on (SPEC §11.2). Mirrors `accessForRecord`
+ * exactly, so the key always corresponds to the access decision:
+ *  - auth OFF  → "public" (one variant — every reader sees the same thing).
+ *  - auth ON   → the reader's session groups, sorted + joined (or "anon" with no session).
+ * Two readers with the same groups share a key, so per-group caches (nav today; the page cache
+ * in move ③) fan out by group, not by user.
+ */
+export function entitlementKey(
+  record: { authEnabled?: boolean | null; id: string } | null | undefined,
+  cookieValue: string | undefined,
+): string {
+  if (!record?.authEnabled) return "public";
+  const groups = readerSession(cookieValue, record.id)?.groups ?? [];
+  return groups.length ? [...groups].sort().join(",") : "anon";
+}

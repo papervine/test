@@ -1,5 +1,7 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeAll } from "vitest";
 import { canAccessPage } from "@/lib/reader-auth";
+import { entitlementKey } from "@/lib/reader-access";
+import { mintReaderSession } from "@/lib/reader-session";
 import { parseDocsConfig } from "@papervine/renderer/lib/config";
 import { contentContext, parsePage, type ContentSource } from "@papervine/renderer/lib/content";
 import { buildNav, type NavLeaf, type NavNode, type PageAccess } from "@papervine/renderer/lib/nav";
@@ -149,5 +151,46 @@ describe("buildNav prunes empty groups and tabs after access filtering", () => {
     const groups = sections.flatMap((s) => s.nodes).flatMap((n) => ("group" in n ? [n.group] : []));
     expect(groups).toContain("Start");
     expect(groups).not.toContain("Team");
+  });
+});
+
+describe("entitlementKey (per-group cache key, SPEC §11.2 move ②/③)", () => {
+  // mintReaderSession encrypts the cookie with this key; readerSession decrypts it.
+  beforeAll(() => {
+    process.env.PAPERVINE_ENCRYPTION_KEY = Buffer.from(
+      "0123456789abcdef0123456789abcdef",
+    ).toString("base64");
+  });
+
+  it("is 'public' for an auth-off site (one shared variant), regardless of cookie", () => {
+    expect(entitlementKey({ authEnabled: false, id: "s1" }, undefined)).toBe("public");
+    expect(
+      entitlementKey({ authEnabled: false, id: "s1" }, mintReaderSession("s1", Date.now(), { groups: ["admin"] })),
+    ).toBe("public");
+  });
+
+  it("is 'anon' for a gated site with no (or password) session", () => {
+    expect(entitlementKey({ authEnabled: true, id: "s1" }, undefined)).toBe("anon");
+    expect(entitlementKey({ authEnabled: true, id: "s1" }, mintReaderSession("s1"))).toBe("anon");
+  });
+
+  it("keys on the sorted group set, so group ORDER never splits the cache", () => {
+    // The cache-correctness property: [b,a] and [a,b] are the same entitlement → one cache entry.
+    const ab = entitlementKey({ authEnabled: true, id: "s1" }, mintReaderSession("s1", Date.now(), { groups: ["a", "b"] }));
+    const ba = entitlementKey({ authEnabled: true, id: "s1" }, mintReaderSession("s1", Date.now(), { groups: ["b", "a"] }));
+    expect(ab).toBe("a,b");
+    expect(ba).toBe("a,b");
+  });
+
+  it("gives distinct keys to distinct group sets", () => {
+    const admin = entitlementKey({ authEnabled: true, id: "s1" }, mintReaderSession("s1", Date.now(), { groups: ["admin"] }));
+    const beta = entitlementKey({ authEnabled: true, id: "s1" }, mintReaderSession("s1", Date.now(), { groups: ["beta"] }));
+    expect(admin).toBe("admin");
+    expect(admin).not.toBe(beta);
+  });
+
+  it("treats a cookie minted for another site as no session (site-bound) → 'anon'", () => {
+    const otherSiteCookie = mintReaderSession("s2", Date.now(), { groups: ["admin"] });
+    expect(entitlementKey({ authEnabled: true, id: "s1" }, otherSiteCookie)).toBe("anon");
   });
 });

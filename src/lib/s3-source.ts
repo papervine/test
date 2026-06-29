@@ -18,7 +18,7 @@ import { getObjectText, listKeys } from "./storage";
  * fix), and config/docs.json was fetched 3-4× per request. We add a 1h `revalidate`
  * as a safety net so a missed invalidation self-heals.
  */
-function siteContentTag(siteId: string): string {
+export function siteContentTag(siteId: string): string {
   return `site-content:${siteId}`;
 }
 

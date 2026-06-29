@@ -2043,10 +2043,20 @@ now** (it's the Neon-round-trip fix); the rest build on the gate:
   columns are re-hydrated after the cache's JSON round-trip (`reviveSiteDates`) so the
   `updatedAt`-in-version-key path keeps working. *(Redis/Edge Config still relevant for move ④,
   the edge gate, which needs sub-ms **edge** reads the Data Cache can't serve.)*
-- **② Cache `buildNav` per `(contentVersion, groupSet)`.** Recomputed on every request today
-  (`packages/renderer/lib/nav.ts`, no cache wrapper) yet it's a pure function of
-  `(config, base, accessPredicate)`. On a large site this is a real chunk; memoize it in the Data
-  Cache keyed by content version + class. The MDX compile and S3 reads are already cached.
+- **② Cache `buildNav` per `(contentVersion, groupSet)` — ✅ LANDED 2026-06-29.** `buildNav`
+  resolves every nav leaf via `loadPage` (a content read per page) and the nav is identical across
+  all of a site's pages for a given entitlement class — yet it ran on *every* page render (the
+  shell AND the article). `buildNavCached` (`render-tenant.tsx`) now wraps it in the Data Cache,
+  **version-keyed** (`sha:syncedAt`, like the content cache — and via move ① the version follows
+  the cached site row, so a manual sync busts immediately, a webhook sync settles within the row
+  TTL) and **group-keyed** (`entitlementKey`, new in `reader-access.ts` — "public" for an auth-off
+  site, the sorted group set for a gated reader; this is also the move ③ entitlement-class key).
+  The callback re-establishes `contentContext` so `loadPage` works on a miss. Built once per
+  (version, base, class) and reused for every page + the shell; covers subdomain *and*
+  custom-domain renders (editor drafts, the apex single-repo path, and search/MCP retrieval keep
+  their own uncached `buildNav`). Verified on a local prod build: the 67-link papervine/docs nav
+  renders correctly (cache callback context works), warm renders ~15 ms. Unit-tested
+  (`entitlementKey`: public/anon/sorted-group-stability/site-binding) + crawl gate clean.
 
 *Needs the §11.2 edge gate first (adds the edge cache on top):*
 - **③ Cache key carries the entitlement class.** Middleware already verifies the JWT and reads

@@ -1,15 +1,18 @@
 import { notFound, redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
+import { unstable_cache } from "next/cache";
 import { getSiteBySlug, resolveTenantSlug } from "@/lib/tenant";
 import { READER_COOKIE, readerSessionValid } from "@/lib/reader-session";
-import { accessForRecord } from "@/lib/reader-access";
+import { accessForRecord, entitlementKey } from "@/lib/reader-access";
 import { requestContentSource } from "@/lib/request-source";
+import { siteContentTag } from "@/lib/s3-source";
 import type { PageAccess } from "@papervine/renderer/lib/nav";
 import {
   contentContext,
   loadConfig,
   loadPage,
   loadAssetDimensions,
+  type ContentSource,
 } from "@papervine/renderer/lib/content";
 import { buildNav, findGroupLabel } from "@papervine/renderer/lib/nav";
 import { loadApiCatalog } from "@papervine/renderer/lib/openapi";
@@ -83,6 +86,41 @@ async function readerAccess(slug: string): Promise<PageAccess> {
   return accessForRecord(record, cookie);
 }
 
+/**
+ * `buildNav` resolves every nav leaf via `loadPage` (one content read per page), and the nav is
+ * identical across all pages of a site for a given reader-entitlement class — yet it ran on every
+ * page render (the shell AND the article). Cache it in the Data Cache (SPEC §11.2 move ②):
+ *  - VERSION-keyed (`sha:syncedAt`, like the content cache), so a sync yields a fresh key — and,
+ *    via move ①, the version follows the cached site row (manual sync busts immediately, a webhook
+ *    sync settles within the row TTL).
+ *  - GROUP-keyed (`entitlementKey`), so a gated site's per-group nav variants don't collide; a
+ *    public site is the single "public" class.
+ * Built once per (version, base, class) and reused for every page render + the shell. The callback
+ * re-establishes `contentContext` so `loadPage` works on a cache miss regardless of whether the
+ * ambient ALS propagates through `unstable_cache`. Output is plain NavSection[] (strings/arrays),
+ * so it round-trips the cache cleanly.
+ */
+async function buildNavCached(
+  slug: string,
+  base: string,
+  config: Parameters<typeof buildNav>[0],
+  canAccess: PageAccess,
+  src: ContentSource,
+): Promise<Awaited<ReturnType<typeof buildNav>>> {
+  const record = await getSiteBySlug(slug);
+  if (!record) return buildNav(config, base, canAccess); // src exists; purely defensive
+  const cookie = (await cookies()).get(READER_COOKIE)?.value;
+  const version = `${record.lastSyncedCommitSha ?? ""}:${
+    record.updatedAt instanceof Date ? record.updatedAt.getTime() : 0
+  }`;
+  const groupKey = entitlementKey(record, cookie);
+  return unstable_cache(
+    () => contentContext.run(src, () => buildNav(config, base, canAccess)),
+    ["tenant-nav", record.id, version, base, groupKey],
+    { tags: [siteContentTag(record.id)], revalidate: 3600 },
+  )();
+}
+
 /** The persistent docs chrome (layout). Renders the tenant's navbar/tabs/sidebar/assistant
  *  + theme once; `children` is the per-page article, which streams independently. */
 export async function TenantDocsShell({
@@ -104,7 +142,7 @@ export async function TenantDocsShell({
   const canAccess = await readerAccess(slug);
   return contentContext.run(src, async () => {
     const config = await loadConfig();
-    const sections = await buildNav(config, base, canAccess);
+    const sections = await buildNavCached(slug, base, config, canAccess, src);
 
     // Override the apex theme vars with this tenant's brand colors.
     const theme = resolveTheme(config.theme);
@@ -156,7 +194,7 @@ export async function TenantDocsArticle({
   const canAccess = await readerAccess(slug);
   return contentContext.run(src, async () => {
     const config = await loadConfig();
-    const sections = await buildNav(config, base, canAccess);
+    const sections = await buildNavCached(slug, base, config, canAccess, src);
     const slugStr = path.join("/");
     const page = await loadPage(slugStr);
     if (!page) {
