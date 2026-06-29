@@ -76,6 +76,17 @@ function fieldKey(p: TryItParam): string {
   return `${p.in}:${p.name}`;
 }
 
+// Persistent, theme-matched scrollbar for the modal's scroll panes (the results window
+// especially). Defining ::-webkit-scrollbar disables macOS's fade-out overlay scrollbar, so it
+// stays visible; `overflow-y-scroll` on the pane keeps the track reserved even for short bodies.
+const TRY_IT_SCROLL_CSS = `
+.try-it-scroll{scrollbar-width:thin;scrollbar-color:#52525b transparent}
+.try-it-scroll::-webkit-scrollbar{width:12px;height:12px}
+.try-it-scroll::-webkit-scrollbar-track{background:transparent}
+.try-it-scroll::-webkit-scrollbar-thumb{background-color:#3f3f46;border-radius:9999px;border:3px solid transparent;background-clip:content-box}
+.try-it-scroll::-webkit-scrollbar-thumb:hover{background-color:#52525b}
+`;
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -335,6 +346,10 @@ function Modal(p: {
       onMouseDown={(e) => e.target === ref.current && p.setOpen(false)}
       ref={ref}
     >
+      {/* Always-visible, styled scrollbar for the modal's scroll panes — defining
+          ::-webkit-scrollbar opts out of macOS overlay scrollbars (which fade out), so the
+          results window's scrollbar is persistently there. Paired with overflow-y-scroll. */}
+      <style>{TRY_IT_SCROLL_CSS}</style>
       <div className="my-auto w-full max-w-6xl overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-950 text-zinc-100 shadow-2xl">
         {/* Header: op selector · editable URL · Send */}
         <div className="flex flex-wrap items-center gap-3 border-b border-zinc-800 p-4">
@@ -472,7 +487,7 @@ function Modal(p: {
               </div>
               {p.live ? (
                 <pre
-                  className="m-0 max-h-[40vh] overflow-auto p-4 font-mono text-xs leading-relaxed text-zinc-200"
+                  className="try-it-scroll m-0 max-h-[40vh] overflow-y-scroll overflow-x-auto p-4 font-mono text-xs leading-relaxed text-zinc-200"
                   dangerouslySetInnerHTML={{ __html: colorizeJson(p.live.body) }}
                 />
               ) : (
