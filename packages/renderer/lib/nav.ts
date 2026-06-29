@@ -75,7 +75,26 @@ async function openapiLeaves(div: Division, canAccess: PageAccess): Promise<(Nav
     method: op.method,
   });
 
-  if (!Array.isArray(div.pages)) return ops.map(leafFor);
+  // Auto-generated (no explicit `pages`): group operations by their first OpenAPI tag, like
+  // the incumbent — each tag becomes a collapsible nav group, operations in spec order under it.
+  // Tags appear in first-encounter order; untagged operations stay as bare leaves up top. A
+  // spec with no tags at all falls through to a flat list (unchanged behavior).
+  if (!Array.isArray(div.pages)) {
+    const untagged: NavLeaf[] = [];
+    const groups = new Map<string, NavLeaf[]>();
+    for (const op of ops) {
+      if (op.tag) {
+        let items = groups.get(op.tag);
+        if (!items) groups.set(op.tag, (items = []));
+        items.push(leafFor(op));
+      } else {
+        untagged.push(leafFor(op));
+      }
+    }
+    if (groups.size === 0) return untagged;
+    const tagNodes: NavNode[] = [...groups].map(([group, items]) => ({ group, items }));
+    return [...untagged, ...tagNodes];
+  }
 
   // Resolve entries concurrently (manual page entries hit loadPage — one S3 round-trip
   // each); Promise.all preserves nav order. See collectChildren for why this matters.

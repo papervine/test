@@ -75,8 +75,10 @@ const CHECKS = [
   { slug: "hidden", desc: "hidden page reachable by URL", include: ["HIDDEN_PAGE_MARKER"] },
   {
     slug: "list-users",
-    desc: "OpenAPI: GET endpoint page (params + response schema)",
-    include: ["GET", "/users", "limit", "Max users to return"],
+    desc: "OpenAPI: GET endpoint page (params + response schema + tag-grouped nav)",
+    // "Users" is the operations' OpenAPI tag → the sidebar groups them under it (not a flat
+    // list). Capitalized so it matches the group header, not the "List users" page titles.
+    include: ["GET", "/users", "limit", "Max users to return", ">Users<"],
   },
   {
     slug: "create-user",

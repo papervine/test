@@ -33,8 +33,8 @@ location — it resolves identically whether you're previewing locally with the
 
 ## Generation (at sync time)
 
-When the site syncs, Papervine parses the spec and generates pages. Operations become
-**one page each**, or are grouped by tag. Each operation page includes:
+When the site syncs, Papervine parses the spec and generates pages — **one page per
+operation**. Each operation page includes:
 
 - A **method + path header**, the operation description, and its auth requirements.
 - **Request documentation** — params, headers, and body fields rendered with
@@ -46,8 +46,11 @@ Because generation happens at sync time, the reference is just more pages in you
 searchable, themeable, and indexed for the [AI assistant](/features/ai-assistant) like any
 other content.
 
-Each operation also gets a **colored HTTP-method badge** in the left sidebar (a green `GET`,
-a blue `POST`, a red `DEL`), so readers can scan the API surface at a glance.
+In the left sidebar, operations are **grouped by their OpenAPI tag** — each tag becomes a
+collapsible nav group (its operations listed in spec order), so a large API reads as a tidy
+set of sections rather than one long flat list. Operations with no tag stay as plain entries.
+Each operation also gets a **colored HTTP-method badge** (a green `GET`, a blue `POST`, a red
+`DEL`), so readers can scan the API surface at a glance.
 
 ## The three-pane layout
 

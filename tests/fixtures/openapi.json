@@ -7,6 +7,7 @@
       "get": {
         "operationId": "listUsers",
         "summary": "List users",
+        "tags": ["Users"],
         "description": "Returns a paginated list of users.",
         "parameters": [
           {
@@ -46,6 +47,7 @@
       "post": {
         "operationId": "createUser",
         "summary": "Create user",
+        "tags": ["Users"],
         "requestBody": {
           "required": true,
           "content": {
@@ -68,6 +70,7 @@
       "get": {
         "operationId": "getUser",
         "summary": "Get user",
+        "tags": ["Users"],
         "parameters": [
           {
             "name": "id",

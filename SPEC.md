@@ -784,7 +784,7 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 ## 7. API Playground (v1)
 
 - **Input:** OpenAPI 3.0+ (YAML/JSON) and AsyncAPI; referenced from `docs.json` (`"openapi": "..."`).
-- **Generation (at sync time):** parse spec → one page per operation (or grouped by tag), with:
+- **Generation (at sync time):** parse spec → one page per operation (grouped by tag in the nav), with:
   - method + path header, description, auth requirements
   - request param/body docs (`<ParamField>`), schema explorer
   - response schemas + examples (`<ResponseField>`)
@@ -820,6 +820,17 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 > in the bundle); (3) a read-only right rail (`ApiPlayground.tsx`) showing those samples + a
 > per-status response tab. The `papervine/starter` Widgets spec points `servers` at an echo
 > (`httpbin.org/anything`) so the live demo returns a real 200 you can see.
+
+> **Status — left-nav groups operations by tag (2026-06-28).** Auto-generated OpenAPI nav
+> (`openapiLeaves`, no explicit `pages`) was a **flat** list of every operation — a 40-endpoint
+> spec was 40 ungrouped rows. It now mirrors the incumbent: operations are bucketed by their first
+> OpenAPI `tag` into one collapsible `NavNode` per tag (tags in first-encounter = spec order;
+> untagged operations stay as bare leaves above the groups). A spec with **no** tags falls
+> through to the old flat list, so nothing regresses for untagged specs. The grouping reuses the
+> existing `Sidebar` group rendering (collapsible `SubGroup` + the method badges above), so no
+> renderer change was needed beyond emitting the nodes. Unit-tested (`nav-openapi-tags.test.ts`:
+> grouping, order, untagged-leaves, no-tags fallback) and exercised in the fixtures smoke (the
+> `Users`-tagged spec). Verified the rendered nesting via DOM (`Endpoints › Users › [ops]`).
 
 > **Status — "Try it" promoted to a full modal playground (2026-06-28).** The interactive
 > playground moved off the right rail onto a **green trigger on the center endpoint bar** that
