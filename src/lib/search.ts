@@ -89,7 +89,7 @@ function splitSections(body: string): Section[] {
   return sections;
 }
 
-const buildIndex = cache(async () => {
+async function buildIndexUncached() {
   const db = await create({ schema });
   const config = await loadConfig();
   const nav = await buildNav(config);
@@ -133,7 +133,39 @@ const buildIndex = cache(async () => {
 
   await insertMultiple(db, docs);
   return db;
-});
+}
+
+/**
+ * Reuse the built Orama index ACROSS requests, in-process, keyed by content version. The index is
+ * reader-independent (the per-page gate is applied per query in `runSearch`) and changes only on
+ * (re-)sync, yet building it re-reads every page — so rebuilding it per request (React `cache`
+ * alone) re-read the whole site on every keystroke (the "search got slow" report). With a version
+ * key the build happens once per version per process; queries just hit the warm index. A re-sync
+ * changes the key (new sha/updatedAt) → fresh index. No key (apex / `papervine dev`, where content
+ * is edited live with no stable version) falls back to the per-request build so edits stay fresh.
+ */
+const perRequestIndex = cache(buildIndexUncached);
+const indexByVersion = new Map<string, ReturnType<typeof buildIndexUncached>>();
+const MAX_CACHED_INDEXES = 32; // bound a long-lived multi-tenant process; evict the oldest
+
+function getIndex(indexKey: string | null | undefined): ReturnType<typeof buildIndexUncached> {
+  if (!indexKey) return perRequestIndex();
+  const hit = indexByVersion.get(indexKey);
+  if (hit) {
+    indexByVersion.delete(indexKey); // re-insert to mark most-recently-used (LRU)
+    indexByVersion.set(indexKey, hit);
+    return hit;
+  }
+  if (indexByVersion.size >= MAX_CACHED_INDEXES) {
+    indexByVersion.delete(indexByVersion.keys().next().value as string);
+  }
+  const built = buildIndexUncached().catch((err) => {
+    indexByVersion.delete(indexKey); // never cache a failed build
+    throw err;
+  });
+  indexByVersion.set(indexKey, built);
+  return built;
+}
 
 /** Build a short snippet centered on the first matched term. */
 function makeSnippet(content: string, term: string, len = 140): string {
@@ -146,9 +178,13 @@ function makeSnippet(content: string, term: string, len = 140): string {
   return (start > 0 ? "…" : "") + slice + (start + len < content.length ? "…" : "");
 }
 
-export async function runSearch(term: string, limit = 8): Promise<SearchHit[]> {
+export async function runSearch(
+  term: string,
+  opts: { indexKey?: string | null; limit?: number } = {},
+): Promise<SearchHit[]> {
   if (!term.trim()) return [];
-  const db = await buildIndex();
+  const { indexKey, limit = 8 } = opts;
+  const db = await getIndex(indexKey);
   // Over-fetch so the reader-access filter below can drop gated hits without under-filling
   // the result list (a reader who can see most pages should still get `limit` hits).
   const access = currentPageAccess();

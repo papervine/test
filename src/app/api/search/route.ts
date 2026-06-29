@@ -1,6 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { contentContext } from "@papervine/renderer/lib/content";
-import { requestContentSource, requestReaderAccess } from "@/lib/request-source";
+import {
+  requestContentSource,
+  requestReaderAccess,
+  requestSearchIndexKey,
+} from "@/lib/request-source";
 import { withReaderAccess } from "@/lib/reader-access";
 import { runSearch } from "@/lib/search";
 
@@ -18,8 +22,13 @@ export async function GET(req: NextRequest) {
   // Gate results by the reader's per-page access (SPEC §11.2) so Cmd-K never surfaces a
   // page the reader can't open — the same predicate the renderer/nav use.
   const access = await requestReaderAccess(site);
+  // Version key so the index is reused across keystrokes/requests instead of rebuilt each time
+  // (null on the apex → per-request build; see runSearch/getIndex in search.ts).
+  const indexKey = await requestSearchIndexKey(site);
   const results = src
-    ? await contentContext.run(src, () => withReaderAccess(access, () => runSearch(q)))
+    ? await contentContext.run(src, () =>
+        withReaderAccess(access, () => runSearch(q, { indexKey })),
+      )
     : await withReaderAccess(access, () => runSearch(q));
 
   // Analytics is NOT logged here: this fires once per keystroke-debounce, so it would

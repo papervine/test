@@ -779,6 +779,22 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 - `/api/search?q=` endpoint per tenant, edge-cached.
 - Pluggable: allow Algolia as an alternative provider via config.
 
+> **Index caching (2026-06-29).** The Orama index is built by re-reading every page, but it was
+> only React-`cache`d — i.e. rebuilt *per request*. Since `/api/search` fires once per
+> keystroke-debounce, every keystroke re-read the whole site (the "search got slow after we gated
+> by group permissions" report — the per-page gate is actually applied cheaply per *query* on a
+> reader-independent index; it just made the pre-existing per-request rebuild more noticeable).
+> Fix: the index is reader-independent and changes only on (re-)sync, so cache the built Orama
+> instance **in-process, keyed by content version** (`siteId:sha:updatedAt`, from
+> `requestSearchIndexKey`) — built once per version per process, reused across keystrokes; a
+> re-sync changes the key → rebuild. The Orama object isn't JSON-serializable, so it's a bounded
+> in-process `Map` (LRU, 32 entries), not the Data Cache. No version key (apex / `papervine dev`,
+> edited live) keeps the per-request build so edits stay fresh. Measured on papervine/docs (local
+> prod build): first query 735 ms (build) → subsequent ~8 ms (reuse), vs 735 ms *every* query
+> before. Deferred (still): build the index at sync time + persist it, so even the first query is
+> warm. Assistant/MCP RAG (`docs-tools.searchDocs`) still rebuilds per call — same fix applies
+> once the index key is threaded through those routes.
+
 ---
 
 ## 7. API Playground (v1)

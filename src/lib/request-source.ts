@@ -112,3 +112,23 @@ export async function requestAssetBase(): Promise<string> {
   const record = await getSiteByCustomDomain(h.get("x-papervine-host") ?? h.get("host") ?? "");
   return record ? `/api/tenant-asset/${record.slug}` : "";
 }
+
+/**
+ * A stable cache key for the search index of the current request's tenant — site id + the synced
+ * version (sha:updatedAt). The search index (src/lib/search.ts) is reader-INDEPENDENT (the
+ * per-page gate is applied per query) and changes only on (re-)sync, so keying an in-process
+ * cache on this lets the index be built once per version per process instead of rebuilt on every
+ * keystroke. Mirrors `requestContentSource`'s tenant resolution + version. Returns null on the
+ * apex/preview host (no stable version → search.ts keeps its per-request build so `papervine dev`
+ * live edits stay fresh). `getSiteBySlug` is per-request `cache()`d, so this is ~free.
+ */
+export async function requestSearchIndexKey(slugOverride?: string): Promise<string | null> {
+  const h = await headers();
+  const slug = slugOverride ?? h.get("x-papervine-site") ?? resolveTenantSlug(h.get("host"));
+  const record = slug
+    ? await getSiteBySlug(slug)
+    : await getSiteByCustomDomain(h.get("x-papervine-host") ?? h.get("host") ?? "");
+  if (!record) return null;
+  const syncedAt = record.updatedAt instanceof Date ? record.updatedAt.getTime() : 0;
+  return `${record.id}:${record.lastSyncedCommitSha ?? ""}:${syncedAt}`;
+}
