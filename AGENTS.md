@@ -185,8 +185,8 @@ Core principles, in priority order:
 
 ```bash
 docker compose up -d        # local Postgres (+pgvector) + MinIO (S3) for the control plane
-npm run dev                 # serve the app (singleton: reuses a running server, so parallel agents can't corrupt .next)
-npm run dev:fresh           # kill the dev server, wipe .next, restart clean (use when chunks/manifests are already corrupted)
+npm run dev                 # serve the app (plain `next dev`; if :3000 is busy Next auto-picks the next port, so multiple worktrees coexist)
+npm run dev:fresh           # kill whatever holds PORT, wipe this worktree's .next, restart clean (use when chunks/manifests are corrupted)
 npm run build               # production build
 npm run typecheck           # tsc --noEmit
 npm test                    # smoke: renderer + control-plane gate (zero-dep, no DB)
