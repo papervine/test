@@ -37,6 +37,10 @@ type RailItem = {
   // When set, the item only renders for roles that can see this feature
   // (src/lib/features.ts). Absent → visible to everyone.
   feature?: FeatureKey;
+  // Heavy routes (expensive per-request RSC render) opt OUT of the full prefetch below, so we
+  // don't fire that work for every rail item on every dashboard page. They keep Next's default
+  // (lighter) prefetch and fetch on navigation. Analytics runs time-series aggregation queries.
+  heavy?: boolean;
 };
 
 // Grouped rail IA, mirroring the incumbent's sidebar: a lead group, an "Automate" section
@@ -50,7 +54,7 @@ const NAV_SECTIONS: { heading?: string; items: RailItem[] }[] = [
     items: [
       { sub: "", label: "Home", icon: Home },
       { sub: "editor", label: "Editor", icon: FileEdit, feature: "editor.workspace" },
-      { sub: "analytics", label: "Analytics", icon: BarChart3 },
+      { sub: "analytics", label: "Analytics", icon: BarChart3, heavy: true },
     ],
   },
   {
@@ -145,7 +149,7 @@ export function AppRail({
                   {section.heading}
                 </h3>
               )}
-              {section.items.map(({ sub, label, icon: Icon, soon }) => {
+              {section.items.map(({ sub, label, icon: Icon, soon, heavy }) => {
                 if (soon || sub === undefined) {
                   return (
                     <span
@@ -172,6 +176,11 @@ export function AppRail({
                     key={href}
                     href={href}
                     onClick={onNavigate}
+                    // Full prefetch on the light rail items so their RSC is in the Router Cache
+                    // before the click; paired with experimental.staleTimes.dynamic it makes nav
+                    // an instant 0-network client render (SPEC §10.x). Heavy routes (Analytics)
+                    // keep Next's default partial prefetch — see the `heavy` flag above.
+                    prefetch={heavy ? undefined : true}
                     className={`flex items-center gap-2 rounded-md px-2 py-2.5 text-sm transition-colors lg:py-1.5 ${
                       active
                         ? "bg-[rgba(var(--ink-rgb),0.06)] text-[var(--fg)]"

@@ -1717,6 +1717,40 @@ network-vs-generic branch can't silently regress.
 > in-browser (forced throw, light + dark) — chrome intact, themed card, no black screen.
 > Smoke's control-plane checks exercise the app-host gate around the new boundaries.
 
+### 10.x Instant settings navigation (Router-Cache reuse)
+
+The dashboard is a Next App Router SPA: the rail/subnav persist and only the content segment
+swaps on navigation (soft-nav). But every dashboard page reads the session cookie, so it
+renders **dynamically** — and Next 15 defaults the client Router Cache's `staleTimes.dynamic`
+to **0**, meaning a prefetched dynamic route is treated as immediately stale: `<Link>`
+prefetches its RSC, then **discards it and refetches on click**. Measured against the incumbent's
+dashboard (Playwright, Resource Timing): clicking a settings sibling tab refetched the RSC live
+(~222 ms, 1 request, ~195 ms TTFB on Neon) where the incumbent reused its prefetch (**42 ms, 0
+requests**) — the ~100 ms perception line sat right between them ("click → wait → change" vs
+"changed before you let go").
+
+Fix, two parts: (1) `experimental.staleTimes.dynamic: 30` (`next.config.mjs`) gives a
+prefetched/visited dynamic entry a 30 s reuse window; (2) `prefetch={true}` on the nav links
+forces a **full** prefetch (Next's default partial prefetch skips a dynamic route's RSC data, so
+there'd be nothing to reuse). Applied to both the `SettingsNav` subnav and the main `AppRail`.
+Safe because mutations go through server actions that `revalidatePath` the affected entry, so
+freshly-changed data still shows; a hard refresh always wins. Tradeoff: landing on Settings now
+fires ~14 RSC prefetches (one per tab) — the same cost the incumbent pays for the instant feel;
+settings queries are light. **Heavy rail routes opt out** via a `heavy` flag on the `RailItem`
+(Analytics, which runs time-series aggregation keyed on `searchParams`) — they keep Next's
+default partial prefetch and fetch on navigation, so we don't fire an expensive aggregation for
+every rail item on every dashboard page.
+
+> **Status (2026-06-29):** verified in a real browser against a local production build (seeded
+> `dev-org/starter`, Playwright + Resource Timing). After the fix, landing on Settings lands 14
+> full RSC prefetches and **every sibling-tab click is 0 network requests, ~30 ms**; the main
+> rail's light items (MCP, Settings, Editor) are likewise **0 requests, ~40 ms**, while Analytics
+> (the `heavy` opt-out) still fetches on click (~95 ms), as intended. Loopback, so absolute ms
+> isn't comparable to deployed — the decisive, latency-independent change is the elimination of
+> the per-click refetch, which on deployed removes the ~195 ms Neon round-trip. Distinct from the
+> §3/§11 docs-site edge-cache defer (that's `force-dynamic` SSR HTML with no CDN cache; this is
+> the *dashboard's* client Router Cache). typecheck + smoke green.
+
 ---
 
 ## 11. Authentication & Access Control

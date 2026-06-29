@@ -31,6 +31,11 @@ export function SettingsNav() {
               <Link
                 key={slug}
                 href={href}
+                // Full prefetch (not Next's default partial, which skips a dynamic route's RSC
+                // data) so the tab's payload is in the Router Cache before the click; paired
+                // with experimental.staleTimes.dynamic (next.config) it's reused on navigation,
+                // making sibling-tab switches an instant 0-network client render (SPEC perf).
+                prefetch={true}
                 className={`flex shrink-0 items-center gap-2 rounded-full border px-3 py-1.5 text-sm transition-colors ${
                   active
                     ? "border-transparent bg-[rgba(var(--ink-rgb),0.08)] text-[var(--fg)]"
@@ -61,6 +66,7 @@ export function SettingsNav() {
                 <Link
                   key={slug}
                   href={href}
+                  prefetch={true} // see the mobile strip above — full prefetch + staleTimes reuse
                   className={`flex items-center gap-2.5 rounded-md px-2 py-1.5 text-sm transition-colors ${
                     active
                       ? "bg-[rgba(var(--ink-rgb),0.06)] text-[var(--fg)]"

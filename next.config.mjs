@@ -19,6 +19,24 @@ const nextConfig = {
   images: {
     formats: ["image/avif", "image/webp"],
   },
+  experimental: {
+    // Client-side Router Cache reuse window. Next 15 defaults `dynamic` to 0, which means a
+    // prefetched-but-dynamic route (every dashboard/settings page — they read the session
+    // cookie, so they render dynamically) is treated as immediately stale: <Link> prefetches
+    // the RSC, then THROWS IT AWAY and refetches on click. That's a live round-trip on every
+    // navigation (~200ms TTFB measured), so settings tabs feel like "click → wait → change"
+    // instead of the incumbent's "changed before you let go" (their prefetched RSC is reused from
+    // cache → ~40ms, 0 network). Giving dynamic entries a 30s freshness window lets the
+    // prefetch be reused, turning sibling-tab navigation into an instant client render.
+    //
+    // Safe because our mutations go through server actions that call revalidatePath (see
+    // settings/*/actions.ts), which busts the cached entry — so freshly-changed data still
+    // shows. 30s only affects re-visiting an already-fetched route within the window; a hard
+    // refresh or the revalidate always wins. (This was Next 14.1's own former default.)
+    staleTimes: {
+      dynamic: 30,
+    },
+  },
 };
 
 export default withSentryConfig(nextConfig, {
