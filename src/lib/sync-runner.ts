@@ -7,6 +7,7 @@ import { syncSite, type SyncResult } from "./sync";
 import { fetchLatestCommit, type CommitInfo } from "./github";
 import { repoTokenForSite } from "./github-token";
 import { revalidateSite } from "./s3-source";
+import { revalidateSiteRow } from "./tenant";
 import { syncErrorDetail } from "./sync-error";
 import { triggerActivity } from "./realtime";
 
@@ -159,6 +160,10 @@ export async function runSync(
         updatedAt: new Date(),
       })
       .where(eq(siteTable.id, site.id));
+    // Drop the cached site row so the new sha/updatedAt (the content-cache version key) is read
+    // fresh. Immediate for a manual sync (server-action context); a no-op for the push webhook,
+    // whose runSync is in after() — there the SITE_ROW_TTL backstop applies (see tenant.ts).
+    revalidateSiteRow({ slug: site.slug, domains: [site.customDomain] });
   }
 
   return { result, error, commitSha: commit?.sha ?? null };

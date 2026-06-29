@@ -2027,19 +2027,22 @@ cache win for gated sites. Five moves — the **first is independent of the edge
 now** (it's the Neon-round-trip fix); the rest build on the gate:
 
 *Ships now, no edge gate needed (pure latency wins on the current dynamic render):*
-- **① Kill the per-request Neon read (the measured ~195 ms villain) — the FIRST PR.** Today
-  `getSiteBySlug` *and* `getSiteByCustomDomain` (`src/lib/tenant.ts`) are a Neon `select` on
+- **① Kill the per-request Neon read (the measured ~195 ms villain) — ✅ LANDED 2026-06-29.**
+  `getSiteBySlug` *and* `getSiteByCustomDomain` (`src/lib/tenant.ts`) were a Neon `select` on
   *every* tenant request — only React `cache()`'d *per-request* (one memo per request), so a cold
-  serverless invocation always pays the full round-trip. They're called from ~20 sites
+  serverless invocation always paid the full round-trip. They're called from ~20 sites
   (`requestContentSource`, `render-tenant.tsx`, the docs route, login, export, reader actions), so
-  the fix lives in **one place** and is transparent to all of them: make those two functions a
-  **read-through cache** — Redis/KV keyed by slug + by custom-domain (the §12 "domain→tenant map"
-  Redis line is exactly this), **write-through** at the mutation points (`sync-runner.ts` on every
-  sync, connect, and the auth/domain settings actions, which already bust caches) with a short TTL
-  backstop and Neon read-through on miss. Removes the round-trip from *every* tenant request
-  **today**, independent of everything below. Correctness: the record's `version` (`sha:syncedAt`)
-  already keys the content Data Cache, and write-through fires on every sync, so a cache entry is
-  never staler than the content it gates; read-through + TTL bound any miss.
+  the fix lives in **one place** and is transparent to all of them: both functions now wrap the DB
+  read in **`unstable_cache`** (the Next Data Cache — the same mechanism `s3-source` uses for
+  content; chosen over Redis because it needs *no new infra* and is what already works on Vercel),
+  keyed + tagged per slug / per custom-domain, with a 60 s TTL backstop. **Write-through**
+  `revalidateSiteRow` busts the tag at every normal-context mutation (`sync-runner` on manual sync,
+  connect, auth/domain settings, delete) so changes apply immediately; the push-webhook sync runs
+  in `after()` where `revalidateTag` doesn't propagate (same constraint the content cache
+  documents), so there fresh content appears within the ≤60 s TTL. Drizzle's `Date` timestamp
+  columns are re-hydrated after the cache's JSON round-trip (`reviveSiteDates`) so the
+  `updatedAt`-in-version-key path keeps working. *(Redis/Edge Config still relevant for move ④,
+  the edge gate, which needs sub-ms **edge** reads the Data Cache can't serve.)*
 - **② Cache `buildNav` per `(contentVersion, groupSet)`.** Recomputed on every request today
   (`packages/renderer/lib/nav.ts`, no cache wrapper) yet it's a pure function of
   `(config, base, accessPredicate)`. On a large site this is a real chunk; memoize it in the Data

@@ -16,6 +16,7 @@ import {
 } from "@/lib/github";
 import { getInstallationToken } from "@/lib/github-app";
 import { runSync } from "@/lib/sync-runner";
+import { revalidateSiteRow } from "@/lib/tenant";
 import { encryptSecret } from "@/lib/crypto";
 import { slugify } from "@/lib/slug";
 import { siteBase, siteRoute } from "@/lib/dashboard-nav";
@@ -115,6 +116,10 @@ export async function connectRepo(
       githubInstallationId: token ? null : (install?.installationId ?? null),
     })
     .returning();
+
+  // Clear any negative cache for this slug so the brand-new site resolves immediately rather
+  // than after the TTL (the slug is freshly unique, so normally a no-op — cheap insurance).
+  revalidateSiteRow({ slug: created.slug });
 
   // Pre-create the 'building' deployment row, then run the (slow) repo→storage copy in the
   // BACKGROUND so the user isn't stuck on the form for the whole sync (a big repo is ~60s).

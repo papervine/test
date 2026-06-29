@@ -11,6 +11,7 @@ import { deletePrefix } from "@/lib/storage";
 import { releaseDomain } from "@/lib/domain-reconcile";
 import { isReasonValid, planResourceCleanup } from "@/lib/danger-zone";
 import type { SiteResources } from "@/lib/danger-zone";
+import { revalidateSiteRow } from "@/lib/tenant";
 
 // The site these actions target, carried from the URL-scoped page (/:org/:site) since a
 // server action has no params of its own; the action re-authorizes it server-side.
@@ -104,6 +105,9 @@ export async function deleteSite(
   // the Vercel domain + sweep storage, both best-effort so neither can block the delete.
   await cleanupSiteResources([{ id: row.id, customDomain: row.customDomain }]);
   await db.delete(site).where(eq(site.id, row.id));
+  // Drop cached lookups so the deleted site stops resolving immediately (a stale cache entry
+  // would keep serving it for the TTL window).
+  revalidateSiteRow({ slug: row.slug, domains: [row.customDomain] });
 
   return { redirectTo: `/${org.slug}` };
 }

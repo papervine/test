@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { site } from "@/lib/db/app-schema";
 import { findSite } from "@/lib/dashboard-context";
+import { revalidateSiteRow } from "@/lib/tenant";
 import { siteRoute } from "@/lib/dashboard-nav";
 import { parseCustomDomain } from "@/lib/custom-domain";
 import { addProjectDomain } from "@/lib/vercel-domains";
@@ -99,6 +100,9 @@ export async function setCustomDomain(
 
   // Try once now so a domain whose DNS is already pointed shows "Connected" immediately.
   await liveCheck(parsed.domain, active.slug, active.id);
+  // Drop cached lookups for the slug, the new domain, and the OLD domain (so a changed-away
+  // host stops resolving to this site immediately rather than for the TTL window).
+  revalidateSiteRow({ slug: active.slug, domains: [parsed.domain, active.customDomain] });
   revalidatePath(domainPath(ref));
   return { ok: true };
 }
@@ -121,6 +125,8 @@ export async function removeCustomDomain(ref: SiteRef): Promise<DomainActionStat
       updatedAt: new Date(),
     })
     .where(eq(site.id, active.id));
+  // Drop the removed domain's cached lookup so it stops resolving to this site immediately.
+  revalidateSiteRow({ slug: active.slug, domains: [active.customDomain] });
   revalidatePath(domainPath(ref));
   return { ok: true };
 }

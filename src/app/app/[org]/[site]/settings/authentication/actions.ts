@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { site } from "@/lib/db/app-schema";
 import { findSite } from "@/lib/dashboard-context";
+import { revalidateSiteRow } from "@/lib/tenant";
 import { siteRoute } from "@/lib/dashboard-nav";
 import { encryptSecret } from "@/lib/crypto";
 import { generateEd25519Keypair } from "@/lib/reader-jwt";
@@ -61,6 +62,9 @@ export async function setAuthEnabled(
     .update(site)
     .set({ authEnabled: enabled, ...seed, updatedAt: new Date() })
     .where(eq(site.id, active.id));
+  // Bust the cached site row so the gate sees the new authEnabled immediately — a site toggled
+  // ON must not keep serving publicly for the TTL window (SPEC §11.2).
+  revalidateSiteRow({ slug: active.slug, domains: [active.customDomain] });
   revalidatePath(authPath(ref));
   return { ok: true };
 }
@@ -86,6 +90,7 @@ export async function setAuthMethod(
     .update(site)
     .set({ authMethod: method, ...secretReset, updatedAt: new Date() })
     .where(eq(site.id, active.id));
+  revalidateSiteRow({ slug: active.slug, domains: [active.customDomain] });
   revalidatePath(authPath(ref));
   return { ok: true };
 }
@@ -135,6 +140,7 @@ export async function saveAuthConfig(
       updatedAt: new Date(),
     })
     .where(eq(site.id, active.id));
+  revalidateSiteRow({ slug: active.slug, domains: [active.customDomain] });
   revalidatePath(authPath(ref));
   return { ok: true };
 }
@@ -152,6 +158,7 @@ export async function regenerateJwtKeypair(ref: SiteRef): Promise<AuthActionStat
       updatedAt: new Date(),
     })
     .where(eq(site.id, active.id));
+  revalidateSiteRow({ slug: active.slug, domains: [active.customDomain] });
   revalidatePath(authPath(ref));
   return { ok: true };
 }
