@@ -2,11 +2,20 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { usePathname } from "next/navigation";
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactNode,
+} from "react";
 import { Streamdown } from "streamdown";
 import { Sparkles, X, Maximize2, Minimize2, ArrowUp, Paperclip } from "lucide-react";
 import clsx from "clsx";
+import { assistantInternalTarget } from "@/lib/assistant-link";
 
 /** Custom event other components dispatch to open the assistant (optionally with a query). */
 export const OPEN_EVENT = "papervine:open-assistant";
@@ -16,6 +25,7 @@ export function openAssistant(query?: string) {
 
 export function Assistant({ site }: { site?: string }) {
   const pathname = usePathname();
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [input, setInput] = useState("");
@@ -37,6 +47,64 @@ export function Assistant({ site }: { site?: string }) {
     },
     [sendMessage, pathname, site],
   );
+
+  // Markdown renderers for answers. The one that matters: a citation to a docs page must
+  // **soft-navigate** within the docs SPA (like clicking the sidebar), not open a new tab.
+  // Streamdown defaults every link to `target="_blank"`, so we strip its `target`/`rel`
+  // (don't let them ride `…props`) and decide by origin: an internal page link routes via
+  // `router.push` and closes the panel; only a genuinely external URL opens a new tab.
+  const mdComponents = useMemo(() => {
+    // Path mode serves the tenant under `/sites/{slug}` (vs. empty base on a subdomain), so a
+    // root-absolute citation (`/quickstart`) needs that prefix to resolve to the right page.
+    const base = site && pathname.startsWith(`/sites/${site}`) ? `/sites/${site}` : "";
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    // The internal soft-nav target for an href, or null if it's external / a same-page anchor.
+    const internalTarget = (href?: string): string | null =>
+      assistantInternalTarget(href, base, origin);
+    return {
+      // Strip Streamdown's default target/rel (`_t`/`_r`) so they can't ride `…props`.
+      a: ({ href, children, target: _t, rel: _r, ...props }: {
+        href?: string;
+        children?: ReactNode;
+        target?: string;
+        rel?: string;
+      }) => {
+        const to = internalTarget(href);
+        const className =
+          "text-inherit underline decoration-blue-500 underline-offset-2 hover:decoration-blue-400";
+        if (to !== null) {
+          return (
+            <a
+              href={href}
+              onClick={(e) => {
+                // Honor modifier/middle clicks (open-in-new-tab) — only hijack a plain click.
+                if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
+                e.preventDefault();
+                setOpen(false);
+                router.push(to);
+              }}
+              className={className}
+              {...props}
+            >
+              {children}
+            </a>
+          );
+        }
+        // Same-page anchor (no target) or external URL (new tab).
+        const external = !!href && !href.startsWith("#");
+        return (
+          <a
+            href={href}
+            {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
+            className={className}
+            {...props}
+          >
+            {children}
+          </a>
+        );
+      },
+    };
+  }, [router, pathname, site]);
 
   // Open triggers: navbar button / Cmd-I / ?assistant= deep link.
   useEffect(() => {
@@ -121,7 +189,7 @@ export function Assistant({ site }: { site?: string }) {
         ) : (
           <div className="space-y-5">
             {messages.map((m) => (
-              <Message key={m.id} role={m.role} parts={m.parts} />
+              <Message key={m.id} role={m.role} parts={m.parts} components={mdComponents} />
             ))}
             {busy && lastIsUser && (
               <p className="text-sm text-zinc-400">Thinking…</p>
@@ -172,27 +240,17 @@ export function Assistant({ site }: { site?: string }) {
   );
 }
 
-// Citation/link styling for assistant answers: keep the body text color (white in the
-// dark panel, dark in light) with a blue underline — links read as text, not blue text.
-const streamdownComponents = {
-  a: ({ href, children, ...props }: { href?: string; children?: ReactNode }) => {
-    const external = !!href && /^https?:\/\//.test(href);
-    return (
-      <a
-        href={href}
-        {...(external ? { target: "_blank", rel: "noreferrer" } : {})}
-        className="text-inherit underline decoration-blue-500 underline-offset-2 hover:decoration-blue-400"
-        {...props}
-      >
-        {children}
-      </a>
-    );
-  },
-};
-
 type Part = { type: string; text?: string; state?: string };
 
-function Message({ role, parts }: { role: string; parts: Part[] }) {
+function Message({
+  role,
+  parts,
+  components,
+}: {
+  role: string;
+  parts: Part[];
+  components: ComponentProps<typeof Streamdown>["components"];
+}) {
   if (role === "user") {
     const text = parts.filter((p) => p.type === "text").map((p) => p.text).join("");
     return (
@@ -207,7 +265,7 @@ function Message({ role, parts }: { role: string; parts: Part[] }) {
       {parts.map((part, i) => {
         if (part.type === "text" && part.text) {
           return (
-            <Streamdown key={i} className="prose-assistant" components={streamdownComponents}>
+            <Streamdown key={i} className="prose-assistant" components={components}>
               {part.text}
             </Streamdown>
           );
