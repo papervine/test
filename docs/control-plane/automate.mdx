@@ -8,10 +8,12 @@ just rendering them: **Workflows**, **Agent**, and **Assistant**. All three live
 Automate area and are gated behind a per-org **Trialing** entitlement.
 
 <Note>
-  **This is a roadmap target, not a built feature.** The Automate pages are UI scaffolds — the
-  catalog, onboarding, and empty states render, but none of the toggles, prompts, or inputs
-  post anywhere yet. This page describes the shape we're building *toward*. Where the spec and
-  the implementation diverge, the spec wins; treat everything below as the design intent.
+  **This is mostly a roadmap target, not a built feature.** The Automate pages are UI scaffolds —
+  the catalog, onboarding, and empty states render, but almost none of the toggles, prompts, or
+  inputs post anywhere yet. The exception is the Assistant's two **operational toggles** (Status
+  and Invisible CAPTCHA), which persist (see [below](#where-each-toggles-state-lives)). This page
+  describes the shape we're building *toward*. Where the spec and the implementation diverge, the
+  spec wins; treat everything else below as the design intent.
 </Note>
 
 ## Why one section
@@ -90,8 +92,27 @@ for. The layout:
   vs-last-month delta) plus a "Get insights" card linking to the
   [Analytics](/control-plane/analytics) deep-dive. The overview is cross-linked, not
   duplicated.
-- **Status and control** — enable/disable the assistant.
+- **Status and control** — an enable/disable toggle with an Active/Inactive badge.
 - **Response handling** — deflection to a support email and a "show help button", with **Search
   Domains** gated behind an enterprise-plan upsell.
-- **Bot protection** — invisible hCaptcha.
+- **Bot protection** — an invisible hCaptcha toggle.
 - **Starter questions** — up to three.
+
+### Where each toggle's state lives
+
+The Assistant page mixes two kinds of setting, and they're stored differently on purpose:
+
+- **Operational toggles — *Status* and *Invisible CAPTCHA* — are database state.** They're a
+  kill switch and an abuse guard, so they take effect **instantly, with no Git commit**. The
+  toggles persist the moment you flip them (the same instant-effect path as
+  [reader authentication](/auth/reader-auth)): the switch reflects the stored value, a click
+  writes it, and a reload re-reads it. The Status badge tracks the toggle (Active when on,
+  Inactive when off).
+- **Published-behavior settings — deflection, search domains, starter questions — are
+  version-controlled in `docs.json`.** They describe what readers see, so they belong in Git
+  and are edited through the [authoring layer](/features/mcp-servers) rather than written to a
+  database column. These controls are still scaffold on this page until that write path is
+  surfaced here.
+
+Self-hosters get the same split from configuration alone: the operational state from
+environment, the published behavior from `docs.json` — no dashboard required.

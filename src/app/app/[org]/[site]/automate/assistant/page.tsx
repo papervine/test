@@ -2,7 +2,6 @@ import {
   LineChart,
   ArrowRight,
   ArrowUp,
-  Check,
   Mail,
   Globe,
   Plus,
@@ -10,11 +9,19 @@ import {
   AlertTriangle,
 } from "lucide-react";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
+import { requireSite } from "@/lib/dashboard-context";
+import {
+  AssistantStatusControl,
+  AssistantCaptchaToggle,
+} from "./AssistantControls";
 
 // Automate › Assistant (SPEC §8.6 / §10.2). The AI-assistant management page:
 // usage overview + enable/disable, deflection, search domains, bot protection, and
-// starter questions. Scaffold only — every toggle, input, and button is inert, and the
-// numbers are placeholders; nothing is wired to the assistant or its analytics yet.
+// starter questions. The two *operational* toggles — Assistant Status and Invisible
+// CAPTCHA — are live: they persist to the DB (instant effect, no Git commit) via the
+// AssistantControls client components. The published-behavior config (deflection,
+// search domains, starter questions) is docs.json-backed (§8.6) and edited through the
+// authoring layer (§9.2); those controls + the overview numbers are still scaffold.
 const METRICS = [
   { label: "Total questions", value: "5", delta: "100%" },
   { label: "Answered properly", value: "5", delta: "100%" },
@@ -27,6 +34,7 @@ export default async function AssistantPage({
   params: Promise<{ org: string; site: string }>;
 }) {
   const { org, site } = await params;
+  const { site: activeSite } = await requireSite(org, site);
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
       <AutomateHeader page="Assistant" />
@@ -67,20 +75,11 @@ export default async function AssistantPage({
         title="Status and control"
         desc="Manage your assistant's operational status"
       >
-        <Card className="flex items-center justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Assistant Status</span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-xs font-medium text-emerald-300">
-                <Check className="h-3 w-3" />
-                Active
-              </span>
-            </div>
-            <p className="mt-1 text-sm text-[var(--muted)]">
-              Enable or disable your assistant.
-            </p>
-          </div>
-          <Toggle on />
+        <Card>
+          <AssistantStatusControl
+            siteRef={{ org, site }}
+            enabled={activeSite.assistantEnabled}
+          />
         </Card>
       </SettingRow>
 
@@ -197,7 +196,10 @@ export default async function AssistantPage({
               .
             </p>
           </div>
-          <Toggle on />
+          <AssistantCaptchaToggle
+            siteRef={{ org, site }}
+            enabled={activeSite.assistantCaptchaEnabled}
+          />
         </Card>
       </SettingRow>
 

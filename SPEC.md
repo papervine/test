@@ -1038,6 +1038,20 @@ block** — the dashboard edits it through the authoring layer (§9.2) so it sta
 Operational/metering state (enable toggle, CAPTCHA, credits, plan) lives in our **DB** for
 instant effect. Self-host reads it all from `docs.json` + env, no dashboard required.
 
+> **Operational toggles wired (2026-06-30).** The two DB-state toggles — *Assistant Status*
+> (the enable/disable kill switch, with the Active/Inactive badge) and *Invisible CAPTCHA* —
+> now persist. They follow the exact reader-auth pattern (SPEC §11.2): new `site` columns
+> `assistant_enabled` / `assistant_captcha_enabled` (both default `true`, migration 0012),
+> URL-scoped server actions (`setAssistantEnabled` / `setAssistantCaptchaEnabled` in
+> `automate/assistant/actions.ts`) that re-authorize via `findSite`, write the row, then
+> `revalidateSiteRow` + `revalidatePath` so a toggle takes effect without the cached-row TTL
+> lag. The switches are optimistic client components (`AssistantControls.tsx`) that roll back
+> on a failed action. The published-behavior toggles (deflection, search domains, starter
+> questions) stay scaffold here on purpose — they're `docs.json`-backed and belong on the
+> authoring layer (§9.2), not in DB columns; wiring them is a follow-up once that write path
+> is exposed from this page. Search Domains remains plan-gated (enterprise). Covered by
+> `tests/e2e/assistant.spec.ts` (toggle → persist → reload round-trip).
+
 ---
 
 ## 9. MCP Servers

@@ -61,6 +61,16 @@ export const site = pgTable(
     // shared password — AES-256-GCM-encrypted at rest (src/lib/crypto.ts), same as
     // repoTokenEnc. Decrypted only to display to the site's own owner.
     authSecretEnc: text("auth_secret_enc"),
+    // AI assistant operational state (SPEC §8.6). These two toggles live in the DB — not
+    // docs.json — precisely so they take effect *instantly* without a Git commit: the
+    // enable switch is an operational kill switch, and CAPTCHA throttles abuse/token cost
+    // on the public /api/assistant endpoint. Published-behavior config (starter questions,
+    // deflection, search domains) is version-controlled in docs.json's `assistant` block
+    // instead, edited through the authoring layer (§9.2).
+    assistantEnabled: boolean("assistant_enabled").default(true).notNull(),
+    assistantCaptchaEnabled: boolean("assistant_captcha_enabled")
+      .default(true)
+      .notNull(),
     // GitHub App installation that grants access to this repo (SPEC §3). The numeric
     // GitHub installation id — minted into a short-lived token at sync time (see
     // src/lib/github-app.ts), the same `token` seam as repoTokenEnc/PAT. Not a FK so an
