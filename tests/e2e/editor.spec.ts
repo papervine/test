@@ -57,9 +57,10 @@ test.describe("web editor @external", () => {
   test("renders the 3-panel editor and persists a source edit to the draft buffer", async ({ page }) => {
     await page.goto(sitePath(SLUG, "editor"));
 
-    // The 3-panel shell: agent composer, nav, branch switcher. The editor opens on the site's
-    // configured deploy branch ("main") by default — not a freshly-minted edit-* branch.
-    await expect(page.getByPlaceholder('Try "expand more about…"')).toBeVisible();
+    // The editor shell: nav, branch switcher, and the on-demand agent toggle. The editor opens on
+    // the site's configured deploy branch ("main") by default — not a freshly-minted edit-* branch.
+    // The agent composer is hidden until summoned (see the dedicated test below).
+    await expect(page.getByRole("button", { name: /Ask agent/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "main", exact: true })).toBeVisible();
 
     // Switch to Source mode and type into the raw MDX.
@@ -129,5 +130,22 @@ test.describe("web editor @external", () => {
     await expect(page.locator("textarea").last()).toContainText("Flushed on switch.", {
       timeout: 10_000,
     });
+  });
+
+  // The editing-agent column is hidden by default and summoned on demand (Ask agent / ⌘I), so the
+  // editor opens with room to write. Toggling preserves the panel (CSS visibility, not unmount).
+  test("keeps the editing-agent column hidden until summoned", async ({ page }) => {
+    await page.goto(sitePath(SLUG, "editor"));
+    const composer = page.getByPlaceholder('Try "expand more about…"');
+
+    // Hidden on load.
+    await expect(page.getByRole("button", { name: /Ask agent/ })).toBeVisible();
+    await expect(composer).toBeHidden();
+
+    // Summon it, then close it from the panel's ✕.
+    await page.getByRole("button", { name: /Ask agent/ }).click();
+    await expect(composer).toBeVisible();
+    await page.getByRole("button", { name: "Close agent" }).click();
+    await expect(composer).toBeHidden();
   });
 });

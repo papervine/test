@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState, useTransition } from "react";
-import { ChevronRight } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { ChevronRight, X } from "lucide-react";
 import type { NavSection } from "@papervine/renderer/lib/nav";
 import { NavTree } from "./NavTree";
 import { BranchSwitcher } from "./BranchSwitcher";
@@ -44,6 +44,13 @@ export function EditorShell({
   const [mode, setMode] = useState<Mode>("source");
   // Bump to force the editor pane to remount with fresh content (page switch / agent edit).
   const [docKey, setDocKey] = useState(0);
+  // The editing-agent column is hidden by default — the editor opens on the page, more room for
+  // writing — and revealed on demand via the "Ask agent" button or ⌘/Ctrl-I. We toggle visibility
+  // (not mount) so the chat history survives a close→reopen.
+  const [agentOpen, setAgentOpen] = useState(false);
+  // Shortcut glyph: ⌘ on mac, Ctrl elsewhere. Defaults to ⌘ (matches SSR) and corrects on mount,
+  // so there's no hydration mismatch.
+  const [modKey, setModKey] = useState("⌘");
   const [, start] = useTransition();
   // The pane remounts per page, so a keystroke still inside its 700ms autosave debounce would be
   // lost on a fast nav click. We flush it through this handle BEFORE a user-initiated switch.
@@ -80,12 +87,38 @@ export function EditorShell({
     await saveDraftAction(org, site, branch, path, md);
   };
 
+  // ⌘/Ctrl-I toggles the agent column (the incumbent's "Ask agent" shortcut); set the glyph per OS.
+  useEffect(() => {
+    const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+    setModKey(isMac ? "⌘" : "Ctrl");
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === "i" || e.key === "I")) {
+        e.preventDefault();
+        setAgentOpen((o) => !o);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <div className="flex h-[calc(100dvh-0px)] min-h-0 w-full">
-      {/* Col 1 — editing agent */}
-      <aside className="flex w-80 shrink-0 flex-col border-r border-neutral-200 dark:border-neutral-800">
-        <div className="border-b border-neutral-200 px-3 py-3 text-sm font-semibold dark:border-neutral-800">
-          New chat
+      {/* Col 1 — editing agent (hidden until "Ask agent" / ⌘I; kept mounted so chat persists) */}
+      <aside
+        className={`${
+          agentOpen ? "flex" : "hidden"
+        } w-80 shrink-0 flex-col border-r border-neutral-200 dark:border-neutral-800`}
+      >
+        <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-3 text-sm font-semibold dark:border-neutral-800">
+          <span>New chat</span>
+          <button
+            type="button"
+            aria-label="Close agent"
+            onClick={() => setAgentOpen(false)}
+            className="rounded p-1 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
         <EditorAgentPanel org={org} site={site} branch={branch} onAgentWrite={refreshActive} />
       </aside>
@@ -108,6 +141,21 @@ export function EditorShell({
               sessionBranches={sessionBranches}
               onSwitch={switchBranch}
             />
+            <button
+              type="button"
+              aria-pressed={agentOpen}
+              onClick={() => setAgentOpen((o) => !o)}
+              className={`flex shrink-0 items-center gap-2 rounded-md border px-2.5 py-1.5 text-sm ${
+                agentOpen
+                  ? "border-neutral-400 bg-neutral-200 dark:border-neutral-600 dark:bg-neutral-700"
+                  : "border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              }`}
+            >
+              Ask agent
+              <kbd className="rounded bg-neutral-100 px-1.5 py-0.5 text-[11px] font-medium text-neutral-500 dark:bg-neutral-800 dark:text-neutral-400">
+                {modKey}I
+              </kbd>
+            </button>
             <span className="flex min-w-0 items-center gap-1 text-sm text-neutral-500">
               <ChevronRight className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">{slug || "index"}</span>

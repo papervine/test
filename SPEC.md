@@ -1182,6 +1182,12 @@ layer.
 > draft is the newer content and must win, not the human's stale buffer. Guard: the e2e editor spec
 > types and switches pages faster than the debounce, asserting the edit survives.
 >
+> **Agent column is on-demand (2026-06-29).** The editing-agent column took a fixed third of the
+> editor even when unused. It's now **hidden by default** and summoned via an "Ask agent" header
+> button or **⌘/Ctrl-I** (the incumbent's shortcut) — closeable from the button, the panel's ✕, or the
+> shortcut. Toggled by CSS visibility (not unmount) in `EditorShell`, so the chat history survives a
+> close→reopen; default-collapsed gives the page/preview the full width.
+>
 > Token-scoped *external* auth for the authoring MCP (a platform-auth PAT, §11) is the
 > follow-up; today it authenticates via the app-host session + `x-papervine-org/site` headers.
 
