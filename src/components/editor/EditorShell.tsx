@@ -8,6 +8,7 @@ import { BranchSwitcher } from "./BranchSwitcher";
 import { PublishButton } from "./PublishButton";
 import { EditorAgentPanel } from "./EditorAgentPanel";
 import { MdxEditorPane, type Mode, type MdxEditorHandle } from "./MdxEditorPane";
+import { Toaster } from "@/components/ui/sonner";
 import { readDraftPageAction, saveDraftAction } from "@/lib/actions/authoring";
 
 // The 3-panel editor (SPEC §9.2/§10): editing-agent chat | navigation | multi-modal editor.
@@ -179,6 +180,7 @@ export function EditorShell({
           />
         </div>
       </main>
+      <Toaster />
     </div>
   );
 }

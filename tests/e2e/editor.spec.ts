@@ -148,4 +148,18 @@ test.describe("web editor @external", () => {
     await page.getByRole("button", { name: "Close agent" }).click();
     await expect(composer).toBeHidden();
   });
+
+  // Publish results show as a toast (auto-dismissing, dismissible) — not the old persistent banner
+  // that never went away. Publishing with no edits returns "No open edit session" with no GitHub
+  // write, so it's a side-effect-free way to assert the toast wiring (provider mounted, useToast).
+  test("publish shows a dismissible toast, not a persistent banner", async ({ page }) => {
+    await page.goto(sitePath(SLUG, "editor"));
+    await page.getByRole("button", { name: "Publish", exact: true }).click();
+
+    const toast = page.getByText("No open edit session for this branch.");
+    await expect(toast).toBeVisible();
+    // Dismissible immediately (it also auto-dismisses on a timer). sonner labels its close "Close toast".
+    await page.getByRole("button", { name: "Close toast" }).click();
+    await expect(toast).toBeHidden();
+  });
 });

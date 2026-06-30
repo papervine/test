@@ -224,6 +224,16 @@ prefer expand-then-contract.
   only for interactivity (see `src/components/mdx/Tabs.tsx`, `Accordion.tsx`).
 - Match the surrounding code's style, comment density, and naming. Comments explain
   *why* (especially the non-obvious gotchas above), not *what*.
+- **This is a shadcn/ui project** (`components.json`, "new-york" style). Build platform /
+  control-plane UI from the primitives in `src/components/ui/` (Radix + `cva` + the `cn()`
+  helper in `src/lib/utils.ts`) — **don't hand-roll a component when a shadcn one exists or
+  can be added** (`npx shadcn@latest add <name>`). The primitives are mapped onto the `.db`
+  platform palette; a component that **portals to `<body>`** (dialog, dropdown, toast) must
+  carry the **`db-portal`** class so it re-resolves the platform tokens outside the `.db`
+  shell — see `src/components/ui/dialog.tsx` and the two-theme gotcha above. shadcn's toast
+  is **sonner** (`add sonner`), not a bespoke component. **Discover** what's available (registry
+  components, blocks, examples) via the **shadcn MCP** rather than guessing names — search/list
+  the registry, then `add` what fits.
 - Keep `SPEC.md` / `GAP-REPORT.md` **and `docs/`** current when you make architectural
   decisions or change what renders — record the decision and measured result in `SPEC.md`,
   the evergreen "how it works" in `docs/`. See "Document every change" above.

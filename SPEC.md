@@ -1188,6 +1188,16 @@ layer.
 > shortcut. Toggled by CSS visibility (not unmount) in `EditorShell`, so the chat history survives a
 > close→reopen; default-collapsed gives the page/preview the full width.
 >
+> **Publish result is a toast (2026-06-30).** The Publish outcome (PR link / commit sha / error)
+> rendered as a persistent inline banner under the button that never cleared. Now a toast: we use
+> **shadcn's sonner** (`src/components/ui/sonner.tsx`, `add @shadcn/sonner`) — the project is shadcn,
+> so this is a registry component, not a bespoke one. The stock wrapper themes via `next-themes`
+> (unused here); ours reads the **platform `data-db-theme`** instead and re-renders on toggle, carries
+> **`db-portal`** so sonner's body-portaled container re-resolves the `.db` palette/fonts (same as
+> `dialog.tsx`), and enables `richColors` for green/red success/error. `<Toaster>` mounts in
+> `EditorShell`; `PublishButton` calls `toast.success/error` (errors get a longer 8s duration).
+> Reusable for other surfaces (settings forms still use inline banners) later.
+>
 > Token-scoped *external* auth for the authoring MCP (a platform-auth PAT, §11) is the
 > follow-up; today it authenticates via the app-host session + `x-papervine-org/site` headers.
 

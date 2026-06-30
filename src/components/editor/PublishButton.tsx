@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { ChevronDown, GitPullRequest, GitCommit } from "lucide-react";
+import { toast } from "sonner";
 import { publishDraftAction } from "@/lib/actions/authoring";
 import { publishModeForBranch } from "@/lib/publish-mode";
 
@@ -21,7 +22,6 @@ export function PublishButton({
 }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
-  const [result, setResult] = useState<string | null>(null);
 
   // On the deploy branch, the natural publish is a direct commit (the incumbent's Publish on Default);
   // on a working branch it's a PR into the deploy branch.
@@ -30,11 +30,11 @@ export function PublishButton({
   const publish = (mode: "pr" | "commit") =>
     start(async () => {
       setOpen(false);
-      setResult(null);
       const res = await publishDraftAction(org, site, branch, mode);
-      if (res.ok && res.mode === "pr") setResult(`Opened PR #${res.prNumber}`);
-      else if (res.ok) setResult(`Committed ${res.commitSha.slice(0, 7)} to the deploy branch`);
-      else setResult(res.error);
+      if (res.ok && res.mode === "pr") toast.success(`Opened PR #${res.prNumber}`);
+      else if (res.ok) toast.success(`Committed ${res.commitSha.slice(0, 7)} to the deploy branch`);
+      // Errors linger a bit longer than the success default (more to read).
+      else toast.error(res.error, { duration: 8000 });
     });
 
   return (
@@ -78,11 +78,6 @@ export function PublishButton({
             </button>
           </div>
         </>
-      )}
-      {result && (
-        <div className="absolute right-0 top-full z-20 mt-2 w-72 rounded-md border border-neutral-200 bg-white p-2 text-xs shadow dark:border-neutral-800 dark:bg-neutral-950">
-          {result}
-        </div>
       )}
     </div>
   );

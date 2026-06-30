@@ -63,6 +63,7 @@
     "rehype-slug": "6.0.0",
     "remark-gfm": "4.0.0",
     "shiki": "1.29.2",
+    "sonner": "^2.0.7",
     "streamdown": "^2.5.0",
     "tailwind-merge": "^3.6.0",
     "tailwindcss-animate": "^1.0.7",
