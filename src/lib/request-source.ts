@@ -105,6 +105,21 @@ export async function requestReaderAccess(
   return accessForRecord(record, cookieValue, opts);
 }
 
+/**
+ * The full site row for the current request's tenant, resolved the SAME way
+ * `requestContentSource` does (slugOverride / `x-papervine-site` / subdomain → getSiteBySlug,
+ * else the custom-domain Host → getSiteByCustomDomain). null on the apex/preview host. Lets a
+ * caller read a site-row flag (e.g. `assistantEnabled`) without re-deriving the tenant.
+ * getSiteBySlug / getSiteByCustomDomain are per-request `cache()`d, so this is ~free.
+ */
+export async function requestSiteRecord(slugOverride?: string) {
+  const h = await headers();
+  const slug = slugOverride ?? h.get("x-papervine-site") ?? resolveTenantSlug(h.get("host"));
+  return slug
+    ? await getSiteBySlug(slug)
+    : await getSiteByCustomDomain(h.get("x-papervine-host") ?? h.get("host") ?? "");
+}
+
 export async function requestAssetBase(): Promise<string> {
   const h = await headers();
   const slug = h.get("x-papervine-site") ?? resolveTenantSlug(h.get("host"));

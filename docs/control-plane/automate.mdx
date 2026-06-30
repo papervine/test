@@ -107,7 +107,11 @@ The Assistant page mixes two kinds of setting, and they're stored differently on
   toggles persist the moment you flip them (the same instant-effect path as
   [reader authentication](/auth/reader-auth)): the switch reflects the stored value, a click
   writes it, and a reload re-reads it. The Status badge tracks the toggle (Active when on,
-  Inactive when off).
+  Inactive when off). Turning *Status* off is enforced on the live docs site: the **Ask
+  Assistant** launcher stops rendering and the assistant endpoint declines requests, so a
+  disabled assistant truly disappears for readers. *(Search Domains and Starter Questions are
+  scaffold today, so their switches don't yet change reader behavior; CAPTCHA persists but
+  its enforcement is still to come.)*
 - **Published-behavior settings — deflection, search domains, starter questions — are
   version-controlled in `docs.json`.** They describe what readers see, so they belong in Git
   and are edited through the [authoring layer](/features/mcp-servers) rather than written to a

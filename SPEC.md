@@ -1051,6 +1051,19 @@ instant effect. Self-host reads it all from `docs.json` + env, no dashboard requ
 > authoring layer (§9.2), not in DB columns; wiring them is a follow-up once that write path
 > is exposed from this page. Search Domains remains plan-gated (enterprise). Covered by
 > `tests/e2e/assistant.spec.ts` (toggle → persist → reload round-trip).
+>
+> **Kill switch now enforced (2026-06-30).** Persisting the toggle wasn't enough — the docs site
+> never read `assistant_enabled`, so disabling it still showed the "Ask Assistant" launcher on
+> prod. Enforcement landed at both read points, mirroring the `authEnabled` gate: `TenantDocsShell`
+> (`render-tenant.tsx`) skips mounting `<AskAssistantButton>` and `<Assistant>` when the row's flag
+> is off, and `POST /api/assistant` returns **403** for a positively-resolved disabled tenant (so
+> hiding the launcher can't be bypassed by calling the endpoint). Both resolve the row via a new
+> `requestSiteRecord` helper (`request-source.ts`), the same tenant resolution the content source
+> uses; the apex/preview host (no row) keeps the platform's own docs assistant working. The 403 sits
+> *after* the `ANTHROPIC_API_KEY` 503 check so the DB-free smoke (no key → 503 before any DB read)
+> is unaffected. Regression: `tests/e2e/tenant-render.spec.ts` asserts a disabled site renders but
+> hides the launcher. **CAPTCHA is still not enforced** — `assistant_captcha_enabled` persists but
+> there's no hCaptcha integration on `/api/assistant` yet (separate follow-up).
 
 ---
 

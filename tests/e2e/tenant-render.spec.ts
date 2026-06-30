@@ -21,6 +21,11 @@ const docsUrl = (p: string) => `${APEX_ORIGIN}${p}`;
 const SITE_ID = "e2e-tenant-render-site";
 const SLUG = "regression-nav";
 
+// A second tenant identical to the first but with the assistant kill switch OFF
+// (assistant_enabled=false), to prove the disabled state hides the launcher (SPEC §8.6).
+const NOASSIST_SITE_ID = "e2e-tenant-render-noassist";
+const NOASSIST_SLUG = "regression-no-assistant";
+
 // Distinctive nav that exists ONLY in this tenant's repo — nothing the platform's
 // content/ docs.json contains — so a leak from the default source is unmistakable.
 const DOCS_JSON = JSON.stringify({
@@ -70,10 +75,20 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     await put(`${prefix}index.mdx`, `---\ntitle: Tenant Home\n---\nTENANT_HOME_MARKER zorptenant\n`);
     await put(`${prefix}tenant-page.mdx`, `---\ntitle: Tenant Page\n---\nTENANT_PAGE_MARKER\n`);
     await put(`${prefix}logo.svg`, LOGO_SVG, "image/svg+xml");
+
+    // The assistant-disabled twin: same content, assistant_enabled=false.
+    await sql`delete from site where id = ${NOASSIST_SITE_ID}`;
+    await sql`insert into site (id, organization_id, name, slug, repo_owner, repo_name, branch, status, assistant_enabled)
+              values (${NOASSIST_SITE_ID}, ${org.id}, 'No Assistant Tenant', ${NOASSIST_SLUG}, 'acme', 'docs', 'main', 'live', false)`;
+    const nprefix = `sites/${NOASSIST_SITE_ID}/`;
+    await put(`${nprefix}docs.json`, DOCS_JSON);
+    await put(`${nprefix}index.mdx`, `---\ntitle: Tenant Home\n---\nNOASSIST_HOME_MARKER\n`);
+    await put(`${nprefix}tenant-page.mdx`, `---\ntitle: Tenant Page\n---\nTENANT_PAGE_MARKER\n`);
+    await put(`${nprefix}logo.svg`, LOGO_SVG, "image/svg+xml");
   });
 
   test.afterAll(async () => {
-    await sql`delete from site where id = ${SITE_ID}`;
+    await sql`delete from site where id in (${SITE_ID}, ${NOASSIST_SITE_ID})`;
     await sql.end();
   });
 
@@ -113,6 +128,17 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     await expect(
       page.getByText("Responses are generated using AI and may contain mistakes."),
     ).toBeVisible();
+  });
+
+  test("a site with the assistant disabled hides the Ask Assistant launcher (kill switch)", async ({
+    page,
+  }) => {
+    // SPEC §8.6: the Assistant Status toggle is an operational kill switch. With it OFF the
+    // docs still render, but the launcher (and its widget) must not mount — the bug where
+    // the button kept showing on prod after disabling the assistant.
+    await page.goto(docsUrl(`/sites/${NOASSIST_SLUG}`));
+    await expect(page.getByText("NOASSIST_HOME_MARKER")).toBeVisible(); // page renders fine
+    await expect(page.getByRole("button", { name: "Ask Assistant" })).toHaveCount(0);
   });
 
   test("search is scoped to the tenant, not the platform default", async ({ page }) => {

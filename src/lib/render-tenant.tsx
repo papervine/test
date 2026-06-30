@@ -139,6 +139,13 @@ export async function TenantDocsShell({
   const src = await requestContentSource(slug);
   if (!src) notFound();
 
+  // Operational kill switch (SPEC §8.6): when the assistant is disabled for this site, don't
+  // mount its launcher or widget — the toggle takes effect on the next render (the row is
+  // revalidated on toggle). Default ON for older rows. `getSiteBySlug` is per-request cached,
+  // so this shares the lookup buildNavCached already does.
+  const record = await getSiteBySlug(slug);
+  const assistantOn = record?.assistantEnabled ?? true;
+
   const canAccess = await readerAccess(slug);
   return contentContext.run(src, async () => {
     const config = await loadConfig();
@@ -160,7 +167,7 @@ export async function TenantDocsShell({
           base={base}
           assetBase={assetBase}
           search={<SearchButton site={slug} />}
-          assistant={<AskAssistantButton />}
+          assistant={assistantOn ? <AskAssistantButton /> : null}
         />
         <NavTabs sections={sections} />
         <div className="mx-auto flex max-w-7xl gap-8 pl-9 pr-6">
@@ -169,8 +176,8 @@ export async function TenantDocsShell({
         </div>
         {/* The navbar's "Ask Assistant" button (and Cmd-I) dispatch an event this
             component listens for. Tenant pages render outside the apex (docs) group's
-            layout, so mount it here. */}
-        <Assistant site={slug} />
+            layout, so mount it here. Skipped when the kill switch is off. */}
+        {assistantOn && <Assistant site={slug} />}
       </>
     );
   });

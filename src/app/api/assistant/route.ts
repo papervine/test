@@ -6,6 +6,7 @@ import {
   requestContentSource,
   requestReaderAccess,
   requestSearchIndexKey,
+  requestSiteRecord,
 } from "@/lib/request-source";
 import { withReaderAccess, currentPageAccess } from "@/lib/reader-access";
 import { withSearchIndexKey } from "@/lib/search";
@@ -39,6 +40,18 @@ export async function POST(req: Request) {
     pageSlug?: string;
     site?: string;
   };
+
+  // Operational kill switch (SPEC §8.6): a tenant that disabled its assistant answers nothing,
+  // enforced here too so hiding the launcher (render-tenant.tsx) can't be bypassed by calling
+  // the endpoint directly. Only blocks a positively-resolved disabled tenant — the apex/preview
+  // host (record null) keeps the platform's own docs assistant working.
+  const record = await requestSiteRecord(site);
+  if (record && !record.assistantEnabled) {
+    return Response.json(
+      { error: "The assistant is disabled for this site." },
+      { status: 403 },
+    );
+  }
 
   // Scope every content read — config, current page, and the streaming tool calls
   // (searchDocs / readPage / searchApi) — to the requesting tenant. Without this the
