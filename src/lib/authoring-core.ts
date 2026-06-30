@@ -183,9 +183,19 @@ export async function publishDraft(
   // PR mode: create the working branch off the base, commit to it, open the PR.
   const created = await createBranch(site.repoOwner!, site.repoName!, branch, base.commitSha, token);
   if (!created.ok) return { ok: false, error: created.error ?? "Failed to create the branch." };
+
+  // Commit onto the working branch's CURRENT tip, not the deploy head. A fresh branch is at `base`,
+  // so this is the same thing — but if the branch already exists (a re-publish, or it carried prior
+  // commits), basing on `base` would fork a SIBLING commit off the deploy branch, and the
+  // updateRef(force:false) below would (correctly) reject it as "Update is not a fast forward".
+  // Reading the branch tip makes each publish stack on top, so re-publishing is idempotent.
+  const tip = created.alreadyExists
+    ? await getRef(site.repoOwner!, site.repoName!, branch, token)
+    : base;
+  if (!tip) return { ok: false, error: `Can't read the ${branch} branch to publish onto.` };
   const commit = await commitFiles(site.repoOwner!, site.repoName!, {
-    baseCommitSha: base.commitSha,
-    baseTreeSha: base.treeSha,
+    baseCommitSha: tip.commitSha,
+    baseTreeSha: tip.treeSha,
     files,
     message,
     token,

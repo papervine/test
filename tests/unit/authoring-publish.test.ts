@@ -94,11 +94,33 @@ describe("publishDraft — pr mode", () => {
     const res = await publishDraft(site, "papervine/edit-x", { mode: "pr" });
     expect(res).toEqual({ ok: true, mode: "pr", prUrl: "https://gh/pr/5", prNumber: 5 });
     expect(git.createBranch).toHaveBeenCalledWith("o", "r", "papervine/edit-x", "base1", "tok");
+    // A fresh branch is created at the deploy base, so the commit parents on the base.
+    expect(git.commitFiles.mock.calls[0][2]).toMatchObject({ baseCommitSha: "base1", baseTreeSha: "tree1" });
     expect(git.openPullRequest).toHaveBeenCalledWith(
       "o",
       "r",
       expect.objectContaining({ head: "papervine/edit-x", base: "main" }),
     );
+  });
+
+  it("re-publish onto an EXISTING branch commits on the branch tip, not the deploy base", async () => {
+    // The working branch already exists and is ahead of the deploy base (a prior publish advanced
+    // it). Basing the commit on the deploy base would fork a sibling → updateRef 422 "not a fast
+    // forward". We must read the branch tip and commit on top of it. getRef is called twice: the
+    // deploy branch (concurrency check) then the working branch (its tip).
+    git.createBranch.mockResolvedValue({ ok: true, alreadyExists: true });
+    git.getRef
+      .mockResolvedValueOnce({ commitSha: "base1", treeSha: "tree1" }) // deploy branch
+      .mockResolvedValueOnce({ commitSha: "branchTip", treeSha: "branchTree" }); // the working branch
+
+    const res = await publishDraft(site, "papervine/edit-x", { mode: "pr" });
+
+    expect(res).toMatchObject({ ok: true, mode: "pr" });
+    expect(git.commitFiles.mock.calls[0][2]).toMatchObject({
+      baseCommitSha: "branchTip",
+      baseTreeSha: "branchTree",
+    });
+    expect(git.updateRef).toHaveBeenCalledWith("o", "r", "papervine/edit-x", "newc", "tok");
   });
 });
 

@@ -1212,6 +1212,18 @@ layer.
 > `EditorShell`; `PublishButton` calls `toast.success/error` (errors get a longer 8s duration).
 > Reusable for other surfaces (settings forms still use inline banners) later.
 >
+> **PR-mode publish commits on the branch tip, not the deploy head (fixed 2026-06-30).** PR mode
+> always parented the new commit on the *deploy* head (`base.commitSha`/`base.treeSha`) and then
+> `updateRef(force:false)` the working branch to it. Fine for a *fresh* branch (it's at the deploy
+> head), but a **re-publish** (or any pre-existing working branch that already carried commits)
+> forked a **sibling** commit off the deploy base — so `updateRef` correctly rejected it with
+> `422 "Update is not a fast forward"`. Fix: after `createBranch`, when it reports `alreadyExists`,
+> read the **working branch's current tip** (`getRef(branch)`) and base the commit on that, so each
+> publish stacks on top and re-publishing is idempotent. (Surfaced on Pixwel/platform; the earlier
+> `createTree 403` / `createBranch 422` they hit were the App's missing Contents-write + repo
+> rulesets, not this.) Guard: `tests/unit/authoring-publish.test.ts` asserts an existing-branch
+> re-publish commits on the branch tip, a fresh one on the deploy base.
+>
 > Token-scoped *external* auth for the authoring MCP (a platform-auth PAT, §11) is the
 > follow-up; today it authenticates via the app-host session + `x-papervine-org/site` headers.
 
