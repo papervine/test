@@ -55,10 +55,17 @@ A **Custom** workflow is a user-defined `{ trigger, prompt, action }`. The page 
 ## Agent
 
 An interactive agent reachable from chat. The surface is **Slack-centric**: you invoke it with
-`@papervine <prompt>` in a channel,
-and onboarding's "Send your first message" posts a starter prompt to a Slack channel you pick.
+`@papervine <prompt>` in a channel, and the agent answers questions and opens doc changes on
+request.
 
-Steady state is a connected Slack app that answers questions and opens doc changes on request.
+The **Agent settings** page is where you wire it up. A **Connect your Slack workspace** banner
+installs the Slack app — the agent's home. Below it, **Enabled integrations** lists the
+connectors the agent can currently draw on (empty until you connect one), and **Available to
+your team** is the catalog of connectors you can add — Notion, Google Drive, Linear, Jira,
+Confluence, Salesforce, HubSpot, Intercom, Plain, and more — each grouped by what it brings
+(documentation, communication, project management, customer support, CRM). Connecting a source
+lets the agent reference it when it answers and authors.
+
 It shares the authoring backend with Workflows — the distinction is **interactive (Agent) vs
 scheduled/triggered (Workflows)**, over the same underlying tools.
 

@@ -1368,13 +1368,21 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
     audit-ability of agent-authored PRs is the open risk.
 - **Agent** — an interactive agent reachable from chat. **The surface is Slack-centric**
   (matching the incumbent, which built Agent as a Slack app first): you invoke it with
-  `@papervine <prompt>` in a channel, and the onboarding's "Send your first message"
-  posts a starter prompt to a **Slack channel** you pick. The channel selector is a
-  dropdown populated from the connected workspace (`conversations.list`); in the scaffold
-  it's a static list defaulting to `#general`. Steady state is a connected Slack app that
-  answers questions and opens doc changes on request. Shares the authoring backend with
-  Workflows; the distinction is **interactive (Agent) vs scheduled/triggered
-  (Workflows)**, same underlying tools.
+  `@papervine <prompt>` in a channel; steady state is a connected Slack app that answers
+  questions and opens doc changes on request. Shares the authoring backend with Workflows;
+  the distinction is **interactive (Agent) vs scheduled/triggered (Workflows)**, same
+  underlying tools.
+  - *Agent settings page (2026-06-30).* Reworked the scaffold from the single-shot "Send
+    your first message" onboarding to an **integrations gallery** matching the reference:
+    a `Connect your Slack workspace` banner (Install Slack app, "Not connected" status),
+    an **Enabled integrations** list (empty state until a connector is wired), and an
+    **Available to your team** catalog — Notion, Google Drive, Google Calendar, Linear,
+    Slack, Plain, Intercom, Salesforce, Jira, Confluence, HubSpot — each tagged by category
+    (documentation / communication / project management / customer support / CRM) with an
+    inert `+ Connect`. The catalog + hand-built brand SVGs live in
+    `src/components/app/automate/integrations.tsx` (no brand-icon dep — we only ship
+    lucide-react); the page (`…/automate/agent/page.tsx`) is presentational. Verified
+    in-browser, light + dark platform theme.
   - *Why Slack.* The reference product treats Agent as "your docs teammate in Slack" —
     it lives where the team already works rather than as a separate console, and
     threads/channels give it conversational context and an audit trail for the PRs it

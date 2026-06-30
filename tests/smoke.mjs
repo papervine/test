@@ -153,6 +153,12 @@ const CONTROL_PLANE_CHECKS = [
     redirectTo: "/login",
   },
   {
+    host: "app.localhost",
+    path: "/acme/docs/automate/agent",
+    desc: "unauthenticated app host agent settings redirects to /login (SPEC §10.2)",
+    redirectTo: "/login",
+  },
+  {
     // The live Activity feed's polling endpoint (SPEC §10.3) is a bare /:org/:site path, so
     // the edge gate must catch it like any dashboard page — an unauthenticated poll redirects
     // to /login, never leaks a tenant's deployment feed.
