@@ -86,6 +86,14 @@ export async function submitReaderPassword(input: {
     return { error: "This site's authentication is misconfigured. Contact the owner." };
   }
 
+  // `authSecretEnc` is shared across methods and a method switch preserves it (so the JWT keypair
+  // survives toggling — see settings/authentication/actions.ts). So a site switched to "password"
+  // but never given one can still hold a leftover JWT private key here. That's not a password —
+  // fail closed until the owner saves a real one, rather than accepting the PEM as the password.
+  if (actual.startsWith("-----BEGIN")) {
+    return { error: "Password sign-in isn't enabled for this site." };
+  }
+
   if (!passwordMatches(input.password, actual)) {
     return { error: "Incorrect password." };
   }

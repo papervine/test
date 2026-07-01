@@ -2043,8 +2043,20 @@ jsonb, `authSecretEnc`), *not* docs.json — the incumbent configures this in th
 and we have no Git-write authoring backend (§9.2) yet to round-trip a docs.json
 `authentication` block. The one secret per method (JWT private key / OAuth client
 secret / shared password) is AES-256-GCM-encrypted via `src/lib/crypto.ts`, same as
-`repoTokenEnc`; switching methods resets it (a JWT private key is meaningless as an
-OAuth client secret). Pure validation + types live in `src/lib/reader-auth.ts`.
+`repoTokenEnc`. Pure validation + types live in `src/lib/reader-auth.ts`.
+
+**Fix (2026-07-01) — switching methods must NOT regenerate the JWT keypair.** `setAuthMethod`
+used to mint a fresh Ed25519 keypair whenever you switched *to* JWT and null the secret when
+switching *away*. So toggling JWT → Password → JWT minted a **new** keypair, and since the verify
+path reads `authConfig.publicKey`, every reader JWT the customer's backend had already signed
+stopped verifying ("Could not verify your sign-in token" — hit in production). Rotation must be
+deliberate: only the **Regenerate** button (`regenerateJwtKeypair`) mints a new key. Now
+`setAuthMethod` only flips `authMethod`, preserving `authSecretEnc`/`authConfig`; it mints a
+keypair *only* when switching to JWT and none exists yet. Consequence of preserving the shared
+`authSecretEnc` across a switch: a non-JWT method could read a leftover EdDSA PEM — so the settings
+page hides it (shows an empty secret field) and `submitReaderPassword` fails closed if the stored
+secret is a PEM (a half-configured "password" site with no real password rejects login rather than
+accepting the PEM). Guard: `tests/unit/auth-method-switch.test.ts`.
 
 **Status (2026-06-25) — JWT handshake shipped (asymmetric EdDSA).** The JWT method is now
 wired end-to-end and uses **asymmetric Ed25519**, replacing the earlier symmetric

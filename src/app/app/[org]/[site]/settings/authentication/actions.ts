@@ -69,10 +69,13 @@ export async function setAuthEnabled(
   return { ok: true };
 }
 
-// Switch the active handshake method. The stored secret is method-specific (a JWT private
-// key is meaningless as an OAuth client secret), so switching resets it: JWT mints a fresh
-// Ed25519 keypair, the others clear it so their secret field starts empty rather than
-// inheriting the previous method's value.
+// Switch the active handshake method. This ONLY flips `authMethod` — it must NOT regenerate
+// or clear the JWT keypair. The verify path reads `authConfig.publicKey`, so minting a new key
+// here would invalidate every reader JWT the customer's backend already signed (they'd get
+// "Could not verify your sign-in token" until they re-copied the key). Rotation is deliberate:
+// the explicit Regenerate button (`regenerateJwtKeypair`). Toggling JWT → Password → JWT thus
+// returns to the SAME keypair. We mint a keypair only when switching to JWT and none exists yet
+// (e.g. auth was configured for password and never had one), so JWT is always usable.
 export async function setAuthMethod(
   ref: SiteRef,
   method: string,
@@ -81,14 +84,13 @@ export async function setAuthMethod(
   if (!active) return { error: "No active site." };
   if (!isAuthMethod(method)) return { error: "Unknown auth method." };
 
-  const secretReset =
-    method === "jwt"
-      ? await newJwtKeyFields(active.authConfig as ReaderAuthConfig | null)
-      : { authSecretEnc: null };
+  const existing = active.authConfig as ReaderAuthConfig | null;
+  const needsKeypair = method === "jwt" && !existing?.publicKey;
+  const seed = needsKeypair ? await newJwtKeyFields(existing) : {};
 
   await db
     .update(site)
-    .set({ authMethod: method, ...secretReset, updatedAt: new Date() })
+    .set({ authMethod: method, ...seed, updatedAt: new Date() })
     .where(eq(site.id, active.id));
   revalidateSiteRow({ slug: active.slug, domains: [active.customDomain] });
   revalidatePath(authPath(ref));

@@ -70,8 +70,9 @@ the handshake completes.
 In **Settings → Authentication**, enable authentication and choose **JWT**. Papervine
 generates an **Ed25519 keypair** for the site: it shows you the **private key** to copy into
 your backend and keeps the matching public key to verify tokens with. Set your **Login URL**
-— the page where your own app signs readers in. (Regenerating the key invalidates the old
-one, so update your backend when you rotate.)
+— the page where your own app signs readers in. The keypair is stable: switching between auth
+methods leaves it untouched, so only the **Regenerate** button rotates it — and regenerating
+invalidates the old key, so update your backend whenever you do.
 
 Then, in your login flow, sign a token with that private key and redirect back to the docs:
 

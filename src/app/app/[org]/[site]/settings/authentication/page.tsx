@@ -17,6 +17,8 @@ export default async function AuthenticationSettingsPage({
   const { org: orgSlug, site: siteSlug } = await params;
   const { site } = await requireSite(orgSlug, siteSlug);
 
+  const method: AuthMethod = isAuthMethod(site.authMethod) ? site.authMethod : "jwt";
+
   // The stored secret is the org owner's own JWT signing secret / OAuth client secret /
   // shared password — safe to reveal on this org-scoped page. Best-effort: if the key is
   // unset (local without PAPERVINE_ENCRYPTION_KEY) we just show it blank rather than 500.
@@ -28,8 +30,11 @@ export default async function AuthenticationSettingsPage({
       secret = "";
     }
   }
-
-  const method: AuthMethod = isAuthMethod(site.authMethod) ? site.authMethod : "jwt";
+  // `authSecretEnc` is one column shared across methods, and a method switch preserves it (so the
+  // JWT keypair survives toggling — see setAuthMethod). So a non-JWT method can find a leftover JWT
+  // private key here; don't surface it as that method's "secret" (an EdDSA PEM isn't a password /
+  // client secret). The field shows empty until the owner saves the method's own value.
+  if (method !== "jwt" && secret.startsWith("-----BEGIN")) secret = "";
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-6">
