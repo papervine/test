@@ -127,8 +127,10 @@ Core principles, in priority order:
   single unexpected `docs.json` field must never break the site. Every field is
   lenient (`.catch`), unknown keys are passed through with a warning.
 - **`docs.json` is docs.json-compatible.** Match their schema/behavior so real repos
-  migrate unchanged. When unsure how something should behave, check against a real
-  docs.json repo, don't guess.
+  migrate unchanged. The **authoritative schema is the JSON Schema at
+  `https://papervine.io/docs.json`** (what real repos set as their `$schema`) — consult it
+  for field names/shapes/enums before adding or changing config handling. When behavior isn't
+  captured by the schema, check against a representative docs repo; don't guess.
 
 ## Gotchas (learned the hard way — don't rediscover these)
 
