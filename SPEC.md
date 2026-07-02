@@ -1237,6 +1237,30 @@ layer.
 > rulesets, not this.) Guard: `tests/unit/authoring-publish.test.ts` asserts an existing-branch
 > re-publish commits on the branch tip, a fresh one on the deploy base.
 >
+> **WYSIWYG "Visual" editor — reversed the MDXEditor decision & shipped (2026-07-02).** We now
+> ship an editable **Visual** mode alongside Source (the earlier note dropped WYSIWYG; this
+> reverses it, matching the incumbent — who use TipTap). The keystone is a new pure package
+> **`@papervine/mdx-prosemirror`**: bidirectional MDX↔ProseMirror where the **canonical value is
+> the raw MDX text** (byte-exact git commits stay the source of truth) and anything the editor
+> can't model (custom components, `{expressions}`, imports, expression-valued attrs) is preserved
+> **verbatim** via `mdxUnknown*` nodes — the renderer's Fallback philosophy applied to editing.
+> Round-trip is **idempotent** (gated by `mdx-prosemirror-roundtrip` + a `mdx-prosemirror-corpus`
+> test that runs every `docs/*.mdx` through the converter) and validated against a real TipTap
+> instance in jsdom (`mdx-prosemirror-tiptap`). The editor (`VisualEditor.tsx` + `visual/`) builds
+> on **open-source TipTap v3** (not the paid Notion template) with node views rendering the *real*
+> renderer components (`@papervine/renderer/components/mdx/editor-registry`), and Notion-style UX:
+> a `/` slash palette + a "+" **block picker** (both from one categorized item set; the slash menu
+> is a **controlled popover**, not `ReactRenderer` — that hits React 19's flushSync-in-render), a
+> selection **bubble menu**, **drag handles** with a Turn-into/Duplicate/Delete **block menu**, and
+> an editable **frontmatter header** (title/description). The pane toolbar is Visual · Source · Diff
+> (full-pane draft⇄published diff) · Copy-markdown, with `⌘⇧M`/`⌘⇧D`. Editor **opens in Visual by
+> default**. Nav-item cogs open **Page settings** (frontmatter via `gray-matter`) and **Group
+> settings** (`docs.json` patch); to make those effective the renderer now honors page `icon`/`tag`/
+> external `url` and group `hidden`/`expanded`/`tag` in the sidebar (`nav.ts` + `Sidebar.tsx`, gated
+> by `nav-page-group-settings`). **Deferred:** real-time collaboration (Yjs/Hocuspocus — deps are
+> already in via the drag handle; the canonical-text model was chosen to make this a clean next
+> step) and per-page `<head>` metadata for `og:image`/`keywords`/`noindex` + page `mode` layout.
+>
 > Token-scoped *external* auth for the authoring MCP (a platform-auth PAT, §11) is the
 > follow-up; today it authenticates via the app-host session + `x-papervine-org/site` headers.
 

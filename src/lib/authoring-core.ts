@@ -94,6 +94,30 @@ export async function resolvePagePath(
   return { path: `${normalized}.mdx`, raw: null };
 }
 
+/** The published (base) MDX for a page — S3 synced content only, ignoring any draft. Used by
+ *  the editor's diff view to compare the working draft against what's live. */
+export async function resolveBasePage(site: SiteRow, slug: string): Promise<{ path: string; raw: string | null }> {
+  const clean = slug.replace(/^\//, "");
+  const normalized = clean === "" || clean === "/" ? "index" : clean;
+  for (const ext of PAGE_EXTS) {
+    const path = `${normalized}${ext}`;
+    const raw = await getObjectText(`sites/${site.id}/${path}`);
+    if (raw !== null) return { path, raw };
+  }
+  return { path: `${normalized}.mdx`, raw: null };
+}
+
+/** Read one file's current draft-aware text by exact repo path (draft overlay, else S3). Used
+ *  for non-page files like `docs.json`. Returns null if deleted in the draft or missing. */
+export async function resolveDraftFile(site: SiteRow, branch: string, path: string): Promise<string | null> {
+  const session = await findOpenSession(site.id, branch);
+  if (session) {
+    const draft = await getDraftFile(session.id, path);
+    if (draft) return draft.deleted ? null : draft.content;
+  }
+  return getObjectText(`sites/${site.id}/${path}`);
+}
+
 /** Buffer an edit to one file (auto-checks-out the branch if no session is open yet). */
 export async function saveDraft(
   site: SiteRow,

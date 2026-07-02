@@ -10,8 +10,10 @@ import { parseDocsConfig, type DocsConfig } from "./config";
 export type PageFrontmatter = {
   title?: string;
   description?: string;
-  icon?: string;
+  icon?: string; // sidebar leaf icon (Lucide/incumbent name)
   sidebarTitle?: string; // nav label override (GAP-REPORT §3)
+  url?: string; // external link — the sidebar entry opens this instead of the page
+  tag?: string; // small badge shown next to the sidebar entry
   hidden?: boolean; // reachable by URL, but omitted from the sidebar
   noindex?: boolean; // exclude from search/SEO
   // Reader-auth access control (SPEC §11.2). `groups` gates the page to readers in ≥1 of the

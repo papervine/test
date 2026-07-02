@@ -13,14 +13,24 @@ const ALLOW_ALL: PageAccess = () => true;
 
 /** Serializable nav tree handed to the client Sidebar. `method` is set only for OpenAPI
  *  operation leaves, so the sidebar can render a colored HTTP-method badge beside them. */
-export type NavLeaf = { title: string; href: string; method?: string };
+export type NavLeaf = {
+  title: string;
+  href: string;
+  method?: string;
+  icon?: string; // page frontmatter `icon`
+  tag?: string; // page frontmatter `tag` — a small badge
+  external?: boolean; // page frontmatter `url` — opens in a new tab, not an internal route
+};
 export type NavNode = {
   group: string;
   icon?: string;
+  tag?: string; // group `tag` — a small badge
   // When true, the sidebar renders this group collapsible (chevron toggle) even at the top
   // level — used for OpenAPI tag groups, which can be long. Nested groups are always
   // collapsible regardless; this only changes the otherwise-static top-level header.
   collapsible?: boolean;
+  // Group `expanded: true` (docs.json) — default the collapsible group to open.
+  expanded?: boolean;
   items: (NavLeaf | NavNode)[];
 };
 export type NavSection = {
@@ -46,10 +56,17 @@ async function resolveLeaf(slug: string, canAccess: PageAccess): Promise<NavLeaf
   const page = await loadPage(slug);
   if (page?.frontmatter.hidden) return null;
   if (page && !canAccess(page.frontmatter)) return null;
-  return {
-    title: page?.frontmatter.sidebarTitle ?? page?.frontmatter.title ?? titleFromSlug(slug),
-    href: "/" + slug,
+  const fm = page?.frontmatter;
+  const leaf: NavLeaf = {
+    title: fm?.sidebarTitle ?? fm?.title ?? titleFromSlug(slug),
+    // An external `url` becomes the href directly (withBase leaves absolute URLs alone); else
+    // the internal page route.
+    href: fm?.url || "/" + slug,
   };
+  if (fm?.url) leaf.external = true;
+  if (fm?.icon) leaf.icon = fm.icon;
+  if (fm?.tag) leaf.tag = fm.tag;
+  return leaf;
 }
 
 // Container keys whose values hold further pages/divisions, and label keys that
@@ -154,6 +171,8 @@ async function collectItem(item: unknown, canAccess: PageAccess): Promise<(NavLe
   }
   if (item && typeof item === "object") {
     const div = item as Division;
+    // A group marked `hidden: true` in docs.json is dropped from the sidebar entirely.
+    if (div.hidden === true && labelOf(div)) return [];
     const children = await collectChildren(div, canAccess);
     const label = labelOf(div);
     if (label) {
@@ -164,8 +183,11 @@ async function collectItem(item: unknown, canAccess: PageAccess): Promise<(NavLe
       // a fully-gated *tab* disappears (buildNav drops a tab whose nodes are all gone) —
       // access stays single-source-of-truth at the page, and containers derive from it.
       if (children.length === 0) return [];
-      const icon = typeof div.icon === "string" ? div.icon : undefined;
-      return [{ group: label, icon, items: children }];
+      const node: NavNode = { group: label, items: children };
+      if (typeof div.icon === "string") node.icon = div.icon;
+      if (typeof div.tag === "string") node.tag = div.tag;
+      if (div.expanded === true) node.expanded = true;
+      return [node];
     }
     return children; // unlabeled wrapper — splice children up a level
   }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronRight, X } from "lucide-react";
 import type { NavSection } from "@papervine/renderer/lib/nav";
 import { NavTree } from "./NavTree";
@@ -8,6 +9,8 @@ import { BranchSwitcher } from "./BranchSwitcher";
 import { PublishButton } from "./PublishButton";
 import { EditorAgentPanel } from "./EditorAgentPanel";
 import { MdxEditorPane, type Mode, type MdxEditorHandle } from "./MdxEditorPane";
+import { PageSettings } from "./settings/PageSettings";
+import { GroupSettings } from "./settings/GroupSettings";
 import { Toaster } from "@/components/ui/sonner";
 import { readDraftPageAction, saveDraftAction } from "@/lib/actions/authoring";
 
@@ -39,10 +42,11 @@ export function EditorShell({
   const [slug, setSlug] = useState(initialSlug);
   const [path, setPath] = useState(initialPath);
   const [markdown, setMarkdown] = useState(initialMarkdown);
-  // Source ⇄ Preview lives here, not in the pane: the pane is `key`ed by page so it remounts
-  // on every nav click, and pane-local mode would snap back to Source each time. Holding it in
-  // the shell makes the chosen mode persist across page switches.
-  const [mode, setMode] = useState<Mode>("source");
+  // Visual ⇄ Source lives here, not in the pane: the pane is `key`ed by page so it remounts on
+  // every nav click, and pane-local mode would snap back each time. Holding it in the shell makes
+  // the chosen mode persist across page switches. Default Visual — clicking "Editor" lands you
+  // straight in the rendered editor, like the incumbent.
+  const [mode, setMode] = useState<Mode>("visual");
   // Bump to force the editor pane to remount with fresh content (page switch / agent edit).
   const [docKey, setDocKey] = useState(0);
   // The editing-agent column is hidden by default — the editor opens on the page, more room for
@@ -52,7 +56,10 @@ export function EditorShell({
   // Shortcut glyph: ⌘ on mac, Ctrl elsewhere. Defaults to ⌘ (matches SSR) and corrects on mount,
   // so there's no hydration mismatch.
   const [modKey, setModKey] = useState("⌘");
+  // The Page/Group settings slide-over, opened from a nav-item cog.
+  const [settings, setSettings] = useState<{ kind: "page" | "group"; key: string } | null>(null);
   const [, start] = useTransition();
+  const router = useRouter();
   // The pane remounts per page, so a keystroke still inside its 700ms autosave debounce would be
   // lost on a fast nav click. We flush it through this handle BEFORE a user-initiated switch.
   const paneRef = useRef<MdxEditorHandle>(null);
@@ -86,6 +93,21 @@ export function EditorShell({
   // Awaitable so the pane can flush a pending save before loading the preview iframe.
   const save = async (md: string): Promise<void> => {
     await saveDraftAction(org, site, branch, path, md);
+  };
+
+  // Settings panels. Flush the editor before opening page settings so it reads the latest draft.
+  const openPageSettings = async (s: string) => {
+    await paneRef.current?.flush();
+    setSettings({ kind: "page", key: s });
+  };
+  const openGroupSettings = (g: string) => setSettings({ kind: "group", key: g });
+  // A settings save changed frontmatter/docs.json — refresh the server-built nav to reflect it.
+  const onSettingsSaved = () => router.refresh();
+  const closeSettings = () => {
+    const reloadActive = settings?.kind === "page" && settings.key === slug;
+    setSettings(null);
+    // Sync the editor with frontmatter edited in the panel (don't flush the stale editor buffer over it).
+    if (reloadActive) loadPage(slug, branch, { flush: false });
   };
 
   // ⌘/Ctrl-I toggles the agent column (the incumbent's "Ask agent" shortcut); set the glyph per OS.
@@ -127,11 +149,17 @@ export function EditorShell({
       {/* Col 2 — navigation */}
       <aside className="w-64 shrink-0 overflow-y-auto border-r border-neutral-200 dark:border-neutral-800">
         <div className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Navigation</div>
-        <NavTree sections={sections} activeSlug={slug} onSelect={loadPage} />
+        <NavTree
+          sections={sections}
+          activeSlug={slug}
+          onSelect={loadPage}
+          onPageSettings={openPageSettings}
+          onGroupSettings={openGroupSettings}
+        />
       </aside>
 
       {/* Cols 3–4 — editor */}
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 py-2 dark:border-neutral-800">
           <div className="flex min-w-0 items-center gap-2">
             <BranchSwitcher
@@ -179,6 +207,28 @@ export function EditorShell({
             onModeChange={setMode}
           />
         </div>
+        {/* Anchored inside <main> so the panel opens just right of the nav tree (over the editor),
+            regardless of the agent column being open. */}
+        {settings?.kind === "page" && (
+          <PageSettings
+            org={org}
+            site={site}
+            branch={branch}
+            slug={settings.key}
+            onSaved={onSettingsSaved}
+            onClose={closeSettings}
+          />
+        )}
+        {settings?.kind === "group" && (
+          <GroupSettings
+            org={org}
+            site={site}
+            branch={branch}
+            group={settings.key}
+            onSaved={onSettingsSaved}
+            onClose={closeSettings}
+          />
+        )}
       </main>
       <Toaster />
     </div>

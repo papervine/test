@@ -1,5 +1,6 @@
 "use server";
 
+import matter from "gray-matter";
 import { revalidatePath } from "next/cache";
 import { siteRoute } from "@/lib/dashboard-nav";
 import { findSite, type SiteRow } from "@/lib/dashboard-context";
@@ -11,8 +12,45 @@ import {
   publishDraft,
   discardSession,
   resolvePagePath,
+  resolveBasePage,
+  resolveDraftFile,
   type PublishResult,
 } from "@/lib/authoring-core";
+
+// Frontmatter keys the Page settings panel manages (docs.json-compatible). Booleans are only
+// written when true; strings/arrays only when non-empty — keeping frontmatter clean.
+type PageMeta = Record<string, unknown>;
+
+function cleanMeta(data: PageMeta): PageMeta {
+  const out: PageMeta = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (v === "" || v === null || v === undefined || v === false) continue;
+    if (Array.isArray(v) && v.length === 0) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
+// Recursively find a docs.json navigation group object by its `group` name (returns the live
+// reference so the caller can mutate it in place).
+function findGroupNode(node: unknown, name: string): Record<string, unknown> | null {
+  if (Array.isArray(node)) {
+    for (const child of node) {
+      const found = findGroupNode(child, name);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (node && typeof node === "object") {
+    const obj = node as Record<string, unknown>;
+    if (obj.group === name) return obj;
+    for (const value of Object.values(obj)) {
+      const found = findGroupNode(value, name);
+      if (found) return found;
+    }
+  }
+  return null;
+}
 
 // Server-action front-end to the authoring backend — the human editor's write path. The
 // editing agent / authoring MCP call the SAME authoring-core functions (Phase 4), so both
@@ -58,6 +96,152 @@ export async function readDraftPageAction(
   if ("error" in gate) return gate;
   const { path, raw } = await resolvePagePath(gate.site, branch, slug);
   return { path, markdown: raw ?? "" };
+}
+
+/** Load a page's published (base) MDX — for the editor's diff view (draft vs live). */
+export async function readBasePageAction(
+  orgSlug: string,
+  siteSlug: string,
+  slug: string,
+): Promise<{ markdown: string } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const { raw } = await resolveBasePage(gate.site, slug);
+  return { markdown: raw ?? "" };
+}
+
+/** Read a page's frontmatter (for the Page settings panel). */
+export async function readPageMetaAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  slug: string,
+): Promise<{ path: string; data: PageMeta } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const { path, raw } = await resolvePagePath(gate.site, branch, slug);
+  return { path, data: matter(raw ?? "").data as PageMeta };
+}
+
+/** Write a page's frontmatter (Page settings), preserving the body. */
+export async function savePageMetaAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  slug: string,
+  data: PageMeta,
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const { path, raw } = await resolvePagePath(gate.site, branch, slug);
+  const parsed = matter(raw ?? "");
+  const clean = cleanMeta(data);
+  const next = Object.keys(clean).length ? matter.stringify(parsed.content, clean) : parsed.content;
+  await saveDraft(gate.site, branch, path, next, { actorUserId: gate.userId });
+  return { ok: true };
+}
+
+/** Delete a page (tombstone in the draft; publish carries the removal to git). */
+export async function deletePageAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  slug: string,
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const { path } = await resolvePagePath(gate.site, branch, slug);
+  await saveDraft(gate.site, branch, path, "", { deleted: true, actorUserId: gate.userId });
+  return { ok: true };
+}
+
+/** Read a docs.json navigation group's settings (for the Group settings panel). */
+export async function readGroupSettingsAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  group: string,
+): Promise<{ settings: PageMeta } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const raw = await resolveDraftFile(gate.site, branch, "docs.json");
+  try {
+    const config = JSON.parse(raw ?? "{}");
+    const node = findGroupNode(config.navigation ?? config, group);
+    return { settings: (node as PageMeta) ?? {} };
+  } catch {
+    return { settings: {} };
+  }
+}
+
+// Remove a navigation group (by `group` name) from its containing array in docs.json.
+function removeGroupNode(node: unknown, name: string): boolean {
+  if (Array.isArray(node)) {
+    const i = node.findIndex((c) => c && typeof c === "object" && (c as Record<string, unknown>).group === name);
+    if (i >= 0) {
+      node.splice(i, 1);
+      return true;
+    }
+    return node.some((c) => removeGroupNode(c, name));
+  }
+  if (node && typeof node === "object") {
+    return Object.values(node).some((v) => removeGroupNode(v, name));
+  }
+  return false;
+}
+
+/** Delete a docs.json navigation group. */
+export async function deleteGroupAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  group: string,
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const raw = await resolveDraftFile(gate.site, branch, "docs.json");
+  let config: unknown;
+  try {
+    config = JSON.parse(raw ?? "{}");
+  } catch {
+    return { error: "docs.json isn't valid JSON." };
+  }
+  if (!removeGroupNode((config as Record<string, unknown>).navigation ?? config, group)) {
+    return { error: "Group not found in docs.json." };
+  }
+  await saveDraft(gate.site, branch, "docs.json", JSON.stringify(config, null, 2) + "\n", {
+    actorUserId: gate.userId,
+  });
+  return { ok: true };
+}
+
+/** Patch a docs.json navigation group in place (Group settings). `patch.group` renames it. */
+export async function saveGroupSettingsAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  group: string,
+  patch: PageMeta,
+): Promise<{ ok: true; group: string } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const raw = await resolveDraftFile(gate.site, branch, "docs.json");
+  let config: unknown;
+  try {
+    config = JSON.parse(raw ?? "{}");
+  } catch {
+    return { error: "docs.json isn't valid JSON." };
+  }
+  const node = findGroupNode((config as Record<string, unknown>).navigation ?? config, group);
+  if (!node) return { error: "Group not found in docs.json." };
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === "" || value === null || value === undefined || value === false) delete node[key];
+    else node[key] = value;
+  }
+  await saveDraft(gate.site, branch, "docs.json", JSON.stringify(config, null, 2) + "\n", {
+    actorUserId: gate.userId,
+  });
+  return { ok: true, group: (patch.group as string) || group };
 }
 
 export async function saveDraftAction(

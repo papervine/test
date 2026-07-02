@@ -17,20 +17,29 @@ function containsHref(nodes: (NavLeaf | NavNode)[], pathname: string): boolean {
   return nodes.some((n) => (isLeaf(n) ? n.href === pathname : containsHref(n.items, pathname)));
 }
 
+/** A small uppercase badge shown next to a nav entry (frontmatter/group `tag`). */
+function TagBadge({ tag }: { tag: string }) {
+  return (
+    <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 text-[0.625rem] font-semibold uppercase tracking-wide text-primary">
+      {tag}
+    </span>
+  );
+}
+
 function Leaf({ node }: { node: NavLeaf }) {
   const pathname = usePathname();
-  const active = pathname === node.href;
-  return (
-    <Link
-      href={node.href}
-      className={clsx(
-        "flex items-center gap-2 rounded-[var(--db-radius)] px-3 py-1.5 text-sm transition-colors",
-        active
-          ? "bg-zinc-100 font-medium text-primary dark:bg-white/10"
-          : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200",
-      )}
-    >
+  const active = !node.external && pathname === node.href;
+  const cls = clsx(
+    "flex items-center gap-2 rounded-[var(--db-radius)] px-3 py-1.5 text-sm transition-colors",
+    active
+      ? "bg-zinc-100 font-medium text-primary dark:bg-white/10"
+      : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200",
+  );
+  const inner = (
+    <>
+      {node.icon && <LucideIcon name={node.icon} className="h-4 w-4 shrink-0 opacity-70" />}
       <span className="min-w-0 flex-1 truncate">{node.title}</span>
+      {node.tag && <TagBadge tag={node.tag} />}
       {node.method && (
         <span
           className={clsx(
@@ -41,6 +50,16 @@ function Leaf({ node }: { node: NavLeaf }) {
           {methodAbbrev(node.method)}
         </span>
       )}
+    </>
+  );
+  // A page with an external `url` opens in a new tab instead of an internal route.
+  return node.external ? (
+    <a href={node.href} target="_blank" rel="noreferrer" className={cls}>
+      {inner}
+    </a>
+  ) : (
+    <Link href={node.href} className={cls}>
+      {inner}
     </Link>
   );
 }
@@ -53,6 +72,7 @@ function TopGroup({ node }: { node: NavNode }) {
     <>
       {node.icon && <LucideIcon name={node.icon} className="h-4 w-4 text-zinc-400" />}
       {node.group}
+      {node.tag && <TagBadge tag={node.tag} />}
     </>
   );
   if (!node.collapsible) {
@@ -84,7 +104,8 @@ function TopGroup({ node }: { node: NavNode }) {
 /** Nested group: a collapsible row with a chevron (Projects, Preferences, …). */
 function SubGroup({ node, depth }: { node: NavNode; depth: number }) {
   const pathname = usePathname();
-  const [open, setOpen] = useState(() => containsHref(node.items, pathname));
+  // Open by default when it contains the active page, or when `expanded: true`.
+  const [open, setOpen] = useState(() => containsHref(node.items, pathname) || !!node.expanded);
   return (
     <>
       <button
@@ -92,7 +113,10 @@ function SubGroup({ node, depth }: { node: NavNode; depth: number }) {
         onClick={() => setOpen((o) => !o)}
         className="flex w-full items-center justify-between rounded-[var(--db-radius)] px-3 py-1.5 text-sm font-medium text-zinc-700 transition-colors hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-zinc-100"
       >
-        <span>{node.group}</span>
+        <span className="flex items-center gap-2">
+          {node.group}
+          {node.tag && <TagBadge tag={node.tag} />}
+        </span>
         <ChevronRight className={clsx("h-4 w-4 text-zinc-400 transition-transform", open && "rotate-90")} />
       </button>
       {open && <NodeList nodes={node.items} depth={depth + 1} />}

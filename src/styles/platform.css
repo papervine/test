@@ -272,3 +272,587 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
     transform: none;
   }
 }
+
+/* Visual editor: TipTap wraps a React node view's content in an extra element, so a
+   CardGroup's grid would have a single child (the wrapper) and the cards would stack.
+   Flatten that wrapper so the child cards become direct grid items. */
+.pv-cardgrid > [data-node-view-content-react] {
+  display: contents;
+}
+
+/* ============================================================================
+   Visual (WYSIWYG) editor — Notion-style UX chrome. The slash palette and
+   bubble toolbar portal to <body> (outside the .db shell), so they carry
+   self-contained styling tuned to the platform's dark surface.
+   ============================================================================ */
+.pv-visual .ProseMirror {
+  min-height: 100%;
+}
+.pv-visual .ProseMirror:focus {
+  outline: none;
+}
+.pv-visual .ProseMirror > * + * {
+  margin-top: 0.65em;
+}
+/* Empty-line placeholder ("Type '/' for commands…"). */
+.pv-visual .ProseMirror .is-empty::before,
+.pv-visual .ProseMirror .is-editor-empty::before {
+  content: attr(data-placeholder);
+  color: var(--muted);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+
+/* `/` command palette. */
+.pv-slash-menu {
+  width: 320px;
+  max-height: 340px;
+  overflow-y: auto;
+  padding: 4px;
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.5);
+}
+.pv-slash-empty {
+  padding: 10px 12px;
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: #8a8a99;
+  font-size: 13px;
+}
+.pv-slash-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 9px;
+  border-radius: 7px;
+  text-align: left;
+  color: #ececf1;
+}
+.pv-slash-item.is-active {
+  background: rgba(91, 140, 255, 0.16);
+}
+.pv-slash-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #c9c9d4;
+}
+.pv-slash-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.pv-slash-title {
+  font-size: 13px;
+  font-weight: 500;
+}
+.pv-slash-desc {
+  font-size: 11px;
+  color: #8a8a99;
+}
+
+/* Selection bubble toolbar. */
+.pv-bubble {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+.pv-bubble-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  color: #c9c9d4;
+}
+.pv-bubble-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.pv-bubble-btn.is-active {
+  background: rgba(91, 140, 255, 0.2);
+  color: #ececf1;
+}
+
+/* Block drag handle (appears on hover, left of the block). */
+.pv-drag-handle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 24px;
+  border-radius: 5px;
+  color: #8a8a99;
+  cursor: grab;
+}
+.pv-drag-handle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ececf1;
+}
+
+/* Visual editor: the frontmatter title/description header (mirrors the reader-facing article
+   shell) and inline images sized to the content column. */
+.pv-visual .pv-doc-header {
+  margin-bottom: 1.75rem;
+}
+/* Editable title/description — borderless inputs styled as the rendered header text. */
+.pv-visual .pv-doc-title-input,
+.pv-visual .pv-doc-desc-input {
+  display: block;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  outline: none;
+  padding: 0;
+  resize: none;
+  font-family: inherit;
+}
+.pv-visual .pv-doc-title-input {
+  margin-bottom: 0.5rem;
+  font-size: 2.25rem;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--fg);
+}
+.pv-visual .pv-doc-desc-input {
+  font-size: 1.075rem;
+  line-height: 1.5;
+  color: var(--muted);
+  field-sizing: content;
+}
+.pv-visual .pv-doc-title-input::placeholder,
+.pv-visual .pv-doc-desc-input::placeholder {
+  color: var(--muted);
+  opacity: 0.55;
+}
+.pv-visual .pv-visual-img img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+
+/* Block controls (drag handle + "+" add-block), Notion-style, on block hover. */
+.pv-block-controls {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+}
+.pv-block-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 24px;
+  border-radius: 5px;
+  color: #8a8a99;
+}
+.pv-block-add:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ececf1;
+}
+
+/* Slash palette category headers. */
+.pv-slash-category {
+  padding: 7px 9px 3px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #6b6b78;
+}
+
+/* "+" block picker popover (Notion/the incumbent "Sections" search). */
+.pv-picker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+}
+.pv-picker {
+  position: fixed;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  max-height: 400px;
+  overflow: hidden;
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.5);
+}
+.pv-picker-search {
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: #ececf1;
+  font-size: 14px;
+  outline: none;
+}
+.pv-picker-search::placeholder {
+  color: #6b6b78;
+}
+.pv-picker-list {
+  overflow-y: auto;
+  padding: 4px;
+}
+
+/* ── Editor toolbar buttons + tooltips (Visual/Source/Diff/Copy) ── */
+.pv-toolbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: var(--muted);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.pv-toolbtn:hover {
+  background: rgba(var(--ink-rgb), 0.06);
+  color: var(--fg);
+}
+.pv-toolbtn.is-active {
+  background: rgba(var(--ink-rgb), 0.1);
+  color: var(--fg);
+  box-shadow: 0 0 0 1px var(--line) inset;
+}
+.pv-toolbtn-wrap {
+  position: relative;
+  display: inline-flex;
+}
+.pv-tip {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  white-space: nowrap;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #ececf1;
+  font-size: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+  z-index: 40;
+}
+.pv-toolbtn-wrap:hover .pv-tip {
+  opacity: 1;
+}
+.pv-tip-kbd {
+  color: #8a8a99;
+  font-size: 11px;
+}
+
+/* ── Diff view (draft ⇄ published, split) ── */
+.pv-diff {
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.pv-diff-empty {
+  padding: 10px 14px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+.pv-diff-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+.pv-diff-cell {
+  display: flex;
+  gap: 12px;
+  padding: 1px 12px;
+  border-right: 1px solid var(--line);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.pv-diff-cell.is-empty {
+  background: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 6px,
+    rgba(var(--ink-rgb), 0.03) 6px,
+    rgba(var(--ink-rgb), 0.03) 12px
+  );
+}
+.pv-diff-cell.is-del {
+  background: rgba(229, 72, 77, 0.14);
+}
+.pv-diff-cell.is-add {
+  background: rgba(46, 160, 67, 0.16);
+}
+.pv-diff-ln {
+  flex: 0 0 auto;
+  width: 28px;
+  text-align: right;
+  color: var(--muted);
+  opacity: 0.6;
+  user-select: none;
+}
+.pv-diff-code {
+  flex: 1 1 auto;
+}
+
+/* Drag-handle click menu (Turn into / Duplicate / Delete). */
+.pv-blockmenu {
+  position: fixed;
+  z-index: 51;
+  min-width: 200px;
+  padding: 4px;
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.5);
+}
+.pv-blockmenu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 7px;
+  text-align: left;
+  font-size: 13px;
+  color: #ececf1;
+}
+.pv-blockmenu-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+.pv-blockmenu-item svg {
+  color: #b8b8c4;
+}
+.pv-blockmenu-danger:hover {
+  background: rgba(229, 72, 77, 0.16);
+}
+.pv-blockmenu-danger,
+.pv-blockmenu-danger svg {
+  color: #f1a3a5;
+}
+.pv-blockmenu-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ============================================================================
+   Page / Group settings slide-over (opened from a nav-item cog).
+   ============================================================================ */
+.pv-settings-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 45;
+  background: rgba(0, 0, 0, 0.35);
+}
+.pv-settings {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: 46;
+  display: flex;
+  flex-direction: column;
+  width: 460px;
+  max-width: 92vw;
+  height: 100%;
+  background: var(--bg);
+  border-right: 1px solid var(--line);
+  box-shadow: 20px 0 60px rgba(0, 0, 0, 0.4);
+}
+.pv-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+.pv-settings-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+.pv-settings-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.pv-settings-iconbtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  color: var(--muted);
+}
+.pv-settings-iconbtn:hover {
+  background: rgba(var(--ink-rgb), 0.07);
+  color: var(--fg);
+}
+.pv-settings-iconbtn.is-active {
+  color: var(--blue);
+}
+.pv-settings-iconbtn.is-danger:hover {
+  background: rgba(229, 72, 77, 0.16);
+  color: #f1a3a5;
+}
+.pv-settings-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px 18px 24px;
+}
+.pv-settings-loading {
+  padding: 20px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.pv-settings-row {
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  align-items: center;
+  gap: 12px;
+  min-height: 52px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.pv-settings-rowlabel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--fg);
+  font-size: 14px;
+}
+.pv-settings-rowcontrol {
+  min-width: 0;
+}
+.pv-settings-input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--fg);
+  font-size: 14px;
+  padding: 4px 0;
+}
+.pv-settings-input:disabled {
+  color: var(--muted);
+}
+.pv-settings-input::placeholder {
+  color: var(--muted);
+  opacity: 0.6;
+}
+.pv-settings-select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--fg);
+  font-size: 14px;
+  outline: none;
+}
+.pv-settings-select option {
+  background: var(--option-bg);
+}
+
+/* Toggle switch */
+.pv-settings-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.pv-toggle-track {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  border-radius: 999px;
+  background: rgba(var(--ink-rgb), 0.18);
+  transition: background 0.15s ease;
+}
+.pv-toggle-track.is-on {
+  background: var(--blue);
+}
+.pv-toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+.pv-toggle-track.is-on .pv-toggle-thumb {
+  transform: translateX(16px);
+}
+.pv-toggle-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* Keywords */
+.pv-keywords {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+.pv-keyword {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px 2px 8px;
+  border-radius: 6px;
+  background: rgba(var(--ink-rgb), 0.08);
+  color: var(--fg);
+  font-size: 12px;
+}
+.pv-keyword button {
+  display: flex;
+  color: var(--muted);
+}
+.pv-keyword button:hover {
+  color: var(--fg);
+}
+.pv-keyword-input {
+  flex: 1;
+  min-width: 90px;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--fg);
+  font-size: 13px;
+}
+.pv-keyword-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--fg);
+  font-size: 13px;
+}
+.pv-keyword-add:hover {
+  background: rgba(var(--ink-rgb), 0.06);
+}
