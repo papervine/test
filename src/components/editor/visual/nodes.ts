@@ -15,6 +15,7 @@ export interface NodeViewOpts {
   componentNodeView?: (type: string) => NodeViewRenderer;
   atomNodeView?: (type: string, inline: boolean) => NodeViewRenderer;
   imageNodeView?: () => NodeViewRenderer;
+  codeBlockNodeView?: () => NodeViewRenderer;
 }
 
 // Derive each component node's attr set from the shared spec (union across aliased tags),
@@ -102,11 +103,15 @@ const ThematicBreak = Node.create({
 });
 
 // codeBlock keeps the fence info string (```lang meta); Link keeps the `title` (`[x](u "t")`).
-const CodeBlockWithMeta = CodeBlock.extend({
-  addAttributes() {
-    return { ...this.parent?.(), meta: { default: null } };
-  },
-});
+// In the live editor a node view renders a ```mermaid fence as a diagram (see NodeViews).
+function codeBlockExt(nodeView?: NodeViewRenderer) {
+  return CodeBlock.extend({
+    addAttributes() {
+      return { ...this.parent?.(), meta: { default: null } };
+    },
+    ...(nodeView ? { addNodeView: () => nodeView } : {}),
+  });
+}
 const LinkWithTitle = Link.extend({
   addAttributes() {
     return { ...this.parent?.(), title: { default: null } };
@@ -129,7 +134,7 @@ export function buildMdxExtensions(opts: NodeViewOpts = {}): Extensions {
   });
   return [
     StarterKit.configure({ horizontalRule: false, codeBlock: false, link: false }),
-    CodeBlockWithMeta,
+    codeBlockExt(opts.codeBlockNodeView?.()),
     LinkWithTitle.configure({ openOnClick: false }),
     ImageWithAttrs.configure({ inline: true, allowBase64: true }),
     ThematicBreak,

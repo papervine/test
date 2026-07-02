@@ -880,3 +880,12 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
 .pv-tip-row kbd {
   color: #b8b8c4;
 }
+
+/* Visual editor: a ```mermaid code block renders the live diagram above its editable source. */
+.pv-visual .pv-mermaid-preview {
+  margin-bottom: 0.5rem;
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: rgba(var(--ink-rgb), 0.03);
+  border: 1px solid var(--line);
+}

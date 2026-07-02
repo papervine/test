@@ -6,7 +6,7 @@ import {
   ReactNodeViewRenderer,
   type NodeViewProps,
 } from "@tiptap/react";
-import { editorComponents } from "@papervine/renderer/components/mdx/editor-registry";
+import { editorComponents, Mermaid } from "@papervine/renderer/components/mdx/editor-registry";
 import type { NodeViewOpts } from "./nodes";
 
 // Phase-2b node views: render the SAME components the reader-facing renderer uses, so the
@@ -134,11 +134,34 @@ function InlineAtomView({ node }: NodeViewProps) {
   );
 }
 
+/** Code block node view: a ```mermaid fence renders the live Mermaid diagram above its editable
+ *  source (matching the renderer, which converts the fence to <Mermaid>); other languages render
+ *  as a normal editable code block. Keeping the source as a fenced code block means it round-trips
+ *  byte-exact — no rewrite to <Mermaid> JSX. */
+function CodeBlockNodeView({ node }: NodeViewProps) {
+  const language = (node.attrs.language as string) || "";
+  const isMermaid = language.toLowerCase() === "mermaid";
+  const chart = node.textContent;
+  return (
+    <NodeViewWrapper className="pv-codeblock">
+      {isMermaid && chart.trim() && (
+        <div contentEditable={false} className="pv-mermaid-preview">
+          <Mermaid chart={chart} />
+        </div>
+      )}
+      <pre>
+        <NodeViewContent<"code"> as="code" />
+      </pre>
+    </NodeViewWrapper>
+  );
+}
+
 export function makeNodeViewOpts(assetBase: string): NodeViewOpts {
   const ImageNodeView = makeImageNodeView(assetBase);
   return {
     componentNodeView: () => ReactNodeViewRenderer(ComponentNodeView),
     atomNodeView: (_type, inline) => ReactNodeViewRenderer(inline ? InlineAtomView : BlockAtomView),
     imageNodeView: () => ReactNodeViewRenderer(ImageNodeView),
+    codeBlockNodeView: () => ReactNodeViewRenderer(CodeBlockNodeView),
   };
 }

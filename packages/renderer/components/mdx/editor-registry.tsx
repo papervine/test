@@ -16,6 +16,12 @@ import { Frame } from "./Frame";
 import { Accordion, AccordionGroup } from "./Accordion";
 import { ParamField, ResponseField, ApiField } from "./ApiField";
 import { Expandable } from "./Expandable";
+import { Mermaid } from "./Mermaid";
+
+// The live Mermaid renderer, exported for the editor's ```mermaid code-block node view (the
+// converter keeps mermaid as a fenced code block for byte-exact round-trip, so it isn't in the
+// tag-keyed map below).
+export { Mermaid };
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const editorComponents: Record<string, ComponentType<any>> = {
