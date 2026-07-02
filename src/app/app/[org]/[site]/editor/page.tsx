@@ -54,7 +54,7 @@ export default async function EditorPage({
     );
   }
 
-  const { sections, initialSlug, initialPath, initialMarkdown } = await contentContext.run(src, async () => {
+  const { sections, slugs, initialSlug, initialPath, initialMarkdown } = await contentContext.run(src, async () => {
     // Read config straight from `src`, NOT the memoized `loadConfig()`. The root layout renders
     // first on this app host, finds no tenant source (no slug/custom-domain — see
     // requestContentSource), and primes the per-request React `cache()` for `loadConfig` with the
@@ -65,9 +65,11 @@ export default async function EditorPage({
     const config = await src.loadConfig();
     // includeHidden: the editor keeps hidden pages/groups (dimmed) so hiding one never loses it.
     const sections = await buildNav(config, "", undefined, { includeHidden: true });
+    // Every page slug — the "Files" view lists the raw repo tree (vs the docs.json Navigation).
+    const slugs = await src.listPageSlugs();
     const initialSlug = slugParam ?? firstSlug(sections);
     const { path, raw } = await resolvePagePath(siteRow, branch, initialSlug);
-    return { sections, initialSlug, initialPath: path, initialMarkdown: raw ?? "" };
+    return { sections, slugs, initialSlug, initialPath: path, initialMarkdown: raw ?? "" };
   });
 
   return (
@@ -77,6 +79,7 @@ export default async function EditorPage({
       deployBranch={siteRow.branch}
       initialBranch={branch}
       sections={sections}
+      slugs={slugs}
       sessionBranches={sessionBranches}
       initialSlug={initialSlug}
       initialPath={initialPath}

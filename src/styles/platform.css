@@ -856,3 +856,27 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
 .pv-keyword-add:hover {
   background: rgba(var(--ink-rgb), 0.06);
 }
+
+/* Titled, shortcut-annotated tooltip for the Navigation/Files toggles (left-aligned menu). */
+.pv-tip-menu {
+  left: 0;
+  transform: none;
+  align-items: stretch;
+  min-width: 180px;
+  padding: 8px 10px;
+  gap: 5px;
+}
+.pv-tip-title {
+  font-weight: 600;
+  color: #ececf1;
+}
+.pv-tip-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #8a8a99;
+}
+.pv-tip-row kbd {
+  color: #b8b8c4;
+}

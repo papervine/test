@@ -2,9 +2,10 @@
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, X } from "lucide-react";
+import { ChevronRight, X, ListTree, FolderOpen, type LucideIcon } from "lucide-react";
 import type { NavSection } from "@papervine/renderer/lib/nav";
 import { NavTree } from "./NavTree";
+import { FileTree } from "./FileTree";
 import { BranchSwitcher } from "./BranchSwitcher";
 import { PublishButton } from "./PublishButton";
 import { EditorAgentPanel } from "./EditorAgentPanel";
@@ -23,6 +24,7 @@ export function EditorShell({
   deployBranch,
   initialBranch,
   sections,
+  slugs,
   sessionBranches,
   initialSlug,
   initialPath,
@@ -33,6 +35,7 @@ export function EditorShell({
   deployBranch: string;
   initialBranch: string;
   sections: NavSection[];
+  slugs: string[];
   sessionBranches: string[];
   initialSlug: string;
   initialPath: string;
@@ -58,6 +61,9 @@ export function EditorShell({
   const [modKey, setModKey] = useState("⌘");
   // The Page/Group settings slide-over, opened from a nav-item cog.
   const [settings, setSettings] = useState<{ kind: "page" | "group"; key: string } | null>(null);
+  // Left panel: "nav" (docs.json Navigation) ⇄ "files" (raw file tree), and whether it's shown.
+  const [treeView, setTreeView] = useState<"nav" | "files">("nav");
+  const [treeOpen, setTreeOpen] = useState(true);
   const [, start] = useTransition();
   const router = useRouter();
   // The pane remounts per page, so a keystroke still inside its 700ms autosave debounce would be
@@ -117,9 +123,17 @@ export function EditorShell({
     const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
     setModKey(isMac ? "⌘" : "Ctrl");
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === "i" || e.key === "I")) {
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && (e.key === "i" || e.key === "I")) {
         e.preventDefault();
         setAgentOpen((o) => !o);
+      } else if (mod && e.key === "\\") {
+        e.preventDefault(); // ⌘\ — hide/show the tree
+        setTreeOpen((o) => !o);
+      } else if (mod && e.shiftKey && (e.key === "f" || e.key === "F")) {
+        e.preventDefault(); // ⌘⇧F — switch Navigation ⇄ Files (and reveal the tree if hidden)
+        setTreeOpen(true);
+        setTreeView((v) => (v === "nav" ? "files" : "nav"));
       }
     };
     window.addEventListener("keydown", onKey);
@@ -148,22 +162,53 @@ export function EditorShell({
         <EditorAgentPanel org={org} site={site} branch={branch} onAgentWrite={refreshActive} />
       </aside>
 
-      {/* Col 2 — navigation */}
-      <aside className="w-64 shrink-0 overflow-y-auto border-r border-neutral-200 dark:border-neutral-800">
-        <div className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">Navigation</div>
-        <NavTree
-          sections={sections}
-          activeSlug={slug}
-          onSelect={loadPage}
-          onPageSettings={openPageSettings}
-          onGroupSettings={openGroupSettings}
-        />
-      </aside>
+      {/* Col 2 — navigation / files tree (toggleable; hidden via ⌘\ or the header buttons) */}
+      {treeOpen && (
+        <aside className="w-64 shrink-0 overflow-y-auto border-r border-neutral-200 dark:border-neutral-800">
+          <div className="px-3 py-3 text-xs font-semibold uppercase tracking-wide text-neutral-400">
+            {treeView === "nav" ? "Navigation" : "Files"}
+          </div>
+          {treeView === "nav" ? (
+            <NavTree
+              sections={sections}
+              activeSlug={slug}
+              onSelect={loadPage}
+              onPageSettings={openPageSettings}
+              onGroupSettings={openGroupSettings}
+            />
+          ) : (
+            <FileTree slugs={slugs} activeSlug={slug} onSelect={loadPage} />
+          )}
+        </aside>
+      )}
 
       {/* Cols 3–4 — editor */}
       <main className="relative flex min-w-0 flex-1 flex-col">
         <header className="flex items-center justify-between gap-3 border-b border-neutral-200 px-4 py-2 dark:border-neutral-800">
           <div className="flex min-w-0 items-center gap-2">
+            {/* Left-panel view toggles: Navigation (list) / Files (folder). Clicking the active
+                view hides the tree; clicking the other switches to it (and reveals it). */}
+            <div className="flex shrink-0 items-center gap-1">
+              <TreeButton
+                icon={ListTree}
+                label="Navigation"
+                shortcuts={[["Switch tree", `${modKey}⇧F`], ["Hide tree", `${modKey}\\`]]}
+                active={treeOpen && treeView === "nav"}
+                onClick={() =>
+                  treeOpen && treeView === "nav" ? setTreeOpen(false) : (setTreeOpen(true), setTreeView("nav"))
+                }
+              />
+              <TreeButton
+                icon={FolderOpen}
+                label="Files"
+                shortcuts={[["Switch tree", `${modKey}⇧F`], ["Hide tree", `${modKey}\\`]]}
+                active={treeOpen && treeView === "files"}
+                onClick={() =>
+                  treeOpen && treeView === "files" ? setTreeOpen(false) : (setTreeOpen(true), setTreeView("files"))
+                }
+              />
+            </div>
+            <span className="h-5 w-px shrink-0 bg-neutral-300 dark:bg-neutral-700" />
             <BranchSwitcher
               org={org}
               site={site}
@@ -234,5 +279,43 @@ export function EditorShell({
       </main>
       <Toaster />
     </div>
+  );
+}
+
+/** A left-panel view toggle (Navigation / Files) with a titled, shortcut-annotated tooltip. */
+function TreeButton({
+  icon: Icon,
+  label,
+  shortcuts,
+  active,
+  onClick,
+}: {
+  icon: LucideIcon;
+  label: string;
+  shortcuts: [string, string][];
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <span className="pv-toolbtn-wrap">
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={active}
+        onClick={onClick}
+        className={`pv-toolbtn${active ? " is-active" : ""}`}
+      >
+        <Icon className="h-4 w-4" />
+      </button>
+      <span className="pv-tip pv-tip-menu" role="tooltip">
+        <span className="pv-tip-title">{label}</span>
+        {shortcuts.map(([name, keys]) => (
+          <span key={name} className="pv-tip-row">
+            <span>{name}</span>
+            <kbd className="pv-tip-kbd">{keys}</kbd>
+          </span>
+        ))}
+      </span>
+    </span>
   );
 }
