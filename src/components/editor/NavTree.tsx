@@ -23,7 +23,8 @@ function Leaf({ leaf, h }: { leaf: NavLeaf; h: Handlers }) {
   const active = slug === h.activeSlug;
   return (
     <div
-      className={`group flex items-center rounded-md pr-1 ${
+      title={leaf.hidden ? "Hidden — not shown on the published site" : undefined}
+      className={`group flex items-center rounded-md pr-1 ${leaf.hidden ? "opacity-40" : ""} ${
         active ? "bg-neutral-200 dark:bg-neutral-800" : "hover:bg-neutral-100 dark:hover:bg-neutral-900"
       }`}
     >
@@ -52,8 +53,11 @@ function Leaf({ leaf, h }: { leaf: NavLeaf; h: Handlers }) {
 function Node({ node, h }: { node: NavNode; h: Handlers }) {
   const [open, setOpen] = useState(true);
   return (
-    <div>
-      <div className="group flex items-center pr-1">
+    <div className={node.hidden ? "opacity-40" : ""}>
+      <div
+        className="group flex items-center pr-1"
+        title={node.hidden ? "Hidden — not shown on the published site" : undefined}
+      >
         <button
           type="button"
           onClick={() => setOpen((o) => !o)}

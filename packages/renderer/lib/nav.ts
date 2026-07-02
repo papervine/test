@@ -11,6 +11,11 @@ import { withBase } from "./url-base";
 export type PageAccess = (frontmatter: PageFrontmatter) => boolean;
 const ALLOW_ALL: PageAccess = () => true;
 
+// Threaded through the nav recursion. `includeHidden` keeps `hidden` pages/groups in the tree
+// (marked `hidden: true`) instead of dropping them — the editor passes it so hiding a page just
+// dims it rather than making it vanish; the published site leaves it false.
+type NavCtx = { canAccess: PageAccess; includeHidden: boolean };
+
 /** Serializable nav tree handed to the client Sidebar. `method` is set only for OpenAPI
  *  operation leaves, so the sidebar can render a colored HTTP-method badge beside them. */
 export type NavLeaf = {
@@ -20,6 +25,7 @@ export type NavLeaf = {
   icon?: string; // page frontmatter `icon`
   tag?: string; // page frontmatter `tag` — a small badge
   external?: boolean; // page frontmatter `url` — opens in a new tab, not an internal route
+  hidden?: boolean; // only set when includeHidden — the editor renders these dimmed
 };
 export type NavNode = {
   group: string;
@@ -31,6 +37,7 @@ export type NavNode = {
   collapsible?: boolean;
   // Group `expanded: true` (docs.json) — default the collapsible group to open.
   expanded?: boolean;
+  hidden?: boolean; // only set when includeHidden — the editor renders these dimmed
   items: (NavLeaf | NavNode)[];
 };
 export type NavSection = {
@@ -52,10 +59,10 @@ function titleFromSlug(slug: string): string {
 
 /** Resolve a page slug to a sidebar leaf, honoring sidebarTitle, hidden, and reader access.
  *  Null = omit (hidden, or the reader can't access it). */
-async function resolveLeaf(slug: string, canAccess: PageAccess): Promise<NavLeaf | null> {
+async function resolveLeaf(slug: string, ctx: NavCtx): Promise<NavLeaf | null> {
   const page = await loadPage(slug);
-  if (page?.frontmatter.hidden) return null;
-  if (page && !canAccess(page.frontmatter)) return null;
+  if (page?.frontmatter.hidden && !ctx.includeHidden) return null;
+  if (page && !ctx.canAccess(page.frontmatter)) return null;
   const fm = page?.frontmatter;
   const leaf: NavLeaf = {
     title: fm?.sidebarTitle ?? fm?.title ?? titleFromSlug(slug),
@@ -66,6 +73,7 @@ async function resolveLeaf(slug: string, canAccess: PageAccess): Promise<NavLeaf
   if (fm?.url) leaf.external = true;
   if (fm?.icon) leaf.icon = fm.icon;
   if (fm?.tag) leaf.tag = fm.tag;
+  if (fm?.hidden) leaf.hidden = true; // reached only when includeHidden — mark for dimming
   return leaf;
 }
 
@@ -90,7 +98,7 @@ const OP_SELECTOR = /^(get|post|put|patch|delete|head|options)\s+\//i;
  * (incumbent model). `pages`, if present, selects/orders endpoints by "METHOD /path"
  * (other strings are treated as normal page slugs, so manual pages can mix in).
  */
-async function openapiLeaves(div: Division, canAccess: PageAccess): Promise<(NavLeaf | NavNode)[]> {
+async function openapiLeaves(div: Division, ctx: NavCtx): Promise<(NavLeaf | NavNode)[]> {
   const specPath = div.openapi as string;
   const ops = await apiOperations(specPath);
   const bySelector = new Map(ops.map((op) => [`${op.method} ${op.path}`, op]));
@@ -130,7 +138,7 @@ async function openapiLeaves(div: Division, canAccess: PageAccess): Promise<(Nav
         const op = bySelector.get(`${method.toUpperCase()} ${path}`);
         return Promise.resolve(op ? [leafFor(op)] : []);
       }
-      return collectItem(entry, canAccess);
+      return collectItem(entry, ctx);
     }),
   );
   return parts.flat();
@@ -145,35 +153,36 @@ async function openapiLeaves(div: Division, canAccess: PageAccess): Promise<(Nav
  * O(pages) round-trips (6–20s on large repos); Promise.all collapses that to a
  * handful of batches (bounded by the S3 client's socket pool) while preserving order.
  */
-async function collectChildren(div: Division, canAccess: PageAccess): Promise<(NavLeaf | NavNode)[]> {
+async function collectChildren(div: Division, ctx: NavCtx): Promise<(NavLeaf | NavNode)[]> {
   const branches: Promise<(NavLeaf | NavNode)[]>[] = [];
   if (typeof div.root === "string") {
-    branches.push(resolveLeaf(div.root, canAccess).then((leaf) => (leaf ? [leaf] : [])));
+    branches.push(resolveLeaf(div.root, ctx).then((leaf) => (leaf ? [leaf] : [])));
   }
   if (typeof div.openapi === "string") {
-    branches.push(openapiLeaves(div, canAccess));
+    branches.push(openapiLeaves(div, ctx));
     return (await Promise.all(branches)).flat(); // openapi division: `pages` are operation selectors
   }
   for (const key of CONTAINER_KEYS) {
     const value = div[key];
     if (Array.isArray(value)) {
-      branches.push(Promise.all(value.map((it) => collectItem(it, canAccess))).then((r) => r.flat()));
+      branches.push(Promise.all(value.map((it) => collectItem(it, ctx))).then((r) => r.flat()));
     }
   }
   return (await Promise.all(branches)).flat();
 }
 
 /** Turn a single nav entry (slug string or division object) into nav items. */
-async function collectItem(item: unknown, canAccess: PageAccess): Promise<(NavLeaf | NavNode)[]> {
+async function collectItem(item: unknown, ctx: NavCtx): Promise<(NavLeaf | NavNode)[]> {
   if (typeof item === "string") {
-    const leaf = await resolveLeaf(item, canAccess);
+    const leaf = await resolveLeaf(item, ctx);
     return leaf ? [leaf] : [];
   }
   if (item && typeof item === "object") {
     const div = item as Division;
-    // A group marked `hidden: true` in docs.json is dropped from the sidebar entirely.
-    if (div.hidden === true && labelOf(div)) return [];
-    const children = await collectChildren(div, canAccess);
+    // A group marked `hidden: true` in docs.json is dropped from the published sidebar; the
+    // editor (includeHidden) keeps it, marked, so it can be dimmed rather than lost.
+    if (div.hidden === true && labelOf(div) && !ctx.includeHidden) return [];
+    const children = await collectChildren(div, ctx);
     const label = labelOf(div);
     if (label) {
       // Prune a group with no surviving children — i.e. one whose every page was filtered
@@ -187,6 +196,7 @@ async function collectItem(item: unknown, canAccess: PageAccess): Promise<(NavLe
       if (typeof div.icon === "string") node.icon = div.icon;
       if (typeof div.tag === "string") node.tag = div.tag;
       if (div.expanded === true) node.expanded = true;
+      if (div.hidden === true) node.hidden = true; // reached only when includeHidden — mark for dimming
       return [node];
     }
     return children; // unlabeled wrapper — splice children up a level
@@ -250,7 +260,9 @@ export async function buildNav(
   config: DocsConfig,
   base = "",
   canAccess: PageAccess = ALLOW_ALL,
+  opts: { includeHidden?: boolean } = {},
 ): Promise<NavSection[]> {
+  const ctx: NavCtx = { canAccess, includeHidden: opts.includeHidden ?? false };
   let nav = config.navigation as Division;
 
   // Descend through localization/version wrappers to the default (first) entry.
@@ -267,7 +279,7 @@ export async function buildNav(
     // Resolve tabs concurrently — each descends into its own loadPage fan-out.
     const tabSections = await Promise.all(
       (nav.tabs as Division[]).map(async (tab) => {
-        const nodes = await collectChildren(tab, canAccess);
+        const nodes = await collectChildren(tab, ctx);
         const hrefs = collectHrefs(nodes);
         return {
           tab: typeof tab.tab === "string" ? tab.tab : undefined,
@@ -281,7 +293,7 @@ export async function buildNav(
     // groups / hidden). A non-member never sees a teasing, empty "Internal" tab.
     sections.push(...tabSections.filter((s) => s.hrefs.length > 0));
   } else {
-    const nodes = await collectChildren(nav, canAccess);
+    const nodes = await collectChildren(nav, ctx);
     const hrefs = collectHrefs(nodes);
     if (hrefs.length > 0) sections.push({ hrefs, nodes });
   }

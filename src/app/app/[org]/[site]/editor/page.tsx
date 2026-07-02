@@ -63,7 +63,8 @@ export default async function EditorPage({
     // sidebar would show OUR pages, not the edited site's. `loadPage` (used by buildNav) isn't
     // primed by the layout, so it reads the draft correctly; only config needs the direct read.
     const config = await src.loadConfig();
-    const sections = await buildNav(config, "");
+    // includeHidden: the editor keeps hidden pages/groups (dimmed) so hiding one never loses it.
+    const sections = await buildNav(config, "", undefined, { includeHidden: true });
     const initialSlug = slugParam ?? firstSlug(sections);
     const { path, raw } = await resolvePagePath(siteRow, branch, initialSlug);
     return { sections, initialSlug, initialPath: path, initialMarkdown: raw ?? "" };
