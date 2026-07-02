@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
 import { requireSite } from "@/lib/dashboard-context";
+import { assistantMetrics } from "@/lib/analytics";
 import {
   AssistantStatusControl,
   AssistantCaptchaToggle,
@@ -21,12 +22,13 @@ import {
 // CAPTCHA — are live: they persist to the DB (instant effect, no Git commit) via the
 // AssistantControls client components. The published-behavior config (deflection,
 // search domains, starter questions) is docs.json-backed (§8.6) and edited through the
-// authoring layer (§9.2); those controls + the overview numbers are still scaffold.
-const METRICS = [
-  { label: "Total questions", value: "5", delta: "100%" },
-  { label: "Answered properly", value: "5", delta: "100%" },
-  { label: "Not Answered", value: "0", delta: null },
-];
+// authoring layer (§9.2); those controls are still scaffold. The overview numbers are real
+// — computed from analytics_event (type='assistant') split by outcome status.
+// Format a delta as a short percent label ("42%"), or null when there's nothing to show.
+function fmtDelta(delta: { pct: number; dir: "up" | "down" | "flat" } | null): string | null {
+  if (!delta || delta.pct === 0) return null;
+  return `${Math.abs(delta.pct)}%`;
+}
 
 export default async function AssistantPage({
   params,
@@ -35,6 +37,13 @@ export default async function AssistantPage({
 }) {
   const { org, site } = await params;
   const { site: activeSite } = await requireSite(org, site);
+  // Real usage from analytics_event (type='assistant'), split by outcome status.
+  const usage = await assistantMetrics(activeSite.id);
+  const METRICS = [
+    { label: "Total questions", value: String(usage.total), delta: fmtDelta(usage.totalDelta) },
+    { label: "Answered properly", value: String(usage.answered), delta: fmtDelta(usage.answeredDelta) },
+    { label: "Not Answered", value: String(usage.notAnswered), delta: null },
+  ];
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
       <AutomateHeader page="Assistant" />

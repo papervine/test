@@ -11,7 +11,8 @@ import {
 import { withReaderAccess, currentPageAccess } from "@/lib/reader-access";
 import { withSearchIndexKey } from "@/lib/search";
 import { getSiteByHost } from "@/lib/tenant";
-import { logEvent } from "@/lib/track";
+import { logEvent, setEventStatus } from "@/lib/track";
+import { outcomeFromText } from "@/lib/assistant-outcome";
 
 /** Pull the user's question text out of a UIMessage (its text parts). */
 function questionText(m: UIMessage | undefined): string {
@@ -77,13 +78,14 @@ export async function POST(req: Request) {
   return run(async () => {
     const config = await loadConfig();
 
-    // Log the assistant query for analytics (SPEC §10.1). Status (answered/unanswered)
-    // is a follow-up once the stream resolves; the foundation just counts queries.
+    // Log the assistant query for analytics (SPEC §10.1). The outcome status is filled in once
+    // the stream resolves (onFinish → answered/unanswered; onError → unanswered), so the
+    // Assistant page's Answered/Not-answered split reflects reality.
     const site = await getSiteByHost(req.headers.get("host"));
+    let eventId: string | null = null;
     if (site) {
       const q = questionText(messages[messages.length - 1]);
-      if (q)
-        await logEvent({ siteId: site.id, type: "assistant", source: "human", query: q });
+      if (q) eventId = await logEvent({ siteId: site.id, type: "assistant", source: "human", query: q });
     }
 
     // Current-page context: ground answers in what the reader is looking at (SPEC §8.1).
@@ -114,6 +116,14 @@ export async function POST(req: Request) {
       messages: await convertToModelMessages(messages),
       tools: assistantTools,
       stopWhen: stepCountIs(8),
+      // Record the outcome on the logged event so the Assistant page's answered/unanswered
+      // split is real. Fire-and-forget — never block or fail the stream on instrumentation.
+      onFinish: ({ text }) => {
+        if (eventId) void setEventStatus(eventId, outcomeFromText(text));
+      },
+      onError: () => {
+        if (eventId) void setEventStatus(eventId, "unanswered");
+      },
     });
 
     return result.toUIMessageStreamResponse();

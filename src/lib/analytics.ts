@@ -41,6 +41,56 @@ export interface Metrics {
   feedback: number;
 }
 
+export interface AssistantMetrics {
+  total: number; // questions in the last 30 days
+  answered: number; // status='answered' in the last 30 days
+  notAnswered: number; // status IN ('unanswered','deflected') in the last 30 days
+  totalDelta: ReturnType<typeof computeDelta>; // vs the prior 30 days ("vs last month")
+  answeredDelta: ReturnType<typeof computeDelta>;
+}
+
+/**
+ * Assistant usage counts for the Assistant page cards, split by outcome `status` over a rolling
+ * 30-day window, compared to the prior 30 days ("vs last month"). A rolling window (vs calendar
+ * month) avoids the number cratering on the 1st of the month. `status` is written by the
+ * assistant route on stream finish/error (answered vs unanswered); a NULL status (in-flight /
+ * legacy row) counts toward the total but neither bucket. `now` is injected so it's testable.
+ */
+export async function assistantMetrics(siteId: string, now = new Date()): Promise<AssistantMetrics> {
+  const DAY = 86_400_000;
+  const monthStart = new Date(now.getTime() - 30 * DAY);
+  const lastMonthStart = new Date(now.getTime() - 60 * DAY);
+
+  const countByStatus = async (start: Date, end: Date) => {
+    const rows = await db
+      .select({ status: analyticsEvent.status, count: sql<number>`count(*)::int` })
+      .from(analyticsEvent)
+      .where(
+        and(
+          eq(analyticsEvent.siteId, siteId),
+          eq(analyticsEvent.type, "assistant"),
+          gte(analyticsEvent.createdAt, start),
+          lt(analyticsEvent.createdAt, end),
+        ),
+      )
+      .groupBy(analyticsEvent.status);
+    const total = rows.reduce((s, r) => s + r.count, 0);
+    const of = (...statuses: string[]) =>
+      rows.filter((r) => r.status && statuses.includes(r.status)).reduce((s, r) => s + r.count, 0);
+    return { total, answered: of("answered"), notAnswered: of("unanswered", "deflected") };
+  };
+
+  const cur = await countByStatus(monthStart, now);
+  const prev = await countByStatus(lastMonthStart, monthStart);
+  return {
+    total: cur.total,
+    answered: cur.answered,
+    notAnswered: cur.notAnswered,
+    totalDelta: computeDelta(cur.total, prev.total),
+    answeredDelta: computeDelta(cur.answered, prev.answered),
+  };
+}
+
 async function metricsForWindow(
   siteId: string,
   source: AnalyticsSource,

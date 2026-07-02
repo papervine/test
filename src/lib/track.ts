@@ -1,5 +1,6 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { analyticsEvent } from "./db/app-schema";
 
@@ -24,10 +25,11 @@ export interface EventInput {
  * instrumentation must NEVER break the request it measures, so a failed insert is
  * swallowed and warned (mirrors the renderer/config "warn, don't throw" principle).
  */
-export async function logEvent(e: EventInput): Promise<void> {
+export async function logEvent(e: EventInput): Promise<string | null> {
+  const id = randomUUID();
   try {
     await db.insert(analyticsEvent).values({
-      id: randomUUID(),
+      id,
       siteId: e.siteId,
       type: e.type,
       source: e.source ?? "human",
@@ -38,8 +40,20 @@ export async function logEvent(e: EventInput): Promise<void> {
       status: e.status ?? null,
       sessionId: e.sessionId ?? null,
     });
+    return id;
   } catch (err) {
     console.warn("[analytics] failed to log event:", err);
+    return null;
+  }
+}
+
+/** Set an event's outcome status after the fact (e.g. the assistant marking answered/unanswered
+ *  once the stream resolves). Fire-and-forget, same as logEvent. */
+export async function setEventStatus(id: string, status: string): Promise<void> {
+  try {
+    await db.update(analyticsEvent).set({ status }).where(eq(analyticsEvent.id, id));
+  } catch (err) {
+    console.warn("[analytics] failed to set event status:", err);
   }
 }
 
