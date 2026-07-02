@@ -76,6 +76,8 @@ export function EditorShell({
         setPath(res.path);
         setMarkdown(res.markdown);
         setDocKey((k) => k + 1);
+        // Changing pages closes any open settings panel (it targeted the old page/group).
+        setSettings(null);
       });
     },
     [org, site, branch],
