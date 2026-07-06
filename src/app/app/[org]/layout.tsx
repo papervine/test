@@ -1,5 +1,7 @@
 import { requireOrg } from "@/lib/dashboard-context";
+import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { AppRail } from "@/components/app/AppRail";
+import { PlatformAdminBanner } from "@/components/app/PlatformAdminBanner";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 
 // Control-plane shell (SPEC §9/§10). Wraps every URL-scoped dashboard route
@@ -14,12 +16,21 @@ export default async function OrgLayout({
   params: Promise<{ org: string }>;
 }) {
   const { org: orgSlug } = await params;
-  const { session, org, role, sites } = await requireOrg(orgSlug);
+  const { session, org, role, sites, platformAdminView } =
+    await requireOrg(orgSlug);
+  // A plugin-minted impersonation session carries the operator's user id (SPEC §10.10);
+  // it and the read-only bypass are the two cross-tenant states the banner surfaces.
+  const impersonating = Boolean(session.session.impersonatedBy);
 
   // "lite" atmosphere: the soft top glow carries the brand, but no grid/grain behind
   // the data-dense dashboard tables and forms.
   return (
     <PlatformShell variant="lite">
+      {impersonating ? (
+        <PlatformAdminBanner mode="impersonating" name={session.user.name} />
+      ) : platformAdminView ? (
+        <PlatformAdminBanner mode="view" name={org.name} />
+      ) : null}
       {/* Column on mobile (AppRail renders a sticky top bar above the content), row on
           desktop (AppRail renders a fixed sidebar beside it). min-w-0 lets wide content
           — analytics tables, code blocks — scroll inside the column instead of forcing
@@ -30,6 +41,10 @@ export default async function OrgLayout({
           sites={sites}
           userName={session.user.name}
           role={role}
+          platformAdmin={isPlatformAdminEmail(
+            session.user.email,
+            process.env.PLATFORM_ADMIN_EMAILS,
+          )}
         />
         <div className="min-w-0 flex-1 overflow-auto">{children}</div>
       </div>

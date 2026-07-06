@@ -186,6 +186,15 @@ const CONTROL_PLANE_CHECKS = [
     redirectTo: "/login",
   },
   {
+    // The platform superadmin overview (SPEC §10.10) is a bare app-host path like any
+    // dashboard page — the edge gate must bounce it signed-out. (The allowlist 404 for
+    // signed-in non-admins needs a session + DB, so it's verified in-browser, not here.)
+    host: "app.localhost",
+    path: "/admin",
+    desc: "unauthenticated app host /admin redirects to /login (SPEC §10.10)",
+    redirectTo: "/login",
+  },
+  {
     path: "/login",
     desc: "login page renders in the platform theme (shell + gradient CTA)",
     // `db-glow` proves PlatformShell wraps it; `db-cta` proves the shared Button is used.

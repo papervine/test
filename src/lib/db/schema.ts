@@ -17,6 +17,13 @@ export const user = pgTable("user", {
   email: text("email").notNull().unique(),
   emailVerified: boolean("email_verified").default(false).notNull(),
   image: text("image"),
+  // admin plugin (SPEC §10.10 impersonation). `role` is SYNCED from the
+  // PLATFORM_ADMIN_EMAILS allowlist (see src/lib/auth.ts databaseHooks) — the env var
+  // stays the source of truth; this column just lets the plugin authorize its endpoints.
+  role: text("role"),
+  banned: boolean("banned").default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestamp("ban_expires"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at")
     .defaultNow()
@@ -40,6 +47,9 @@ export const session = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     activeOrganizationId: text("active_organization_id"),
+    // admin plugin: set on sessions minted by impersonateUser — the impersonating
+    // platform admin's user id. Drives the "Impersonating…" banner (SPEC §10.10).
+    impersonatedBy: text("impersonated_by"),
   },
   (table) => [index("session_userId_idx").on(table.userId)],
 );

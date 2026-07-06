@@ -1,0 +1,64 @@
+---
+title: Platform admin
+description: The operator's cross-tenant overview — every customer organization, its members, sites, deploys, and traffic, on one read-only page.
+---
+
+If you run a Papervine deployment, the **platform admin** page at **`app.{your-domain}/admin`**
+shows every customer on it at a glance:
+
+- **Platform totals** — customers (organizations), users, sites, and all-time deploys, plus the
+  total analytics events recorded in the last 30 days.
+- **One card per organization** — its members (email and role), and a table of its sites: status
+  (live/draft), connected repo, custom domain, deploy count, last deploy time, and 30-day
+  analytics volume. Site names link straight into that site's dashboard.
+
+The overview itself is **read-only**. From it, a platform admin has two ways into a customer's
+world, with different power levels:
+
+## Browsing a customer's dashboard
+
+Site links on the admin page open that site's regular dashboard. As a platform admin you can open
+**any** organization's dashboard — not just ones you're a member of. You browse **as yourself**:
+an amber **"Platform admin view"** banner marks the cross-tenant context, and because you hold no
+role in the organization, every manage control (invites, renames, danger zone) stays hidden and
+every mutation stays blocked. Eyes, not hands.
+
+## Impersonating a user
+
+Each member chip on the admin page has an **impersonate** action. It signs you in *as that user*
+for up to an hour: you see exactly their dashboard, their role, their sites — and actions you take
+are performed **as them**. A persistent amber banner shows who you're impersonating with a
+**Stop impersonating** button that returns you to your own session and the admin page.
+
+Use browsing for "what's on this account?"; use impersonation for "what does this user actually
+see, and why can't they do X?". Impersonating another platform admin is not allowed.
+
+## Who can open it
+
+Access is controlled by the **`PLATFORM_ADMIN_EMAILS`** environment variable: a comma-separated,
+case-insensitive list of account emails.
+
+```bash
+PLATFORM_ADMIN_EMAILS=you@example.com,ops@example.com
+```
+
+- A signed-in user whose email is on the list sees a **Platform admin** link at the bottom of the
+  dashboard sidebar, and can open `/admin` directly.
+- Anyone else gets a **404** — the page is invisible, not forbidden.
+- If the variable is unset (the default), the page is a 404 for **everyone**.
+
+There is no in-app way to grant or revoke platform admin: changing the list means changing the
+deployment's environment and redeploying. That's deliberate — the allowlist can't be escalated
+through the app itself.
+
+One nuance for impersonation: it's powered by an `admin` role on the user record that Papervine
+**syncs from the allowlist** (granted when an allowlisted admin uses the admin surface, revoked at
+the next sign-in of anyone no longer listed). The env var remains the source of truth — the role
+column is plumbing, never something you set by hand.
+
+## Reserved organization slugs
+
+Because `/admin` (and a few other control-plane paths) live beside the `/:org` dashboard URLs,
+those names can't be used as organization slugs: `admin`, `preview`, `app`, `api`, `login`,
+`signup`, `onboarding`, and `accept-invite`. Creating an organization whose name slugifies to one
+of these is rejected with a clear error — pick a different name.

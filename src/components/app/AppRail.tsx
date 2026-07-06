@@ -13,6 +13,7 @@ import {
   Bot,
   MessageCircle,
   Menu,
+  ShieldCheck,
   type LucideIcon,
 } from "lucide-react";
 import { signOut } from "@/lib/auth-client";
@@ -94,11 +95,15 @@ export function AppRail({
   sites,
   userName,
   role,
+  platformAdmin = false,
 }: {
   orgSlug: string;
   sites: { slug: string; name: string }[];
   userName: string;
   role: string | null;
+  // Platform-operator allowlist (SPEC §10.10) — shows the /admin link. Cosmetic only:
+  // the real gate is requirePlatformAdmin on the page.
+  platformAdmin?: boolean;
 }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -197,6 +202,17 @@ export function AppRail({
             </div>
           ))}
         </nav>
+      )}
+
+      {platformAdmin && (
+        <Link
+          href="/admin"
+          onClick={onNavigate}
+          className="mt-4 flex items-center gap-2 rounded-md px-2 py-2.5 text-sm text-[var(--muted)] transition-colors hover:bg-[rgba(var(--ink-rgb),0.04)] hover:text-[var(--fg)] lg:py-1.5"
+        >
+          <ShieldCheck className="h-4 w-4" />
+          Platform Admin
+        </Link>
       )}
 
       <div className="mt-auto flex items-center justify-between gap-2 px-2 pt-4 text-sm">

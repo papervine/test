@@ -1,9 +1,13 @@
 import { betterAuth } from "better-auth";
+import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { organization } from "better-auth/plugins";
+import { admin, organization } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
+import { eq } from "drizzle-orm";
 import { db } from "./db";
 import * as schema from "./db/schema";
+import { isReservedOrgSlug } from "./slug";
+import { resolvePlatformRole } from "./platform-admin";
 
 // Better Auth rejects any request whose Origin isn't trusted (CSRF protection →
 // "Invalid origin"). The control plane (signup/login/dashboard) serves on the app host
@@ -25,8 +29,55 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
   emailAndPassword: { enabled: true },
   trustedOrigins,
+  databaseHooks: {
+    session: {
+      create: {
+        // Sync `user.role` from the PLATFORM_ADMIN_EMAILS allowlist at every sign-in
+        // (SPEC §10.10). The env var is the source of truth for platform admins; the
+        // role column only exists so the admin plugin below authorizes impersonation.
+        // Crucially this REVOKES too — an email removed from the allowlist loses the
+        // plugin's endpoints at their next session, not never.
+        before: async (session) => {
+          const [u] = await db
+            .select({ email: schema.user.email, role: schema.user.role })
+            .from(schema.user)
+            .where(eq(schema.user.id, session.userId))
+            .limit(1);
+          const next = resolvePlatformRole(
+            u?.email,
+            process.env.PLATFORM_ADMIN_EMAILS,
+            u?.role,
+          );
+          if (next) {
+            await db
+              .update(schema.user)
+              .set({ role: next })
+              .where(eq(schema.user.id, session.userId));
+          }
+        },
+      },
+    },
+  },
   plugins: [
+    // Impersonation for platform admins (SPEC §10.10): "log in as this customer" from
+    // /admin, to see exactly what they see. Authorized by user.role === "admin", which
+    // is only ever a synced mirror of the allowlist (databaseHooks above). Sessions the
+    // plugin mints carry impersonatedBy → the persistent banner in the dashboard shell.
+    admin({ impersonationSessionDuration: 60 * 60 }),
     organization({
+      // Org slugs are app-host path segments (/:org). Refuse the handful that collide
+      // with static control-plane routes — /admin (SPEC §10.10), /preview, the auth
+      // pages — which would otherwise shadow the new org's dashboard 404-style. See
+      // RESERVED_ORG_SLUGS in src/lib/slug.ts.
+      organizationHooks: {
+        beforeCreateOrganization: async ({ organization: org }) => {
+          if (org.slug && isReservedOrgSlug(org.slug)) {
+            throw new APIError("BAD_REQUEST", {
+              message: `"${org.slug}" is reserved — pick a different name.`,
+            });
+          }
+        },
+      },
       // Invitation delivery seam (SPEC §10). v1 has NO email infra — the Members settings
       // action surfaces a shareable accept link directly (Copy-link UI), so a real send isn't
       // required to invite. This callback just records the link server-side; it's the single

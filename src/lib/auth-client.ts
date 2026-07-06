@@ -1,8 +1,10 @@
 import { createAuthClient } from "better-auth/react";
-import { organizationClient } from "better-auth/client/plugins";
+import { adminClient, organizationClient } from "better-auth/client/plugins";
 
 export const authClient = createAuthClient({
-  plugins: [organizationClient()],
+  // adminClient: impersonation controls for platform admins (SPEC §10.10) —
+  // authClient.admin.impersonateUser / stopImpersonating.
+  plugins: [organizationClient(), adminClient()],
 });
 
 export const { signIn, signUp, signOut, useSession } = authClient;

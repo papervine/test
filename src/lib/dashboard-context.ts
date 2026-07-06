@@ -2,7 +2,9 @@ import "server-only";
 import { notFound, redirect } from "next/navigation";
 import { and, asc, eq } from "drizzle-orm";
 import { getMemberRole, getSession, listOrganizations } from "@/lib/session";
+import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { db } from "@/lib/db";
+import { organization } from "@/lib/db/schema";
 import { site } from "@/lib/db/app-schema";
 
 // The dashboard is URL-scoped (SPEC §10): the org and site live in the path
@@ -19,6 +21,10 @@ export type OrgContext = {
   org: { id: string; slug: string; name: string };
   role: string | null;
   sites: SiteListItem[];
+  // True when the viewer isn't a member and got in via the platform-admin bypass
+  // (SPEC §10.10): a read-only cross-tenant view. role is null in that case, so the
+  // role-gated manage UI naturally degrades to viewer; drives the banner in the shell.
+  platformAdminView: boolean;
 };
 
 export type SiteContext = OrgContext & { site: SiteRow };
@@ -34,18 +40,46 @@ export async function requireOrg(orgSlug: string): Promise<OrgContext> {
   if (!session) redirect("/login");
 
   const orgs = await listOrganizations();
-  if (!orgs?.length) redirect("/onboarding");
-  const match = orgs.find((o) => o.slug === orgSlug);
-  if (!match) notFound();
+  const match = orgs?.find((o) => o.slug === orgSlug);
+
+  // Platform-admin bypass (SPEC §10.10): an allowlisted operator may VIEW any org's
+  // dashboard without being a member. Read-only by construction — role stays null, so
+  // every owner/admin-gated control hides, and the mutation path (findSite + the
+  // membership-scoped server actions) still requires real membership. Checked only
+  // after the membership miss, so a member's own role always wins.
+  if (!match) {
+    if (
+      isPlatformAdminEmail(session.user.email, process.env.PLATFORM_ADMIN_EMAILS)
+    ) {
+      const [row] = await db
+        .select({
+          id: organization.id,
+          slug: organization.slug,
+          name: organization.name,
+        })
+        .from(organization)
+        .where(eq(organization.slug, orgSlug))
+        .limit(1);
+      if (!row) notFound();
+      const sites = await orgSites(row.id);
+      return { session, org: row, role: null, sites, platformAdminView: true };
+    }
+    if (!orgs?.length) redirect("/onboarding");
+    notFound();
+  }
 
   const org = { id: match.id, slug: match.slug, name: match.name };
-  const sites = await db
+  const sites = await orgSites(org.id);
+  const role = await getMemberRole(org.id, session.user.id);
+  return { session, org, role, sites, platformAdminView: false };
+}
+
+function orgSites(organizationId: string): Promise<SiteListItem[]> {
+  return db
     .select({ id: site.id, slug: site.slug, name: site.name })
     .from(site)
-    .where(eq(site.organizationId, org.id))
+    .where(eq(site.organizationId, organizationId))
     .orderBy(asc(site.createdAt));
-  const role = await getMemberRole(org.id, session.user.id);
-  return { session, org, role, sites };
 }
 
 /**
@@ -65,6 +99,26 @@ export async function requireSite(
     .limit(1);
   if (!row) notFound();
   return { ...ctx, site: row };
+}
+
+/**
+ * Gate for the /admin platform surface (SPEC §10.10): the signed-in user must be on the
+ * PLATFORM_ADMIN_EMAILS allowlist (src/lib/platform-admin.ts). 404s — not 403s —
+ * non-admins, so the surface is invisible to probing, the same posture as requireOrg's
+ * cross-tenant notFound.
+ */
+export async function requirePlatformAdmin() {
+  const session = await getSession();
+  if (!session) redirect("/login");
+  if (
+    !isPlatformAdminEmail(
+      session.user.email,
+      process.env.PLATFORM_ADMIN_EMAILS,
+    )
+  ) {
+    notFound();
+  }
+  return session;
 }
 
 /**

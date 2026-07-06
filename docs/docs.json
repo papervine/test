@@ -38,7 +38,8 @@
           "control-plane/analytics",
           "control-plane/automate",
           "control-plane/exports",
-          "control-plane/danger-zone"
+          "control-plane/danger-zone",
+          "control-plane/platform-admin"
         ]
       },
       {

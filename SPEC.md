@@ -1940,6 +1940,77 @@ Deliberately *not* editable here: the **slug** (the stable URL id) and the **ren
 (from the repo's `docs.json`). Status 2026-06-29: built + browser-verified (rename persists +
 reflects in the switcher); typecheck + unit (`normalizeSiteName`) + smoke + crawl green.
 
+### 10.10 Platform superadmin (`/admin`)
+
+The operator's cross-tenant overview, at **`app.papervine.io/admin`**: every customer org with
+its members (email + role), sites (status, repo, custom domain), deploy counts + last-deploy
+time, and 30-day analytics volume, plus platform totals (customers/users/sites/deploys).
+**Read-only by design** — support needs eyes, not a write path; mutations stay on the
+tenant-scoped surfaces where their guards live. Access is an **env allowlist**
+(`PLATFORM_ADMIN_EMAILS`, comma-separated, case-insensitive — pure matcher in
+`src/lib/platform-admin.ts`), chosen over a DB staff-role column: nothing to escalate through
+(no grant UI, unreachable from signup), and rotation is a deploy, not a migration. Unset → the
+surface is dark for everyone. The gate (`requirePlatformAdmin`, dashboard-context) **404s**
+non-admins — same invisible-surface posture as requireOrg's cross-tenant notFound; the edge
+middleware already bounces the signed-out to /login. The rail shows a "Platform admin" link to
+allowlisted users (cosmetic; the page gate is authoritative). Since `/admin` is a static
+segment beside `[org]`, org slugs that would be shadowed by static control-plane paths are now
+**reserved at creation** (`RESERVED_ORG_SLUGS` in `src/lib/slug.ts`, enforced by the
+`beforeCreateOrganization` hook) — this also retro-fixes the latent `/preview` + auth-path
+collisions. Status 2026-07-06: built + browser-verified (seeded dev login on the allowlist
+sees the rail link + totals + org cards, light and dark; a fresh signed-in non-admin gets 404;
+org create with slug "admin" 400s with the reserved message). typecheck + unit
+(platform-admin, reserved slugs) + smoke (signed-out /admin → /login) + docs crawl (29/29,
+0×500) green.
+
+**Cross-tenant access** (same day, follow-up): two power levels from /admin into a customer's
+world. ① **Read-only browse** — `requireOrg` lets an allowlisted non-member VIEW any org's
+dashboard (`platformAdminView` flag): org loaded directly when membership misses, `role: null`
+so every owner/admin-gated control hides, and mutations (`findSite` + membership-scoped
+actions) still require real membership. An amber "Platform admin view" banner marks the
+context. ② **Impersonation** — Better Auth's `admin` plugin (`user.role/banned/banExpires`,
+`session.impersonatedBy`; migration `0013`, additive). The plugin authorizes by `user.role`,
+but OUR source of truth stays the env allowlist: the role column is a **synced mirror** —
+granted in the impersonate action (works for live sessions after an allowlist edit), granted
+*and revoked* in a `session.create` databaseHook (a removed email loses plugin access at next
+sign-in; narrow window accepted: a removed admin's live session keeps plugin endpoints until
+then, while all our own gates check the env live). Impersonate buttons live on /admin's member
+chips (self excluded; plugin refuses impersonating admins); sessions last 1h, carry
+`impersonatedBy`, and the [org] layout shows a persistent "Impersonating X — Stop" banner
+whose stop restores the admin's session and hard-navigates to /admin (Host-rewrite gotcha).
+Status 2026-07-06: browser-verified (bypass banner + viewer-degraded UI on a non-member org;
+impersonate → customer's dashboard as them → stop → back to /admin); typecheck + unit
+(resolvePlatformRole grant/revoke/no-op) green.
+
+**Tests + the onboarding-loop fix** (same day): the full §10.10 access matrix is pinned at
+three layers — unit (`dashboard-context.test.ts` mocks session/db and asserts member /
+signed-out / non-member 404 / allowlisted-bypass / membership-wins / ghost-slug for
+`requireOrg`), smoke (signed-out /admin → /login), and e2e (`admin.spec.ts`: non-admin 404 +
+no rail link; /admin lists a non-member org; bypass banner; impersonate → stop round-trip —
+the allowlist email is webServer env in playwright.config, deliberately not TEST_USER).
+Writing the e2e spec surfaced why the whole e2e suite was red (the "auth loop"): the
+middleware's authed bounce off auth paths included **/onboarding**, which the dashboard
+resolver redirects org-less users TO — every fresh signup looped (ERR_TOO_MANY_REDIRECTS),
+in prod as well as tests. Fixed by excluding /onboarding from the bounce (middleware.ts, with
+unit regressions in middleware-routing.test.ts).
+
+**e2e suite repair** (same day, follow-up): with the loop fixed the suite ran again and
+exposed two rot classes, both now fixed → **27/27 green, twice consecutively**. ① *Stale
+selectors* from the blocked period: the site switcher is a shadcn DropdownMenu
+(menu/menuitem, not listbox/option), `getByRole` name-matching is substring by default so
+"Edit" collided with the editor feature's "Editor"/"Open editor" links (→ `exact: true`),
+and RankTable is a Card div, not a `<section>` (→ `data-testid="rank-*"`, same pattern as
+the metric-* cards). ② *A real harness bug*: Playwright starts the webServer BEFORE
+globalSetup, so the DB rebuild dropped the schema underneath the app's live pool + warm
+Next data cache — poisoned connections then 500'd random requests mid-suite ("relation
+\"site\" does not exist"), a different victim spec each run. Fix: the rebuild moved into
+the webServer command itself (`tests/e2e/reset-db.mjs && next dev`, before boot), and
+`reuseExistingServer: false` so a leftover server can't leak the previous run's pool/cache
+(globalSetup hook removed; global-setup.ts now only exports TEST_DB_URL). Two timing
+hardenings ride along: the first overview visit is `test.slow()` (dev cold compile > 30s),
+and the assistant-toggle reload assertions retry via `toPass` (optimistic flip vs
+server-action write race).
+
 ### 10.x Instant settings navigation (Router-Cache reuse)
 
 The dashboard is a Next App Router SPA: the rail/subnav persist and only the content segment
