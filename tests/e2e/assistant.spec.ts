@@ -45,12 +45,18 @@ test("the status toggle reflects DB state, persists on click, and survives reloa
   await expect(page.getByText("Active")).toBeVisible();
   await expect(status).toHaveAttribute("aria-checked", "true");
 
-  // Reload re-reads from the DB — the enable persisted, not just local state.
-  await page.reload();
-  await expect(page.getByRole("switch", { name: "Enable assistant" })).toHaveAttribute(
-    "aria-checked",
-    "true",
-  );
+  // Reload re-reads from the DB — the enable persisted, not just local state. The
+  // switch flips optimistically before the server action commits, so an immediate
+  // reload can race the write: retry reload+assert until it settles (a genuinely
+  // lost write still fails — it never becomes true).
+  await expect(async () => {
+    await page.reload();
+    await expect(page.getByRole("switch", { name: "Enable assistant" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+      { timeout: 2_000 },
+    );
+  }).toPass({ timeout: 15_000 });
   await expect(page.getByText("Active")).toBeVisible();
 });
 
@@ -63,8 +69,11 @@ test("the CAPTCHA toggle persists independently and survives reload", async ({ p
   await captcha.click();
   await expect(captcha).toHaveAttribute("aria-checked", "true");
 
-  await page.reload();
-  await expect(
-    page.getByRole("switch", { name: "Enable invisible CAPTCHA" }),
-  ).toHaveAttribute("aria-checked", "true");
+  // Same optimistic-flip vs server-write race as the status toggle above.
+  await expect(async () => {
+    await page.reload();
+    await expect(
+      page.getByRole("switch", { name: "Enable invisible CAPTCHA" }),
+    ).toHaveAttribute("aria-checked", "true", { timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
 });

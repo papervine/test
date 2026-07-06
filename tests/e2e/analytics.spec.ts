@@ -77,8 +77,9 @@ test("analytics renders human metrics and the Top pages table", async ({ page })
   await expect(page.getByTestId("metric-searches")).toContainText("1");
   await expect(page.getByTestId("metric-assistant")).toContainText("1");
 
-  // Top pages lists '/'.
-  const topPages = page.locator("section", { hasText: "Top pages" });
+  // Top pages lists '/'. RankTable is a Card (a div, no landmark role) — target its
+  // testid, same pattern as the metric-* cards above.
+  const topPages = page.getByTestId("rank-top-pages");
   await expect(topPages.getByText("/", { exact: true })).toBeVisible();
 });
 

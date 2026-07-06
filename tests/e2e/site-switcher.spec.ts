@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 import postgres from "postgres";
 import { TEST_DB_URL } from "./global-setup";
-import { ORG_SLUG, sitePath } from "./constants";
+import { ORG_SLUG, TEST_USER, sitePath } from "./constants";
 
 // The top-left site switcher (SPEC §10): the control plane is URL-scoped, so switching a
 // site *navigates* to /:org/:site (preserving the sub-page) — shareable, multi-tab, no
@@ -15,8 +15,11 @@ test.describe("dashboard site switcher", () => {
   const sql = postgres(TEST_DB_URL, { max: 1 });
 
   test.beforeAll(async () => {
-    const [org] = await sql`select id from organization limit 1`;
-    expect(org, "expected a seeded organization").toBeTruthy();
+    // By name, like the other specs — `limit 1` over all orgs is order-dependent if
+    // another spec ever seeds one.
+    const [org] =
+      await sql`select id from organization where name = ${TEST_USER.org} limit 1`;
+    expect(org, `expected the seeded org "${TEST_USER.org}"`).toBeTruthy();
 
     // Stable createdAt so Alpha is the default "first" site (oldest-first ordering).
     for (const [i, s] of [ALPHA, BETA].entries()) {
@@ -38,15 +41,16 @@ test.describe("dashboard site switcher", () => {
     await page.goto(sitePath(ALPHA.slug));
     const switcher = page.getByRole("button", { name: "Switch site" });
 
-    // Opening it lists both sites + a New-site action.
+    // Opening it lists both sites + a New-site action. The switcher is a shadcn
+    // DropdownMenu (role menu/menuitem; the content portals to <body>), not a listbox.
     await switcher.click();
-    const listbox = page.getByRole("listbox");
-    await expect(listbox.getByRole("option", { name: new RegExp(ALPHA.name) })).toBeVisible();
-    await expect(listbox.getByRole("option", { name: new RegExp(BETA.name) })).toBeVisible();
-    await expect(listbox.getByRole("link", { name: "New site" })).toBeVisible();
+    const menu = page.getByRole("menu");
+    await expect(menu.getByRole("menuitem", { name: new RegExp(ALPHA.name) })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: new RegExp(BETA.name) })).toBeVisible();
+    await expect(menu.getByRole("menuitem", { name: "New site" })).toBeVisible();
 
     // Selecting Beta navigates to its bare URL — the switcher now shows Beta.
-    await listbox.getByRole("option", { name: new RegExp(BETA.name) }).click();
+    await menu.getByRole("menuitem", { name: new RegExp(BETA.name) }).click();
     await page.waitForURL(`**/${ORG_SLUG}/${BETA.slug}`);
     await expect(switcher).toContainText(BETA.name);
 
@@ -54,7 +58,7 @@ test.describe("dashboard site switcher", () => {
     // the page is scoped to Beta (the name label by the heading).
     await page.goto(sitePath(ALPHA.slug, "analytics"));
     await switcher.click();
-    await page.getByRole("listbox").getByRole("option", { name: new RegExp(BETA.name) }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: new RegExp(BETA.name) }).click();
     await page.waitForURL(`**/${ORG_SLUG}/${BETA.slug}/analytics`);
     const heading = page.getByRole("heading", { name: "Analytics" });
     await expect(heading.locator("xpath=following-sibling::*[1]")).toHaveText(BETA.name);
@@ -63,7 +67,7 @@ test.describe("dashboard site switcher", () => {
   test("New site action links to the connect form", async ({ page }) => {
     await page.goto(sitePath(ALPHA.slug));
     await page.getByRole("button", { name: "Switch site" }).click();
-    await page.getByRole("listbox").getByRole("link", { name: "New site" }).click();
+    await page.getByRole("menu").getByRole("menuitem", { name: "New site" }).click();
     await page.waitForURL(`**/${ORG_SLUG}/connect`);
     await expect(page.getByRole("heading", { name: "Connect a repository" })).toBeVisible();
   });

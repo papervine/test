@@ -220,7 +220,12 @@ function RankTable({
   mono?: boolean;
 }) {
   return (
-    <Card className="gap-0 overflow-hidden p-0">
+    // testid mirrors the metric-* cards: a stable e2e hook (the Card is a plain div,
+    // no landmark role to target), e.g. "rank-top-pages".
+    <Card
+      className="gap-0 overflow-hidden p-0"
+      data-testid={`rank-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+    >
       <div className="flex items-center justify-between border-b border-[rgba(var(--ink-rgb),0.06)] px-4 py-3">
         <h2 className="text-sm font-medium">{title}</h2>
         <span className="text-xs text-[var(--muted)]">{valueLabel}</span>

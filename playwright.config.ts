@@ -7,7 +7,6 @@ const PORT = 3210;
 
 export default defineConfig({
   testDir: "tests/e2e",
-  globalSetup: "./tests/e2e/global-setup.ts",
   fullyParallel: false,
   // Serialize: every spec shares one Postgres + one seeded org/user, so parallel
   // workers race on that state (a spec that adds a site would break another's
@@ -34,9 +33,16 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: `next dev -p ${PORT}`,
+    // The DB rebuild runs INSIDE the command, before `next dev` boots — not in a
+    // globalSetup hook, which Playwright runs AFTER starting the webServer (a rebuild
+    // there drops the schema underneath the app's live pool + warm Next cache →
+    // poisoned connections randomly 500 requests mid-suite). See tests/e2e/reset-db.mjs.
+    command: `node tests/e2e/reset-db.mjs && next dev -p ${PORT}`,
     url: `http://127.0.0.1:${PORT}`,
-    reuseExistingServer: !process.env.CI,
+    // Never reuse: a leftover server carries the previous run's pool + data cache (the
+    // exact poisoning above) and skips the DB rebuild. If the port is busy, Playwright
+    // errors — kill the stray server rather than inheriting its state.
+    reuseExistingServer: false,
     timeout: 120_000,
     // process.env wins over .env.local in Next, so this points the app at the test DB.
     env: {
@@ -53,6 +59,11 @@ export default defineConfig({
       // Deterministic GitHub App webhook secret so the push-webhook spec can sign payloads
       // the running server will verify (SPEC §3 auto-sync). Test-only.
       GITHUB_APP_WEBHOOK_SECRET: "e2e-webhook-secret",
+      // Platform superadmin allowlist (SPEC §10.10) for admin.spec.ts. Deliberately NOT
+      // TEST_USER's email: the shared storageState user must stay a plain customer so the
+      // admin rail link / bypass never leaks into the other specs' assertions. The admin
+      // spec signs this account up itself.
+      PLATFORM_ADMIN_EMAILS: "platform-admin@papervine.test",
     },
   },
 });

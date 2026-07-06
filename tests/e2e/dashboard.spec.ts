@@ -31,6 +31,10 @@ test.afterAll(async () => {
 });
 
 test("the site overview greets the user and renders the rail", async ({ page }) => {
+  // First visit to the overview route in the run: under `next dev` its cold compile
+  // (activity feed + preview + rail) can exceed the 30s default. 3× headroom; the
+  // later tests hit the same page warm.
+  test.slow();
   await page.goto(sitePath(SITE.slug));
   // URL-scoped: we stay on the bare /:org/:site path.
   await expect(page).toHaveURL(new RegExp(`/${ORG_SLUG}/${SITE.slug}$`));
@@ -47,7 +51,9 @@ test("the site overview greets the user and renders the rail", async ({ page }) 
 test("a public site shows the open status + a link to edit auth", async ({ page }) => {
   await page.goto(sitePath(SITE.slug));
   await expect(page.getByText("Public — anyone can read")).toBeVisible();
-  const edit = page.getByRole("link", { name: "Edit" });
+  // exact: role-name matching is substring by default, and the page also has
+  // "Editor" / "Open editor" links (the editor workspace) that "Edit" would match.
+  const edit = page.getByRole("link", { name: "Edit", exact: true });
   await expect(edit).toHaveAttribute(
     "href",
     sitePath(SITE.slug, "settings/authentication"),
@@ -58,7 +64,7 @@ test("a gated site shows the required status + method + edit link", async ({ pag
   await page.goto(sitePath(AUTH_SITE.slug));
   await expect(page.getByText("Required")).toBeVisible();
   await expect(page.getByText("JWT")).toBeVisible();
-  const edit = page.getByRole("link", { name: "Edit" });
+  const edit = page.getByRole("link", { name: "Edit", exact: true });
   await expect(edit).toHaveAttribute(
     "href",
     sitePath(AUTH_SITE.slug, "settings/authentication"),

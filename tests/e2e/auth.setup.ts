@@ -5,7 +5,8 @@ const authFile = "tests/e2e/.auth/user.json";
 
 // Create the seeded user through the real signup → onboarding flow, then save the
 // session so the rest of the suite starts already logged in (Playwright storageState).
-// globalSetup truncated the DB, so this email is free each run. Runs on the app host
+// reset-db.mjs rebuilt the DB before the server booted, so this email is free each
+// run. Runs on the app host
 // (baseURL) — the control plane (SPEC §10).
 setup("authenticate", async ({ page }) => {
   await page.goto("/signup");
