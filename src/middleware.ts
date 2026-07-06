@@ -105,7 +105,11 @@ export function middleware(req: NextRequest) {
     if (isAuthPath(pathname)) {
       // Already logged in? Skip the auth form and go to the dashboard — the way
       // app.example.com/signup bounces a signed-in user straight to their workspace.
-      if (authed) {
+      // EXCEPT /onboarding, which exists FOR the just-signed-in: the dashboard resolver
+      // (app/page.tsx) redirects org-less users here, so bouncing authed users back to
+      // "/" made every fresh signup loop (ERR_TOO_MANY_REDIRECTS) — the bug that broke
+      // the e2e auth.setup flow and real first-run onboarding alike.
+      if (authed && pathname !== "/onboarding") {
         const url = req.nextUrl.clone();
         url.pathname = "/";
         return syncFlag(NextResponse.redirect(url));
