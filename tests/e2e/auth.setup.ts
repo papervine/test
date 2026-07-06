@@ -9,6 +9,10 @@ const authFile = "tests/e2e/.auth/user.json";
 // run. Runs on the app host
 // (baseURL) — the control plane (SPEC §10).
 setup("authenticate", async ({ page }) => {
+  // The signup → onboarding chain cold-compiles several routes under `next dev`; on a
+  // CI runner that alone can blow the 30s default (same class as the overview test's
+  // slow() in dashboard.spec). 3× headroom.
+  setup.slow();
   await page.goto("/signup");
   await page.getByLabel("Name").fill(TEST_USER.name);
   await page.getByLabel("Email").fill(TEST_USER.email);
