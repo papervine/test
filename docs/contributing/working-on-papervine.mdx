@@ -67,6 +67,12 @@ don't hand-walk signup → onboarding. Seed a known account and drive a real bro
     **`http://app.localhost:3000/login`**; the dashboard is at bare
     **`app.localhost:3000/:org/:site`** (seed → `app.localhost:3000/dev-org/starter`). New
     site at `/:org/connect`.
+
+    Any dev port works: when `:3000` is busy (several worktrees running at once), Next
+    auto-picks `:3001`/`:3002`… and auth follows — development trusts `localhost`,
+    `*.localhost`, and `127.0.0.1` on **any port** (`trustedOrigins` in `src/lib/auth.ts`),
+    so sign-in works without touching `BETTER_AUTH_URL`. Production never trusts these
+    wildcards.
   </Step>
   <Step title="Open the rendered docs">
     Tenant docs render at **`{slug}.localhost:3000`** (subdomain mode) or **`/sites/{slug}`**

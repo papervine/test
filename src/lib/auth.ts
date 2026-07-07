@@ -12,14 +12,24 @@ import { resolvePlatformRole } from "./platform-admin";
 // Better Auth rejects any request whose Origin isn't trusted (CSRF protection →
 // "Invalid origin"). The control plane (signup/login/dashboard) serves on the app host
 // `app.papervine.io` (SPEC §10) — covered by the `*.papervine.io` wildcard; the apex
-// entry stays for the marketing host. In dev the control plane is `app.localhost:3000`,
-// which no wildcard above matches, so it needs its own entry. BETTER_AUTH_URL adds this
-// deploy's own origin too — covering Vercel preview URLs.
+// entry stays for the marketing host. BETTER_AUTH_URL adds this deploy's own origin
+// too — covering Vercel preview URLs.
+//
+// Dev trusts localhost on ANY port: `next dev` auto-picks 3001/3002… when :3000 is busy
+// (multiple worktrees coexist by design), and a hardcoded `app.localhost:3000` entry
+// 403'd every other port's sign-in ("Invalid origin") — which forced a per-worktree
+// BETTER_AUTH_URL edit. In these patterns `*` matches any characters except `/`, so
+// `http://*.localhost:*` covers the app host and every tenant subdomain on every port
+// (see better-auth's matchesOriginPattern). Gated to non-production builds so the
+// wildcards never ship: NODE_ENV is "development" under `next dev` (and the e2e/smoke
+// servers), "production" on Vercel.
 const trustedOrigins = [
   "https://papervine.io",
   "https://*.papervine.io",
-  "http://app.localhost:3000",
   ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
+  ...(process.env.NODE_ENV !== "production"
+    ? ["http://localhost:*", "http://*.localhost:*", "http://127.0.0.1:*"]
+    : []),
 ];
 
 // Layer 1 — platform auth (SPEC §10.1). Email/password first; the organization
