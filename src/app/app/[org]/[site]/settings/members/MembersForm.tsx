@@ -3,10 +3,18 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2, Copy, Check, Mail } from "lucide-react";
+import { Select } from "@/components/ui/select";
+import {
+  assignableRoles,
+  canEditMemberRole,
+  isOrgRole,
+  type OrgRole,
+} from "@/lib/org-roles";
 import {
   inviteMembers,
   cancelInvite,
   removeMember,
+  changeMemberRole,
   type SiteRef,
   type InviteOutcome,
 } from "./actions";
@@ -22,6 +30,7 @@ export type MemberRow = {
 export type InviteRow = {
   id: string;
   email: string;
+  role: string;
   expiresAt: string; // ISO
 };
 
@@ -45,18 +54,25 @@ export function MembersForm({
   members,
   invites,
   canManage,
+  viewerRole,
 }: {
   siteRef: SiteRef;
   members: MemberRow[];
   invites: InviteRow[];
   canManage: boolean;
+  viewerRole: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [emails, setEmails] = useState("");
+  const [inviteRole, setInviteRole] = useState<OrgRole>("member");
   const [results, setResults] = useState<InviteOutcome[] | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+
+  // What this viewer may hand out — owners can grant owner, admins stop at admin
+  // (Better Auth rejects anything beyond this server-side; the picker just doesn't offer it).
+  const grantable = assignableRoles(viewerRole);
 
   function run(fn: () => Promise<{ ok?: boolean; error?: string }>, after?: () => void) {
     setError(null);
@@ -75,7 +91,7 @@ export function MembersForm({
     setError(null);
     setResults(null);
     start(async () => {
-      const res = await inviteMembers(siteRef, emails);
+      const res = await inviteMembers(siteRef, emails, inviteRole);
       if (res.error && !res.results) {
         setError(res.error);
         return;
@@ -122,7 +138,23 @@ export function MembersForm({
             rows={3}
             className="mt-3 w-full resize-y rounded-lg border border-[rgba(var(--ink-rgb),0.08)] bg-transparent px-3 py-2 text-sm outline-none placeholder:text-[var(--muted)]/60 focus:border-[rgba(var(--ink-rgb),0.2)]"
           />
-          <div className="mt-3 flex items-center gap-3">
+          <div className="mt-3 flex flex-wrap items-center gap-3">
+            <div className="w-36">
+              <Select
+                aria-label="Invite role"
+                value={inviteRole}
+                onChange={(e) => {
+                  if (isOrgRole(e.target.value)) setInviteRole(e.target.value);
+                }}
+                className="capitalize"
+              >
+                {grantable.map((r) => (
+                  <option key={r} value={r} className="capitalize">
+                    {r}
+                  </option>
+                ))}
+              </Select>
+            </div>
             <button
               type="button"
               disabled={pending || emails.trim().length === 0}
@@ -191,7 +223,36 @@ export function MembersForm({
                     {m.email}
                     {m.isSelf && <span className="ml-2 text-xs text-[var(--muted)]">(you)</span>}
                   </td>
-                  <td className="px-4 py-3 capitalize text-[var(--muted)]">{m.role}</td>
+                  <td className="px-4 py-3 text-[var(--muted)]">
+                    {canEditMemberRole(viewerRole, m) ? (
+                      // Owner/admin can re-role a member in place (this is how an owner
+                      // grants `owner`/`admin` — e.g. to make an org an eligible site-transfer
+                      // destination). The picker offers what THIS viewer may grant; Better
+                      // Auth re-checks and refuses e.g. demoting the last owner.
+                      <div className="w-32">
+                        <Select
+                          aria-label={`Role of ${m.email}`}
+                          value={isOrgRole(m.role) ? m.role : "member"}
+                          disabled={pending}
+                          onChange={(e) => {
+                            const next = e.target.value;
+                            if (isOrgRole(next) && next !== m.role) {
+                              run(() => changeMemberRole(siteRef, m.id, next));
+                            }
+                          }}
+                          className="h-8 capitalize"
+                        >
+                          {grantable.map((r) => (
+                            <option key={r} value={r} className="capitalize">
+                              {r}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                    ) : (
+                      <span className="capitalize">{m.role}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-[var(--muted)]">{shortDate(m.joinedAt)}</td>
                   <td className="px-4 py-3 text-right">
                     {canManage && !m.isSelf && (
@@ -227,6 +288,7 @@ export function MembersForm({
               >
                 <Mail className="h-4 w-4 shrink-0 text-[var(--muted)]" />
                 <span>{inv.email}</span>
+                <span className="capitalize text-[var(--muted)]">· {inv.role}</span>
                 <span className="text-[var(--muted)]">· expires {shortDate(inv.expiresAt)}</span>
                 <div className="ml-auto flex items-center gap-2">
                   <button

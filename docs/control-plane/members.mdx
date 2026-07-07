@@ -15,15 +15,27 @@ Every member has one of three roles:
 - **Admin** — can manage sites, settings, and members.
 - **Member** — can access the org's sites.
 
-Only **owners and admins** can invite or remove members. Invitations default to the **member**
-role.
+Only **owners and admins** can invite, re-role, or remove members.
+
+## Changing a member's role
+
+The **Role** column is editable in place: pick a new role and it applies immediately. What you
+can grant depends on what you are — an **owner** can grant `member`, `admin`, or `owner`; an
+**admin** can grant `member` or `admin` (only an owner can create another owner, and only an
+owner can change an existing owner's role). You can't change your own role, and the last owner
+can't be demoted.
+
+Granting `owner` or `admin` is also how you make an organization an eligible **site-transfer
+destination** — [transferring a site](/control-plane/danger-zone#transfer-a-site) requires
+owner/admin on both ends.
 
 ## Inviting people
 
-In **Invite member**, enter one or more email addresses separated by commas or spaces, then
-**Send Invite**. Each address becomes a **pending invitation**. Papervine reports the result per
-address — newly invited, already a member, or already invited — so a partly-duplicate paste still
-sends the new ones.
+In **Invite member**, enter one or more email addresses separated by commas or spaces, pick the
+**role** they'll join with (defaults to `member`; the same grant rules apply), then
+**Send Invite**. Each address becomes a **pending invitation** carrying that role. Papervine
+reports the result per address — newly invited, already a member, or already invited — so a
+partly-duplicate paste still sends the new ones.
 
 Each pending invitation has a **shareable accept link**. Use **Copy link** and send it to the
 invitee however you like (chat, your own email). The link is the invitation: anyone who opens it

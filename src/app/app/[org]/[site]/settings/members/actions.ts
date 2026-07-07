@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { getSession, listOrganizations, getMemberRole } from "@/lib/session";
 import { siteRoute } from "@/lib/dashboard-nav";
 import { parseInviteEmails } from "@/lib/invite-emails";
+import { isOrgRole, type OrgRole } from "@/lib/org-roles";
 
 // Members are ORG-scoped (the member/invitation tables key on organizationId, SPEC §10), but
 // the surface lives under the site shell at /:org/:site/settings/members like every settings
@@ -73,14 +74,24 @@ function inviteOutcomeFromError(email: string, err: unknown): InviteOutcome {
   if (code.includes("INVITATION_LIMIT") || code.includes("MEMBERSHIP_LIMIT")) {
     return { email, status: "error", message: "Invite or member limit reached." };
   }
+  if (code.includes("INVITE_USER_WITH_THIS_ROLE")) {
+    return { email, status: "error", message: "Only an owner can invite an owner." };
+  }
   console.error(`[members] invite failed for ${email}`, err);
   return { email, status: "error", message: "Couldn’t send this invite." };
 }
 
-/** Invite one or more addresses (the textarea value) as `member`s of the org. */
-export async function inviteMembers(ref: SiteRef, raw: string): Promise<InviteState> {
+/** Invite one or more addresses (the textarea value) with the chosen org role. Better Auth
+ *  enforces who may grant what (only an owner can invite an `owner`); the UI offers only
+ *  the assignable roles (src/lib/org-roles.ts) and this re-validates the string. */
+export async function inviteMembers(
+  ref: SiteRef,
+  raw: string,
+  role: OrgRole = "member",
+): Promise<InviteState> {
   const gate = await requireOrgAdmin(ref);
   if ("error" in gate) return { error: gate.error };
+  if (!isOrgRole(role)) return { error: "Unknown role." };
 
   const { emails, invalid, truncated } = parseInviteEmails(raw);
   if (emails.length === 0) {
@@ -92,7 +103,7 @@ export async function inviteMembers(ref: SiteRef, raw: string): Promise<InviteSt
   for (const email of emails) {
     try {
       const invitation = await auth.api.createInvitation({
-        body: { email, role: "member", organizationId: gate.orgId },
+        body: { email, role, organizationId: gate.orgId },
         headers: hdrs,
       });
       results.push({ email, status: "sent", link: await acceptLinkFor(invitation.id) });
@@ -103,6 +114,35 @@ export async function inviteMembers(ref: SiteRef, raw: string): Promise<InviteSt
 
   revalidatePath(membersPath(ref));
   return { ok: true, results, invalid, truncated };
+}
+
+/** Change an existing member's org role. Better Auth enforces the hard rules server-side —
+ *  only an owner may touch an owner or grant `owner`, and the last owner can't be demoted —
+ *  we map its refusals to friendly messages rather than re-deriving them. */
+export async function changeMemberRole(
+  ref: SiteRef,
+  memberId: string,
+  role: OrgRole,
+): Promise<MembersActionState> {
+  const gate = await requireOrgAdmin(ref);
+  if ("error" in gate) return { error: gate.error };
+  if (!isOrgRole(role)) return { error: "Unknown role." };
+  try {
+    await auth.api.updateMemberRole({
+      body: { memberId, role, organizationId: gate.orgId },
+      headers: await headers(),
+    });
+  } catch (err) {
+    const code = (err as { body?: { code?: string } })?.body?.code ?? "";
+    console.error(`[members] change role of ${memberId} → ${role} failed`, err);
+    return {
+      error: code.includes("NOT_ALLOWED")
+        ? "You can’t change this member’s role."
+        : "Couldn’t change that member’s role.",
+    };
+  }
+  revalidatePath(membersPath(ref));
+  return { ok: true };
 }
 
 /** Revoke a pending invitation. */

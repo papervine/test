@@ -43,7 +43,12 @@ export default async function MembersSettingsPage({
     });
     invites = (all ?? [])
       .filter((i) => i.status === "pending")
-      .map((i) => ({ id: i.id, email: i.email, expiresAt: new Date(i.expiresAt).toISOString() }));
+      .map((i) => ({
+        id: i.id,
+        email: i.email,
+        role: i.role ?? "member",
+        expiresAt: new Date(i.expiresAt).toISOString(),
+      }));
   } catch {
     invites = [];
   }
@@ -66,6 +71,7 @@ export default async function MembersSettingsPage({
         members={members}
         invites={invites}
         canManage={canManage}
+        viewerRole={role}
       />
     </div>
   );
