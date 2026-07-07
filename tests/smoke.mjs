@@ -216,10 +216,26 @@ const CONTROL_PLANE_CHECKS = [
   },
   {
     path: "/pricing",
-    desc: "marketing pricing page renders in the platform theme with both tiers + the matrix",
+    desc: "marketing pricing page renders all three tiers, the Pro price, and the 90-day SSO/RBAC promo",
     // db-glow proves PlatformShell wraps it; the tier names + a matrix group prove the
-    // table content rendered (not just the chrome). Get started → /signup is the primary CTA.
-    include: ["Pricing on", "db-glow", "Starter", "Enterprise", "Customization", 'href="/signup"'],
+    // table content rendered (not just the chrome). "399" + "billed annually" is Pro's
+    // SSR'd annual price (ProPrice defaults to annual; React splits "$"/"399" with a
+    // comment node, so we can't match "$399" literally); "Free for 90 days" is the
+    // SSO/RBAC launch promo on the Pro card and in the matrix. Try for free → /signup.
+    include: [
+      "Pricing on",
+      "db-glow",
+      "Starter",
+      "Pro",
+      "Enterprise",
+      "Customization",
+      "399",
+      "billed annually",
+      "Free for 90 days",
+      "Dashboard SSO",
+      "Security before procurement",
+      'href="/signup"',
+    ],
   },
 ];
 

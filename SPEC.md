@@ -81,6 +81,23 @@ session: a signed-in visitor gets a single **Dashboard** link instead of **Log i
 up** (which would dead-end them re-signing up). Reading the session opts the page into
 dynamic rendering — acceptable for the apex. Smoke covers the logged-out shape (`/home`).
 
+**Pricing page: three tiers, differentiated from incumbent docs tools (landed
+2026-07-06).** `/pricing` (`src/app/pricing/page.tsx`) now has Starter $0 / Pro
+$399/mo annual ($499 monthly, client-side toggle in `ProPrice.tsx`, annual default) /
+Enterprise contact-us. Research note: the incumbent's July 2026 page makes SSO, SCIM, and
+RBAC Enterprise; GitBook lists SAML SSO in Enterprise with lower site pricing plus
+per-user charges; ReadMe prices Pro at $250/mo but keeps SSO/access control in
+Enterprise and starts Enterprise at $3000+/mo; Archbee's Scaling is $350/mo and SSO
+is Enterprise. Papervine's positioning response: keep Pro below the incumbent-style
+$450 anchor, include SSO/RBAC in Pro, package agent docs features together, and use
+open source as the buyer's exit path. SSO/RBAC carry a "Free for 90 days" launch promo
+(one `PROMO_TAG` constant shared by card + matrix). SCIM, custom SLAs, security/legal
+review, and high-touch services stay Enterprise. The page is still **purely
+presentational** — no billing backend, no plan gating (§10 "Billing (later)"); the
+90-day clock is marketing copy until Stripe lands. Smoke (`/pricing` in
+`CONTROL_PLANE_CHECKS`) asserts all three tiers, the SSR'd annual price, the
+positioning section, and the promo string.
+
 **Landing backdrop: a growing vine, not a grid (landed 2026-06-28).** The marketing
 landing swaps the static `.db-grid` for `VineField` (`src/components/platform/VineField.tsx`,
 the `"home"` variant) — three vines that slowly *draw* upward via an animated
