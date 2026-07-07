@@ -1,11 +1,49 @@
 ---
 title: Danger zone
-description: Irreversibly delete a site or organization, behind a required-reason gate and a type-to-confirm modal.
+description: Transfer a site to another organization, or irreversibly delete a site or organization behind a required-reason gate and a type-to-confirm modal.
 ---
 
-**Settings → Danger zone** holds the irreversible deletes, following the familiar danger-zone
-shape — a "delete my deployment" section and a "delete my organization" section, each with a
-required reason and a red action.
+**Settings → Danger zone** holds the disruptive actions, following the familiar danger-zone
+shape: a "transfer this site" section (GitHub keeps ownership transfer here too), then the
+irreversible deletes — a "delete my deployment" section and a "delete my organization"
+section, each with a required reason and a red action.
+
+## Transfer a site
+
+An **owner or admin** can move a site to another organization **they also own or
+administer** — the Vercel-style transfer between your own teams. Both ends are the same
+user, so there's no acceptance handshake; transferring to an organization you don't belong
+to isn't supported.
+
+Everything keyed to the site travels with it: synced content, the custom domain, the
+deployment history, analytics, and any open editor drafts. Members of the current
+organization lose access; members of the destination gain it. Slugs are globally unique, so
+the site's `{slug}.papervine.io` subdomain and URLs don't change — only who manages it.
+
+<Steps>
+  <Step title="Pick a destination">
+    The picker lists **all** your other organizations. Ones where you're only a `member`
+    appear disabled with the reason inline ("requires owner or admin") — being listed-but-
+    disabled tells you what to fix, where hiding them would read as "you aren't in any
+    other organization". If you have no other organizations at all, the section says so
+    instead of offering an empty control.
+  </Step>
+  <Step title="Type the site slug to confirm">
+    Same guard as the deletes: type the exact site **slug** (case-sensitive) to arm the
+    transfer. You land on the site's dashboard under its new organization.
+  </Step>
+</Steps>
+
+<Note>
+  **GitHub App connections don't cross organizations.** An App installation belongs to the
+  organization that installed it, so a transferred site keeps its Git connection only if the
+  destination organization has the **same installation**. Otherwise the App link is dropped:
+  public repos and PAT-connected repos keep syncing (the PAT is stored on the site itself),
+  but an App-connected private repo needs a reconnect from **Settings → Git** after the
+  transfer.
+</Note>
+
+## Deleting
 
 <Warning>
   These actions **cannot be undone.** Deleting a site drops its content and history;

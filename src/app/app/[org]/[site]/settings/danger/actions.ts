@@ -5,12 +5,13 @@ import { headers } from "next/headers";
 import { and, eq } from "drizzle-orm";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { site, deletionFeedback } from "@/lib/db/app-schema";
+import { site, deletionFeedback, githubInstallation } from "@/lib/db/app-schema";
 import { getSession, listOrganizations, getMemberRole } from "@/lib/session";
 import { deletePrefix } from "@/lib/storage";
 import { releaseDomain } from "@/lib/domain-reconcile";
 import { isReasonValid, planResourceCleanup } from "@/lib/danger-zone";
 import type { SiteResources } from "@/lib/danger-zone";
+import { canManageSites, installationCarries } from "@/lib/transfer-site";
 import { revalidateSiteRow } from "@/lib/tenant";
 
 // The site these actions target, carried from the URL-scoped page (/:org/:site) since a
@@ -155,4 +156,75 @@ export async function deleteOrganization(
   }
 
   return { redirectTo: "/" };
+}
+
+// Transfer a site to another organization the actor also administers (Vercel-style: both
+// ends are the same user, so no acceptance handshake — transferring to an org you DON'T
+// belong to would need a pending-invite flow, deliberately out of scope). Owner/admin on
+// BOTH ends. Everything keyed off site.id travels with the row for free — deployments,
+// analytics, editor sessions/drafts (FK cascade chains), the `sites/{id}/` storage prefix,
+// and the custom domain (attached to the shared Vercel project, recorded on the row). The
+// one org-owned link is the GitHub App installation: it stays only if the destination org
+// holds the same installation, else it's dropped (public/PAT sites sync on; App-connected
+// private repos need a reconnect in the new org — the UI says so).
+export async function transferSite(
+  ref: SiteRef,
+  destOrgSlug: string,
+): Promise<DeleteState> {
+  const session = await getSession();
+  if (!session) return { error: "Not signed in." };
+
+  const orgs = await listOrganizations();
+  const src = orgs?.find((o) => o.slug === ref.org);
+  if (!src) return { error: "No active organization." };
+  const dest = orgs?.find((o) => o.slug === destOrgSlug);
+  if (!dest) return { error: "You're not a member of the destination organization." };
+  if (dest.id === src.id) {
+    return { error: "The site already belongs to this organization." };
+  }
+
+  const [srcRole, destRole] = await Promise.all([
+    getMemberRole(src.id, session.user.id),
+    getMemberRole(dest.id, session.user.id),
+  ]);
+  if (!canManageSites(srcRole)) {
+    return { error: "Only an owner or admin can transfer a site." };
+  }
+  if (!canManageSites(destRole)) {
+    return {
+      error: "You must be an owner or admin of the destination organization.",
+    };
+  }
+
+  const [row] = await db
+    .select()
+    .from(site)
+    .where(and(eq(site.organizationId, src.id), eq(site.slug, ref.site)))
+    .limit(1);
+  if (!row) return { error: "Site not found." };
+
+  let installationId = row.githubInstallationId;
+  if (installationId != null) {
+    const destInstalls = await db
+      .select({ installationId: githubInstallation.installationId })
+      .from(githubInstallation)
+      .where(eq(githubInstallation.organizationId, dest.id));
+    if (!installationCarries(installationId, destInstalls.map((i) => i.installationId))) {
+      installationId = null;
+    }
+  }
+
+  await db
+    .update(site)
+    .set({
+      organizationId: dest.id,
+      githubInstallationId: installationId,
+      updatedAt: new Date(),
+    })
+    .where(eq(site.id, row.id));
+  // The cached tenant row carries organizationId — bust it so anything reading org off the
+  // resolved site sees the new owner immediately, not after the TTL.
+  revalidateSiteRow({ slug: row.slug, domains: [row.customDomain] });
+
+  return { redirectTo: `/${dest.slug}/${row.slug}` };
 }
