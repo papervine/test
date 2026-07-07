@@ -1,0 +1,32 @@
+# Fly.io deploy for the Papervine collab socket (Hocuspocus/Yjs). The always-on WebSocket piece
+# Vercel can't host. Deploy: `flyctl deploy ./apps/collab` (builds the Dockerfile here). Set the
+# shared secret once: `flyctl secrets set COLLAB_JWT_SECRET=... --app papervine-collab` — it must
+# match COLLAB_JWT_SECRET in the Next app's env. The app is then reachable at
+# wss://papervine-collab.fly.dev → set that as NEXT_PUBLIC_COLLAB_URL in Vercel.
+app = "papervine-collab"
+primary_region = "sjc"
+
+[build]
+
+[env]
+  COLLAB_PORT = "1234"
+
+# One HTTP service fronts the WebSocket (WS upgrades over HTTPS → clients use wss://). Scale to
+# zero when idle to keep cost near nothing; a new editor connection cold-starts a machine in a few
+# seconds, and a live editing session (an open socket) keeps it awake.
+[http_service]
+  internal_port = 1234
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+
+  # Connection-level health: the port is accepting TCP once Hocuspocus is listening.
+  [[http_service.tcp_checks]]
+    interval = "15s"
+    timeout = "2s"
+    grace_period = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

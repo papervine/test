@@ -5,6 +5,8 @@ import { Eye, Code2, Diff, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { VisualEditor } from "./VisualEditor";
 import { DiffView } from "./visual/DiffView";
+import { useCollabDoc } from "./collab/useCollabDoc";
+import { PresenceDots } from "./collab/PresenceDots";
 import { readBasePageAction } from "@/lib/actions/authoring";
 
 export type Mode = "visual" | "source";
@@ -34,7 +36,7 @@ type MdxEditorPaneProps = {
 };
 
 export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(function MdxEditorPane(
-  { initialMarkdown, path, org, site, slug, onSave, mode, onModeChange },
+  { initialMarkdown, path, org, site, branch, slug, onSave, mode, onModeChange },
   ref,
 ) {
   const [value, setValue] = useState(initialMarkdown);
@@ -45,6 +47,23 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
   const [modKey, setModKey] = useState("⌘");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedValue = useRef(initialMarkdown);
+
+  // Collaboration: the canonical value is a shared Y.Text("mdx") per page-room; `value` mirrors
+  // it for rendering, save, diff and copy. Local edits splice into the Y.Text (broadcast to peers);
+  // remote edits flow back through onRemoteChange. Text-canonical, so git stays byte-exact.
+  const { binding, peers, ready } = useCollabDoc({ org, site, branch, path, initialMarkdown });
+
+  // Debounced draft save, shared by local and remote edits (both mutate the draft).
+  const scheduleSave = (md: string) => {
+    if (md === savedValue.current) return;
+    setSavedAt("saving");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(async () => {
+      await onSave(md);
+      savedValue.current = md;
+      setSavedAt("saved");
+    }, 700);
+  };
 
   const flush = async () => {
     if (timer.current) {
@@ -60,17 +79,30 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
   };
   useImperativeHandle(ref, () => ({ flush }));
 
+  // A local edit from either pane: splice into the shared doc, mirror locally, schedule a save.
   const change = (md: string) => {
+    binding.setText(md);
     setValue(md);
-    if (md === savedValue.current) return;
-    setSavedAt("saving");
-    if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(async () => {
-      await onSave(md);
-      savedValue.current = md;
-      setSavedAt("saved");
-    }, 700);
+    scheduleSave(md);
   };
+
+  // Adopt the settled room content once (first tab seeds it; a later tab adopts a peer's state,
+  // which may be ahead of the server-provided initialMarkdown).
+  useEffect(() => {
+    if (ready) setValue(binding.getText());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, path]);
+
+  // A remote edit (another tab / the other pane): mirror it and persist, but don't echo it back
+  // into the shared doc — it's already there.
+  useEffect(() => {
+    return binding.onRemoteChange((text) => {
+      setValue(text);
+      scheduleSave(text);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [path]);
+
   useEffect(() => () => void (timer.current && clearTimeout(timer.current)), []);
 
   // Fetch the published (base) content when the diff opens.
@@ -113,6 +145,7 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
       <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-1.5 dark:border-neutral-800">
         <span className="truncate text-xs text-neutral-500">{path}</span>
         <div className="flex items-center gap-2">
+          <PresenceDots peers={peers} />
           <span className="text-[11px] text-neutral-400">
             {savedAt === "saving" ? "Saving…" : savedAt === "saved" ? "Draft saved" : ""}
           </span>

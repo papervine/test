@@ -35,6 +35,7 @@
           "control-plane/general",
           "control-plane/members",
           "control-plane/editor",
+          "control-plane/collaboration",
           "control-plane/analytics",
           "control-plane/automate",
           "control-plane/exports",

@@ -74,6 +74,22 @@ services:
       - "6001:6001" # WebSocket + HTTP trigger API
       - "9601:9601" # metrics/health
 
+  # Collaborative editing socket (SPEC §9.2) — standalone Hocuspocus (Yjs CRDT) server, the
+  # always-on piece Vercel can't host. The Next app mints a per-room token (gateEditor → HS256
+  # over COLLAB_JWT_SECRET); this service only verifies it. Prod runs the same image on a
+  # container host (Fly/Railway/Render); self-hosters run exactly this. Set the SAME
+  # COLLAB_JWT_SECRET here and in .env.local, and NEXT_PUBLIC_COLLAB_URL=ws://127.0.0.1:1234.
+  collab:
+    build:
+      context: ./apps/collab
+    container_name: papervine-collab
+    restart: unless-stopped
+    environment:
+      COLLAB_PORT: "1234"
+      COLLAB_JWT_SECRET: ${COLLAB_JWT_SECRET:-papervine-collab-dev-secret}
+    ports:
+      - "1234:1234" # Yjs WebSocket
+
 volumes:
   pgdata:
   miniodata:

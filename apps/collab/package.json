@@ -1,0 +1,26 @@
+{
+  "name": "@papervine/collab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Papervine collaborative editing socket — a standalone Hocuspocus (Yjs) WebSocket service. Relays the editor's shared MDX document across clients; the Next app mints room tokens and persists drafts, so this service holds no session/RBAC and no content pipeline.",
+  "main": "src/server.ts",
+  "scripts": {
+    "dev": "tsx watch --env-file=../../.env.local src/server.ts",
+    "start": "tsx src/server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@hocuspocus/server": "^3.2.4",
+    "jose": "^6.2.3",
+    "tsx": "^4.19.2",
+    "yjs": "^13.6.31"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

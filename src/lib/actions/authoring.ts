@@ -6,6 +6,7 @@ import { siteRoute } from "@/lib/dashboard-nav";
 import { findSite, type SiteRow } from "@/lib/dashboard-context";
 import { getSession, listOrganizations, getMemberRole } from "@/lib/session";
 import { canSeeFeature } from "@/lib/features";
+import { mintCollabToken } from "@/lib/collab-token";
 import {
   checkoutBranch,
   saveDraft,
@@ -57,7 +58,7 @@ function findGroupNode(node: unknown, name: string): Record<string, unknown> | n
 // edit one draft buffer. Auth + the editor feature gate happen here at the edge; core
 // assumes an already-authorized SiteRow.
 
-type Gate = { site: SiteRow; userId: string } | { error: string };
+type Gate = { site: SiteRow; userId: string; userName: string } | { error: string };
 
 // Resolve + authorize the site for an editor action, enforcing the editor feature gate
 // (defense-in-depth — the route layout gates the URL, this gates the mutation).
@@ -70,7 +71,28 @@ async function gateEditor(orgSlug: string, siteSlug: string): Promise<Gate> {
   if (!canSeeFeature("editor.workspace", role)) return { error: "The editor isn't enabled for your role." };
   const site = await findSite(orgSlug, siteSlug);
   if (!site) return { error: "Site not found." };
-  return { site, userId: session.user.id };
+  return { site, userId: session.user.id, userName: session.user.name ?? "Editor" };
+}
+
+/**
+ * Mint a short-lived token for the collaborative editing socket (apps/collab). Runs the full
+ * editor gate, then binds the token to exactly one room (`${siteId}:${branch}:${path}`) so the
+ * socket service — which can't see the session — authorizes purely on the signed room claim.
+ * Returns `{ disabled: true }` when collab isn't configured (no secret): the client then falls
+ * back to same-browser BroadcastChannel sync, never an error.
+ */
+export async function mintCollabTokenAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  path: string,
+): Promise<{ token: string; room: string } | { disabled: true } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const room = `${gate.site.id}:${branch}:${path}`;
+  const token = await mintCollabToken({ room, userId: gate.userId, name: gate.userName });
+  if (!token) return { disabled: true };
+  return { token, room };
 }
 
 export async function checkoutBranchAction(

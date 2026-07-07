@@ -1275,9 +1275,42 @@ layer.
 > default**. Nav-item cogs open **Page settings** (frontmatter via `gray-matter`) and **Group
 > settings** (`docs.json` patch); to make those effective the renderer now honors page `icon`/`tag`/
 > external `url` and group `hidden`/`expanded`/`tag` in the sidebar (`nav.ts` + `Sidebar.tsx`, gated
-> by `nav-page-group-settings`). **Deferred:** real-time collaboration (Yjs/Hocuspocus — deps are
-> already in via the drag handle; the canonical-text model was chosen to make this a clean next
-> step) and per-page `<head>` metadata for `og:image`/`keywords`/`noindex` + page `mode` layout.
+> by `nav-page-group-settings`). **Deferred:** per-page `<head>` metadata for
+> `og:image`/`keywords`/`noindex` + page `mode` layout.
+>
+> **Real-time collaboration — shipped (2026-07-07).** Took the deferred step above. The
+> canonical value is a per-page **`Y.Text("mdx")`** holding the whole raw MDX file; both panes are
+> projections of it (text stays canonical → git byte-exact, unknown MDX never breaks). Keystone is
+> **`textDiff`** (in `@papervine/mdx-prosemirror`): a pane pushes a full new string, we splice only
+> the minimal changed range into the `Y.Text` — never a whole-doc replace, so a collaborator's
+> concurrent edit + cursor survive (`collab-ytext-sync` proves two edits to different regions both
+> merge). **Two transports behind one interface, chosen at runtime, strict-enhancement:** same-
+> browser tabs sync over a ~40-line **BroadcastChannel** provider (zero infra, the fallback when
+> collab is unconfigured — CI/bare checkout never 500s); real cross-machine multiplayer runs over a
+> **standalone Hocuspocus (Yjs) service, `apps/collab`** — the always-on socket Vercel can't host.
+> **Auth:** the Next app runs `gateEditor` then mints a ~5-min **HS256 room token**
+> (`COLLAB_JWT_SECRET`, sub = `${siteId}:${branch}:${path}`); the service holds no Better Auth and
+> no content pipeline — it verifies the token, checks the room matches, and relays. Persistence is
+> the existing debounced `saveDraft` (text-canonical); the first client **seeds the doc from the
+> page's draft**, so the service is stateless coordination — a restart just re-seeds, no data loss
+> (binary `Y.Doc` persistence via `@hocuspocus/extension-database` is a clean later add). Presence
+> rides Hocuspocus **awareness** (or the bc peer map). Verified cross-browser (two profiles): edits
+> both ways + Visual reprojection + presence, over the socket. Guards: `textDiff` (19),
+> `collab-ytext-sync` (4), `collab-token` (5 — forgery/expiry/room-replay).
+>
+> **Hosting decision (2026-07-07): self-host Hocuspocus, not a managed Yjs SaaS.** The service is
+> one MIT container (`docker-compose` `collab` locally; a `$5` Fly/Railway/Render machine or any
+> container host in prod; `crossws` makes it portable to Bun/Deno/CF Workers). We considered the
+> Vercel Marketplace one-click partner **Liveblocks** (fully-managed Yjs) and rejected it *as the
+> default* for a decisive reason: **you can't self-host Liveblocks**, so collab-on-Liveblocks would
+> break Papervine's OSS self-host story (§13). A managed Yjs host (Liveblocks / y-sweet) stays a
+> valid *optional hosted-tier* choice behind the same provider seam — never the foundation. This
+> is a different problem from the Activity feed's Pusher/Soketi choice (§10.3): that relays content-
+> free pings; a document needs stateful sync (correct join-state, awareness, and state transfer that
+> would blow past Pusher's ~10KB message cap — which *diverges* between hosted Pusher and self-host
+> Soketi), so a purpose-built Yjs server is the right tool here. **Deferred:** CodeMirror +
+> `y-codemirror.next` for character-level remote cursors in Source (today Source is a textarea —
+> a remote edit can jump the caret); binary CRDT persistence; real display names in presence.
 >
 > Token-scoped *external* auth for the authoring MCP (a platform-auth PAT, §11) is the
 > follow-up; today it authenticates via the app-host session + `x-papervine-org/site` headers.

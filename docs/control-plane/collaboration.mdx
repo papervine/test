@@ -1,0 +1,85 @@
+---
+title: Real-time collaboration
+description: Edit a page together, live — presence, shared cursors of change, and a self-hostable collaboration service that keeps Git byte-exact.
+---
+
+The editor is **collaborative**: two people (or two of your own tabs) can open the same page and
+edit it at once, in either Visual or Source mode, and see each other's changes as they happen. A
+small **presence** indicator in the editor toolbar shows who else is on the page.
+
+<Info>
+  Collaboration is a **strict enhancement**. With no collaboration service configured, same-browser
+  tabs still stay in sync, and everything else works exactly as before — it can never break editing.
+</Info>
+
+## How it stays correct
+
+The shared value for a page is its **raw MDX text** — the whole file, character for character.
+Both editor modes are views onto that one text:
+
+- **Git stays byte-exact.** There's no block model or second source of truth to convert back from;
+  what everyone edits is the MDX that gets committed.
+- **Unknown components never break.** Anything the Visual editor can't model — custom components,
+  `{expressions}`, imports — is carried verbatim, so a collaborator typing next to it can't corrupt
+  it.
+- **Edits are surgical.** When you change a page, only the exact range you touched is applied to the
+  shared document — never a whole-file replace — so your collaborator's cursor and their in-progress
+  edit elsewhere on the page survive.
+
+## Two ways it syncs
+
+<CardGroup cols={2}>
+  <Card title="Same browser — always on">
+    Two tabs or windows in the same browser sync instantly with zero setup, over a built-in
+    channel. Useful for editing a page while previewing it beside itself.
+  </Card>
+  <Card title="Across machines — the collaboration service">
+    Real multiplayer between different people/devices runs over a small always-on service (below).
+    When it's configured, the editor connects to it automatically; when it isn't, the editor falls
+    back to same-browser sync.
+  </Card>
+</CardGroup>
+
+Either way, your edits still autosave to the page's **draft** on your branch, and **nothing is live
+until you publish** — the same draft-and-publish flow as solo editing. The shared document is just
+live coordination; the draft (and Git) remains the record.
+
+## The collaboration service (self-hosting)
+
+Cross-machine editing uses a standalone **Hocuspocus** (Yjs) WebSocket service — `apps/collab` in
+the repo. It's the one always-on piece a serverless host can't run, so it lives on its own. It is
+deliberately minimal: it **relays** the shared document and tracks presence, and holds **no**
+accounts and **no** content — the app authorizes editing and persists drafts.
+
+<Steps>
+  <Step title="Run it">
+    Locally it's the `collab` service in `docker-compose` (`docker compose up`). In production run
+    the same container on any host that can hold a WebSocket open — a small always-on machine on
+    Fly, Railway, Render, or your own box. It has no database of its own.
+  </Step>
+  <Step title="Point the app at it">
+    Set two environment variables (see `.env.example`):
+
+    - `COLLAB_JWT_SECRET` — a shared secret. The app signs a short-lived, single-page token with
+      it; the service verifies it. Use the **same value** in both places.
+    - `NEXT_PUBLIC_COLLAB_URL` — the WebSocket URL the browser connects to (e.g.
+      `ws://127.0.0.1:1234` locally, `wss://collab.yourdomain` in production).
+  </Step>
+  <Step title="That's it">
+    With both set, the editor connects automatically. Leave them unset and collaboration simply
+    falls back to same-browser sync — no errors, no configuration required.
+  </Step>
+</Steps>
+
+### How access is enforced
+
+The service can't see your login, so the app does the check. When you open a page, the app confirms
+you're allowed to edit that site (the same gate as every editor action), then mints a token scoped
+to **exactly that page** (`site · branch · path`) that expires in a few minutes. The service accepts
+a connection only if the token is valid and matches the page being opened — so one editor can never
+join another site's document.
+
+<Note>
+  Because the service self-hosts as a single container, multiplayer works the same on a self-hosted
+  Papervine as on the hosted one — no third-party collaboration SaaS required.
+</Note>
