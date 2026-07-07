@@ -28,6 +28,10 @@ jobs:
         run: npm run test:unit
 
       - name: Build
+        # Raise V8's old-space cap: the runner's cgroup makes Node default to ~2GB,
+        # which `next build` now exceeds (OOM, exit 134). The runner has 7GB.
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npm run build
 
       - name: Smoke test (renderer + control-plane gate, no DB)
@@ -62,6 +66,22 @@ jobs:
 
       - name: Install Playwright browser
         run: npx playwright install --with-deps chromium
+
+      # MinIO (S3) — same images/creds/bucket as docker-compose. A `services:` block
+      # can't pass the `server /data` command the official image needs, so start it
+      # directly. The dashboard overview + editor specs stream site content from it;
+      # without it those specs 500 on ECONNREFUSED :9000.
+      - name: Start MinIO (S3) + create bucket
+        run: |
+          docker run -d --name minio -p 9000:9000 \
+            -e MINIO_ROOT_USER=papervine -e MINIO_ROOT_PASSWORD=papervinesecret \
+            minio/minio:latest server /data
+          docker run --rm --network host --entrypoint /bin/sh minio/mc:latest -c '
+            for i in $(seq 1 30); do
+              mc alias set local http://127.0.0.1:9000 papervine papervinesecret && break
+              sleep 1
+            done
+            mc mb --ignore-existing local/papervine-content && echo "bucket ready"'
 
       - name: E2E (deterministic — skips @external)
         run: npm run test:e2e -- --grep-invert @external

@@ -365,7 +365,11 @@ async function run() {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(30_000),
+        // 120s: the FIRST request cold-compiles the /mcp route (+ MCP SDK) under
+        // `next dev`, which blows a 30s budget on CI runners — the long-standing
+        // "[mcp] request failed: aborted due to timeout" red. Healthy responses are
+        // sub-second; this only tolerates compile latency, a real hang still fails.
+        signal: AbortSignal.timeout(120_000),
       });
     {
       const before = failures.length;
