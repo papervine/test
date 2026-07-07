@@ -149,7 +149,7 @@ body {
   @apply rounded bg-zinc-100 px-1.5 py-0.5 text-[0.85em] font-medium text-pink-600 before:content-[''] after:content-[''] dark:bg-zinc-800 dark:text-pink-400;
 }
 
-/* Code blocks (@mintlify/mdx Shiki output: <pre class="shiki" ...>) */
+/* Code blocks (serializer Shiki output: <pre class="shiki" ...>) */
 .prose pre {
   font-family: var(--db-font-mono);
   border-radius: var(--db-radius-lg);
@@ -233,4 +233,3 @@ html.dark .prose pre.shiki span {
 .prose-assistant td {
   @apply border-b border-zinc-100 px-2 py-1 dark:border-zinc-800;
 }
-

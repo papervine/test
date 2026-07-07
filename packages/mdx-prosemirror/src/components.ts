@@ -1,6 +1,6 @@
 import type { MdxAttr, MdxJsxElement, PMNode } from "./types";
 
-// The Papervine MDX component set (mirrors packages/renderer/components/mdx/index.ts).
+// The Papervine/docs.json MDX component set (mirrors packages/renderer/components/mdx/index.ts).
 // Each source JSX tag maps to a ProseMirror node type plus the plain-value props we model as
 // typed attrs. Several tags share a node type (Note/Info/... → callout; CardGroup/Columns →
 // cardGroup; ParamField/ResponseField/ApiField → apiField); the original tag name is stored
@@ -94,7 +94,7 @@ export function extractAttrs(name: string, attributes: MdxAttr[]): Record<string
 
     let value = attr.value;
     // Expression-valued attribute (`prop={…}`). Simple JS literals — `cols={2}`,
-    // `defaultOpen={true}`, `title={"x"}` (the common incumbent idiom) — resolve to their
+    // `defaultOpen={true}`, `title={"x"}` (the common hosted docs platforms idiom) — resolve to their
     // value so the component stays a real typed node. Non-literal expressions (variables,
     // `{1 + 2}`) still demote to raw, preserving the expression verbatim.
     if (value !== null && typeof value === "object") {

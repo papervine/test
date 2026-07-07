@@ -16,7 +16,7 @@ export type Appearance = {
 
 /**
  * Inline script that sets the `.dark` class on <html> before first paint, avoiding a flash
- * of the wrong appearance. Resolution mirrors the incumbent's `appearance`:
+ * of the wrong appearance. Resolution mirrors hosted docs platforms' `appearance`:
  *
  *  - `strict: true` → always the configured `default`; any stored choice is ignored
  *    (the UI also hides the toggle — see `themeToggleHidden`), so the author's mode sticks.
@@ -34,7 +34,7 @@ export function appearanceInitScript(appearance?: Appearance): string {
 }
 
 /**
- * Whether the appearance toggle should be hidden. The incumbent `appearance.strict` locks the
+ * Whether the appearance toggle should be hidden. hosted docs platforms `appearance.strict` locks the
  * site to its default appearance, so there's nothing to toggle.
  */
 export function themeToggleHidden(appearance?: Appearance): boolean {

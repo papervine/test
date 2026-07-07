@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { publishDraftAction } from "@/lib/actions/authoring";
 import { publishModeForBranch } from "@/lib/publish-mode";
 
-// The Publish control. The primary action follows the selected branch, mirroring the incumbent:
+// The Publish control. The primary action follows the selected branch, mirroring hosted docs platforms:
 // on the deploy ("Default") branch Publish commits straight to it; on a working branch it
 // opens a PR. The caret menu always offers both modes explicitly. Surfaces the PR link / conflict.
 export function PublishButton({
@@ -23,7 +23,7 @@ export function PublishButton({
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
 
-  // On the deploy branch, the natural publish is a direct commit (the incumbent's Publish on Default);
+  // On the deploy branch, the natural publish is a direct commit (hosted docs platforms' Publish on Default);
   // on a working branch it's a PR into the deploy branch.
   const primaryMode = publishModeForBranch(branch, deployBranch);
 

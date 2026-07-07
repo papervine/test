@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 
 /**
  * Static-asset handler for the docs repo. Images (and other assets) in a
- * the incumbent/Papervine repo are referenced by absolute path from the repo root —
+ * hosted docs platforms/Papervine repo are referenced by absolute path from the repo root —
  * e.g. `![](/img/hero.png)`. Those files live under PAPERVINE_CONTENT, outside the
  * app, so Next won't serve them from `public/`. This route streams them from the
  * content dir; `middleware.ts` rewrites asset requests here.

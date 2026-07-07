@@ -3,7 +3,7 @@ import { parseDocsConfig } from "@papervine/renderer/lib/config";
 import { contentContext, type ContentSource } from "@papervine/renderer/lib/content";
 import { buildNav, type NavLeaf, type NavNode } from "@papervine/renderer/lib/nav";
 
-// Auto-generated OpenAPI nav should GROUP operations by their tag (like the incumbent) — an
+// Auto-generated OpenAPI nav should GROUP operations by their tag (like hosted docs platforms) — an
 // "Assets" group, an "Assettypes" group — instead of one flat list of every endpoint.
 
 function apiSource(spec: object): ContentSource {

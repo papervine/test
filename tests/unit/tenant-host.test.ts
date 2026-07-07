@@ -9,7 +9,7 @@ describe("resolveTenantSlug", () => {
   it("maps a tenant subdomain to its slug", () => {
     expect(resolveTenantSlug("acme.localhost:3100")).toBe("acme");
     expect(resolveTenantSlug("acme.papervine.io")).toBe("acme");
-    expect(resolveTenantSlug("starter.localhost")).toBe("starter");
+    expect(resolveTenantSlug("starter-docs.localhost")).toBe("starter-docs");
   });
   it("returns null for the apex / platform hosts", () => {
     expect(resolveTenantSlug("localhost:3100")).toBeNull();

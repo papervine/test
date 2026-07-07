@@ -28,7 +28,7 @@ export default function ConnectForm({
 }: ConnectFormProps) {
   const [state, formAction, pending] = useActionState(connectRepo, initial);
   const orgSlug = String(useParams().org);
-  // the incumbent's "docs.json is in a subdirectory" toggle. When off we don't render the
+  // hosted docs platforms' "docs.json is in a subdirectory" toggle. When off we don't render the
   // path field at all, so the form submits no `docsPath` and the server reads repo root.
   const [subdir, setSubdir] = useState(false);
 

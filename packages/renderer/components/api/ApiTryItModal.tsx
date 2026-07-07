@@ -8,7 +8,7 @@ import { Play, Loader2, X, ChevronDown, ChevronRight, Copy, Check, Eye, EyeOff }
 import { methodColor } from "../../lib/method-colors";
 
 /**
- * The interactive API "Try it" playground (incumbent model): the trigger lives on the endpoint
+ * The interactive API "Try it" playground (hosted docs platforms model): the trigger lives on the endpoint
  * bar in the center column, and clicking it opens a full modal that encompasses every OpenAPI
  * input class — security schemes (basic / bearer / apiKey / oauth2), headers, path, query, and
  * request body — each as an editable field. A live request sample (cURL / JavaScript / Python)

@@ -3,7 +3,7 @@
 // — these sync helpers are shared by the client form and unit-tested in isolation
 // (tests/unit/danger-zone.test.ts).
 
-// What's being destroyed. A "site" is one docs deployment (the incumbent's "deployment"); an
+// What's being destroyed. A "site" is one docs deployment (hosted docs platforms' "deployment"); an
 // "organization" is the whole workspace — every site, member, and row under it.
 export type DangerScope = "site" | "organization";
 

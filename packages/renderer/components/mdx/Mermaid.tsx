@@ -12,7 +12,7 @@ import { useEffect, useId, useRef, useState } from "react";
  * appearance (the `.dark` class on <html>, see appearance.ts); we re-render on toggle.
  *
  * `securityLevel: "loose"` is deliberately NOT used — we keep htmlLabels (so `<br/>`/`<i>`
- * in node labels render, matching the incumbent) but `"antiscript"` strips any <script>, so a
+ * in node labels render, matching hosted docs platforms) but `"antiscript"` strips any <script>, so a
  * diagram can't introduce a script-execution vector the rest of the renderer doesn't allow.
  *
  * A diagram that fails to parse degrades to its source in a <pre> — it never throws.

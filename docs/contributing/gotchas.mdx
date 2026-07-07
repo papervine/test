@@ -16,10 +16,10 @@ as the fix, because every one of them passes the obvious check and fails somewhe
 This is why we left plain `next-mdx-remote` for the hybrid renderer. See
 [renderer internals](/rendering/internals) for the full compile-then-run design.
 
-### `@mintlify/mdx@4` has a broken peer dep
+### The third-party MDX serializer package has a broken peer dep
 
 <Warning>
-  `@mintlify/mdx@4` declares a peer dep on `@radix-ui/react-popover@^19.2.1`, which doesn't
+  The MDX serializer package declares a peer dep on `@radix-ui/react-popover@^19.2.1`, which doesn't
   exist. **Fix:** `.npmrc` sets `legacy-peer-deps=true`. Keep it.
 </Warning>
 

@@ -3,7 +3,7 @@ import { ChevronRight, FileDown } from "lucide-react";
 import { requireSite } from "@/lib/dashboard-context";
 
 // Concrete Exports surface — overrides the settings/[section] placeholder for the
-// "exports" slug. The incumbent's Settings → Exports: download the whole site as one PDF for
+// "exports" slug. hosted docs platforms' Settings → Exports: download the whole site as one PDF for
 // offline viewing (SPEC §10.4). The button opens the print-ready export view on the docs
 // host; the browser's "Save as PDF" produces the file (no server-side PDF pipeline).
 export default async function ExportsSettingsPage({

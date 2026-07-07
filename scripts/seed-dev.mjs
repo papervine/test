@@ -58,7 +58,7 @@ const DEV = {
     { name: "Starter Docs", slug: "starter", repoOwner: "papervine", repoName: "starter", branch: "main" },
     { name: "Starter (gated)", slug: "starter-gated", repoOwner: "papervine", repoName: "starter", branch: "main",
       auth: { method: "jwt", config: { loginUrl: "https://app.example.com/login" } } },
-    { name: "Incumbent Docs", slug: "large-docs", repoOwner: "papervine", repoName: "docs", branch: "main" },
+    { name: "Large Docs", slug: "large-docs", repoOwner: "papervine", repoName: "docs", branch: "main" },
   ],
 };
 

@@ -1,116 +1,81 @@
-# Compatibility Gap Report — Papervine vs. representative docs repos
+# Compatibility Gap Report
 
 **Date:** 2026-06-07
-**Method:** Ran the M0 renderer (`papervine dev`) against two unmodified docs repos, plus static analysis of every `.md(x)` file and `docs.json`.
 
-| Repo | Size | Result |
-|---|---|---|
-| [`papervine/starter`](https://github.com/papervine/starter) | 2 doc pages | ✅ **Renders fully** — both pages HTTP 200, no errors |
-| [`papervine/docs`](https://github.com/papervine/docs) (the incumbent's own production docs) | 877 `.mdx` + 28 `.md`, 12 snippets | ❌ **Fails to load** — `docs.json` rejected, 500 on every page |
+**Method:** Ran the renderer against representative public `docs.json` repositories and
+static-analyzed their `.md`, `.mdx`, and `docs.json` usage. Detailed repo names and
+competitive notes belong in `_private/`, not in the public repository.
 
-**Headline:** a real starter-kit repo works in Papervine today. The incumbent's *production* docs expose the M1 backlog — and the first blocker is a single over-strict schema field that takes down the whole site.
+## Headline
 
----
+The renderer must treat `docs.json` and MDX as a compatibility layer: unknown config fields,
+unsupported components, malformed frontmatter, and unresolved imports should degrade
+gracefully instead of taking down a page.
 
-## Severity 1 — Blockers (whole site fails)
+## Severity 1 — Blockers
 
-### 1.1 `favicon` as an object rejects the entire `docs.json`
-Our schema declares `favicon: z.string()`. The incumbent allows `{ "light": "...", "dark": "..." }`. Because config parsing throws on *any* schema miss, this single field 500s **every page**.
-- **Fix:** accept `string | { light, dark }` (one line). Same pattern as our `logo`.
-- **Lesson:** config validation should **warn-and-skip** unknown/mismatched fields, not hard-fail (SPEC.md §4 said this — we didn't honor it). Strict-throw is the wrong default for a compatibility layer.
+### `favicon` as an object rejects the entire `docs.json`
 
-### 1.2 `navigation.languages` (and `versions`) layers not handled
-`papervine/docs` nests nav as `navigation.languages[].tabs[]…`. Our `buildNav` only walks `tabs`/`groups`/`pages`, so even once config parses, the sidebar is empty.
-- **Fix:** make nav traversal fully recursive over all division types: `languages`, `versions`, `tabs`, `anchors`, `dropdowns`, `groups`, `pages` (SPEC.md §4 "single recursive structure"). Add `group.root` and `group.icon` support.
+Some real-world configs use `favicon: { "light": "...", "dark": "..." }`. Our first schema
+declared only `favicon: z.string()`, so one field could 500 every page.
 
----
+- **Fix:** accept `string | { light, dark }`.
+- **Lesson:** config validation should warn and continue, not hard-fail.
 
-## Severity 2 — Major (pages fail or content missing)
+### Recursive navigation divisions were incomplete
 
-### 2.1 `.md` files not served
-We only resolve `.mdx`. The incumbent serves `.md` too (28 in their docs). Add `.md` to slug resolution + listing.
+Real-world `docs.json` files nest pages under divisions such as languages, versions, tabs,
+anchors, dropdowns, and groups. The renderer must walk the whole tree generically.
 
-### 2.2 ESM imports / snippets unresolved
-37 distinct `import` statements in `papervine/docs`, e.g. `import { PreviewButton } from "/snippets/previewbutton.jsx"` and `import X from "/snippets/icons-optional.mdx"`. Our compile doesn't resolve imports or the `/snippets` convention → those pages throw.
-- **Fix:** resolve `/snippets/*` (and `/shared/*`) imports relative to the content root; support `.mdx`, `.jsx`, `.js` snippet modules. This is a meaningful chunk of work.
+- **Fix:** make nav traversal recursive over every division type.
+- **Regression guard:** smoke fixtures include languages, hidden pages, `.md`, and nested nav.
 
-### 2.3 46 unsupported components used
-Top offenders by usage in `papervine/docs`:
+## Severity 2 — Major
 
-| Component | Uses | Notes |
-|---|---|---|
-| `ResponseField` / `ParamField` | 1495 / 178 | API param docs — pairs with M4 playground |
-| `Update` | 295 | changelog entries |
-| `Expandable` | 270 | nested field disclosure |
-| `Columns` / `Column` | 50 / 16 | layout grid |
-| `Icon` | 54 | inline icon |
-| `RequestExample` / `ResponseExample` | 52 / 32 | API examples (M4) |
-| `Tooltip` | 36 | inline |
-| `Badge`, `Tile`, `Panel`, `Card` variants… | — | misc |
+### `.md` files not served
 
-Many are long-tail/doc-specific (`ColorGenerator`, `VercelJsonGenerator`) and safe to ignore. The **core dozen** (`Update`, `Expandable`, `Columns`/`Column`, `Icon`, `Tooltip`, `Badge`, `Tile`, `Panel`, plus the API set) cover the vast majority of real usage.
+The renderer originally resolved only `.mdx`; real docs repos often contain both `.mdx` and
+`.md`.
 
-**Note:** unknown components currently throw a hard "Expected component X to be defined." We should render unknown components as a graceful fallback (render children + a dev warning) so one stray component doesn't 500 a page.
+- **Fix:** resolve both extensions.
 
----
+### ESM imports and snippets unresolved
 
-## Severity 3 — Minor / config surface
+Many docs repos use shared snippets or component imports. Until full snippet resolution lands,
+import failures should render an inline notice rather than a 500.
 
-Unsupported `docs.json` top-level keys seen (currently passthrough-ignored, which is fine, but several affect output):
+- **Fix so far:** compile failures degrade gracefully.
+- **Remaining work:** resolve shared snippet imports at sync time.
 
-| Key | Seen in | Impact |
-|---|---|---|
-| `contextual` | both | "Ask AI"/copy-page actions → M5 |
-| `api` | docs | OpenAPI defaults → M4 |
-| `seo`, `redirects`, `icons`, `interaction`, `integrations`, `thumbnails`, `description` | docs | metadata/redirects/analytics — low render impact |
+### Unknown components caused hard failures
 
-Frontmatter keys we ignore but should honor: `sidebarTitle` (130×), `keywords`/`boost` (SEO/search → M3), `openapi`/`asyncapi` (80× → M4), `mode`, `noindex`, `hidden` (4× — should drop from nav).
+Compiled MDX can reference components Papervine does not yet implement. The first renderer
+threw when any one component was missing.
 
----
+- **Fix:** scan compiled output and provide a passthrough fallback for unknown components,
+  including member-expression components.
 
-## M1 backlog (priority order)
+## M1 backlog
 
-1. ✅ **Config robustness** — warn-don't-throw validation; `favicon` object; fully recursive nav incl. `languages`/`versions`/`anchors`/`root`. *(unblocked `papervine/docs` entirely)*
-2. ✅ **`.md` support** + `hidden` frontmatter + `sidebarTitle`.
-3. ✅ **Graceful unknown-component fallback** — passthrough `Fallback` (Proxy-based, so `<Color.Item>` member components degrade too); defensive components (`Card` icon accepts JSX nodes); safe frontmatter YAML parsing; compile-time try/catch → inline notice.
-4. ⏳ **Snippet/import resolution** (`/snippets`, `/shared`) — the only remaining cause of degraded pages.
-5. ⏳ **Core component coverage** — `Update`, `Expandable`, `Columns`/`Column`, `Icon`, `Tooltip`, `Badge`, `Tile`, `Panel`. *(API + changelog-heavy components defer to M4.)*
-6. ✅ **Mermaid diagrams** (2026-06-29) — ```mermaid fences rendered as highlighted code, not diagrams (real repos like Pixwel use them). Now client-rendered to SVG via `remarkMermaid` → `<Mermaid>` (theme-synced, htmlLabels, parse-error fallback). See SPEC §5.
+1. ✅ Config robustness: warn-don't-throw validation, object favicon, recursive nav.
+2. ✅ `.md` support, hidden frontmatter, and `sidebarTitle`.
+3. ✅ Graceful unknown-component fallback.
+4. ⏳ Snippet/import resolution.
+5. ⏳ Broader component coverage for changelog, layout, tooltip, badge, tile, panel, and API
+   reference components.
+6. ✅ Mermaid diagrams.
 
-### Result of items 1–3 (measured on a 125-page sample of `papervine/docs`)
+## Renderer Decision
 
-| Outcome | Before | After |
-|---|---|---|
-| Fully rendered | 0 | **114** |
-| Graceful notice (no crash) | 0 | 11 *(all `/snippets` imports → item 4)* |
-| **HTTP 500** | **every page** | **0** |
+The MDX engine is a hybrid: compile to serializable output, then execute the compiled source
+with `@mdx-js/mdx`'s `run()` inside our own `try/catch`. This keeps unsupported content
+catchable and lets the page degrade to an inline notice instead of throwing through RSC.
 
-**M1 finish line for items 1–3 reached: any representative docs repo renders without crashing.** The starter renders 100%; `papervine/docs` renders with only snippet-import pages stubbed (item 4 next). Regression: our own `./content` still builds/prerenders, starter still 200s.
+The public detail that matters is the invariant, not the competitor comparison: **zero page
+500s beats slightly higher component fidelity**.
 
-### Renderer decision (2026-06-07): hybrid on @mintlify/mdx
+## Regression Protection
 
-After prototyping, the MDX engine is now a **hybrid**: compile with `@mintlify/mdx`'s
-`serialize` (the third-party MDX serializer — built-in Shiki dual-theme highlighting and
-snippet handling), then execute the compiled output with `@mdx-js/mdx`'s `run()`
-inside our `try/catch`. We use `serialize`+`run` rather than their `MDXRemote`
-because `MDXRemote` throws compile errors at RSC render time (uncatchable without an
-error boundary, which breaks streaming); running the compiled source ourselves keeps
-the whole step catchable.
-
-Measured on the same 125-page `papervine/docs` sample:
-
-| Renderer | Fully rendered | Graceful notice | HTTP 500 |
-|---|---|---|---|
-| Our `@mdx-js/mdx` | 114 | 11 | 0 |
-| `@mintlify/mdx` (`MDXRemote`) | 120 | 0 | 5 |
-| **Hybrid (chosen)** | **115** | 10 | **0** |
-
-Notes: `@mintlify/mdx@4` ships a broken peer dep (`@radix-ui/react-popover@^19.2.1`,
-nonexistent) → needs `legacy-peer-deps`; and must be in `serverExternalPackages` or
-it won't compile in the Next bundle. Known polish gaps from the switch: code titles
-(`title="…"`) aren't emitted by their highlighter, and CodeGroup labels fall back to
-the language name.
-
-### Regression protection (added 2026-06-07)
-`tests/fixtures/` encodes every fix above; `npm test` boots the renderer and asserts
-no page 500s; CI also crawls `papervine/starter`. See README → Testing.
+`tests/fixtures/` encodes the compatibility cases above; `npm test` boots the renderer and
+asserts no page 500s. `node tests/crawl.mjs <docs-dir>` remains the manual/CI tool for
+checking larger representative docs repositories.

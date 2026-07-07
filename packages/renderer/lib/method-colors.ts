@@ -18,7 +18,7 @@ export function methodColor(method: string): string {
   );
 }
 
-/** Text-only variant for the left-nav badge (the incumbent renders the method as small colored
+/** Text-only variant for the left-nav badge (hosted docs platforms renders the method as small colored
  *  text beside the operation, not a filled pill). */
 const METHOD_TEXT: Record<string, string> = {
   GET: "text-green-600 dark:text-green-400",

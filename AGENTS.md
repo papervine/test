@@ -9,6 +9,15 @@ rendered by Papervine itself** (we dogfood; `node tests/crawl.mjs docs` is a CI 
 
 This file is the contract for how to work in this repo. Follow it for every change.
 
+## Private planning
+
+`_private/` is a local-only, gitignored workspace for business strategy, pricing
+research, customer notes, launch plans, and private roadmap material.
+
+Do not commit `_private/` or copy its contents into public docs, `SPEC.md`, tests,
+issues, or commits. If a private decision affects public product behavior, write a
+sanitized public summary here instead.
+
 ## Definition of done
 
 A feature/fix is not done until **all** of these pass:
@@ -21,7 +30,7 @@ A feature/fix is not done until **all** of these pass:
    AND dark mode if visual). Don't claim a UI change works from the DOM alone; layout
    bugs (e.g. the card `h-full` height bug) only show visually.
 5. For renderer/config/nav changes: **crawl a representative docs repo** and confirm no
-   regressions — `node tests/crawl.mjs <cloned-incumbent-repo>` (expect 0 × HTTP 500).
+   regressions — `node tests/crawl.mjs <cloned-docs-repo>` (expect 0 × HTTP 500).
 6. For control-plane / authed changes: `npm run test:e2e` green (needs docker
    Postgres + MinIO up).
 7. **Documentation reflects the change in both places** — see "Document every change"
@@ -95,7 +104,7 @@ hand-walk signup → onboarding. Seed a known account and drive a real browser:
     non-production) so a gated site is testable in-browser without an IdP. (CLI alternative that
     exercises the real EdDSA handshake: `node --env-file=.env.local scripts/sign-reader-jwt.mjs
     --groups admin` prints a `…/login/jwt-callback#…` URL.)
-  - **`large-docs`** (→ `papervine/docs`) — a large real repo for exercising the renderer at scale.
+  - **`large-docs`** — a large repo for exercising the renderer at scale.
 - The **control plane lives on the `app.` host** (SPEC §10): log in at
   **`http://app.localhost:3000/login`**, and the dashboard is at bare
   **`app.localhost:3000/:org/:site`** (seed → `app.localhost:3000/dev-org/starter`). New
@@ -110,9 +119,8 @@ hand-walk signup → onboarding. Seed a known account and drive a real browser:
 
 ## How the renderer works (don't break this)
 
-MDX rendering is a **hybrid** (`src/lib/mdx.tsx`): compile with `@mintlify/mdx`'s
-`serialize` (the third-party MDX serializer — Shiki dual-theme highlighting + snippet
-handling), then execute the compiled output with `@mdx-js/mdx`'s `run()` inside a
+MDX rendering is a **hybrid** (`src/lib/mdx.tsx`): compile with a third-party serializer's
+`serialize` output for Shiki dual-theme highlighting + snippet handling, then execute the compiled output with `@mdx-js/mdx`'s `run()` inside a
 `try/catch`. Do not "simplify" this to their `MDXRemote` — it throws compile errors
 at RSC render time, which can't be caught without an error boundary (and a boundary
 breaks RSC streaming). The hybrid keeps the whole step catchable. See GAP-REPORT.
@@ -126,18 +134,18 @@ Core principles, in priority order:
 - **Config is a compatibility layer: warn, don't throw** (`src/lib/config.ts`). A
   single unexpected `docs.json` field must never break the site. Every field is
   lenient (`.catch`), unknown keys are passed through with a warning.
-- **`docs.json` is docs.json-compatible.** Match their schema/behavior so real repos
+- **`docs.json` is docs.json-compatible.** Match the documented schema/behavior so real repos
   migrate unchanged. The **authoritative schema is the JSON Schema at
   `https://papervine.io/docs.json`** (what real repos set as their `$schema`) — consult it
   for field names/shapes/enums before adding or changing config handling. When behavior isn't
-  captured by the schema, check against a representative docs repo; don't guess.
+  captured by the schema, verify against representative docs repos; don't guess.
 
 ## Gotchas (learned the hard way — don't rediscover these)
 
 - **dev/prod JSX runtime must match.** Compile (`serialize`) and `run()` must use the
   same `development` flag / runtime, or React 19 throws "production element rendered
   in development". This is why we left plain `next-mdx-remote`.
-- **`@mintlify/mdx@4` has a broken peer dep** (`@radix-ui/react-popover@^19.2.1`,
+- **The third-party MDX serializer package has a broken peer dep** (`@radix-ui/react-popover@^19.2.1`,
   nonexistent) → `.npmrc` sets `legacy-peer-deps=true`. Keep it.
 - **MDX packages must be in `serverExternalPackages`** (`next.config.mjs`) or they
   fail to compile in the Next bundle.

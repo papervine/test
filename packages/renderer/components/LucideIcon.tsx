@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { icons } from "lucide-react";
 
 /**
- * Render an incumbent `icon` value. Usually a Lucide/FontAwesome name (kebab or
+ * Render a hosted docs platforms `icon` value. Usually a Lucide/FontAwesome name (kebab or
  * snake case), but can also be a JSX node or URL — strings resolve to a Lucide
  * component, anything else is passed through. Unknown names render nothing.
  */

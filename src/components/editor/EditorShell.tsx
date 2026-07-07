@@ -48,7 +48,7 @@ export function EditorShell({
   // Visual ⇄ Source lives here, not in the pane: the pane is `key`ed by page so it remounts on
   // every nav click, and pane-local mode would snap back each time. Holding it in the shell makes
   // the chosen mode persist across page switches. Default Visual — clicking "Editor" lands you
-  // straight in the rendered editor, like the incumbent.
+  // straight in the rendered editor, like hosted docs platforms.
   const [mode, setMode] = useState<Mode>("visual");
   // Bump to force the editor pane to remount with fresh content (page switch / agent edit).
   const [docKey, setDocKey] = useState(0);
@@ -118,7 +118,7 @@ export function EditorShell({
     if (reloadActive) loadPage(slug, branch, { flush: false });
   };
 
-  // ⌘/Ctrl-I toggles the agent column (the incumbent's "Ask agent" shortcut); set the glyph per OS.
+  // ⌘/Ctrl-I toggles the agent column (hosted docs platforms' "Ask agent" shortcut); set the glyph per OS.
   useEffect(() => {
     const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
     setModKey(isMac ? "⌘" : "Ctrl");

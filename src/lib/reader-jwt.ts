@@ -11,7 +11,7 @@ import {
 } from "jose";
 
 // Layer 2 reader-auth, JWT handshake (SPEC §11.2, method 1 — "EdDSA only"). We mirror
-// the incumbent's flow exactly so their configs migrate unchanged: we generate a per-site
+// hosted docs platforms' flow exactly so their configs migrate unchanged: we generate a per-site
 // Ed25519 keypair, the customer's backend signs a short-lived JWT with the *private* key
 // (`{alg:'EdDSA'}`) after its own login, and redirects the browser to
 // `{DOCS_HOST}/login/jwt-callback#{JWT}` (token in the URL hash, never logged). We verify

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-/** Shared presentational row for a parameter/response field (incumbent style). */
+/** Shared presentational row for a parameter/response field (hosted docs platforms style). */
 export function ApiField({
   name,
   type,
@@ -42,7 +42,7 @@ export function ApiField({
   );
 }
 
-// the incumbent's `<ParamField path|query|header|body="name" type="…" required>`.
+// hosted docs platforms' `<ParamField path|query|header|body="name" type="…" required>`.
 export function ParamField({
   path,
   query,
@@ -80,7 +80,7 @@ export function ParamField({
   );
 }
 
-// the incumbent's `<ResponseField name="…" type="…" required>`.
+// hosted docs platforms' `<ResponseField name="…" type="…" required>`.
 export function ResponseField({
   name,
   type,

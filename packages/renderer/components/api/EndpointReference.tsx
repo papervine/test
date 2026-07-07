@@ -278,7 +278,7 @@ export async function EndpointReference({ op, baseUrl }: { op: Operation; baseUr
         )}
       </article>
 
-      {/* Sticky right column: read-only language-tabbed request + response tabs (incumbent layout) */}
+      {/* Sticky right column: read-only language-tabbed request + response tabs (hosted docs platforms layout) */}
       <aside className="hidden w-[26rem] shrink-0 lg:block">
         <div className="sticky top-24">
           <ApiPlayground samples={samples} responses={responses} />

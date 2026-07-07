@@ -7,7 +7,7 @@ import { withBase } from "../lib/url-base";
 
 /**
  * Render the docs logo from docs.json. `logo` is either a single path or a
- * `{ light, dark }` pair (incumbent convention — light logo on light backgrounds,
+ * `{ light, dark }` pair (hosted docs platforms convention — light logo on light backgrounds,
  * dark on dark). We toggle the pair with CSS so it tracks the theme without JS.
  * Falls back to the site name as text when no logo is configured.
  */

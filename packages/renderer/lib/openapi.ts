@@ -5,7 +5,7 @@ import type { DocsConfig } from "./config";
 import { loadRaw } from "./content";
 
 /**
- * OpenAPI → endpoint pages (SPEC §7, incumbent model). A `docs.json` nav division
+ * OpenAPI → endpoint pages (SPEC §7, hosted docs platforms model). A `docs.json` nav division
  * with an `openapi` property auto-generates one in-nav, in-theme page per operation.
  * We use Scalar's MIT parser to load + dereference the spec; rendering is ours.
  *

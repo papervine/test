@@ -9,7 +9,7 @@
 // one Claude session showed as "3 Agent Visitors", the agent-side equivalent of putting
 // the Views number in the Visitors card). This derives a stable id instead, so a single
 // client's burst of calls collapses to one visitor. We don't surface an "Agent Views"
-// card — the incumbent's Agents tab doesn't either; per-page volume lives in Top pages.
+// card — hosted docs platforms' Agents tab doesn't either; per-page volume lives in Top pages.
 
 import { createHash } from "node:crypto";
 

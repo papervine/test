@@ -10,7 +10,7 @@ import {
 import clsx from "clsx";
 
 /**
- * Wraps multiple fenced code blocks in a tabbed view. With @mintlify/mdx each child
+ * Wraps multiple fenced code blocks in a tabbed view. The serializer emits each child
  * is a bare `<pre class="shiki" language="...">`, so we derive each tab's label from
  * the `language` attribute (their highlighter doesn't emit code titles).
  */

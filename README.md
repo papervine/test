@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>The open-source docs platform alternative you can self-host.</strong><br />
-  docs.json-compatible: point it at a folder of MDX + a <code>docs.json</code> and get a fast, themeable docs site.
+  Point it at a folder of MDX + a <code>docs.json</code> and get a fast, themeable docs site.
 </p>
 
 <p align="center">
@@ -16,10 +16,10 @@
 
 ## Why Papervine?
 
-Hosted docs platforms are great — until you hit a paywall for basic customization, or your compliance team asks where the data lives. Papervine gives you the polish of a hosted docs platform with none of the lock-in:
+Hosted docs platforms are great — until you hit a paywall for basic customization, or your compliance team asks where the data lives. Papervine is an open-source docs platform alternative with the polish of a hosted docs platform and none of the lock-in:
 
 - **Own your docs.** MDX files in your repo, rendered by software you control. Your content is always just files.
-- **Drop-in docs.json compatibility.** Papervine reads the same `docs.json` + MDX format. If you have an existing incumbent docs repo, `papervine dev` renders it — we smoke-test against real-world repos like `papervine/starter`.
+- **Drop-in `docs.json` compatibility.** Papervine reads MDX content and a recursive `docs.json` navigation file, then renders the site without a proprietary build step.
 - **Self-host anywhere.** Run it on your own infrastructure, in your VPC, or behind your firewall.
 
 ## Features
@@ -45,7 +45,7 @@ npm run dev      # serves ./content at http://localhost:3000
 
 ### Preview any docs repo with the CLI
 
-`papervine dev` is the analogue of `docs dev` — run it inside any folder of MDX + `docs.json`:
+Run `papervine dev` inside any folder of MDX + `docs.json`:
 
 ```bash
 papervine dev              # preview the current directory
@@ -59,13 +59,13 @@ Pre-release, invoke it via `npm run papervine -- dev ./docs`. Once published: `n
 PAPERVINE_CONTENT=/path/to/docs-repo npm run dev
 ```
 
-## Migrating from the incumbent
+## Migrating existing docs
 
-There's no migration. Papervine reads the incumbent `docs.json` schema and MDX conventions directly:
+There is no import step. Papervine reads MDX files and `docs.json` directly:
 
 ```bash
-git clone https://github.com/your-org/your-large-docs
-papervine dev ./your-large-docs
+git clone https://github.com/your-org/your-docs
+papervine dev ./your-docs
 ```
 
 Pages, navigation, frontmatter titles, snippets, and components render as-is; anything Papervine doesn't support yet degrades gracefully rather than 500ing. You can verify coverage on your own repo:
@@ -114,7 +114,7 @@ node tests/crawl.mjs <dir> --sample=120
 
 Next.js (App Router / RSC) · TypeScript · Tailwind · Zod · Shiki.
 
-MDX rendering is a hybrid: compiled with `@mintlify/mdx` (Shiki dual-theme highlighting + snippet handling) and executed with `@mdx-js/mdx`'s `run()` inside a `try/catch`, so unsupported features degrade to a notice instead of crashing the page.
+MDX rendering is a hybrid: compiled with a third-party serializer for highlighting/snippet support and executed with `@mdx-js/mdx`'s `run()` inside a `try/catch`, so unsupported features degrade to a notice instead of crashing the page.
 
 ## Contributing
 
@@ -130,4 +130,4 @@ Check [good first issues](https://github.com/papervine/papervine/labels/good%20f
 
 Papervine's core is open source — see [LICENSE](LICENSE). Papervine Cloud and enterprise features are commercial offerings built on top of the open-source core.
 
-Papervine is an independent project and is not affiliated with or endorsed by the incumbent.
+Papervine is an independent project.

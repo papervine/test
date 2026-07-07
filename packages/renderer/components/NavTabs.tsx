@@ -6,7 +6,7 @@ import clsx from "clsx";
 import type { NavSection } from "../lib/nav";
 
 /**
- * Horizontal tab bar (the incumbent's top-level `navigation.tabs`). Each tab links to
+ * Horizontal tab bar (hosted docs platforms' top-level `navigation.tabs`). Each tab links to
  * its first page; the active tab is the one containing the current page. Renders
  * nothing when there's only one (unnamed) section.
  */

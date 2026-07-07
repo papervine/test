@@ -34,8 +34,8 @@ export default async function EditorPage({
   const ctx = await requireSite(org, site);
   const siteRow = ctx.site;
 
-  // Open on the site's configured deploy branch by default (the incumbent's "Default"), NOT a
-  // freshly-minted edit branch — landing the editor on the live branch the way the incumbent does.
+  // Open on the site's configured deploy branch by default (hosted docs platforms' "Default"), NOT a
+  // freshly-minted edit branch — landing the editor on the live branch the way hosted docs platforms does.
   // Drafts buffer in a session keyed on this branch, created lazily on the first edit
   // (saveDraft auto-checks-out), so a clean load creates no branch and reads the synced
   // content; Publish then commits straight to the deploy branch. An explicit ?branch= (or

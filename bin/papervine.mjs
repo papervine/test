@@ -58,7 +58,7 @@ function runDev(argv) {
   if (!existsSync(path.join(contentDir, "docs.json"))) {
     fail(
       `no docs.json in ${contentDir}\n` +
-        `  A Papervine docs repo needs a docs.json at its root.`,
+        `  A Papervine/docs.json docs repo needs a docs.json at its root.`,
     );
   }
 

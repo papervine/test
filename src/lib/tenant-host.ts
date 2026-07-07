@@ -45,7 +45,7 @@ export function isPlatformHost(host: string | null): boolean {
 
 /**
  * The control-plane host — the authenticated app (dashboard + auth), kept off the apex/
- * docs namespace the way the incumbent uses app.example.com. `app.localhost` in dev,
+ * docs namespace the way hosted docs platforms uses app-host. `app.localhost` in dev,
  * `app.papervine.io` in prod. Requiring a platform host stops a tenant's own
  * `app.example.com` vanity domain from being mistaken for ours. Pure + import-free so it's
  * safe in the edge middleware.

@@ -475,7 +475,7 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   color: #6b6b78;
 }
 
-/* "+" block picker popover (Notion/the incumbent "Sections" search). */
+/* "+" block picker popover (Notion/hosted docs platforms "Sections" search). */
 .pv-picker-overlay {
   position: fixed;
   inset: 0;

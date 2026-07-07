@@ -12,7 +12,7 @@ export type Mode = "visual" | "source";
 /**
  * The editor pane (SPEC §9.2): two *editable* views over ONE MDX draft — Visual (WYSIWYG,
  * rendered, the default) and Source (raw MDX) — plus a full-pane Diff overlay (working draft
- * vs the published version) and Copy-markdown, mirroring the incumbent's editor toolbar.
+ * vs the published version) and Copy-markdown, mirroring hosted docs platforms' editor toolbar.
  *
  * Visual renders the MDX through @papervine/mdx-prosemirror; components it can't model are
  * preserved verbatim. All views read/write the same `value`; edits debounce-save via `onSave`.

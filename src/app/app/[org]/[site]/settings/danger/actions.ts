@@ -74,7 +74,7 @@ async function cleanupSiteResources(sites: SiteResources[]): Promise<void> {
   }
 }
 
-// Delete one site (the incumbent's "deployment"). Owner/admin only. The Postgres FK cascade
+// Delete one site (hosted docs platforms' "deployment"). Owner/admin only. The Postgres FK cascade
 // drops deployments + analytics; storage and the Vercel domain don't cascade, so
 // cleanupSiteResources sweeps them explicitly. Lands on the bare org, which forwards to
 // the next site (or the connect form when none remain).

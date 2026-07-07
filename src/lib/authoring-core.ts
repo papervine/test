@@ -150,7 +150,7 @@ export async function discardSession(site: SiteRow, branch: string): Promise<{ o
 
 /**
  * Carry a session's buffered edits to git.
- *  - 'commit': commit straight onto the deploy branch (the incumbent's "commit"). The existing
+ *  - 'commit': commit straight onto the deploy branch (hosted docs platforms' "commit"). The existing
  *    push webhook then auto-syncs; only when the App isn't configured do we sync inline.
  *  - 'pr': create the working branch, commit there, open a PR into the deploy branch.
  * Optimistic concurrency: if the deploy branch moved since checkout we bail with a

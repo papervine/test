@@ -19,7 +19,7 @@ export const mdxComponents: MDXComponents = {
   Check,
   Card,
   CardGroup,
-  Columns: CardGroup, // the incumbent's current name for the card grid; CardGroup is the legacy alias
+  Columns: CardGroup, // hosted docs platforms' current name for the card grid; CardGroup is the legacy alias
   Steps,
   Step,
   Frame,

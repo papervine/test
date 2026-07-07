@@ -1,6 +1,6 @@
 import type { DayBucket } from "@/lib/analytics-range";
 
-// Brand-tinted bars (the platform blue→violet, not the incumbent's green) so the chart
+// Brand-tinted bars (the platform blue→violet, not hosted docs platforms' green) so the chart
 // reads as part of the papervine shell. Today's still-filling bucket is hatched to
 // signal "partial", matching the reference design.
 const SOLID = "linear-gradient(180deg, #6f9cff 0%, #5b8cff 100%)";

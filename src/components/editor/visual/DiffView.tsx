@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { diffLines } from "diff";
 
-// Full-editor split diff (published ⇄ working draft), like the incumbent's diff mode. Left column is
+// Full-editor split diff (published ⇄ working draft), like hosted docs platforms' diff mode. Left column is
 // the live/base content (deletions in red), right is the current draft (additions in green);
 // changed regions pair line-by-line. Line-level (not word-level) — enough to review a change.
 

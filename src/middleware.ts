@@ -104,7 +104,7 @@ export function middleware(req: NextRequest) {
     }
     if (isAuthPath(pathname)) {
       // Already logged in? Skip the auth form and go to the dashboard — the way
-      // app.example.com/signup bounces a signed-in user straight to their workspace.
+      // the app-host signup flow bounces a signed-in user straight to their workspace.
       // EXCEPT /onboarding, which exists FOR the just-signed-in: the dashboard resolver
       // (app/page.tsx) redirects org-less users here, so bouncing authed users back to
       // "/" made every fresh signup loop (ERR_TOO_MANY_REDIRECTS) — the bug that broke

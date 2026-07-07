@@ -6,7 +6,7 @@ import { parseSitePath } from "@/lib/dashboard-nav";
 import { SETTINGS_NAV, settingsHref } from "@/lib/settings-nav";
 
 // The Settings subnav — a second sidebar beside the AppRail (SPEC §9 control plane).
-// Grouped sections mirror the incumbent's settings IA; the nav config lives in
+// Grouped sections mirror hosted docs platforms' settings IA; the nav config lives in
 // @/lib/settings-nav so routes and the rail stay in sync.
 //
 // Responsive: a vertical grouped sidebar on desktop (lg+), and a horizontally-scrollable

@@ -4,7 +4,7 @@ import { useState } from "react";
 import clsx from "clsx";
 
 /**
- * The page's read-only right rail (incumbent model): a request panel with language tabs
+ * The page's read-only right rail (hosted docs platforms model): a request panel with language tabs
  * (cURL / JavaScript / Python) above a response panel with per-status tabs. Samples are
  * pre-highlighted server-side with Shiki (`highlightToHtml`) and handed in as HTML strings, so
  * the highlighter never ships to the client. The *interactive* playground is the opt-in modal

@@ -86,7 +86,7 @@ export function resolveRange(key: RangeKey, now: Date): ResolvedRange {
 }
 
 // vs-previous delta. null when there's no prior baseline (can't divide by zero) —
-// the card then shows a dash, matching the incumbent (and the "Visitors 27 / —" screenshot).
+// the card then shows a dash, matching hosted docs platforms (and the "Visitors 27 / —" screenshot).
 export function computeDelta(
   current: number,
   previous: number,

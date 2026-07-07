@@ -19,7 +19,7 @@ export function isAuthMethod(value: unknown): value is AuthMethod {
   return typeof value === "string" && (AUTH_METHODS as readonly string[]).includes(value);
 }
 
-// Human-facing copy for the method picker — mirrors the incumbent's settings surface.
+// Human-facing copy for the method picker — mirrors hosted docs platforms' settings surface.
 export const AUTH_METHOD_META: Record<
   AuthMethod,
   { label: string; tagline: string }

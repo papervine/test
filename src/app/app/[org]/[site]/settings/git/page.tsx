@@ -19,7 +19,7 @@ export const maxDuration = 300;
 
 // Concrete Git settings surface — overrides the settings/[section] placeholder for the
 // "git" slug (a static segment wins over the dynamic one). Lets an owner re-point the
-// site at a different org/repo/branch/subdirectory and re-deploy (the incumbent's Git settings).
+// site at a different org/repo/branch/subdirectory and re-deploy (hosted docs platforms' Git settings).
 export default async function GitSettingsPage({
   params,
 }: {

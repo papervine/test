@@ -44,7 +44,7 @@ type RailItem = {
   heavy?: boolean;
 };
 
-// Grouped rail IA, mirroring the incumbent's sidebar: a lead group, an "Automate" section
+// Grouped rail IA, mirroring hosted docs platforms' sidebar: a lead group, an "Automate" section
 // (Workflows · Agent · Assistant — SPEC §10.2), then an "Admin" section header
 // (MCP + Settings). Deferred surfaces (Editor) render disabled with a "Soon" pill;
 // the Automate surfaces are scaffolded UI only — they navigate but nothing they show

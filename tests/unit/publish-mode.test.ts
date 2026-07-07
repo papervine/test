@@ -4,7 +4,7 @@ import { publishModeForBranch } from "../../src/lib/publish-mode";
 // The editor opens on the deploy ("Default") branch (see editor/page.tsx), so the primary
 // Publish action must commit straight to it — NOT open a PR from the deploy branch into
 // itself (which createBranch would reject as already-existing). A working branch publishes
-// as a PR. Guards the incumbent-parity rule wired into PublishButton.
+// as a PR. Guards a comparable hosted docs platform-parity rule wired into PublishButton.
 describe("publishModeForBranch", () => {
   it("commits when editing the deploy branch (the default editor landing)", () => {
     expect(publishModeForBranch("main", "main")).toBe("commit");

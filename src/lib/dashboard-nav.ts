@@ -64,7 +64,7 @@ export function pickCurrentSite<T extends { slug: string }>(
 /**
  * Where the switcher sends you when you pick `newSiteSlug`, preserving the sub-page
  * you're on (switch sites while on Analytics → land on the new site's Analytics), the
- * way the incumbent's switcher does. From an org-level page (no site in the path, e.g.
+ * way hosted docs platforms' switcher does. From an org-level page (no site in the path, e.g.
  * …/connect) it lands on the new site's home. Returns a PUBLIC bare path.
  */
 export function switchSiteHref(

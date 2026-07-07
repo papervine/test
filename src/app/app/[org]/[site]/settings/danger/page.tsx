@@ -8,7 +8,7 @@ import { TransferSite } from "./TransferSite";
 
 // Concrete Danger zone surface — overrides the settings/[section] placeholder for the
 // "danger" slug (SPEC §10.5). Transfer + irreversible deletes: move the site to another
-// org the user administers, delete the site (the incumbent's "deployment"), or delete the whole
+// org the user administers, delete the site (hosted docs platforms' "deployment"), or delete the whole
 // organization. requireSite gates org membership; the role decides which sections show
 // (owner/admin → transfer + site delete, owner → organization delete), and the actions
 // re-check it.

@@ -14,9 +14,8 @@ import type { AssetDimensions } from "./content";
 import { withBase } from "./url-base";
 
 /**
- * MDX rendering — HYBRID: compile with @mintlify/mdx's `serialize` (the incumbent's own
- * renderer; gives us their Shiki dual-theme highlighting + snippet handling for
- * free), then execute the compiled source ourselves with @mdx-js/mdx's `run`.
+ * MDX rendering — HYBRID: compile with the serializer for Shiki dual-theme highlighting
+ * + snippet handling, then execute the compiled source ourselves with @mdx-js/mdx's `run`.
  *
  * Why not their `MDXRemote`? It renders inside an RSC component and throws compile
  * errors at render time, which can't be caught without an error boundary (and a
@@ -49,7 +48,7 @@ const warnedComponents = new Set<string>();
 // next/image) never sees it, unlike markdown `![]()` which compiles to
 // `_jsx(_components.img, …)`. `remarkLiteralImg` renames literal img elements to this
 // capitalized component name, which compiles to `_jsx(_components.PvImg, …)`; we
-// register it onto the same TenantImage path. (docs.json repos author images as <img>,
+// register it onto the same TenantImage path. (hosted docs platforms repos author images as <img>,
 // often inside <Frame> — see GAP-REPORT.) Unlikely to collide with an author component.
 const LITERAL_IMG_COMPONENT = "PvImg";
 
@@ -102,7 +101,7 @@ function remarkLiteralImg() {
 
 /**
  * ```mermaid fences → `<Mermaid chart="…">` so they render as diagrams, not as a highlighted
- * code block. Runs at the mdast stage, BEFORE @mintlify/mdx's Shiki highlighting, so Shiki
+ * code block. Runs at the mdast stage, before Shiki highlighting, so Shiki
  * never sees the fence. The raw source rides as a string attribute, which the MDX compiler
  * lowers to a JS string literal (`_jsx(Mermaid, { chart: "…" })`) — so arbitrary content
  * (newlines, `<br/>`, quotes, `&amp;`) is escaped for free, no JSX-in-text hazards.
@@ -128,7 +127,7 @@ function remarkMermaid() {
   };
 }
 
-/** the incumbent's bare code-title convention (```js Label) → rehype/highlighter title="Label". */
+/** hosted docs platforms' bare code-title convention (```js Label) → rehype/highlighter title="Label". */
 function remarkCodeTitles() {
   return (tree: { children?: unknown[] }) => {
     const visit = (node: Record<string, unknown>) => {

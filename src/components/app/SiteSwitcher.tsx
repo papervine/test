@@ -113,7 +113,7 @@ export function SiteSwitcher({
   );
 }
 
-// The small gradient square with the site's initial — mirrors the incumbent's switcher mark.
+// The small gradient square with the site's initial — mirrors hosted docs platforms' switcher mark.
 // The gradient is derived per-site from `colorKey` (the slug) so a list of sites reads as
 // distinct colored chips instead of identical blue→violet squares (see lib/site-mark).
 export function SiteMark({ name, colorKey }: { name: string; colorKey: string }) {

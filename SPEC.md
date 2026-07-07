@@ -4,7 +4,11 @@
 **Date:** 2026-06-07
 **Owner:** jeff@loiselles.com
 
-An open-source, multi-tenant documentation platform — a faithful clone of [the incumbent](https://example.com/). Users connect a Git repo containing MDX files + a `docs.json` config; Papervine renders a fast, beautiful, searchable docs site with an interactive API playground and an AI assistant. One deployment serves many tenants.
+An open-source, multi-tenant docs platform alternative for Git-backed MDX docs. Users connect
+a repo containing MDX files + a `docs.json` config; Papervine renders a fast, searchable
+docs site with an interactive API playground and an AI assistant. The technical target is
+`docs.json` compatibility at the migration boundary, with room to diverge where Papervine
+can be simpler, cheaper, or more open. One deployment serves many tenants.
 
 ---
 
@@ -12,8 +16,12 @@ An open-source, multi-tenant documentation platform — a faithful clone of [the
 
 - **Docs-as-code.** Source of truth is MDX + `docs.json` in the user's Git repo. The platform is a renderer + control plane, never the source of truth.
 - **Multi-tenant from day one.** A single app instance serves all customer doc sites, addressable by subdomain (`acme.papervine.io`) and custom domain (`docs.example.com`).
-- **`docs.json`-compatible.** Adopt the incumbent's `docs.json` schema so existing docs.json projects migrate with minimal changes. This is our primary adoption hook.
-- **Runtime rendering, no content at build time.** Like the incumbent, the deployed app has no tenant content baked in. Content is fetched + rendered on demand (with aggressive caching). New deploys don't require rebuilding every tenant.
+- **`docs.json`-compatible.** Use the public `docs.json` schema as the compatibility target
+  so existing MDX docs repos migrate with minimal changes. The schema link remains
+  `https://papervine.io/docs.json`.
+- **Runtime rendering, no content at build time.** The deployed app has no tenant content
+  baked in. Content is fetched + rendered on demand (with aggressive caching). New deploys
+  don't require rebuilding every tenant.
 - **Fast by default.** React Server Components, edge caching, minimal client JS.
 - **Open source.** Permissive license (MIT/Apache-2.0). Self-hostable; the hosted SaaS is a convenience, not a lock-in.
 
@@ -81,22 +89,20 @@ session: a signed-in visitor gets a single **Dashboard** link instead of **Log i
 up** (which would dead-end them re-signing up). Reading the session opts the page into
 dynamic rendering — acceptable for the apex. Smoke covers the logged-out shape (`/home`).
 
-**Pricing page: three tiers, differentiated from incumbent docs tools (landed
-2026-07-06).** `/pricing` (`src/app/pricing/page.tsx`) now has Starter $0 / Pro
-$399/mo annual ($499 monthly, client-side toggle in `ProPrice.tsx`, annual default) /
-Enterprise contact-us. Research note: the incumbent's July 2026 page makes SSO, SCIM, and
-RBAC Enterprise; GitBook lists SAML SSO in Enterprise with lower site pricing plus
-per-user charges; ReadMe prices Pro at $250/mo but keeps SSO/access control in
-Enterprise and starts Enterprise at $3000+/mo; Archbee's Scaling is $350/mo and SSO
-is Enterprise. Papervine's positioning response: keep Pro below the incumbent-style
-$450 anchor, include SSO/RBAC in Pro, package agent docs features together, and use
-open source as the buyer's exit path. SSO/RBAC carry a "Free for 90 days" launch promo
-(one `PROMO_TAG` constant shared by card + matrix). SCIM, custom SLAs, security/legal
-review, and high-touch services stay Enterprise. The page is still **purely
-presentational** — no billing backend, no plan gating (§10 "Billing (later)"); the
-90-day clock is marketing copy until Stripe lands. Smoke (`/pricing` in
-`CONTROL_PLANE_CHECKS`) asserts all three tiers, the SSR'd annual price, the
-positioning section, and the promo string.
+**Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
+incumbent pattern is to make public docs cheap while gating security and AI behind
+high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,
+docs RBAC, custom domains, MCP, API playground, assistant, writing agent, analytics,
+preview deployments, and workflows should be available from Free onward, with limits
+based on scale rather than capability. Paid plans meter the real costs: docs sites,
+editors, traffic/bandwidth, AI usage, analytics retention, support, and procurement.
+Enterprise remains for SCIM, audit logs, BYOK/private model routing, legal/security
+review, custom retention, SLAs, migration, and dedicated support. Detailed pricing
+research and go-to-market planning are private strategy material and stay outside
+tracked public docs; locally, `_private/` is gitignored for that work. The current
+`/pricing` implementation is still presentational and may lag this thesis until the
+next page update; there is no billing backend, plan enforcement, or credit metering
+yet (§10 "Billing (later)").
 
 **Landing backdrop: a growing vine, not a grid (landed 2026-06-28).** The marketing
 landing swaps the static `.db-grid` for `VineField` (`src/components/platform/VineField.tsx`,
@@ -116,11 +122,9 @@ and not `db-grid`.
 
 **UI primitives: shadcn/ui, mapped onto `.db` tokens.** The Control-Plane uses
 [shadcn/ui](https://ui.shadcn.com) for its component primitives (`src/components/ui/`,
-`cn()` in `src/lib/utils.ts`, `components.json`) — the same choice
-[the incumbent made for their dashboard](https://app.example.com) (verified: `data-slot="button"`
-+ the shadcn token constellation + Radix primitives in their shipped HTML/CSS). We follow
-their pattern: keep the shadcn **skeleton** (cva variants, `data-slot`, Radix), but point
-the variants at our `.db` palette rather than stock shadcn vars — so `Button`'s `primary`
+`cn()` in `src/lib/utils.ts`, `components.json`). We keep the shadcn **skeleton** (cva
+variants, `data-slot`, Radix), but point the variants at our `.db` palette rather than
+stock shadcn vars — so `Button`'s `primary`
 is the brand CTA, not `bg-primary` (which stays bound to the tenant docs theme). The
 neutral tokens (`border`/`ring`/`muted`/`accent`) are mapped to the `.db` CSS vars in
 `tailwind.config.ts` and only resolve inside the `.db` scope, so they can't leak into the
@@ -397,7 +401,7 @@ fire-and-forget queue (the same reconcile-against-reality pattern the sync uses)
 2. On `push` webhook (or manual "sync"), a **sync worker**:
    - clones/pulls the repo at the target ref
    - validates `docs.json` against schema (fail loudly with line numbers)
-   - **compiles** each `.md(x)` to a serializable bundle with the **hybrid renderer**: `@mintlify/mdx`'s `serialize` (the third-party MDX serializer — Shiki dual-theme highlighting + snippet handling) executed via `@mdx-js/mdx`'s `run` inside a try/catch, so an unsupported feature degrades to an inline notice rather than a 500 (rationale + measurements in `GAP-REPORT.md`). Resolves our component set, with a passthrough fallback for unknown/member-expression components.
+   - **compiles** each `.md(x)` to a serializable bundle with the **hybrid renderer**: serializer output for Shiki dual-theme highlighting + snippet handling, executed via `@mdx-js/mdx`'s `run` inside a try/catch, so an unsupported feature degrades to an inline notice rather than a 500 (rationale + measurements in `GAP-REPORT.md`). Resolves our component set, with a passthrough fallback for unknown/member-expression components.
    - extracts headings → builds search index + per-page TOC
    - parses any referenced OpenAPI/AsyncAPI specs → playground page definitions
    - generates embeddings for changed pages → vector store (AI assistant)
@@ -405,7 +409,7 @@ fire-and-forget queue (the same reconcile-against-reality pattern the sync uses)
    - invalidates CDN/Redis cache for changed paths
 3. Render Plane reads compiled bundles at request time. **No live MDX compilation on the hot path** (compile-on-sync, not compile-on-request) — this is the key perf decision.
 
-> Note: the incumbent compiles some things (e.g. Twoslash) on the fly via serverless. We prefer compile-on-sync for predictability; revisit if it limits dynamic features.
+> Note: hosted docs platforms compiles some things (e.g. Twoslash) on the fly via serverless. We prefer compile-on-sync for predictability; revisit if it limits dynamic features.
 
 ### 3.1 Static assets
 
@@ -482,7 +486,7 @@ once C lands. We build C next. C ships in two steps so it's incremental, not a b
    image-heavy private monorepo: the whole sync failed at ~40 s before this). The fetch+body
    read sits in one try with a 60 s per-request timeout, retried with backoff, and concurrency
    is held at 12 so the pool sheds fewer sockets in the first place.
-   Measured on `papervine/docs` (1269 files): first sync **66 s**, an unchanged re-sync **1.3 s**
+   Measured on `a large public docs.json repository` (1269 files): first sync **66 s**, an unchanged re-sync **1.3 s**
    (0 files moved). Pure planning logic (`src/lib/sync-plan.ts`: `planSync`, path filters) is
    extracted and unit-tested. The pure helper `extractTarGz` (`src/lib/tar.ts`) stays as the
    sparse-clone/Sandbox fallback for a pathological docs tree that exceeds the tree API's
@@ -546,7 +550,7 @@ helpers in `sync-plan.ts`, unit-tested.
 
 **Image optimization, completed — literal `<img>` + subdomain optimizer (landed 2026-06-16).**
 The first cut above only optimized *markdown* images. Two gaps surfaced on a real `<img>`-heavy
-repo (docs authors lean on `<img>`, usually inside `<Frame>`), both fixed:
+repo (hosted docs platforms authors lean on `<img>`, usually inside `<Frame>`), both fixed:
 1. **Literal `<img>` bypassed the override.** MDX compiles a literal `<img>` to `_jsx("img", …)`
    — a literal tag that skips the components map — while markdown `![]()` compiles to
    `_jsx(_components.img, …)`. So `components.img = TenantImage` never saw HTML tags. A
@@ -565,7 +569,7 @@ repo (docs authors lean on `<img>`, usually inside `<Frame>`), both fixed:
 **Persistent shell layout for tenant docs (landed 2026-06-16).** Every tenant page navigation
 re-rendered and re-streamed the *entire* page — navbar, tabs, sidebar, assistant, AND article —
 because `renderTenantDocs` was one page component with no layout; the sidebar flashed and lost
-its scroll/expanded state on every click, unlike the incumbent's fixed chrome. Split into a persistent
+its scroll/expanded state on every click, unlike hosted docs platforms' fixed chrome. Split into a persistent
 **shell** (`TenantDocsShell` — chrome + reader-auth gate) and a per-page **article**
 (`TenantDocsArticle`), wired as a `layout.tsx`/`page.tsx` pair in a **`(docs)` route group at the
 `[site]` level** (NOT at `[[...path]]`, whose catch-all param changes every navigation and would
@@ -573,7 +577,7 @@ re-render the shell). Same split for custom-domain docs. Added `loading.tsx` (a 
 `ArticleSkeleton`) so a navigation shows an instant skeleton in the persisted shell. The
 reader-auth gate moved into the shell (param `{site}` only), so a gated login round-trips to the
 site root rather than the exact deep page — acceptable for the v2/partial reader-auth (§11.2).
-*Deferred:* full CDN/ISR caching of the render (the incumbent serves edge-cached, prefetchable RSC).
+*Deferred:* full CDN/ISR caching of the render (hosted docs platforms serves edge-cached, prefetchable RSC).
 Verified blocked by the reader-auth `cookies()` gate, which forces the whole route dynamic
 (`no-store`) even for public sites — Next classifies a route static-or-dynamic, and one possible
 `cookies()` taints it. Unblocking moves the gate to an **edge-native** chokepoint (Vercel Edge
@@ -655,7 +659,7 @@ private — the token authenticates it), untars in memory (`src/lib/tar.ts`, a m
 pax-aware reader, no tar dependency), and uploads to storage pool-parallel with content-types
 inferred per extension. This replaced per-file fetching (tree API + one blob/raw request per
 file), whose N round-trips put a ~240-file private repo right at the serverless time limit —
-syncs *intermittently* 504'd. Measured after: ~0.4s warm / ~1.4s cold for `papervine/starter`
+syncs *intermittently* 504'd. Measured after: ~0.4s warm / ~1.4s cold for `a starter docs.json repository`
 (previously multiple seconds, and minutes at repo scale). The token flows through one
 seam — `ghHeaders(token?)` in `src/lib/github.ts` — so the **GitHub App** is a drop-in follow-up:
 the install flow mints an installation token that takes the same parameter, no sync/render
@@ -692,7 +696,7 @@ already get most of the CDN win, and the bucket stays **private with no CORS**.
 
 ## 4. Config: `docs.json` (docs.json-compatible)
 
-Single config file at repo root. Mirror the incumbent's schema so migration is trivial. Core shape:
+Single config file at repo root. Mirror hosted docs platforms' schema so migration is trivial. Core shape:
 
 ```jsonc
 {
@@ -733,12 +737,12 @@ Single config file at repo root. Mirror the incumbent's schema so migration is t
 }
 ```
 
-**Schema strategy:** publish a JSON Schema; validate on sync; support the subset of docs.json keys we implement and warn (don't error) on unrecognized keys so docs.json configs work out of the box. Track schema parity in a compatibility matrix doc.
+**Schema strategy:** publish a JSON Schema; validate on sync; support the subset of hosted docs platforms keys we implement and warn (don't error) on unrecognized keys so hosted docs platforms configs work out of the box. Track schema parity in a compatibility matrix doc.
 
-The `navigation` field is **one recursive tree** — tabs contain groups/anchors/versions/languages, which contain pages — matching the incumbent's docs.json refactor. Model it as a single recursive TypeScript type.
+The `navigation` field is **one recursive tree** — tabs contain groups/anchors/versions/languages, which contain pages — matching hosted docs platforms' docs.json refactor. Model it as a single recursive TypeScript type.
 
 **Themes & appearance:** `theme` selects a named visual preset — one of `mint` (default),
-`maple`, `palm`, `willow`, `linden`, `almond`, `aspen`, `sequoia`, `luma` (the incumbent's set).
+`maple`, `palm`, `willow`, `linden`, `almond`, `aspen`, `sequoia`, `luma` (hosted docs platforms' set).
 Each preset is a small token bundle (font stacks, corner radius, …) applied as CSS variables
 on `<html data-theme="…">`; unknown names fall back to `mint`. `appearance` controls
 light/dark — `{ "default": "light" | "dark" | "system", "strict": boolean }`: `default` sets
@@ -751,7 +755,7 @@ of the theme.
 > parsed and then ignored. Now:
 > - **`favicon`** is emitted as `<link rel="icon">` from the **root layout's `<head>`**, which
 >   already loads the per-request tenant config (so it covers apex docs + every tenant mode).
->   A `{ light, dark }` pair emits one link per `prefers-color-scheme` (the incumbent's convention);
+>   A `{ light, dark }` pair emits one link per `prefers-color-scheme` (hosted docs platforms' convention);
 >   a single string emits one. Paths resolve through the tenant asset proxy via a new
 >   `requestAssetBase()` (mirrors `requestContentSource`'s resolution, gated on a non-null
 >   source so the slug is guaranteed — the path must match the config source or it 404s).
@@ -762,7 +766,7 @@ of the theme.
 >
 > Verified: smoke home check asserts the favicon links + toggle; unit tests cover the script
 > + predicate; in-browser the favicon links resolve through `/api/tenant-asset/…` (200,
-> `image/*`) and a temporarily-strict config dropped the toggle. Real docs.json repo (string
+> `image/*`) and a temporarily-strict config dropped the toggle. Real hosted docs platforms repo (string
 > favicon) + dogfood docs crawl clean (0 × HTTP 500). Still unapplied (parsed-only):
 > `fonts`, `icons`, `background`, `styling`, `logo.href`, `thumbnails`.
 
@@ -770,11 +774,11 @@ of the theme.
 
 ## 5. MDX Component Library (v1)
 
-Ship a styled component set resolved at compile time. Parity targets with the incumbent:
+Ship a styled component set resolved at compile time. Parity targets with hosted docs platforms:
 
 | Component | Notes |
 |---|---|
-| `<Card>` / `<CardGroup>` / `<Columns>` | linkable cards w/ icon; `<Columns>` is the incumbent's current name for the grid, `<CardGroup>` the legacy alias |
+| `<Card>` / `<CardGroup>` / `<Columns>` | linkable cards w/ icon; `<Columns>` is hosted docs platforms' current name for the grid, `<CardGroup>` the legacy alias |
 | `<Tabs>` / `<Tab>` | tabbed content |
 | `<Accordion>` / `<AccordionGroup>` | collapsible |
 | `<Steps>` / `<Step>` | numbered walkthroughs |
@@ -789,30 +793,30 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 
 > **Mermaid — BUILT (2026-06-29).** A ```mermaid fence renders as a diagram, not a highlighted
 > code block. A remark plugin (`remarkMermaid` in `packages/renderer/lib/mdx.tsx`) rewrites the
-> mdast `code` node to a `<Mermaid chart="…">` JSX element **before** @mintlify/mdx's Shiki pass,
+> mdast `code` node to a `<Mermaid chart="…">` JSX element **before** third-party MDX serializer's Shiki pass,
 > so Shiki never touches it; the raw source rides as a string attribute, which MDX lowers to a JS
 > string literal (`_jsx(Mermaid, { chart: "…" })`), escaping newlines/`<br/>`/quotes for free.
 > `<Mermaid>` (`components/mdx/Mermaid.tsx`) is a `"use client"` component that **dynamic-imports
 > mermaid inside its effect** — the heavy lib loads only on pages that actually have a diagram, not
 > in every page's bundle — and re-renders on the docs light/dark toggle (a MutationObserver on the
 > `.dark` class). `securityLevel: "antiscript"` keeps htmlLabels (so `<br/>`/`<i>` node labels
-> render, matching the incumbent) while stripping `<script>`, so a diagram can't introduce a script
+> render, matching hosted docs platforms) while stripping `<script>`, so a diagram can't introduce a script
 > vector the rest of the renderer disallows. A parse failure degrades to the diagram source in a
 > `<pre>` — never a 500. Added as a **direct** dependency (was only transitive via `streamdown`).
 > Cache key bumped `mdx-compile-v2` → `v3`. Guard: a `mermaid` smoke fixture asserts the page SSRs
 > an `aria-label="Diagram"` container and that the chart source is absent from the HTML (i.e. not
 > a code block).
 
-- **Theming:** named theme presets (`theme` in docs.json — `mint`/`maple`/`palm`/`willow`/`linden`/`almond`/`aspen`/`sequoia`/`luma`, the incumbent's set) defined as token bundles in `src/lib/theme.ts` and applied as CSS variables on `<html data-theme="…">`, so the whole UI re-skins from one config value. Adding/tuning a theme = one registry entry (+ optional CSS keyed on `[data-theme="…"]`). Brand accent from `docs.json` `colors`; light/dark default from `appearance.default`.
+- **Theming:** named theme presets (`theme` in docs.json — `mint`/`maple`/`palm`/`willow`/`linden`/`almond`/`aspen`/`sequoia`/`luma`, hosted docs platforms' set) defined as token bundles in `src/lib/theme.ts` and applied as CSS variables on `<html data-theme="…">`, so the whole UI re-skins from one config value. Adding/tuning a theme = one registry entry (+ optional CSS keyed on `[data-theme="…"]`). Brand accent from `docs.json` `colors`; light/dark default from `appearance.default`.
 - **Markdown features:** GFM, footnotes, auto-linked headings, frontmatter (title, description, icon, sidebar overrides), `og:` image generation per page.
-- **Page chrome (incumbent parity):**
+- **Page chrome (docs platform parity):**
   - Top-level `navigation.tabs` render as a horizontal **tab bar**; the sidebar is **scoped
     to the active tab** (the one containing the current page). Nested groups are collapsible.
   - **Section eyebrow:** the group label the page belongs to is shown in the primary color
     above the page `<h1>`.
   - **"On this page" TOC** with scroll-spy — the heading currently in view is highlighted
     (IntersectionObserver) and the panel stays sticky below the navbar + tab bar.
-  - **Default appearance is light** (matches the incumbent); the OS preference is not followed
+  - **Default appearance is light** (matches hosted docs platforms); the OS preference is not followed
     unless the reader toggles.
   - **Prose links** use the default text color with a primary-colored underline (not
     colored text); heading auto-link anchors keep the heading's own color.
@@ -837,7 +841,7 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 > `requestSearchIndexKey`) — built once per version per process, reused across keystrokes; a
 > re-sync changes the key → rebuild. The Orama object isn't JSON-serializable, so it's a bounded
 > in-process `Map` (LRU, 32 entries), not the Data Cache. No version key (apex / `papervine dev`,
-> edited live) keeps the per-request build so edits stay fresh. Measured on papervine/docs (local
+> edited live) keeps the per-request build so edits stay fresh. Measured on a large public docs.json repository (local
 > prod build): first query 735 ms (build) → subsequent ~8 ms (reuse), vs 735 ms *every* query
 > before. The assistant + public-MCP RAG (`docs-tools.searchDocs`) get the same cache: the version
 > key also rides an AsyncLocalStorage (`withSearchIndexKey`, set by those live routes alongside
@@ -887,21 +891,21 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 > The lingering `PAPERVINE_CONTENT`/`CONTENT_DIR` concept is legitimate (it's how `fsSource`
 > roots a local preview); the bug was code reaching past the source abstraction to touch it.
 
-> **Status — reference page reshaped into a incumbent-style three-pane (2026-06-28).** The
-> endpoint page now matches the incumbent's API reference layout: (1) **left-nav method badges** —
+> **Status — reference page reshaped into a modern docs-platform three-pane (2026-06-28).** The
+> endpoint page now matches hosted docs platforms' API reference layout: (1) **left-nav method badges** —
 > each operation leaf carries its HTTP method (`NavLeaf.method`, stamped in `openapiLeaves`) and
 > the sidebar renders a colored verb beside it, sharing one `method-colors.ts` map with the
 > endpoint header so a `GET` reads the same green everywhere; (2) a **language-tabbed request
 > panel** (cURL / JavaScript / Python) plus a **per-status response panel**, both highlighted
 > server-side with Shiki (`highlight.ts`, a standalone `github-dark` highlighter — the right
-> column is always dark, the incumbent's model — kept off the client so the highlighter never ships
+> column is always dark, hosted docs platforms' model — kept off the client so the highlighter never ships
 > in the bundle); (3) a read-only right rail (`ApiPlayground.tsx`) showing those samples + a
 > per-status response tab. The `papervine/starter` Widgets spec points `servers` at an echo
 > (`httpbin.org/anything`) so the live demo returns a real 200 you can see.
 
 > **Status — left-nav groups operations by tag (2026-06-28).** Auto-generated OpenAPI nav
 > (`openapiLeaves`, no explicit `pages`) was a **flat** list of every operation — a 40-endpoint
-> spec was 40 ungrouped rows. It now mirrors the incumbent: operations are bucketed by their first
+> spec was 40 ungrouped rows. It now mirrors hosted docs platforms: operations are bucketed by their first
 > OpenAPI `tag` into one `NavNode` per tag (tags in first-encounter = spec order; untagged
 > operations stay as bare leaves above the groups). A spec with **no** tags falls through to the
 > old flat list, so nothing regresses for untagged specs. The tag nodes are marked
@@ -917,7 +921,7 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 > **Status — "Try it" promoted to a full modal playground (2026-06-28).** The interactive
 > playground moved off the right rail onto a **green trigger on the center endpoint bar** that
 > opens a modal (`ApiTryItModal.tsx`, the one client island; portaled to `<body>`, Esc/backdrop
-> close, scroll-locked), matching the incumbent's full-screen Try-it. The modal **encompasses every
+> close, scroll-locked), matching hosted docs platforms' full-screen Try-it. The modal **encompasses every
 > OpenAPI input class**: an editable URL (server base + path), and collapsible **Authorization /
 > Headers / Path / Query / Body** sections. Auth required extending the `Operation` model with a
 > resolved `auth: AuthScheme[]` (`resolveAuth` reads `components.securitySchemes` against the
@@ -934,9 +938,9 @@ Ship a styled component set resolved at compile time. Parity targets with the in
 
 ## 8. AI Assistant (M5)
 
-A conversational assistant over the tenant's docs + OpenAPI, modeled on the incumbent's
+A conversational assistant over the tenant's docs + OpenAPI, modeled on hosted docs platforms'
 "Ask Assistant" (right-hand slide-out panel). Verified behaviors we target are
-cited from the incumbent's own docs/blog where noted.
+cited from hosted docs platforms' own docs/blog where noted.
 
 > **Status — slice 1 built (2026-06-08):** agentic `/api/assistant` route (Claude via
 > Vercel AI SDK v6 + tool calling over `searchDocs`/`readPage`/`listPages`/`searchApi`
@@ -948,11 +952,10 @@ cited from the incumbent's own docs/blog where noted.
 
 ### 8.1 Architecture: agentic retrieval, not single-shot RAG
 
-The incumbent's assistant is **agentic RAG with tool calling, powered by Claude** — it
-*decides how to search* the docs per question rather than doing one top-k lookup, and
-they replaced RAG sandboxes with a "virtual filesystem over their vector DB" so the
-model navigates docs via filesystem-like tools ([the incumbent's blog](https://example.com/blog/how-we-built-a-virtual-filesystem-for-our-assistant)).
-We adopt the same shape — and it's cheap for us because **the tools are thin wrappers
+Modern docs assistants are **agentic RAG with tool calling**: the model decides how to search
+the docs per question rather than doing one top-k lookup, and it can navigate a docs corpus
+through filesystem-like tools over indexed content. We adopt the same shape — and it's cheap
+for us because **the tools are thin wrappers
 over capabilities we already have** (M1 content loader, M2 nav, M3 search, M4 OpenAPI):
 
 ```
@@ -975,9 +978,9 @@ User question ──▶ /api/assistant (Vercel AI SDK streamText, Claude)
   index first (the model iterates); add a `pgvector` semantic `search_docs` backend
   later without changing the tool contract.
 - **Current-page context:** the page the user is on is injected into the system prompt
-  as starting context (the incumbent does this), so "how do I do *this*?" resolves locally.
+  as starting context (hosted docs platforms does this), so "how do I do *this*?" resolves locally.
 - **Guardrails:** answer only from tool results; cite every claim; say "I don't know"
-  and surface the tenant's **deflection email** (configurable, like the incumbent) when
+  and surface the tenant's **deflection email** (configurable, like hosted docs platforms) when
   confidence is low. Per-tenant rate limits + token budget.
 
 ### 8.2 UI — built on AI Elements
@@ -987,7 +990,7 @@ components) so we don't hand-roll chat UI:
 
 - `Conversation` + `Message` — the transcript
 - `Response` — streaming markdown (renders our same MDX-ish content, code blocks)
-- `Sources` — the cited pages/anchors under each answer (navigable, like the incumbent)
+- `Sources` — the cited pages/anchors under each answer (navigable, like hosted docs platforms)
 - `PromptInput` — the "Ask a question…" box with file/image attach (the paperclip in
   the reference screenshot — multi-modal input, which Claude supports)
 - `Suggestions` — starter / follow-up questions
@@ -997,10 +1000,10 @@ Chrome: a right-hand **slide-out panel** ("Assistant", expand + close), an **"As
 Assistant"** button in the navbar, and the disclaimer "Responses are generated using AI
 and may contain mistakes." Themed via our CSS variables (matches the docs site).
 
-### 8.3 Invocation (match the incumbent)
+### 8.3 Invocation (match hosted docs platforms)
 
 - **"Ask Assistant"** navbar button → opens the panel.
-- **Keyboard:** `Cmd/Ctrl-I` (the incumbent's shortcut). `Cmd-K` stays search; the two are
+- **Keyboard:** `Cmd/Ctrl-I` (hosted docs platforms' shortcut). `Cmd-K` stays search; the two are
   distinct surfaces.
 - **Text selection:** "Ask about this" on highlighted text.
 - **Deep link:** `?assistant=YOUR_QUERY` on any page auto-opens the panel and asks —
@@ -1010,13 +1013,13 @@ and may contain mistakes." Themed via our CSS variables (matches the docs site).
 
 - Index **published pages + OpenAPI specs** at sync time (M2); re-index changed pages
   on publish. Exclude `hidden`/`noindex` pages unless `docs.json` `seo.indexing: "all"`
-  (the incumbent's exact toggle; we already parse `hidden`/`noindex` frontmatter).
+  (hosted docs platforms' exact toggle; we already parse `hidden`/`noindex` frontmatter).
 
 ### 8.5 Surfaces beyond the docs site
 
 - `/api/assistant` SSE endpoint (AI SDK data stream). Offer a docs.json-compatible alias
   path so existing integrations port over.
-- **Embeddable** in external apps/portals; **Slack + Discord bots** later (the incumbent has
+- **Embeddable** in external apps/portals; **Slack + Discord bots** later (hosted docs platforms has
   both).
 - **Shared tool layer = the planned per-docs MCP server:** `search_docs` / `read_page` /
   `list_pages` / `search_api` are exactly the tools a generated read-MCP would expose, so
@@ -1024,12 +1027,12 @@ and may contain mistakes." Themed via our CSS variables (matches the docs site).
 
 ### 8.6 Control-plane page: Assistant settings
 
-The dashboard page where a docs owner manages the assistant (the incumbent: **Automate →
+The dashboard page where a docs owner manages the assistant (hosted docs platforms: **Automate →
 Assistant**). Top of page shows three **overview cards** — *Total questions*, *Answered
 properly*, *Not answered* — each with a month-over-month delta, plus a "Get insights into
 your Assistant usage → View more" card linking to the **Analytics** page (§10.1).
 
-Settings, grouped as the incumbent groups them:
+Settings, grouped as hosted docs platforms groups them:
 
 - **Status & control** — an *Assistant Status* enable/disable toggle (Active/Inactive
   badge). This is an **operational kill switch** (DB state, not `docs.json`) so it takes
@@ -1046,7 +1049,7 @@ Settings, grouped as the incumbent groups them:
   state (renders via AI Elements `Suggestions`, §8.2). Toggle + editable list ("0/3").
 - **Plan / credits** — trial banner (free-credit % remaining, expiry date, *Upgrade plan*);
   per-tenant **credit metering + rate limits** (§8.1). Some controls are **plan-gated**
-  (the incumbent shows "available for enterprise plans / Contact Sales"); gating is config, not
+  (hosted docs platforms shows "available for enterprise plans / Contact Sales"); gating is config, not
   hardcoded, so self-hosters get everything.
 
 **Where each setting lives.** Published-behavior config (starter questions, deflection
@@ -1087,7 +1090,7 @@ instant effect. Self-host reads it all from `docs.json` + env, no dashboard requ
 ## 9. MCP Servers
 
 Papervine exposes Model Context Protocol servers so AI tools can both **read** a docs site
-and **edit** it — mirroring the incumbent, which ships two distinct MCP servers.
+and **edit** it — mirroring hosted docs platforms, which ships two distinct MCP servers.
 
 ### 9.1 Generated read MCP (per docs site)
 
@@ -1121,7 +1124,7 @@ tools (Claude, Cursor, Windsurf). Exposes the **same tool layer as the AI Assist
 
 ### 9.2 Authoring MCP (admin / write)
 
-Lets a docs *owner* connect an AI tool to **edit their docs** (matches the incumbent's Admin
+Lets a docs *owner* connect an AI tool to **edit their docs** (matches hosted docs platforms' Admin
 MCP). All edits happen on a session branch and land via a Pull Request — never directly on
 the deploy branch. Tools:
 
@@ -1136,19 +1139,17 @@ the deploy branch. Tools:
 - This is the agent-native counterpart to the web editor (§10) and embodies AGENTS.md's
   "any action a user can take, an agent can too."
 
-**One backend, two front-ends (verified against the incumbent, 2026-06-09).** The authoring MCP
+**One backend, two front-ends (verified against docs-agent authoring flows, 2026-06-09).** The authoring MCP
 and the web editor (§10) are *not* separate write paths — they operate on the **same session
-branch and the same server-side draft buffer**. In the incumbent, `checkout`'s response includes
-an `editorUrl` you open to "follow along" in the dashboard editor on that same branch; edits
-"buffer on the session branch in real time," persisted server-side across tabs/devices, and
+branch and the same server-side draft buffer**. The agent checkout flow returns an
+`editorUrl` so a user can follow along in the dashboard editor on that same branch; edits
+buffer on the session branch in real time, persist server-side across tabs/devices, and
 only reach the deploy branch on `save`/publish (direct commit if on the deploy branch, else a
 PR with a returned link). **Build implication:** build the authoring layer (GitHub-App write
 creds → session-branch + draft buffer → `save` as commit-or-PR) **once**, then put both the
 MCP and the web editor on top of it. The draft buffer is real persistent state, not a
-commit-on-save shortcut. *(Mechanics confirmed from the incumbent's [Admin MCP](https://example.com/docs/ai/incumbent-mcp)
-+ [editor branching/publishing](https://example.com/docs/editor/branching-and-publishing)
-docs; the "any action a user can take, an agent can too" framing is **ours** (AGENTS.md), but
-it matches their actual architecture.)*
+commit-on-save shortcut. The "any action a user can take, an agent can too" framing is
+ours (AGENTS.md), and the implementation keeps that contract by sharing the write path.
 
 ### Status & sequencing
 
@@ -1197,7 +1198,7 @@ layer.
 >
 > **Editor opens on the deploy branch by default (2026-06-29).** The editor landed each session
 > on a freshly-minted `papervine/edit-xxxx` branch (the top-left picker showed a random working
-> branch). The incumbent instead opens on the configured deploy branch shown as **"Default"** — you
+> branch). hosted docs platforms instead opens on the configured deploy branch shown as **"Default"** — you
 > edit it directly and Publish commits straight to it; a working branch is an explicit
 > "Create new branch" action that publishes as a PR. We match that now: `editor/page.tsx`
 > defaults `branch` to `siteRow.branch` (no eager `checkoutBranch`), so a clean load creates no
@@ -1228,7 +1229,7 @@ layer.
 >
 > **Agent column is on-demand (2026-06-29).** The editing-agent column took a fixed third of the
 > editor even when unused. It's now **hidden by default** and summoned via an "Ask agent" header
-> button or **⌘/Ctrl-I** (the incumbent's shortcut) — closeable from the button, the panel's ✕, or the
+> button or **⌘/Ctrl-I** (hosted docs platforms' shortcut) — closeable from the button, the panel's ✕, or the
 > shortcut. Toggled by CSS visibility (not unmount) in `EditorShell`, so the chat history survives a
 > close→reopen; default-collapsed gives the page/preview the full width.
 >
@@ -1256,7 +1257,7 @@ layer.
 >
 > **WYSIWYG "Visual" editor — reversed the MDXEditor decision & shipped (2026-07-02).** We now
 > ship an editable **Visual** mode alongside Source (the earlier note dropped WYSIWYG; this
-> reverses it, matching the incumbent — who use TipTap). The keystone is a new pure package
+> reverses it, matching hosted docs platforms — who use TipTap). The keystone is a new pure package
 > **`@papervine/mdx-prosemirror`**: bidirectional MDX↔ProseMirror where the **canonical value is
 > the raw MDX text** (byte-exact git commits stay the source of truth) and anything the editor
 > can't model (custom components, `{expressions}`, imports, expression-valued attrs) is preserved
@@ -1289,9 +1290,9 @@ Minimum to operate the SaaS:
 - **Auth:** org + user accounts via **Better Auth** (see §11). RBAC: owner/admin/editor/viewer.
 - **Workspace / site switcher:** an org may own several sites (§2), so the dashboard's
   **top-left switcher** selects the **active site** that per-site pages (Analytics, Editor,
-  Settings) scope to — mirrors the incumbent's top-left switcher. Lists the sites the user can
+  Settings) scope to — mirrors hosted docs platforms' top-left switcher. Lists the sites the user can
   access + a **New site** action. *(Status 2026-06-10: the control plane is now
-  **URL-scoped on its own host**, mirroring the incumbent's `app.example.com/{org}/{site}`.
+  **URL-scoped on its own host**, mirroring hosted docs platforms' `app.example.com/{org}/{site}`.
   The active site is the URL (`app.papervine.io/:org/:site`, `app.localhost:3000` in dev),
   not a cookie — switching sites navigates (`SiteSwitcher` → `switchSiteHref`, preserving
   the sub-page), so URLs are shareable/bookmarkable and multi-tab works. **Why the app
@@ -1313,7 +1314,7 @@ Minimum to operate the SaaS:
   *(Status 2026-06-12: distinct switcher avatars. The little gradient mark next to each
   site was a single hardcoded blue→violet square, so a multi-site org was a wall of
   identical purple chips (and two sites sharing an initial — e.g. `large-docs` /
-  `starter` — were indistinguishable). The mark now derives a per-site
+  `starter-docs` — were indistinguishable). The mark now derives a per-site
   gradient from a stable key (the **slug**, not the display name, so it survives renames
   and never collides on a shared first letter) via `siteMarkGradient` (`src/lib/site-mark.ts`):
   an FNV-1a hash → hue, two-stop HSL gradient tuned to keep the bold white initial legible
@@ -1364,7 +1365,7 @@ Minimum to operate the SaaS:
 
 ### 10.1 Analytics
 
-The control-plane **Analytics** page (the incumbent: *Analytics*) — scoped to the **active site**
+The control-plane **Analytics** page (hosted docs platforms: *Analytics*) — scoped to the **active site**
 (the §10 switcher), with a **Humans vs Agents** toggle (human visitors vs agent/MCP traffic,
 §9.1) and a **date-range** picker. The Assistant page (§8.6) links here via its "Get insights
 → View more" card.
@@ -1390,7 +1391,7 @@ The control-plane **Analytics** page (the incumbent: *Analytics*) — scoped to 
 > `src/lib/agent-session.ts`: `sessionId` is now a **stable per-client id** — the client's
 > `Mcp-Session-Id` when supplied, else `sha256(agent + UA + IP)` (no time component, so it's
 > stable across the window like the human UUID). A client's burst of calls now collapses to one
-> visitor; distinct clients stay distinct. Matching the incumbent, the Agents tab keeps just two
+> visitor; distinct clients stay distinct. Matching hosted docs platforms, the Agents tab keeps just two
 > cards (**Agent Visitors** + **MCP Searches**) — no separate agent "Views" card; per-page agent
 > volume lives in **Top pages**. Same derivation on the `/llms.txt` agent surface
 > (`src/lib/llms-route.ts`). Regression: `tests/unit/agent-session.test.ts` (dedupe/stability)
@@ -1434,7 +1435,7 @@ gaps" all derive from this. Backed by PostHog or a first-party events table; res
 ### 10.2 Automate — Workflows · Agent · Assistant (speculative)
 
 The **Automate** rail section groups the three surfaces where Papervine *acts on* the
-docs instead of just rendering them. All three mirror the incumbent's "Automate" area and are
+docs instead of just rendering them. All three mirror hosted docs platforms' "Automate" area and are
 gated behind a per-org **Trialing** entitlement (the rail/page badge). **Status
 (2026-06-10): UI scaffolded, nothing wired.** The pages render the catalog, onboarding,
 and empty states (`/dashboard/automate/{workflows,agent,assistant}`); none of the
@@ -1457,7 +1458,7 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
     Workflows tab is the run history/log (not yet designed). Output quality and
     audit-ability of agent-authored PRs is the open risk.
 - **Agent** — an interactive agent reachable from chat. **The surface is Slack-centric**
-  (matching the incumbent, which built Agent as a Slack app first): you invoke it with
+  (matching hosted docs platforms, which built Agent as a Slack app first): you invoke it with
   `@papervine <prompt>` in a channel; steady state is a connected Slack app that answers
   questions and opens doc changes on request. Shares the authoring backend with Workflows;
   the distinction is **interactive (Agent) vs scheduled/triggered (Workflows)**, same
@@ -1499,7 +1500,7 @@ remain scaffolds.
 
 ### 10.3 Site Overview (home)
 
-The **per-site landing page** — what you see on entering a connected site (the incumbent's
+The **per-site landing page** — what you see on entering a connected site (hosted docs platforms'
 `app.example.com/{org}/{site}`). Scoped to the **active site** (§10 switcher); it's the
 default `/dashboard` destination once a site exists. It's a *consolidation* surface — every
 panel is a window onto a system specified elsewhere (sync/§3, editor/§10 web-editor,
@@ -1608,9 +1609,9 @@ domains/§2, workflows/§10.2), not new capability. Layout, top to bottom:
 
 ### 10.4 Settings → Exports
 
-The control-plane **Settings → Exports** surface (the incumbent: *Settings → Exports*) lets an
+The control-plane **Settings → Exports** surface (hosted docs platforms: *Settings → Exports*) lets an
 owner download the whole site as **one PDF for offline viewing** — "Export all content".
-(the incumbent gates this behind Enterprise; we ship it ungated.)
+(hosted docs platforms gates this behind Enterprise; we ship it ungated.)
 
 **Approach — print, not a server-side PDF pipeline.** There is no headless-Chromium /
 PDF-library dependency (heavy, and awkward on serverless). Instead the export is a
@@ -1651,10 +1652,10 @@ components (Cards/Steps/callouts), Shiki-highlighted code, the lot — for free.
 ### 10.5 Settings → Danger zone
 
 The control-plane **Settings → Danger zone** surface — irreversible deletes, mirroring the
-shape of the incumbent/Vercel's danger zone (a "Delete my deployment" section + a "Delete my
+shape of hosted docs platforms/Vercel's danger zone (a "Delete my deployment" section + a "Delete my
 organization" section, each with a required *reason* and a red action). Two scopes:
 
-- **Delete this site** (the incumbent's "deployment") — owner **or** admin. Drops the `site` row;
+- **Delete this site** (hosted docs platforms' "deployment") — owner **or** admin. Drops the `site` row;
   the Postgres FK cascade takes its `deployment` + `analytics_event` rows. **Two resources
   don't cascade**, so the action sweeps them by hand *before* the row goes away (it's the
   only key to find them again): the object-storage prefix `sites/{id}/` (`deletePrefix`,
@@ -1781,7 +1782,7 @@ are busted so the org change is visible immediately.
 ### 10.6 CLI (`papervine`) — local dev tool, published to npm
 
 The CLI is a **local dev tool**, not a second front door to the control plane. It's the
-`mint` analogue (the incumbent renamed `incumbent`→`mint`): you run it inside a repo of MDX +
+`mint` analogue (hosted docs platforms renamed `docs`→`mint`): you run it inside a repo of MDX +
 `docs.json` and it renders the site locally. Today that's a single command —
 `papervine dev [dir]` (`bin/papervine.mjs`), which boots the renderer with
 `PAPERVINE_CONTENT` pointed at the folder; `tests/crawl.mjs` reuses the same path.
@@ -1820,7 +1821,7 @@ slot the web app injects), `SearchDialog`→`search-track` (→ no-op without th
 `legacy-peer-deps=true` and `next.config` `serverExternalPackages` both carry to the workspace.
 Either published tarball is `npm pack --dry-run`-audited so no `.env.local`/seed/fixtures leak.
 
-**Execution is phased**, each phase keeping typecheck + smoke + a real-repo crawl green:
+**Execution is phased**, each phase keeping typecheck + smoke + a representative docs crawl green:
 (1) workspace scaffold + move today's app to `apps/web` unchanged; (2) extract
 `@papervine/renderer`, repoint `apps/web` at it (`@/` imports → package-relative); (3) sever
 the four couplings; (4) build `apps/cli`, tarball-audit; (5) ship `papervine@0.1.0` over the
@@ -1828,12 +1829,12 @@ placeholder, from CI with `--provenance`. Phase 1 is the disruptive-but-mechanic
 move touches every import path); 2–4 are contained; the destination is the full monorepo
 regardless of where we pause.
 
-**incumbent parity informs the surface.** `mint` has **no `deploy` and no `login`** —
+**docs platform parity informs the surface.** `mint` has **no `deploy` and no `login`** —
 deployment is Git-based (push → their GitHub app builds it), and the CLI only reaches the
 hosted backend for *read-only live data* (`mint analytics` pulls real traffic). So a CLI
 never *is* the control plane; at most it's a thin HTTPS client to it. Papervine mirrors this:
 local dev commands now, an optional thin authenticated client (`papervine analytics`, a
-hypothetical `papervine deploy`) later — never by embedding the server. The incumbent's one gap is
+hypothetical `papervine deploy`) later — never by embedding the server. hosted docs platforms' one gap is
 that it has **no offline `build`/static export** (prod rendering is server-side on their
 infra); because Papervine is self-hostable, `papervine build` (static export of a docs repo)
 is a genuine differentiator and a natural fit for the renderer-only package.
@@ -1847,7 +1848,7 @@ order, smallest lift first):
 | `papervine broken-links [dir]` | Report dead internal links / missing pages | `tests/crawl.mjs` link-graph |
 | `papervine openapi-check [dir]` | Validate referenced OpenAPI specs | `src/lib/openapi.ts` + `@scalar/openapi-parser` |
 | `papervine validate [dir]` | Strict-mode config + frontmatter + nav report (CI gate) | `src/lib/config.ts` run in *report* mode instead of its lenient warn-don't-throw default |
-| `papervine build [dir]` | Static export to `./dist` (the incumbent-gap differentiator) | renderer + crawl; emits the rendered route tree |
+| `papervine build [dir]` | Static export to `./dist` (static-export differentiator) | renderer + crawl; emits the rendered route tree |
 | `papervine new [dir]` | Scaffold from the starter template | a vendored starter `docs.json` + MDX skeleton |
 
 Deferred (thin-client, needs an API + token storage, not a pure renderer): `papervine
@@ -1890,7 +1891,7 @@ the hosted API over HTTPS, they don't embed it.
 > `apps/cli` → **`papervine`**: a thin Next app (root layout + `(docs)` route + bin) depending
 > only on `next`/`react`/`@papervine/renderer`. Verified: web typecheck + smoke + unit (210) +
 > crawl (`large-docs` 881pp, **0×500**) all green; `papervine dev` renders the dogfood docs
-> (light **and** dark, browser-checked) and a real `starter` incl. asset serving
+> (light **and** dark, browser-checked) and a real `starter-docs` incl. asset serving
 > (`/logo/light.svg` → 200); **tarball audit** = 10 files / 15.5 kB, **dependency audit** = zero
 > control-plane packages (no better-auth/postgres/drizzle/@aws-sdk/pusher/mcp/ai-sdk). Remaining
 > (Phase 5): publish `@papervine/renderer` + `papervine@0.1.0` from CI with `--provenance`
@@ -1899,13 +1900,13 @@ the hosted API over HTTPS, they don't embed it.
 > the docs-CSS (`.prose`/shiki) is duplicated between web `globals.css` and the CLI's, to dedupe
 > into the package later; the cosmetic web→`apps/web` move.
 >
-> **Status (2026-06-14):** stripped the incumbent from all **user-facing** surfaces — the published
+> **Status (2026-06-14):** stripped hosted docs platforms from all **user-facing** surfaces — the published
 > CLI (bin help, `package.json` description/keywords, the source comments) and the public docs
 > site (19 pages + `docs.json`): positioning prose ("docs.json-compatible docs platform", "docs.json-compatible",
-> "mirrors the incumbent") became neutral capability claims ("compatible with existing `docs.json`
-> projects"). Kept where factual/functional: the `@mintlify/mdx` dependency name, the `mint`
+> "mirrors hosted docs platforms") became neutral capability claims ("compatible with existing `docs.json`
+> projects"). Kept where factual/functional: the `third-party MDX serializer` dependency name, the `mint`
 > theme value, the broken-peer-dep gotcha — and **internal** design docs (this SPEC, CLAUDE.md,
-> GAP-REPORT.md, the crawl fixtures), where the incumbent is the legitimate "what we clone" reference.
+> GAP-REPORT.md, the crawl fixtures), where hosted docs platforms is the legitimate "what we clone" reference.
 >
 > **Status (2026-06-14):** wired Phase 5 (publish), publish itself deferred. Versioned
 > `@papervine/renderer`→`0.1.0` and pointed the CLI's dep at `^0.1.0` (resolves to the local
@@ -2093,9 +2094,9 @@ The dashboard is a Next App Router SPA: the rail/subnav persist and only the con
 swaps on navigation (soft-nav). But every dashboard page reads the session cookie, so it
 renders **dynamically** — and Next 15 defaults the client Router Cache's `staleTimes.dynamic`
 to **0**, meaning a prefetched dynamic route is treated as immediately stale: `<Link>`
-prefetches its RSC, then **discards it and refetches on click**. Measured against the incumbent's
+prefetches its RSC, then **discards it and refetches on click**. Measured against hosted docs platforms'
 dashboard (Playwright, Resource Timing): clicking a settings sibling tab refetched the RSC live
-(~222 ms, 1 request, ~195 ms TTFB on Neon) where the incumbent reused its prefetch (**42 ms, 0
+(~222 ms, 1 request, ~195 ms TTFB on Neon) where hosted docs platforms reused its prefetch (**42 ms, 0
 requests**) — the ~100 ms perception line sat right between them ("click → wait → change" vs
 "changed before you let go").
 
@@ -2105,7 +2106,7 @@ forces a **full** prefetch (Next's default partial prefetch skips a dynamic rout
 there'd be nothing to reuse). Applied to both the `SettingsNav` subnav and the main `AppRail`.
 Safe because mutations go through server actions that `revalidatePath` the affected entry, so
 freshly-changed data still shows; a hard refresh always wins. Tradeoff: landing on Settings now
-fires ~14 RSC prefetches (one per tab) — the same cost the incumbent pays for the instant feel;
+fires ~14 RSC prefetches (one per tab) — the same cost hosted docs platforms pays for the instant feel;
 settings queries are light. **Heavy rail routes opt out** via a `heavy` flag on the `RailItem`
 (Analytics, which runs time-series aggregation keyed on `searchParams`) — they keep Next's
 default partial prefetch and fetch on navigation, so we don't fire an expensive aggregation for
@@ -2135,7 +2136,7 @@ way to over-build this, so the spec keeps them apart.
 | Protects | The Papervine dashboard / control plane | Published docs *pages* (private/internal/gated docs) |
 | Who owns identity | **We do** (we are the IdP) | **The customer does** (we only *verify* an assertion) |
 | Needed by | Every tenant — prerequisite for multi-tenancy | Only some tenants (enterprise) |
-| Maps to the incumbent | Their dashboard account | Their "Authentication & Personalization" |
+| Maps to hosted docs platforms | Their dashboard account | Their "Authentication & Personalization" |
 
 ### 11.1 Layer 1 — Platform auth (we build this)
 
@@ -2179,7 +2180,7 @@ write by hand.
 We never run an IdP for readers and never store reader credentials. We **verify a signed
 assertion** from the customer's own login system, then mint a short docs session. This is
 a much smaller security surface than real auth — the customer's IdP does the hard part.
-Match the incumbent's model exactly so their configs migrate unchanged.
+Match hosted docs platforms' model exactly so their configs migrate unchanged.
 
 **Handshake methods** (in build order):
 
@@ -2221,7 +2222,7 @@ This forces per-request rendering, which fights compile-on-sync caching — defe
 **Settings → Authentication** page (`settings/authentication/`) configures Layer 2: the
 master enable toggle plus the JWT / OAuth 2.0 / Password method picker and per-method
 config. It persists to **`site` columns** (`authEnabled`, `authMethod`, `authConfig`
-jsonb, `authSecretEnc`), *not* docs.json — the incumbent configures this in the dashboard too,
+jsonb, `authSecretEnc`), *not* docs.json — hosted docs platforms configures this in the dashboard too,
 and we have no Git-write authoring backend (§9.2) yet to round-trip a docs.json
 `authentication` block. The one secret per method (JWT private key / OAuth client
 secret / shared password) is AES-256-GCM-encrypted via `src/lib/crypto.ts`, same as
@@ -2245,7 +2246,7 @@ wired end-to-end and uses **asymmetric Ed25519**, replacing the earlier symmetri
 `papervine_jwt_…` shared secret (which contradicted this section's "EdDSA only" mandate).
 Decisions: (a) **key custody** — Papervine generates a per-site Ed25519 keypair; the
 **private key** (PKCS#8 PEM) is shown to the customer to sign with and stored AES-GCM-
-encrypted in `authSecretEnc` (so the dashboard can reveal/copy/rotate it, matching the incumbent
+encrypted in `authSecretEnc` (so the dashboard can reveal/copy/rotate it, matching hosted docs platforms
 and the existing secret UX), while the **public key** (SPKI PEM) lives in plaintext
 `authConfig.publicKey`. The verify path uses **only** the public key — a config leak can't
 forge reader tokens, and only the public key needs to ship to the edge later (the planned
@@ -2300,7 +2301,7 @@ access (**404, not 403** — a 403 leaks that a protected page exists). Pure hel
 (`canAccessPage`, the nav predicate) are unit-tested; `readerSession` now returns the claims so
 `groups` can be read back. `buildNav` also **prunes empty containers** after access filtering —
 a group or tab whose pages are all gated away vanishes entirely (no bare label, no empty
-"Internal" tab), which is why the incumbent needs no separate tab-level `groups` knob: access stays
+"Internal" tab), which is why hosted docs platforms needs no separate tab-level `groups` knob: access stays
 single-source-of-truth at the page, and containers (groups, tabs) derive their visibility from
 which leaves survive. **Still to build:** the **OAuth** handshake (its `/login` shows a
 "not available yet" notice today); the `public: true` *site-gate bypass* (a public page on an
@@ -2354,7 +2355,7 @@ change, out of scope here. Mitigation already in place: the content gating above
 retrievable via search/RAG/MCP/llms/export), so an attacker would have to guess storage paths.
 
 **Planned — edge-native gate that unblocks CDN caching (resolves the §3 caching defer).**
-The §3 perf goal is incumbent-speed navigation: tenant docs served from **Vercel's edge cache**
+The §3 perf goal is hosted-docs-speed navigation: tenant docs served from **Vercel's edge cache**
 (`x-vercel-cache: HIT`, ~100 ms globally + prefetchable RSC) instead of a single-region
 serverless render + Neon round-trip per request (~1.6 s). The blocker is *this gate*: the
 reader-auth `cookies()` call in the node render forces the whole route dynamic (`no-store`)
@@ -2447,7 +2448,7 @@ now** (it's the Neon-round-trip fix); the rest build on the gate:
   The callback re-establishes `contentContext` so `loadPage` works on a miss. Built once per
   (version, base, class) and reused for every page + the shell; covers subdomain *and*
   custom-domain renders (editor drafts, the apex single-repo path, and search/MCP retrieval keep
-  their own uncached `buildNav`). Verified on a local prod build: the 67-link papervine/docs nav
+  their own uncached `buildNav`). Verified on a local prod build: the 67-link a large public docs.json repository nav
   renders correctly (cache callback context works), warm renders ~15 ms. Unit-tested
   (`entitlementKey`: public/anon/sorted-group-stability/site-binding) + crawl gate clean.
 
@@ -2480,13 +2481,13 @@ per-reader variation, and only one is server-side:
 - **Visibility** — *which* pages/nav a reader sees — varies by **group**. Server-side, the gate;
   cached per entitlement class as above.
 - **Content values** — per-*user* personalization (`{user.firstName}`, a prefilled/user-scoped
-  API key, user-specific snippets — a real incumbent feature, the `user` blob in v2 sequencing
+  API key, user-specific snippets — a real hosted docs platforms feature, the `user` blob in v2 sequencing
   below, *not* a negligible edge case) — varies by **individual**. Resolve it **client-side**, so
   the cached bytes stay a shared template: the edge serves one cached page with **placeholders**
   (`<span data-pv-user="firstName">`, a key field flagged for fill), and client JS fills them from
   the reader's token, which already lives in the browser from the auth handshake (user-scoped
   *secrets* come from an authenticated client call, never the cached HTML). Cache hit *and*
-  personalized — no per-user server render. This is almost certainly how the incumbent reconciles its
+  personalized — no per-user server render. This is almost certainly how hosted docs platforms reconciles its
   measured edge-caching with its documented personalization (inferred, not confirmed from their
   internals).
 
@@ -2511,13 +2512,13 @@ then **⑤ (optional) PPR**.
   Cloudflare's real win is cheaper egress / bigger edge at scale; it's **additive later** (drop it
   in front of Vercel without redoing any app-level cache semantics — which we need either way), and
   it likely ties into the `custom-domain-cap` thread (the Vercel max-domains limit) when revisited.
-  Note the incumbent runs Vercel origin + Cloudflare in front — that's their *scale/cost* layer, not a
+  Note hosted docs platforms runs Vercel origin + Cloudflare in front — that's their *scale/cost* layer, not a
   capability we lack.
 - **Cache before prefetch for docs — don't prefetch doc content yet.** Tempting to copy the §10.x
   dashboard prefetch onto the docs sidebar, but a docs sidebar has *hundreds* of links and each
   page render is expensive *and uncached* today, so `prefetch={true}` would fire dozens-to-hundreds
   of full origin renders per page view — a load multiplier, the opposite of faster. Prefetch is a
-  **complement to caching, not a substitute**: the incumbent can prefetch aggressively *because* their
+  **complement to caching, not a substitute**: hosted docs platforms can prefetch aggressively *because* their
   pages are edge-cached (a prefetch is a cheap CDN hit). So docs prefetch waits until the edge cache
   (steps 3–5) lands; *then* it's cheap and gives instant nav. (The docs sidebar is already `<Link>`
   soft-nav, and `staleTimes.dynamic: 30` already ships, so revisiting an already-opened page within
@@ -2544,11 +2545,11 @@ then **⑤ (optional) PPR**.
 
 | Layer | Choice | Rationale |
 |---|---|---|
-| Framework | **Next.js (App Router, RSC)** | Matches the incumbent; multi-tenant middleware; streaming |
+| Framework | **Next.js (App Router, RSC)** | Matches hosted docs platforms; multi-tenant middleware; streaming |
 | Language | **TypeScript** strict | |
-| MDX | **hybrid**: `@mintlify/mdx` `serialize` + `@mdx-js/mdx` `run` (see §3) | the incumbent-fidelity highlighting/snippets + catchable, never-500 render |
-| Syntax highlight | **Shiki** (via `@mintlify/mdx`) | fast, accurate, dual light/dark themes |
-| API reference | `@scalar/openapi-parser` (parse/dereference) + our native renderer | incumbent model: in-nav endpoint pages, not a foreign embed (§7) |
+| MDX | **hybrid**: `third-party MDX serializer` `serialize` + `@mdx-js/mdx` `run` (see §3) | high-fidelity highlighting/snippets + catchable, never-500 render |
+| Syntax highlight | **Shiki** (via `third-party MDX serializer`) | fast, accurate, dual light/dark themes |
+| API reference | `@scalar/openapi-parser` (parse/dereference) + our native renderer | hosted docs platforms model: in-nav endpoint pages, not a foreign embed (§7) |
 | CLI | `papervine dev <dir>` (`bin/papervine.mjs`) | preview any MDX + docs.json repo locally — the `mint dev` analogue; `tests/crawl.mjs` reuses it. Local dev tool only (renderer, never the control plane); published to npm as the unscoped `papervine`. Command surface + packaging boundary: **§10.6** |
 | Styling | **Tailwind CSS** + CSS variables | theme tokens from docs.json |
 | Search | **Orama** (Algolia optional) | embeddable, multi-tenant |
@@ -2558,10 +2559,10 @@ then **⑤ (optional) PPR**.
 | Queue/workers | **BullMQ** / serverless functions | git sync jobs |
 | AI | **Vercel AI SDK** + `@ai-sdk/anthropic` (Claude); **AI Elements** for chat UI | agentic assistant (§8) |
 | Auth (platform) | **Better Auth** (+ `organization`) | OSS, self-hostable, orgs + RBAC; WorkOS for enterprise SSO later (§11) |
-| Hosting | Vercel (render) + workers elsewhere | mirrors the incumbent's Vercel approach |
+| Hosting | Vercel (render) + workers elsewhere | mirrors hosted docs platforms' Vercel approach |
 | Monorepo | pnpm + Turborepo | shared packages |
 
-**Decision (see `GAP-REPORT.md`): built from scratch, not on Fumadocs** — multi-tenancy and full control over the renderer outweighed the head start. We still borrow OSS building blocks where they earn it (`@mintlify/mdx` for compile, `@scalar/openapi-parser` for OpenAPI). Prior art studied: [Fumadocs](https://github.com/fuma-nama/fumadocs), [unmint](https://github.com/gregce/unmint), [Scalar](https://github.com/scalar/scalar), [Nextra](https://nextra.site/), Docusaurus.
+**Decision (see `GAP-REPORT.md`): built from scratch, not on Fumadocs** — multi-tenancy and full control over the renderer outweighed the head start. We still borrow OSS building blocks where they earn it (`third-party MDX serializer` for compile, `@scalar/openapi-parser` for OpenAPI). Prior art studied: [Fumadocs](https://github.com/fuma-nama/fumadocs), [unmint](https://github.com/gregce/unmint), [Scalar](https://github.com/scalar/scalar), [Nextra](https://nextra.site/), Docusaurus.
 
 ---
 
@@ -2647,8 +2648,8 @@ OpenAPI parse → reference pages, "Try it" panel, code samples, auth.
   in-nav endpoint pages (method/path, params, request/response schemas via
   `ParamField`/`ResponseField`/`Expandable`, static cURL). Spec parsed/dereferenced with
   Scalar's MIT `@scalar/openapi-parser`; rendering is ours (`src/lib/openapi.ts`,
-  `src/components/api/EndpointReference.tsx`). Decision rationale + incumbent model
-  verification in chat history; matches the incumbent's `openapi`-nav model.
+  `src/components/api/EndpointReference.tsx`). Decision rationale + hosted docs platforms model
+  verification in chat history; matches hosted docs platforms' `openapi`-nav model.
 - ⏳ **Next:** interactive "Try it" panel (request execution, auth, proxy), per-operation
   MDX stubs (`openapi: METHOD /path` frontmatter), multi-language code samples
   (`x-codeSamples`), AsyncAPI.
@@ -2675,14 +2676,14 @@ Org/auth/RBAC, custom domains + TLS, analytics views. Beta-ready.
 4. **Self-host story.** How easy must the OSS self-host path be vs. the hosted SaaS? Affects how much we hardwire to R2/Vercel/etc. **Resolved (2026-06-08):** code to portable interfaces, not vendors — Better Auth owns its schema in Postgres (§11.1), and storage is the **S3 API** (hosted default R2, local MinIO, self-host points `S3_ENDPOINT` anywhere; §3.1). Domain/TLS: **resolved (2026-06-09)** — `*.papervine.io` via host-platform wildcard cert; custom domains via the host-platform domains API, escaping the per-project cap with a SaaS-domains proxy (Approximated / Cloudflare-for-SaaS / Caddy) + `X-Forwarded-Host` when it nears (§2 → Custom domains). Self-host swaps the proxy or uses Caddy on-demand-TLS directly.
 5. **License & governance.** MIT vs. Apache-2.0; CLA; what (if anything) is SaaS-only (open-core) vs. fully open.
 6. **Pricing/limits** for the hosted version (out of scope for build, but shapes tenancy/metering design).
-7. ~~**Web editor** — defer past v1? The incumbent treats it as a differentiator.~~ **DECIDED & BUILT (2026-06-14): build it now, agent-native.** Shipped the full 3-panel editor (editing-agent chat · navigation · multi-modal editor) on a shared authoring backend — see §9.2's build note. We chose to lead with the differentiating axes (open-source + agent-native) rather than defer. Editing is **Source MDX + a Preview rendered by our own renderer** (revised 2026-06-15 — the original MDXEditor WYSIWYG was dropped because a second rendering engine only approximates real-world MDX; see §9.2). Git stays the source of truth and the preview is byte-faithful to publish.
+7. ~~**Web editor** — defer past v1? hosted docs platforms treats it as a differentiator.~~ **DECIDED & BUILT (2026-06-14): build it now, agent-native.** Shipped the full 3-panel editor (editing-agent chat · navigation · multi-modal editor) on a shared authoring backend — see §9.2's build note. We chose to lead with the differentiating axes (open-source + agent-native) rather than defer. Editing is **Source MDX + a Preview rendered by our own renderer** (revised 2026-06-15 — the original MDXEditor WYSIWYG was dropped because a second rendering engine only approximates real-world MDX; see §9.2). Git stays the source of truth and the preview is byte-faithful to publish.
 
 ---
 
 ## 17. Non-Goals (v1)
 
 - In-place WYSIWYG editing (we ship Source + a faithful real-renderer Preview instead; §9.2)
-- Migrating from non-hosted docs sources (Docusaurus/GitBook importers)
+- Migrating from non-docs.json sources (Docusaurus/GitBook importers)
 - Embeddable AI on third-party sites
 - Marketplace / plugin ecosystem
 - On-prem enterprise deploys

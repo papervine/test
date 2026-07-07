@@ -131,7 +131,7 @@ function NodeList({ nodes, depth = 0 }: { nodes: (NavLeaf | NavNode)[]; depth?: 
         // Wide gaps between top-level groups; comfortable spacing within a group.
         depth === 0 ? "space-y-7" : "space-y-1",
         // The guide rail only appears for nested sub-groups, not the top-level
-        // group's items (matches the incumbent).
+        // group's items (matches hosted docs platforms).
         depth >= 2 && "ml-[15px] border-l border-zinc-200 pl-3 dark:border-zinc-800",
       )}
     >
@@ -153,7 +153,7 @@ function NodeList({ nodes, depth = 0 }: { nodes: (NavLeaf | NavNode)[]; depth?: 
 export function Sidebar({ sections }: { sections: NavSection[] }) {
   const pathname = usePathname();
 
-  // Show only the active tab's nav (the incumbent scopes the sidebar to one tab).
+  // Show only the active tab's nav (hosted docs platforms scopes the sidebar to one tab).
   // The active tab is the one containing the current page; fall back to the first.
   const active = sections.find((s) => s.hrefs.includes(pathname)) ?? sections[0];
 

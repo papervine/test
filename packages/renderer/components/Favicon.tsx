@@ -4,8 +4,8 @@ import { withBase } from "../lib/url-base";
 
 /**
  * Emit `<link rel="icon">` from docs.json `favicon`. The value is either a single path or a
- * `{ light, dark }` pair (incumbent convention); for a pair we key each icon on the OS
- * `prefers-color-scheme` so the favicon tracks light/dark the way the incumbent's does. Paths are
+ * `{ light, dark }` pair (hosted docs platforms convention); for a pair we key each icon on the OS
+ * `prefers-color-scheme` so the favicon tracks light/dark the way hosted docs platforms' does. Paths are
  * tenant-scoped through `assetBase` (the `/api/tenant-asset/{slug}` proxy in subdomain/path/
  * custom-domain modes; empty — a no-op — on the apex, where assets are root-absolute).
  *

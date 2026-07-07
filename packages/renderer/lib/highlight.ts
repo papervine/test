@@ -4,8 +4,8 @@ import { createHighlighter, type Highlighter } from "shiki";
 /**
  * Standalone Shiki highlighter for code we generate at render time (the API reference's
  * request/response samples in the sticky right column) — as opposed to fenced code in MDX,
- * which `@mintlify/mdx`'s `serialize` highlights at compile time (see `mdx.tsx`). The right
- * column is always dark (the incumbent's model, and our panels were already zinc-900), so a single
+ * which the serializer highlights at compile time (see `mdx.tsx`). The right
+ * column is always dark, so a single
  * `github-dark` theme matches the dark-mode tokens readers see in MDX code blocks.
  *
  * The highlighter is a module-level singleton (creating one loads WASM + grammars, ~tens of

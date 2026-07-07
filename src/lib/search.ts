@@ -8,7 +8,7 @@ import { currentPageAccess } from "./reader-access";
 
 /**
  * Full-text search index (SPEC.md §6). Each docs page is split into heading
- * sections so a hit can jump straight to the relevant anchor — like the incumbent.
+ * sections so a hit can jump straight to the relevant anchor — like hosted docs platforms.
  *
  * The index is built from the same content source the renderer reads, so at M2
  * this builder runs once at sync time per tenant; today it's memoized per request

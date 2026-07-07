@@ -13,12 +13,12 @@ down the page (let alone the site). Everything below exists to honor that rule.
 MDX rendering (`src/lib/mdx.tsx`) is a deliberate **hybrid** of two libraries:
 
 <Steps>
-  <Step title="Compile with @mintlify/mdx's serialize">
+  <Step title="Compile to serializable output">
     `serialize` brings Shiki dual-theme syntax highlighting and snippet handling, for
     high-fidelity highlighting. It produces compiled, serializable output rather than a
     rendered element.
   </Step>
-  <Step title="Execute with @mdx-js/mdx's run(), inside a try/catch">
+  <Step title="Execute with @mdx-js/mdx run(), inside a try/catch">
     The compiled output is executed with `@mdx-js/mdx`'s `run()` wrapped in our own
     `try/catch`. Because *we* run the compiled source, the whole step is catchable: a failure
     renders an inline notice instead of throwing.
@@ -78,7 +78,7 @@ remote-MDX setup.
 
 The hybrid carries a couple of environment requirements worth knowing:
 
-- **`legacy-peer-deps`** — `@mintlify/mdx@4` declares a broken peer dependency
+- **`legacy-peer-deps`** — the third-party MDX serializer package declares a broken peer dependency
   (a nonexistent `@radix-ui/react-popover` version), so `.npmrc` sets `legacy-peer-deps=true`.
   Keep it.
 - **`serverExternalPackages`** — the MDX packages must be listed in `serverExternalPackages`

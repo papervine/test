@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { GitBranch, Plus, Check } from "lucide-react";
 import { checkoutBranchAction } from "@/lib/actions/authoring";
 
-// Branch dropdown (mirrors the incumbent's editor branch picker): the deploy branch, the
+// Branch dropdown (mirrors a comparable hosted docs platform editor's branch picker): the deploy branch, the
 // open edit sessions, and "Create new branch". Switching navigates the editor to that
 // branch (its drafts); creating mints a fresh working branch via the authoring backend.
 export function BranchSwitcher({

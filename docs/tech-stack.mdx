@@ -5,9 +5,9 @@ description: The building blocks Papervine is made of, and how the monorepo is l
 
 Papervine is built from scratch on Next.js rather than on an existing docs framework:
 multi-tenancy and full control over the renderer outweighed the head start a framework would
-have given. It still borrows OSS building blocks where they earn their place — `@mintlify/mdx`
-for compile-fidelity, `@scalar/openapi-parser` for OpenAPI — but owns the parts that make it
-a multi-tenant platform.
+have given. It still borrows OSS building blocks where they earn their place — a
+third-party MDX serializer for compile fidelity, `@scalar/openapi-parser` for OpenAPI —
+but owns the parts that make it a multi-tenant platform.
 
 <Info>
   Prior art studied before deciding to build from scratch: Fumadocs, unmint, Scalar, Nextra,
@@ -20,8 +20,8 @@ a multi-tenant platform.
 |---|---|---|
 | Framework | **Next.js** (App Router, RSC) | Multi-tenant middleware; streaming render |
 | Language | **TypeScript**, strict | |
-| MDX | **Hybrid**: `@mintlify/mdx` `serialize` + `@mdx-js/mdx` `run` | High-fidelity highlighting/snippets, plus a catchable render that never 500s |
-| Syntax highlighting | **Shiki** (via `@mintlify/mdx`) | Fast, accurate, dual light/dark themes |
+| MDX | **Hybrid**: serializer output + `@mdx-js/mdx` `run` | High-fidelity highlighting/snippets, plus a catchable render that never 500s |
+| Syntax highlighting | **Shiki** | Fast, accurate, dual light/dark themes |
 | API reference | `@scalar/openapi-parser` + a native renderer | In-nav endpoint pages, not a foreign embed |
 | CLI | `papervine dev <dir>` (`bin/papervine.mjs`) | Preview any MDX + `docs.json` repo locally |
 | Styling | **Tailwind CSS** + CSS variables | Theme tokens come from `docs.json` |
@@ -39,8 +39,8 @@ A few choices are worth calling out:
 
 <CardGroup cols={2}>
   <Card title="Hybrid MDX, never MDXRemote">
-    Compile with `@mintlify/mdx`'s `serialize`, then execute the
-    compiled output with `@mdx-js/mdx`'s `run()` inside a `try/catch`. This keeps the whole
+    Compile to serializable output, then execute the compiled output with `@mdx-js/mdx`'s
+    `run()` inside a `try/catch`. This keeps the whole
     step catchable, so an unsupported feature degrades to an inline notice instead of a 500.
     See [renderer internals](/rendering/internals).
   </Card>

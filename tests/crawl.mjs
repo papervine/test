@@ -2,7 +2,7 @@
 /**
  * Real-repo crawl tool. Boots the renderer against any docs repo and hits every
  * page, reporting how many fully render / degrade / 500. This is the manual probe
- * we used against papervine/starter and papervine/docs while building M1.
+ * we used against papervine/starter and papervine/starter while building M1.
  *
  *   node tests/crawl.mjs /path/to/docs-repo [--sample N] [--port P]
  *

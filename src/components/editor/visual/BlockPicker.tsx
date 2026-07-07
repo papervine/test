@@ -5,7 +5,7 @@ import type { Editor } from "@tiptap/core";
 import { SLASH_CATEGORIES, filterSlashItems, type SlashItem } from "./menu-items";
 
 /**
- * The "+" block picker — a standalone, searchable popover (the incumbent's "Sections / Type to
+ * The "+" block picker — a standalone, searchable popover (hosted docs platforms' "Sections / Type to
  * search"). Unlike the `/` slash menu (which rides TipTap's keyboard-only Suggestion),
  * this is fully controlled, so it can be opened by a button click. Selecting an item inserts
  * that block at `insertPos` (just after the hovered block).

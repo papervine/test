@@ -21,7 +21,7 @@ import { siteHref } from "@/lib/dashboard-nav";
 export type SettingsNavItem = { slug: string; label: string; icon: LucideIcon };
 export type SettingsNavSection = { heading: string; items: SettingsNavItem[] };
 
-// Canonical IA for the Settings subnav (mirrors the incumbent's settings surfaces). This is
+// Canonical IA for the Settings subnav (mirrors hosted docs platforms' settings surfaces). This is
 // the single source of truth: the subnav, the route validation, and the index redirect
 // all read from it. Content for each surface is scaffolded later — for now every slug
 // resolves to a placeholder page (see settings/[section]/page.tsx).

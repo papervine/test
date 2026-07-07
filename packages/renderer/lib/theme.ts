@@ -1,5 +1,5 @@
 /**
- * Theme registry (SPEC.md §5). Mirrors the incumbent's named themes (`"theme"` in
+ * Theme registry (SPEC.md §5). Mirrors hosted docs platforms' named themes (`"theme"` in
  * docs.json). A theme is a small set of design tokens applied as CSS variables
  * on <html data-theme="…">, so the whole UI re-skins from one config value and
  * adding/tuning a theme means editing one entry here (plus optional per-theme

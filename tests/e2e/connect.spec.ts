@@ -14,6 +14,6 @@ test("connect a public repo and land on its site overview @external", async ({ p
   // slugify("Starter E2E") = "starter-e2e"). The overview shows the site + repo + Live.
   await page.waitForURL(`**/${ORG_SLUG}/starter-e2e`);
   await expect(page.getByRole("heading", { name: "Starter E2E" })).toBeVisible();
-  await expect(page.getByRole("link", { name: /incumbent\/starter/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: /papervine\/starter/ })).toBeVisible();
   await expect(page.getByText("Live").first()).toBeVisible();
 });

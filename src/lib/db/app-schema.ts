@@ -28,7 +28,7 @@ export const site = pgTable(
     repoOwner: text("repo_owner"),
     repoName: text("repo_name"),
     branch: text("branch").default("main").notNull(),
-    // Subdirectory the docs.json lives in (the incumbent's "docs.json is in a subdirectory"
+    // Subdirectory the docs.json lives in (hosted docs platforms' "docs.json is in a subdirectory"
     // option), normalized by normalizeDocsPath. "" = repo root. Sync strips this prefix
     // so storage keys stay sites/{id}/docs.json regardless — the render path never sees it.
     docsPath: text("docs_path").default("").notNull(),
@@ -40,7 +40,7 @@ export const site = pgTable(
     repoTokenEnc: text("repo_token_enc"),
     customDomain: text("custom_domain").unique(),
     // "Host at /docs": serve the docs under {customDomain}/docs instead of at its
-    // root, so the customer can keep their own site on the apex (incumbent parity).
+    // root, so the customer can keep their own site on the apex (docs platform parity).
     customDomainSubpath: boolean("custom_domain_subpath")
       .default(false)
       .notNull(),
@@ -258,7 +258,7 @@ export const analyticsEvent = pgTable(
 // (SPEC §10.5). Deliberately NOT FK'd to site/organization: the whole point is to
 // outlive the thing being deleted (those rows are gone the moment the deletion commits),
 // so we snapshot the subject's name + id as plain text. Append-only; nothing reads it in
-// the app yet — it's product/retention feedback, the way Vercel/the incumbent ask "why are
+// the app yet — it's product/retention feedback, the way Vercel/hosted docs platforms ask "why are
 // you deleting this?". actorUserId stays (the user isn't deleted) but is set null if they
 // later are, so the survey survives independently.
 export const deletionFeedback = pgTable(

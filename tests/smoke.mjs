@@ -4,7 +4,7 @@
  *
  * Boots the real renderer against tests/fixtures (a docs repo that exercises every
  * M1 fix) and crawls each page, asserting it renders without a 500. This is the
- * automated version of the manual `papervine dev` crawl we used to validate against
+ * automated version of the manual `papervine dev` crawl we use to validate against
  * representative docs repos — it guards the GAP-REPORT fixes from regressing.
  *
  * No test framework: pure Node + fetch. Run with `npm test`.

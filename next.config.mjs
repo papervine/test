@@ -25,7 +25,7 @@ const nextConfig = {
     // cookie, so they render dynamically) is treated as immediately stale: <Link> prefetches
     // the RSC, then THROWS IT AWAY and refetches on click. That's a live round-trip on every
     // navigation (~200ms TTFB measured), so settings tabs feel like "click → wait → change"
-    // instead of the incumbent's "changed before you let go" (their prefetched RSC is reused from
+    // instead of hosted docs platforms' "changed before you let go" (their prefetched RSC is reused from
     // cache → ~40ms, 0 network). Giving dynamic entries a 30s freshness window lets the
     // prefetch be reused, turning sibling-tab navigation into an instant client render.
     //

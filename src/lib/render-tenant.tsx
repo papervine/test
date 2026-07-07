@@ -33,7 +33,7 @@ import { SearchButton } from "@/components/SearchDialog";
  * around a per-page ARTICLE (page: title + MDX + ToC). Splitting them into a layout/page
  * pair is the whole point: navigating between pages of the same site re-renders only the
  * article segment — the sidebar/navbar persist (no flash, scroll preserved) and only the
- * small article RSC payload streams, the way the incumbent swaps content under a fixed chrome.
+ * small article RSC payload streams, the way hosted docs platforms swaps content under a fixed chrome.
  * Previously one component rendered the entire page per navigation.
  *
  * Both halves resolve the same content source from the slug (cheap: getSiteBySlug is a

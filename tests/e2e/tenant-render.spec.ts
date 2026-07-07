@@ -31,7 +31,7 @@ const NOASSIST_SLUG = "regression-no-assistant";
 const DOCS_JSON = JSON.stringify({
   name: "Regression Tenant",
   colors: { primary: "#2563EB" },
-  // Root-absolute logo path (incumbent convention) — must resolve to our tenant-asset
+  // Root-absolute logo path (a comparable hosted docs platform convention) — must resolve to our tenant-asset
   // route, NOT GitHub. This is the shape that broke the navbar logo on live-GitHub sites.
   logo: "/logo.svg",
   navigation: {

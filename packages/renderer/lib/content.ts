@@ -10,7 +10,7 @@ import { parseDocsConfig, type DocsConfig } from "./config";
 export type PageFrontmatter = {
   title?: string;
   description?: string;
-  icon?: string; // sidebar leaf icon (Lucide/incumbent name)
+  icon?: string; // sidebar leaf icon (Lucide/docs name)
   sidebarTitle?: string; // nav label override (GAP-REPORT §3)
   url?: string; // external link — the sidebar entry opens this instead of the page
   tag?: string; // small badge shown next to the sidebar entry
@@ -60,7 +60,7 @@ export type ContentSource = {
 
 export const contentContext = new AsyncLocalStorage<ContentSource>();
 
-/** Page file extensions we serve, in resolution priority order. The incumbent ships both. */
+/** Page file extensions we serve, in resolution priority order. hosted docs platforms ships both. */
 export const PAGE_EXTS = [".mdx", ".md"];
 
 /** Raster image extensions we measure for next/image — mirrors the sync-side RASTER_IMAGE_EXT

@@ -78,7 +78,7 @@ async function resolveLeaf(slug: string, ctx: NavCtx): Promise<NavLeaf | null> {
 }
 
 // Container keys whose values hold further pages/divisions, and label keys that
-// name a division. Walking these generically covers the incumbent's whole recursive
+// name a division. Walking these generically covers hosted docs platforms' whole recursive
 // navigation surface (languages → versions → tabs → anchors/dropdowns → groups
 // → pages) without enumerating every combination — GAP-REPORT §1.2.
 const CONTAINER_KEYS = ["pages", "groups", "anchors", "dropdowns"];
@@ -95,7 +95,7 @@ const OP_SELECTOR = /^(get|post|put|patch|delete|head|options)\s+\//i;
 
 /**
  * A division with an `openapi` property auto-generates a leaf per operation
- * (incumbent model). `pages`, if present, selects/orders endpoints by "METHOD /path"
+ * (hosted docs platforms model). `pages`, if present, selects/orders endpoints by "METHOD /path"
  * (other strings are treated as normal page slugs, so manual pages can mix in).
  */
 async function openapiLeaves(div: Division, ctx: NavCtx): Promise<(NavLeaf | NavNode)[]> {
@@ -109,7 +109,7 @@ async function openapiLeaves(div: Division, ctx: NavCtx): Promise<(NavLeaf | Nav
   });
 
   // Auto-generated (no explicit `pages`): group operations by their first OpenAPI tag, like
-  // the incumbent — each tag becomes a collapsible nav group, operations in spec order under it.
+  // hosted docs platforms — each tag becomes a collapsible nav group, operations in spec order under it.
   // Tags appear in first-encounter order; untagged operations stay as bare leaves up top. A
   // spec with no tags at all falls through to a flat list (unchanged behavior).
   if (!Array.isArray(div.pages)) {
@@ -215,7 +215,7 @@ function collectHrefs(nodes: (NavLeaf | NavNode)[]): string[] {
 }
 
 /**
- * The label of the deepest group containing `href` — the incumbent shows this as an
+ * The label of the deepest group containing `href` — hosted docs platforms shows this as an
  * "eyebrow" above the page title (e.g. "Introduction" over "Pixwel Platform").
  */
 export function findGroupLabel(sections: NavSection[], href: string): string | undefined {

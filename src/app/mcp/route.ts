@@ -16,7 +16,7 @@ import { agentSessionId, firstForwardedIp } from "@/lib/agent-session";
 import { logEvent, type EventType } from "@/lib/track";
 
 /**
- * Generated MCP server for this docs site (SPEC §8.5) — the incumbent "MCP for your
+ * Generated MCP server for this docs site (SPEC §8.5) — a comparable hosted docs platform "MCP for your
  * docs" feature. Exposes the docs as Model Context Protocol tools so external AI
  * clients (Claude, Cursor, …) can search and read the docs live. Same capabilities
  * as the in-app assistant (`docs-tools.ts`), a second transport.

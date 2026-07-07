@@ -67,7 +67,7 @@ export default async function SiteOverview({
     : null;
 
   // "Last updated by" reflects the latest *live* publish, independent of which feed tab
-  // is showing — the incumbent shows the live deploy here.
+  // is showing — hosted docs platforms shows the live deploy here.
   const [latest] = await db
     .select({
       createdAt: deployment.createdAt,

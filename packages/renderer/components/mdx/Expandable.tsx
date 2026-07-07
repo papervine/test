@@ -4,7 +4,7 @@ import { useState, type ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import clsx from "clsx";
 
-/** the incumbent's <Expandable title="…"> — inline collapsible for nested schema fields. */
+/** hosted docs platforms' <Expandable title="…"> — inline collapsible for nested schema fields. */
 export function Expandable({
   title,
   defaultOpen = false,
