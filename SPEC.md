@@ -1717,6 +1717,50 @@ answer (it read as pre-filled).
 > (no-op without `VERCEL_TOKEN`, so local/CI unaffected), affecting only hosted-prod sites
 > that set a custom domain.
 
+**Transfer this site.** The Danger zone's third section (listed first — GitHub keeps
+ownership transfer in its danger zone too, and it's disruptive but not destructive): an
+**owner/admin** moves a site to another org **they are also owner/admin of** — the
+Vercel-style transfer between your own teams. Both ends are the same authenticated user, so
+no acceptance handshake exists; transferring to a foreign org would need a pending-invite
+flow and is deliberately out of scope (noted for later if asked for). Mechanically the
+transfer is one `UPDATE site SET organization_id` — everything else is keyed off `site.id`
+and travels for free: deployments/analytics/editor-session rows (FK chains), the
+`sites/{id}/` storage prefix (no org in the key), and the custom domain (attached to the
+shared Vercel project, recorded on the row). Slugs are globally unique, so tenant URLs
+don't change. The **one org-owned link is the GitHub App installation**
+(`githubInstallation.organizationId`): the site keeps its `githubInstallationId` only if
+the destination org holds the *same* installation, else it's nulled — otherwise the site
+would mint sync tokens from an installation the new org doesn't control (and the old org
+could revoke out from under it). Public/PAT sites are unaffected (`repoTokenEnc` is
+site-scoped); an App-connected private repo needs a reconnect in the new org, which the UI
+says up front. Gates: destination picker (only eligible orgs are offered; the action
+re-checks both roles) + the same type-the-slug confirm modal as the deletes; no reason
+required (no exit survey — nothing is destroyed). Pure decisions live in
+`src/lib/transfer-site.ts` (`canManageSites`, `eligibleDestinations`,
+`installationCarries`; unit-tested), the action is `transferSite` in the danger actions
+(same `redirectTo` + client hard-navigate contract), and the row's slug/domain cache tags
+are busted so the org change is visible immediately.
+>
+> **Status (2026-07-06):** built. Unit tests (`tests/unit/transfer-site.test.ts`) cover the
+> role gate, destination filter (current org excluded even when owned; member/null roles
+> excluded), and installation carry-over. E2E (`tests/e2e/transfer-site.spec.ts`) seeds a
+> second org + site, drives the picker + confirm modal (display name must NOT arm it; slug
+> does), performs a real transfer, and asserts the redirect to the destination URL, the
+> moved `organization_id`, and a 404 on the old org-scoped URL.
+>
+> **Status (2026-07-06, same day):** the picker now lists ALL the actor's other orgs, with
+> ineligible ones (role `member`) disabled + "requires owner or admin" inline
+> (`destinationOptions` replaced `eligibleDestinations`). Hiding them failed in first
+> contact: a real user invited to a second org as `member` read the empty state as "you
+> aren't a member of any other organizations". Surfaced two adjacent gaps, deliberately
+> not fixed here: (a) **no UI lists a user's org memberships** (the site switcher is
+> per-org sites only; other orgs are reachable only by typed URL), and (b) **invites are
+> hardcoded `role: 'member'` with no change-role action**, so an eligible destination
+> can't be produced through the UI at all — both queued as follow-ups (org switcher /
+> member-role management). Note the related inconsistency: `connectRepo` doesn't role-gate
+> site creation, while transfer-in requires owner/admin; resolution leans toward
+> tightening connect, not loosening transfer.
+
 ### 10.6 CLI (`papervine`) — local dev tool, published to npm
 
 The CLI is a **local dev tool**, not a second front door to the control plane. It's the
@@ -1928,6 +1972,21 @@ land back on accept); signed-in as the wrong account → switch-account prompt.
 > Active members; cancel + remove work; owner/admin gate enforced. typecheck + unit
 > (`parseInviteEmails`) + smoke + crawl green. Follow-ups: real email (Resend, seam ready),
 > per-invite role picker (v1 invites as `member`).
+>
+> **Status (2026-07-06): role management landed** (the queued follow-up, forced by site
+> transfer — a transfer destination needs owner/admin there, and v1 could produce only
+> `member`s, so no org built through the UI could ever receive a site). Two additions,
+> both on Better Auth's own enforcement: the **invite form carries a role picker**
+> (`createInvitation` takes the role; the pending list shows it) and the members table's
+> **Role column is an in-place select** (`auth.api.updateMemberRole`). The UI offers only
+> what the viewer may grant — owner → member/admin/owner, admin → member/admin — via the
+> pure `assignableRoles`/`canEditMemberRole` (`src/lib/org-roles.ts`, unit-tested), which
+> mirror the plugin's rules: only the creator role (owner) may grant `owner` or touch an
+> existing owner (`YOU_ARE_NOT_ALLOWED_TO_INVITE_USER_WITH_THIS_ROLE` /
+> `updateMemberRole`'s creator checks), never yourself, and the server rejects demoting
+> the last owner. E2E (`tests/e2e/members-roles.spec.ts`): owner promotes a seeded member
+> to admin from the table (persisted row asserted) and sends an owner-role invite (the
+> invitation row carries `role='owner'`).
 
 ### 10.9 Settings → General (rename a site)
 
@@ -2086,6 +2145,17 @@ Add it behind Better Auth's org model when the first enterprise deal lands. **Cl
 fastest DX, only if we decide OSS self-hosting is *not* a real goal (we've decided it is).
 **Auth.js v5** — viable but minimal; Better Auth ≈ Auth.js + the org layer we'd otherwise
 write by hand.
+
+> **Status (2026-07-06):** dev `trustedOrigins` no longer hardcode a port. The list had
+> exactly `http://app.localhost:3000` for local dev, so any worktree dev server that
+> auto-picked `:3001`/`:3002` (several checkouts running at once — the intended workflow)
+> got 403 "Invalid origin" on sign-in until someone edited `BETTER_AUTH_URL`. Non-production
+> builds now trust `http://localhost:*`, `http://*.localhost:*`, and `http://127.0.0.1:*`
+> (better-auth's origin patterns: `*` matches any chars except `/`, so host wildcards and
+> port wildcards compose). Gated on `NODE_ENV !== "production"` — the wildcards never ship;
+> prod trust stays `papervine.io`/`*.papervine.io` + `BETTER_AUTH_URL` (Vercel previews).
+> Verified in-browser: sign-in 200 on a `:3001` dev server with `BETTER_AUTH_URL` still
+> pointing at `:3000` (the previously failing combination).
 
 ### 11.2 Layer 2 — Reader auth (docs.json-compatible handshake)
 
