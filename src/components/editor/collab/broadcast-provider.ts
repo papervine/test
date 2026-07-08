@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { Awareness } from "y-protocols/awareness";
 
 // Service-less Yjs transport over BroadcastChannel — syncs a Y.Doc across tabs of the SAME
 // browser/origin with zero infrastructure. This is the Phase-3 (in-memory) stand-in for the
@@ -34,6 +35,10 @@ type Msg =
  */
 export class BroadcastProvider {
   readonly doc: Y.Doc;
+  // A local-only Awareness so the Source (CodeMirror) editor has one to bind to. Same-browser
+  // tabs don't share it over the channel (bc presence rides the peer map above), so it just
+  // carries THIS tab's cursor — real cross-tab remote cursors are the Hocuspocus path's job.
+  readonly awareness: Awareness;
   private channel: BroadcastChannel;
   private self: PeerInfo | null = null;
   private peers = new Map<number, PeerInfo>();
@@ -45,6 +50,7 @@ export class BroadcastProvider {
 
   constructor(roomId: string, doc: Y.Doc) {
     this.doc = doc;
+    this.awareness = new Awareness(doc);
     this.channel = new BroadcastChannel(`pv-collab:${roomId}`);
     this.channel.onmessage = (e: MessageEvent<Msg>) => this.handle(e.data);
     doc.on("update", this.onDocUpdate);
@@ -121,6 +127,8 @@ export class BroadcastProvider {
   setPresence(info: Omit<PeerInfo, "clientId">) {
     this.self = { clientId: this.doc.clientID, ...info };
     this.post({ t: "presence", id: this.self.clientId, peer: this.self });
+    // Also mirror into awareness so the CodeMirror editor colours this tab's own cursor.
+    this.awareness.setLocalStateField("user", { name: info.name, color: info.color });
   }
 
   /** Observe the peer roster (excludes self). Returns an unsubscribe. */
@@ -147,6 +155,7 @@ export class BroadcastProvider {
     if (this.self) this.post({ t: "presence", id: this.self.clientId, peer: null });
     this.doc.off("update", this.onDocUpdate);
     window.removeEventListener("beforeunload", this.onUnload);
+    this.awareness.destroy();
     this.channel.close();
   }
 }

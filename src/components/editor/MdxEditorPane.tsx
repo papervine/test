@@ -4,6 +4,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "re
 import { Eye, Code2, Diff, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { VisualEditor } from "./VisualEditor";
+import { SourceEditor } from "./SourceEditor";
 import { DiffView } from "./visual/DiffView";
 import { useCollabDoc } from "./collab/useCollabDoc";
 import { PresenceDots } from "./collab/PresenceDots";
@@ -51,7 +52,7 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
   // Collaboration: the canonical value is a shared Y.Text("mdx") per page-room; `value` mirrors
   // it for rendering, save, diff and copy. Local edits splice into the Y.Text (broadcast to peers);
   // remote edits flow back through onRemoteChange. Text-canonical, so git stays byte-exact.
-  const { binding, peers, ready } = useCollabDoc({ org, site, branch, path, initialMarkdown });
+  const { binding, peers, ready, ytext, awareness } = useCollabDoc({ org, site, branch, path, initialMarkdown });
 
   // Debounced draft save, shared by local and remote edits (both mutate the draft).
   const scheduleSave = (md: string) => {
@@ -181,12 +182,18 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
         {diffing ? (
           <DiffView base={baseContent ?? ""} draft={value} />
         ) : mode === "source" ? (
-          <textarea
-            value={value}
-            onChange={(e) => change(e.target.value)}
-            spellCheck={false}
-            className="h-full w-full resize-none bg-transparent p-4 font-mono text-sm leading-relaxed text-neutral-800 outline-none dark:text-neutral-200"
-          />
+          // Collaborative CodeMirror once the shared doc has settled; a plain textarea covers the
+          // brief pre-connect window (and the collab-disabled path where ytext/awareness are null).
+          ready && ytext && awareness ? (
+            <SourceEditor ytext={ytext} awareness={awareness} />
+          ) : (
+            <textarea
+              value={value}
+              onChange={(e) => change(e.target.value)}
+              spellCheck={false}
+              className="h-full w-full resize-none bg-transparent p-4 font-mono text-sm leading-relaxed text-neutral-800 outline-none dark:text-neutral-200"
+            />
+          )
         ) : (
           <VisualEditor value={value} onChange={change} assetBase={`/api/tenant-asset/${site}`} />
         )}

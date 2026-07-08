@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as Y from "yjs";
+import type { Awareness } from "y-protocols/awareness";
 import { textDiff } from "@papervine/mdx-prosemirror";
 import { mintCollabTokenAction } from "@/lib/actions/authoring";
 import { BroadcastProvider, type PeerInfo } from "./broadcast-provider";
@@ -19,6 +20,7 @@ import { HocuspocusTransport } from "./hocuspocus-transport";
 // secret), we fall back to BroadcastChannel rather than fail.
 
 interface CollabTransport {
+  awareness: Awareness | null;
   onSynced(fn: () => void): () => void;
   onPeers(fn: (peers: PeerInfo[]) => void): () => void;
   setPresence(info: Omit<PeerInfo, "clientId">): void;
@@ -40,6 +42,10 @@ export interface CollabDoc {
   peers: PeerInfo[];
   /** True once initial state has settled (seeded, or adopted from server/peer). */
   ready: boolean;
+  /** The shared Y.Text — for a native editor binding (CodeMirror). Null until the room mounts. */
+  ytext: Y.Text | null;
+  /** The active transport's awareness (remote cursors) — Hocuspocus's, or a local-only one. */
+  awareness: Awareness | null;
 }
 
 export interface CollabRoom {
@@ -67,6 +73,8 @@ export function useCollabDoc(room: CollabRoom): CollabDoc {
   const { org, site, branch, path } = room;
   const [ready, setReady] = useState(false);
   const [peers, setPeers] = useState<PeerInfo[]>([]);
+  const [ytext, setYtext] = useState<Y.Text | null>(null);
+  const [awareness, setAwareness] = useState<Awareness | null>(null);
   const bindingRef = useRef<CollabBinding | null>(null);
   // Keep the freshest initial content without retriggering the room effect.
   const initialRef = useRef(room.initialMarkdown);
@@ -105,6 +113,8 @@ export function useCollabDoc(room: CollabRoom): CollabDoc {
 
     setReady(false);
     setPeers([]);
+    setYtext(ytext);
+    setAwareness(null);
 
     let transport: CollabTransport | null = null;
     let disposed = false;
@@ -117,6 +127,7 @@ export function useCollabDoc(room: CollabRoom): CollabDoc {
       }
       transport = t;
       t.setPresence(identity);
+      setAwareness(t.awareness);
       t.onPeers(setPeers);
       t.onSynced(() => {
         // First client in the room finds it empty → seed from the server-provided content. A
@@ -148,6 +159,8 @@ export function useCollabDoc(room: CollabRoom): CollabDoc {
       transport?.destroy();
       doc.destroy();
       bindingRef.current = null;
+      setYtext(null);
+      setAwareness(null);
     };
   }, [org, site, branch, path]);
 
@@ -158,5 +171,5 @@ export function useCollabDoc(room: CollabRoom): CollabDoc {
     onRemoteChange: (fn) => bindingRef.current?.onRemoteChange(fn) ?? (() => {}),
   });
 
-  return { binding: facadeRef.current, peers, ready };
+  return { binding: facadeRef.current, peers, ready, ytext, awareness };
 }

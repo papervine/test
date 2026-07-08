@@ -1,4 +1,5 @@
 import type { Doc } from "yjs";
+import type { Awareness } from "y-protocols/awareness";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import type { PeerInfo } from "./broadcast-provider";
 
@@ -32,6 +33,11 @@ export class HocuspocusTransport {
     });
     // Awareness → peer roster. The provider owns a y-protocols Awareness bound to the same doc.
     this.provider.awareness?.on("change", this.emitPeers);
+  }
+
+  /** The provider's awareness, for the Source (CodeMirror) editor to render remote cursors. */
+  get awareness(): Awareness | null {
+    return (this.provider.awareness as Awareness | null) ?? null;
   }
 
   private markSynced = () => {

@@ -1308,9 +1308,22 @@ layer.
 > is a different problem from the Activity feed's Pusher/Soketi choice (§10.3): that relays content-
 > free pings; a document needs stateful sync (correct join-state, awareness, and state transfer that
 > would blow past Pusher's ~10KB message cap — which *diverges* between hosted Pusher and self-host
-> Soketi), so a purpose-built Yjs server is the right tool here. **Deferred:** CodeMirror +
-> `y-codemirror.next` for character-level remote cursors in Source (today Source is a textarea —
-> a remote edit can jump the caret); binary CRDT persistence; real display names in presence.
+> Soketi), so a purpose-built Yjs server is the right tool here. **Deferred:** binary CRDT
+> persistence; real display names in presence.
+>
+> **Source mode is CodeMirror now — remote cursors + no caret jump (2026-07-08).** Took the
+> deferred CodeMirror step. Source mode is CodeMirror 6 bound DIRECTLY to the shared `Y.Text` via
+> `y-codemirror.next` (`SourceEditor.tsx`), replacing the `value`/`onChange` textarea. Two wins the
+> textarea couldn't give: (1) **no caret jump** — a remote insert before your cursor maps your
+> selection through the CRDT, so your caret stays on the same logical character; (2) **remote
+> cursors** — every other editor's caret + selection render in their presence colour + name (from
+> awareness). To feed CodeMirror, `useCollabDoc` now exposes the `Y.Text` and a `y-protocols`
+> Awareness (the Hocuspocus provider's, or a local-only one for the BroadcastChannel fallback —
+> which gets the caret-jump fix but no shared cursors, being same-browser). Persistence is
+> unchanged: CodeMirror writes the `Y.Text` with its own txn origin, so the pane's existing
+> observer debounce-saves it exactly like a remote edit. Verified across two browser profiles:
+> live sync, a colour+name remote caret, and a caret that holds position when the other side
+> inserts above it (the textarea's wart, gone).
 >
 > Token-scoped *external* auth for the authoring MCP (a platform-auth PAT, §11) is the
 > follow-up; today it authenticates via the app-host session + `x-papervine-org/site` headers.
