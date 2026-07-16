@@ -34,6 +34,10 @@ type SiteRow = typeof site.$inferSelect;
  * site-cache.ts (DB-free, unit-tested).
  */
 export const getSiteBySlug = cache(async (slug: string): Promise<SiteRow | null> => {
+  // Single-repo mode (`papervine dev` / the smoke fixtures) serves ONE repo from PAPERVINE_CONTENT
+  // with no control-plane DB — there are no tenant rows to resolve, so short-circuit before touching
+  // the DB (which isn't there and would ECONNREFUSED). Callers already treat null as "no tenant".
+  if (process.env.PAPERVINE_CONTENT) return null;
   // unstable_cache is created per-call with the slug in BOTH keyParts and the tag, so the cache
   // entry is per-slug and the tag busts exactly it. The outer React cache() keeps per-request dedupe.
   const read = unstable_cache(
@@ -46,6 +50,9 @@ export const getSiteBySlug = cache(async (slug: string): Promise<SiteRow | null>
 
 // Resolve a site by its vanity domain (the host the owner pointed at us, e.g. docs.example.com).
 export const getSiteByCustomDomain = cache(async (host: string): Promise<SiteRow | null> => {
+  // Single-repo mode (PAPERVINE_CONTENT) has no custom-domain tenants and no DB — no-op before the
+  // query so the apex/preview home renders DB-free instead of 500ing on ECONNREFUSED (smoke gate).
+  if (process.env.PAPERVINE_CONTENT) return null;
   const name = normalizeHost(host);
   const read = unstable_cache(
     async () =>
