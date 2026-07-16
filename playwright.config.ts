@@ -46,6 +46,12 @@ export default defineConfig({
     timeout: 120_000,
     // process.env wins over .env.local in Next, so this points the app at the test DB.
     env: {
+      // Raise V8's old-space cap for the dev server. On CI the runner's cgroup makes Node
+      // default to ~2GB; `next dev` compiling the whole app on-demand across the suite crosses
+      // its memory threshold and SELF-RESTARTS mid-run ("Server is approaching the used memory
+      // threshold, restarting…"), and each restart is a brief window where page.goto hits
+      // ERR_CONNECTION_REFUSED and cascades spec failures. Same fix the CI build step already uses.
+      NODE_OPTIONS: "--max-old-space-size=6144",
       DATABASE_URL: TEST_DB_URL,
       BETTER_AUTH_SECRET: "e2e-only-deterministic-secret-do-not-use-in-production-0123456789",
       // Auth happens on the app host — trust that origin (Better Auth's CSRF check reads
