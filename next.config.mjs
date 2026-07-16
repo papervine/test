@@ -36,6 +36,14 @@ const nextConfig = {
     staleTimes: {
       dynamic: 30,
     },
+    // The editor autosaves whole MDX files through a Server Action (saveDraftAction). Next's
+    // default 1 MB body cap is low for a docs editor: a large API-reference page or one with an
+    // embedded data-URI image can legitimately exceed it, and the whole file rides one request.
+    // Raise it to 4 MB. (This is headroom for real pages — NOT a cover for runaway growth; the
+    // Visual-editor emit is a fixed point, see mdx-prosemirror-emit-idempotent.test.ts.)
+    serverActions: {
+      bodySizeLimit: "4mb",
+    },
   },
 };
 
