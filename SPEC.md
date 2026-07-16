@@ -1325,6 +1325,26 @@ layer.
 > live sync, a colour+name remote caret, and a caret that holds position when the other side
 > inserts above it (the textarea's wart, gone).
 >
+> **Visual mode gets remote carets too — a custom projection, no y-prosemirror (2026-07-09).**
+> The paved path for PM cursors (`y-prosemirror`'s `yCursorPlugin`) requires ProseMirror to be the
+> canonical CRDT bound to a `Y.XmlFragment` — which we deliberately *don't* do (raw MDX `Y.Text` is
+> canonical, Visual is a projection; see the text-canonical decision above). So there is no
+> off-the-shelf package that renders a Y.Text-offset cursor inside a ProseMirror projection. The
+> insight that makes a custom one cheap: **every client projects the same MDX body to the same
+> deterministic PM doc, so a raw ProseMirror position means the same place in every Visual editor** —
+> no source-offset↔PM mapping needed for the Visual↔Visual case. `CollabCarets.ts` is a TipTap
+> extension whose PM plugin (1) writes the local selection (`{anchor, head}` in PM coords) to a
+> `visualCursor` awareness field on every selection/doc change, and (2) renders every *other*
+> client's `visualCursor` as a `Decoration.widget` caret (colour + name label) plus a
+> `Decoration.inline` selection band, refreshing on the awareness `change` event. It reuses the
+> **same Awareness** `useCollabDoc` already exposes for CodeMirror, so presence colour/name are
+> shared across both panes. Scope: **Visual↔Visual** — a Source-mode peer's caret lives in Y.Text
+> offset space and doesn't cross into PM coords without a source-offset bridge (deferred; the field
+> is simply absent so no caret shows, never a wrong one). During simultaneous typing a remote caret
+> can lag by the size of not-yet-synced edits and self-corrects on the next projection — accepted as
+> cosmetic. Verified across two browser profiles: bidirectional colour+name carets that track the
+> other side's selection as it moves through the doc.
+>
 > Token-scoped *external* auth for the authoring MCP (a platform-auth PAT, §11) is the
 > follow-up; today it authenticates via the app-host session + `x-papervine-org/site` headers.
 

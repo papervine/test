@@ -445,6 +445,36 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   border-radius: 8px;
 }
 
+/* Remote-collaborator carets in Visual mode (CollabCarets extension). A zero-width widget: a thin
+   coloured bar the height of the line, with a small name label that fades unless the caret moved
+   recently. Colour comes inline from the peer's presence colour; only geometry lives here. */
+.pv-visual .pv-remote-caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 2px solid;
+  border-color: inherit;
+  pointer-events: none;
+  word-break: normal;
+}
+.pv-visual .pv-remote-caret-label {
+  position: absolute;
+  top: -1.35em;
+  left: -2px;
+  white-space: nowrap;
+  border-radius: 4px 4px 4px 0;
+  padding: 1px 5px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #fff;
+  user-select: none;
+  pointer-events: none;
+}
+.pv-visual .pv-remote-selection {
+  border-radius: 1px;
+}
+
 /* Block controls (drag handle + "+" add-block), Notion-style, on block hover. */
 .pv-block-controls {
   display: flex;

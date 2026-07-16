@@ -7,9 +7,11 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { useEffect, useRef, useState } from "react";
 import { Bold, Italic, Strikethrough, Code, Link as LinkIcon, GripVertical, Plus } from "lucide-react";
 import type { Node as PMNode } from "@tiptap/pm/model";
+import type { Awareness } from "y-protocols/awareness";
 import { mdxToProseMirror, proseMirrorToMdx, splitFrontmatter } from "@papervine/mdx-prosemirror";
 import { buildMdxExtensions } from "./visual/nodes";
 import { makeNodeViewOpts } from "./visual/NodeViews";
+import { CollabCarets, collabCaretsKey } from "./visual/CollabCarets";
 import { SlashCommand, type SlashState } from "./visual/SlashCommand";
 import { SlashMenu, type SlashMenuHandle } from "./visual/SlashMenu";
 import { BlockPicker } from "./visual/BlockPicker";
@@ -47,13 +49,21 @@ export function VisualEditor({
   value,
   onChange,
   assetBase,
+  awareness,
 }: {
   value: string;
   onChange: (markdown: string) => void;
   assetBase: string;
+  // Remote-collaborator carets are rendered from this awareness. Null when collaboration is off or
+  // the shared doc hasn't connected yet; the editor rebuilds (see the useEditor deps) once it arrives.
+  awareness?: Awareness | null;
 }) {
   const frontmatter = useRef(splitFrontmatter(value).frontmatter);
   const lastEmitted = useRef<string | null>(null);
+  // Awareness (remote carets) is read through a stable getter so the editor is built once and never
+  // rebuilt when collaboration connects — the ref always holds the latest value.
+  const awarenessRef = useRef<Awareness | null>(awareness ?? null);
+  awarenessRef.current = awareness ?? null;
   // The block the drag handle last hovered — the target for the "+" insert button. We keep the
   // last non-null block: moving the mouse onto the handle itself fires onNodeChange(null), and
   // clearing then would leave nothing to insert after when "+" is clicked.
@@ -89,6 +99,7 @@ export function VisualEditor({
         onClose: () => setSlash(null),
         keyHandlerRef: slashKeyRef,
       }),
+      CollabCarets.configure({ getAwareness: () => awarenessRef.current }),
     ],
     content: mdxToProseMirror(splitFrontmatter(value).body),
     editorProps: {
@@ -110,8 +121,29 @@ export function VisualEditor({
     frontmatter.current = fm;
     setTitle(frontmatterField(fm, "title"));
     setDescription(frontmatterField(fm, "description"));
-    editor.commands.setContent(mdxToProseMirror(body), { emitUpdate: false });
+    // Defer setContent out of React's commit phase: it dispatches a transaction that synchronously
+    // renders our React node views (flushSync), which React forbids while it is already rendering.
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled || editor.isDestroyed) return;
+      editor.commands.setContent(mdxToProseMirror(body), { emitUpdate: false });
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [value, editor]);
+
+  // Carets: awareness arrives after the editor is built (async token mint). Nudge the plugin ONCE
+  // to bind + paint once it's available — no editor rebuild, so the doc/cursor/undo are untouched.
+  // The ref guard is load-bearing: `useEditor` returns a fresh `editor` identity on every render it
+  // triggers, so a bare dep on `editor` would re-dispatch → re-render → re-dispatch forever. We only
+  // ever need one nudge; the plugin then tracks awareness on its own via its "change" subscription.
+  const caretsNudged = useRef(false);
+  useEffect(() => {
+    if (caretsNudged.current || !editor || !awareness) return;
+    caretsNudged.current = true;
+    editor.view.dispatch(editor.state.tr.setMeta(collabCaretsKey, true));
+  }, [editor, awareness]);
 
   // Emit the full file (frontmatter + serialized body) after any edit — body or frontmatter.
   const emit = () => {

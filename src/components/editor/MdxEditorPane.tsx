@@ -195,7 +195,12 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
             />
           )
         ) : (
-          <VisualEditor value={value} onChange={change} assetBase={`/api/tenant-asset/${site}`} />
+          <VisualEditor
+            value={value}
+            onChange={change}
+            assetBase={`/api/tenant-asset/${site}`}
+            awareness={awareness}
+          />
         )}
       </div>
     </div>
