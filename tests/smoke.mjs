@@ -208,11 +208,15 @@ const CONTROL_PLANE_CHECKS = [
   },
   {
     path: "/home",
-    desc: "logged-out marketing apex shows Log in / Sign up, not Dashboard (session-aware nav, SPEC §2)",
-    include: ['href="/login"', 'href="/signup"'],
+    desc: "logged-out marketing apex shows Log in / Sign up + the growing-vine backdrop, not Dashboard (session-aware nav, SPEC §2)",
+    // `db-vine` + `pv-sprouts` prove the landing uses the "home" PlatformShell variant (the
+    // animated VineField + ambient SproutField) rather than the static `.db-grid` other
+    // "full" surfaces use.
+    include: ['href="/login"', 'href="/signup"', "db-vine", "pv-sprouts"],
     // Guards the session-aware swap: a signed-out visitor must never see the
-    // Dashboard link (which only renders when getSession() resolves).
-    exclude: ['href="/dashboard"'],
+    // Dashboard link (which only renders when getSession() resolves). And the landing
+    // must not fall back to the static grid backdrop.
+    exclude: ['href="/dashboard"', "db-grid"],
   },
   {
     path: "/pricing",

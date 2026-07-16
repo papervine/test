@@ -106,6 +106,194 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
 }
+/* Vine backdrop (VineField.tsx) — the landing page's living alternative to `.db-grid`.
+   Strands draw upward (stroke-dashoffset), leaves unfurl, buds light, then it sways. */
+.db-vine {
+  position: absolute;
+  inset: -40px 0 auto 0;
+  height: 880px;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: radial-gradient(125% 80% at 50% 24%, #000 30%, transparent 82%);
+  mask-image: radial-gradient(125% 80% at 50% 24%, #000 30%, transparent 82%);
+}
+.db-vine svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+/* Settle into a slow sway once everything has grown in (delay clears the draw phase). */
+.db-vine-sway {
+  transform-box: view-box;
+  transform-origin: 600px 760px;
+  animation: db-vine-sway 11s ease-in-out 7.5s infinite alternate;
+}
+@keyframes db-vine-sway {
+  from {
+    transform: rotate(-0.45deg);
+  }
+  to {
+    transform: rotate(0.45deg);
+  }
+}
+/* A luminous wash on the whole composition — keeps it of a piece with `.db-glow`. */
+.db-vine-art {
+  filter: drop-shadow(0 0 5px rgba(124, 131, 255, 0.35));
+}
+.db-vine-stroke {
+  fill: none;
+  stroke: url(#db-vine-grad);
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-opacity: 0.5;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  animation: db-vine-draw 6.5s cubic-bezier(0.16, 0.7, 0.3, 1) forwards;
+}
+@keyframes db-vine-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+/* Leaves pivot/scale from their base (the joint), so they read as unfurling. */
+.db-leaf {
+  fill: url(#db-vine-grad);
+  fill-opacity: 0.3;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  transform: scale(0.3) rotate(-8deg);
+  animation: db-vine-leaf 0.95s cubic-bezier(0.2, 0.7, 0.25, 1) forwards;
+}
+@keyframes db-vine-leaf {
+  60% {
+    opacity: 1;
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) rotate(0);
+  }
+}
+.db-vine-bud {
+  fill: #d7ddff;
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  transform: scale(0);
+  animation: db-vine-bud 1.1s ease-out forwards;
+}
+@keyframes db-vine-bud {
+  50% {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.9;
+    transform: scale(1);
+  }
+}
+.db-vine-halo {
+  fill: rgba(124, 131, 255, 0.45);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: db-vine-halo 2.8s ease-in-out infinite;
+}
+@keyframes db-vine-halo {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.15);
+  }
+}
+/* Respect reduced-motion: skip the choreography, show the grown-in vine at rest. */
+@media (prefers-reduced-motion: reduce) {
+  .db-vine-sway,
+  .db-vine-halo {
+    animation: none;
+  }
+  .db-vine-stroke {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .db-leaf,
+  .db-vine-bud {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+  .db-vine-bud {
+    opacity: 0.9;
+  }
+}
+
+/* Ambient seedling field (SproutField.tsx) — a whisper-faint, full-viewport bed of tiny
+   sprouts that grow, hold, wither, and regrow on staggered loops. Sits behind the vines. */
+.pv-sprouts {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.pv-sprout {
+  position: absolute;
+  width: 16px;
+  height: 22px;
+  /* left/top mark the sprout's base; lift the box so its bottom-center sits on that point. */
+  margin: -22px 0 0 -8px;
+  transform-origin: bottom center;
+  opacity: 0;
+  animation: pv-sprout var(--dur, 20s) ease-in-out var(--delay, 0s) infinite;
+  will-change: transform, opacity;
+}
+.pv-sprout svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.pv-sprout-leaf {
+  fill: rgba(var(--ink-rgb), 0.55);
+}
+.pv-sprout-stem {
+  fill: none;
+  stroke: rgba(var(--ink-rgb), 0.4);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+/* Grow slowly (0→45%), live, then wither — looping back to a seed while invisible. */
+@keyframes pv-sprout {
+  0% {
+    opacity: 0;
+    transform: scale(0) rotate(var(--r, 0deg));
+  }
+  18% {
+    opacity: var(--o, 0.1);
+  }
+  45%,
+  78% {
+    opacity: var(--o, 0.1);
+    transform: scale(var(--s, 1)) rotate(var(--r, 0deg));
+  }
+  100% {
+    opacity: 0;
+    transform: scale(var(--s, 1)) rotate(var(--r, 0deg));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pv-sprout {
+    animation: none;
+    opacity: var(--o, 0.1);
+    transform: scale(var(--s, 1)) rotate(var(--r, 0deg));
+  }
+}
+
 .db-content {
   position: relative;
   z-index: 2;

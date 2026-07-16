@@ -80,7 +80,7 @@ export default async function LandingPage() {
   const appBase = `${host.includes("localhost") ? "http" : "https"}://${appHostFor(host)}`;
 
   return (
-    <PlatformShell variant="full">
+    <PlatformShell variant="home">
       {/* Header */}
       <header className="db-glass sticky top-0 z-30 border-b border-[rgba(var(--ink-rgb),0.06)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
@@ -201,7 +201,7 @@ export default async function LandingPage() {
               <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
               <span className="h-3 w-3 rounded-full bg-[#28c840]" />
               <span className="mono ml-3 text-xs text-[var(--muted)]">
-                docs.acme.com
+                docs.example.com
               </span>
             </div>
             <div className="grid grid-cols-[180px_1fr] gap-6 p-6">
