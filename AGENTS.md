@@ -9,6 +9,13 @@ rendered by Papervine itself** (we dogfood; `node tests/crawl.mjs docs` is a CI 
 
 This file is the contract for how to work in this repo. Follow it for every change.
 
+The *process* half of this contract (the engineering loop, test routing, verification and
+documentation discipline) is an instance of the reusable, project-agnostic doctrine in
+[`playbook/`](./playbook/) — this file is its **Papervine binding**: the same laws mapped
+onto this repo's commands, layers, and hard-won gotchas. Work from this file; read the
+playbook chapter when you want the full reasoning. Starting a new project? Lift `playbook/`
+wholesale and write a new binding (see `playbook/README.md`).
+
 ## Private planning
 
 `_private/` is a local-only, gitignored workspace for business strategy, pricing
@@ -18,15 +25,58 @@ Do not commit `_private/` or copy its contents into public docs, `SPEC.md`, test
 issues, or commits. If a private decision affects public product behavior, write a
 sanitized public summary here instead.
 
+## The engineering loop (how every task runs)
+
+Every feature, bugfix, or behavior change runs the same loop — full doctrine in
+[`playbook/loop.md`](./playbook/loop.md); the Definition of done below is its exit
+criteria. Compactly:
+
+1. **Clarify before building** — ambiguities that change the design get asked **up front,
+   batched in one round**; never ask what the code, `SPEC.md`, or this file already answers.
+2. **Bugs: reproduce before fixing** — the repro *becomes* the regression test: write it
+   failing at the right layer, then fix. (How the collab render loops were pinned.)
+3. **Plan the test surface with the change** — pick the layers (routing table below)
+   *before* coding; it shapes the design (pure cores extracted, no-DB fallbacks designed in).
+4. **Loop until green** — typecheck → unit → smoke → real browser **with the console
+   open** → e2e/crawl as applicable; a failed gate means fix and **re-run every affected
+   gate**. Hand back "this works, here's what I ran" — never "this should work."
+5. **Loop on review until quiet** — a PR isn't done when opened; see "The PR review
+   loop" below.
+6. **Document and report** — `SPEC.md` note + `docs/` page; anything unverified is
+   labeled unverified.
+
+## The PR review loop (Copilot and human reviewers)
+
+Automated reviewers respond to pushes, so review is itself a loop with a cadence — run it
+until a full cycle produces **zero new comments**, not until you've answered the first
+batch:
+
+1. **Fetch** open review threads: `gh pr view <n> --comments` for the overview;
+   `gh api repos/{owner}/{repo}/pulls/<n>/comments` for the machine-readable list;
+   thread IDs (needed for resolving) come from the GraphQL `reviewThreads` connection
+   on the PR.
+2. **Triage honestly.** Fix what's right. What's wrong gets a **reply explaining why**
+   — never silently ignore a comment, and never "fix" something just to appease a bot
+   (a wrong suggestion applied is a real bug with an audit trail saying you agreed).
+3. **Push the fixes, then resolve the addressed threads** (GraphQL
+   `resolveReviewThread`) so the PR's open-thread count reflects reality.
+4. **Wait ~5 minutes** — Copilot re-reviews after a push — then re-fetch and repeat.
+   In Claude Code, don't hand-poll: run the cycle with **`/loop`** (dynamic pacing,
+   ~4–5 min) so it keeps itself going until the reviewer goes quiet.
+
+Exit when a cycle ends with no new comments and no unresolved threads you haven't
+answered. CI green + review quiet + DoD met = actually done.
+
 ## Definition of done
 
 A feature/fix is not done until **all** of these pass:
 
 1. `npm run typecheck` — clean.
 2. `npm test` — the fixtures smoke test (boots the real renderer, asserts no page 500s).
-3. **A regression test exists for what you changed, at the right layer** — see "Always
-   write tests" below (unit / smoke / e2e).
-4. **Verified in a real browser** — screenshot the affected page (`agent-browser`, light
+3. **A regression test exists for what you changed, at the right layer** — see the
+   routing table in "Always write tests" below (unit / smoke / e2e).
+4. **Verified in a real browser** ([`playbook/verification.md`](./playbook/verification.md))
+   — screenshot the affected page (`agent-browser`, light
    AND dark mode if visual). Don't claim a UI change works from the DOM alone; layout
    bugs (e.g. the card `h-full` height bug) only show visually. **And watch the console:**
    a whole class of React-correctness bug — `flushSync`-during-render, "Maximum update
@@ -45,7 +95,8 @@ State plainly what you ran and what passed. If something is unverified, say so.
 
 ## Document every change (SPEC.md *and* docs/)
 
-Every new feature or behavior change is documented in **two** places — they serve
+Every new feature or behavior change is documented in **two** places
+([`playbook/documentation.md`](./playbook/documentation.md)) — they serve
 different readers, so a change isn't done until both are current:
 
 - **`SPEC.md` — the design log.** The *why*: the decision, the trade-off, the dated status
@@ -65,8 +116,26 @@ neither (a code comment suffices).
 
 ## Always write tests
 
-Regression protection is a hard requirement, not optional. Three layers — put the test
-where the logic lives:
+Regression protection is a hard requirement, not optional
+([`playbook/testing.md`](./playbook/testing.md) has the doctrine; this is its Papervine
+mapping). **Route by the change you're making** — every row's tests are owed before the
+change is done:
+
+| You are… | You owe |
+|---|---|
+| Adding/changing pure logic (parsing, config, slugs, converters) | A unit test. Keep the helper pure; if the logic lives in something effectful, **extract its pure core** and test that. |
+| Changing what the renderer does (MDX, components, nav, `docs.json` handling) | A smoke **fixture** reproducing the case + a `CHECKS` entry, and a crawl of a representative repo (0 × 500). |
+| Adding code to any rendered page's path | Nothing new *if* it survives no-DB — ask "does this reach the DB, and does it no-op without one?" (`npm test` is the proof; see the smoke bullet). |
+| Touching a control-plane / authed surface (dashboard, auth, editor) | An e2e spec for the journey; interactive React surfaces also get the **console-clean** assertion (`editor.spec.ts` pattern). |
+| Fixing a bug (any layer) | A regression test **at the lowest layer that reproduces it**, written failing before the fix. |
+| Building client interactivity / collab | Pure decision core extracted → unit-tested; the user journey → e2e. |
+| Changing the DB schema | A committed migration (CI's e2e rebuilds `papervine_test` from it, so a broken one fails CI). |
+| Refactoring with zero behavior change | No new tests — the existing suites staying green *is* the test. |
+
+Rule of thumb: **the lowest layer that can catch the regression wins.** A unit test on an
+extracted pure core is worth more than an e2e asserting the same fact — it's faster, runs
+everywhere, and fails closer to the cause. Reach for e2e only for what genuinely needs a
+browser + real services. Three layers — put the test where the logic lives:
 
 1. **Unit (Vitest) — `tests/unit/`, `npm run test:unit`.** Pure functions, no DB/browser:
    `resolveTenantSlug`, `parseRepoInput`, `slugify`, config parsing. Fast; runs anywhere.
@@ -82,7 +151,13 @@ where the logic lives:
    dynamic import when a module captures env at load (the collab secret), and a `window` shim
    when a browser class only needs `addEventListener`.
 2. **Smoke (zero-dep) — `tests/smoke.mjs`, `npm test`.** The renderer + control-plane
-   **gate**, no Postgres so it runs in CI everywhere. **To cover a new renderer case, add
+   **gate**, no Postgres so it runs in CI everywhere — which means **the renderer must survive a
+   missing DB.** `waitForReady()` probes `GET /` and needs a 200; any DB call on a rendered path
+   that *throws* without Postgres (not returns null) 500s that probe and fails the whole gate on
+   "server did not become ready" — invisible locally, where a dev DB is reachable. So tenant
+   lookups (`getSiteBy*`) short-circuit in `PAPERVINE_CONTENT` single-repo mode, and `getSiteByHost`
+   catches connection errors → null. When you add code to a page's render path, ask "does this
+   reach the DB, and does it no-op without one?" **To cover a new renderer case, add
    a fixture** under `tests/fixtures/` (register it in `tests/fixtures/docs.json` nav) and
    a check to `CHECKS`. Fixtures reproduce the *actual failure shape* (object favicon,
    `languages` nav, `.md`, unknown/member-expr components, bad frontmatter, snippet
@@ -98,7 +173,11 @@ where the logic lives:
    `NEXT_PUBLIC_COLLAB_URL`, which `playwright.config.ts` forwards to the app only when the
    operator exports it (and starts `apps/collab`). Two `browser.newContext()`s model two
    machines; same-browser BroadcastChannel does **not** sync cursor awareness, so carets
-   can't be faked with two tabs.
+   can't be faked with two tabs. The webServer runs with `NODE_OPTIONS=--max-old-space-size=6144`
+   (`playwright.config.ts`) — without it, CI's cgroup caps Node at ~2GB and `next dev`
+   compiling the app on-demand across the suite crosses its memory threshold and **self-restarts
+   mid-run**, and each restart is an `ERR_CONNECTION_REFUSED` window that cascades spec failures
+   that look like flakes but aren't.
 
 CI (`.github/workflows/ci.yml`): `verify` job runs typecheck + unit + build + smoke
 (no services); `e2e` job runs Playwright against a Postgres service (skipping `@external`).
@@ -160,6 +239,9 @@ Core principles, in priority order:
   captured by the schema, verify against representative docs repos; don't guess.
 
 ## Gotchas (learned the hard way — don't rediscover these)
+
+This is the repo's gotcha log ([`playbook/gotchas.md`](./playbook/gotchas.md) — what
+qualifies and how to write an entry). When a debugging session meets the bar, add it here.
 
 - **dev/prod JSX runtime must match.** Compile (`serialize`) and `run()` must use the
   same `development` flag / runtime, or React 19 throws "production element rendered
