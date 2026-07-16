@@ -2,18 +2,13 @@ import type { Doc } from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import type { PeerInfo } from "./broadcast-provider";
+import { peersFromStates, rosterKey } from "./peer-roster";
 
 // Cross-machine transport: binds the shared Y.Doc to the standalone Hocuspocus socket service
 // (apps/collab). Same surface as BroadcastProvider (onSynced / onPeers / setPresence / destroy)
 // so useCollabDoc can pick either — BroadcastChannel for same-browser tabs, this for real
 // multiplayer across machines. Presence rides Hocuspocus's built-in awareness (unlike the
 // hand-rolled peer map the BroadcastChannel path needs).
-
-interface AwarenessUser {
-  clientId: number;
-  name: string;
-  color: string;
-}
 
 /** Adapter around HocuspocusProvider matching the BroadcastProvider transport shape. */
 export class HocuspocusTransport {
@@ -22,6 +17,10 @@ export class HocuspocusTransport {
   private syncListeners = new Set<() => void>();
   private synced = false;
   private destroyed = false;
+  // The last roster we notified listeners about, as a stable key. Awareness "change" fires on every
+  // cursor move (CollabCarets writes visualCursor into awareness), but the peer roster only changes
+  // on join/leave/rename — so we dedupe to avoid churning React state on every keystroke/cursor tick.
+  private lastRosterKey = " "; // sentinel that no real roster ("" for empty) can equal
 
   constructor(opts: { url: string; room: string; token: string; doc: Doc }) {
     this.provider = new HocuspocusProvider({
@@ -46,16 +45,22 @@ export class HocuspocusTransport {
     for (const fn of this.syncListeners) fn();
   };
 
-  private emitPeers = () => {
+  /** The current peer roster (everyone but us who has published a presence identity). */
+  private computePeers(): PeerInfo[] {
     const awareness = this.provider.awareness;
-    if (!awareness) return;
-    const self = awareness.clientID;
-    const peers: PeerInfo[] = [];
-    for (const [clientId, state] of awareness.getStates()) {
-      if (clientId === self) continue;
-      const user = (state as { user?: AwarenessUser }).user;
-      if (user) peers.push({ clientId, name: user.name, color: user.color });
-    }
+    if (!awareness) return [];
+    return peersFromStates(awareness.getStates(), awareness.clientID);
+  }
+
+  // Awareness-"change" handler: notify listeners ONLY when the roster actually changed. Cursor
+  // movement fires this constantly (visualCursor updates) but leaves the roster untouched; emitting
+  // a fresh array every time would setState → re-render on every tick, which under a navigation
+  // transition compounds into "Maximum update depth exceeded". Dedupe by a stable roster key.
+  private emitPeers = () => {
+    const peers = this.computePeers();
+    const key = rosterKey(peers);
+    if (key === this.lastRosterKey) return;
+    this.lastRosterKey = key;
     for (const fn of this.peerListeners) fn(peers);
   };
 
@@ -67,7 +72,7 @@ export class HocuspocusTransport {
 
   onPeers(fn: (peers: PeerInfo[]) => void): () => void {
     this.peerListeners.add(fn);
-    this.emitPeers();
+    fn(this.computePeers()); // replay the current roster to this subscriber (bypasses the dedupe)
     return () => this.peerListeners.delete(fn);
   }
 
