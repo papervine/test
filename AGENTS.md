@@ -28,7 +28,12 @@ A feature/fix is not done until **all** of these pass:
    write tests" below (unit / smoke / e2e).
 4. **Verified in a real browser** — screenshot the affected page (`agent-browser`, light
    AND dark mode if visual). Don't claim a UI change works from the DOM alone; layout
-   bugs (e.g. the card `h-full` height bug) only show visually.
+   bugs (e.g. the card `h-full` height bug) only show visually. **And watch the console:**
+   a whole class of React-correctness bug — `flushSync`-during-render, "Maximum update
+   depth exceeded" render loops, hydration mismatches — is invisible in the DOM and in
+   screenshots and shows up *only* as a console error (this bit the collaborative Visual
+   editor). Assert it stays clean: an e2e that opens the surface and fails on any
+   `pageerror` / React `console.error` (see `editor.spec.ts`) is the durable guard.
 5. For renderer/config/nav changes: **crawl a representative docs repo** and confirm no
    regressions — `node tests/crawl.mjs <cloned-docs-repo>` (expect 0 × HTTP 500).
 6. For control-plane / authed changes: `npm run test:e2e` green (needs docker
@@ -66,7 +71,16 @@ where the logic lives:
 1. **Unit (Vitest) — `tests/unit/`, `npm run test:unit`.** Pure functions, no DB/browser:
    `resolveTenantSlug`, `parseRepoInput`, `slugify`, config parsing. Fast; runs anywhere.
    If you add a pure helper, unit-test it (and keep it pure — `"use server"` files can't
-   export sync helpers, so extract them, e.g. `src/lib/slug.ts`).
+   export sync helpers, so extract them, e.g. `src/lib/slug.ts`). **Effectful client logic
+   still gets a unit test — by extracting its pure core.** The editor/collab code does this:
+   the MDX↔ProseMirror converter is a pure library (`mdx-prosemirror-*` tests, the fidelity
+   gate); the Visual carets' decision layer is `visual/caret-plan.ts` (`collab-carets.test.ts`
+   — self-filtering, doc-bounds clamping, selection-vs-caret); the same-browser sync protocol
+   runs headless over Node's `BroadcastChannel` (`collab-broadcast.test.ts`); and the collab
+   service's room-isolation gate (`apps/collab/src/auth.ts` `authorizeConnection`) is pinned by
+   `collab-auth.test.ts` (forgery / expiry / wrong-room). Reach for a `vi.resetModules()` +
+   dynamic import when a module captures env at load (the collab secret), and a `window` shim
+   when a browser class only needs `addEventListener`.
 2. **Smoke (zero-dep) — `tests/smoke.mjs`, `npm test`.** The renderer + control-plane
    **gate**, no Postgres so it runs in CI everywhere. **To cover a new renderer case, add
    a fixture** under `tests/fixtures/` (register it in `tests/fixtures/docs.json` nav) and
@@ -79,7 +93,12 @@ where the logic lives:
    creates/migrates/truncates the test DB; `auth.setup.ts` logs in once and saves the
    session (storageState) so specs start authenticated. Tag specs that hit the network
    (e.g. the GitHub connect flow) `@external` so CI can `--grep-invert @external` and stay
-   deterministic.
+   deterministic. A spec that needs an **optional** always-on dependency (the collab socket
+   service) `test.skip`s itself unless its env is set — the remote-caret test skips without
+   `NEXT_PUBLIC_COLLAB_URL`, which `playwright.config.ts` forwards to the app only when the
+   operator exports it (and starts `apps/collab`). Two `browser.newContext()`s model two
+   machines; same-browser BroadcastChannel does **not** sync cursor awareness, so carets
+   can't be faked with two tabs.
 
 CI (`.github/workflows/ci.yml`): `verify` job runs typecheck + unit + build + smoke
 (no services); `e2e` job runs Playwright against a Postgres service (skipping `@external`).

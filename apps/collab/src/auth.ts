@@ -32,3 +32,18 @@ export async function verifyCollabToken(token: string | undefined): Promise<Coll
     return null;
   }
 }
+
+/**
+ * The full connection gate: a token authorizes ONLY the room it was minted for. Verifies the token
+ * AND that its room claim matches the document the client is trying to open, so a token for one
+ * page can never join another site's / page's document. Returns the claims to accept, or null to
+ * reject (the socket closes; the client falls back to same-browser sync).
+ */
+export async function authorizeConnection(
+  token: string | undefined,
+  documentName: string,
+): Promise<CollabClaims | null> {
+  const claims = await verifyCollabToken(token);
+  if (!claims || claims.room !== documentName) return null;
+  return claims;
+}

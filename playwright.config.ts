@@ -64,6 +64,15 @@ export default defineConfig({
       // admin rail link / bypass never leaks into the other specs' assertions. The admin
       // spec signs this account up itself.
       PLATFORM_ADMIN_EMAILS: "platform-admin@papervine.test",
+      // Opt-in collaboration: when the operator exports NEXT_PUBLIC_COLLAB_URL (and runs
+      // apps/collab), forward it + the shared secret so the app connects to the real socket
+      // service and the gated remote-caret spec in editor.spec.ts can run. Unset → skipped.
+      ...(process.env.NEXT_PUBLIC_COLLAB_URL
+        ? {
+            NEXT_PUBLIC_COLLAB_URL: process.env.NEXT_PUBLIC_COLLAB_URL,
+            COLLAB_JWT_SECRET: process.env.COLLAB_JWT_SECRET ?? "papervine-collab-dev-secret",
+          }
+        : {}),
     },
   },
 });

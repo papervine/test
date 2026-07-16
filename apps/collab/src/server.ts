@@ -1,5 +1,5 @@
 import { Server } from "@hocuspocus/server";
-import { verifyCollabToken, isConfigured } from "./auth.js";
+import { authorizeConnection, isConfigured } from "./auth.js";
 
 // Papervine collaborative editing socket (SPEC §9.2 / §10.3). A standalone Hocuspocus (Yjs CRDT)
 // WebSocket server — the always-on piece Vercel can't host. Deliberately MINIMAL:
@@ -23,9 +23,8 @@ const server = new Server({
   // opened. Throwing here closes the socket with an auth error; the client falls back to
   // same-browser BroadcastChannel sync.
   async onAuthenticate({ documentName, token }) {
-    const claims = await verifyCollabToken(token);
-    if (!claims) throw new Error("collab: invalid or expired token");
-    if (claims.room !== documentName) throw new Error("collab: token/room mismatch");
+    const claims = await authorizeConnection(token, documentName);
+    if (!claims) throw new Error("collab: invalid, expired, or wrong-room token");
     // Exposed to hooks as `context`; awareness (name/color) is set client-side.
     return { userId: claims.userId, name: claims.name };
   },

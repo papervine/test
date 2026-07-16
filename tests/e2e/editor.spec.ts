@@ -63,13 +63,13 @@ test.describe("web editor @external", () => {
     await expect(page.getByRole("button", { name: /Ask agent/ })).toBeVisible();
     await expect(page.getByRole("button", { name: "main", exact: true })).toBeVisible();
 
-    // Switch to Source mode and type into the raw MDX.
+    // Switch to Source mode and type into the raw MDX. Source is CodeMirror bound to the shared
+    // Y.Text (SPEC §9.2) — a contenteditable `.cm-content`, not a textarea.
     await page.getByRole("button", { name: "Source mode" }).click();
-    const textarea = page.locator("textarea").last();
-    await expect(textarea).toContainText("Original body text", { timeout: 10_000 });
-    await textarea.click();
-    await textarea.press("End");
-    await textarea.pressSequentially("\n\nAdded by the e2e editor test.");
+    const cm = page.locator(".cm-content");
+    await expect(cm).toContainText("Original body text", { timeout: 10_000 });
+    await cm.click(); // focus + place the caret in the document
+    await page.keyboard.type(" Added by the e2e editor test.");
 
     // The debounced autosave (700ms) should land a draft row for index.mdx.
     await expect
@@ -86,28 +86,28 @@ test.describe("web editor @external", () => {
       .toContain("Added by the e2e editor test.");
   });
 
-  // The editor pane is `key`ed by page, so it remounts on every nav click. The Source/Preview
-  // mode must survive that remount: switch pages in Preview and you stay in Preview (rendered),
-  // in Source and you stay in Source. (Mode lives in EditorShell, not pane-local state.)
-  test("keeps the Source/Preview mode when switching pages in the nav", async ({ page }) => {
+  // The editor pane is `key`ed by page, so it remounts on every nav click. The Visual/Source mode
+  // must survive that remount: switch pages in Source and you stay in Source (raw MDX), in Visual
+  // and you stay in Visual (WYSIWYG). Mode lives in EditorShell, not pane-local state (SPEC §9.2).
+  test("keeps the Visual/Source mode when switching pages in the nav", async ({ page }) => {
     await page.goto(sitePath(SLUG, "editor"));
     await expect(page.getByRole("button", { name: "main", exact: true })).toBeVisible();
 
-    // Source mode (the default): clicking another page shows that page's raw MDX, still in Source.
+    // Source mode: clicking another page shows that page's raw MDX in CodeMirror, still in Source.
     await page.getByRole("button", { name: "Source mode" }).click();
     await page.getByRole("button", { name: "Second Page" }).click();
-    await expect(page.locator("textarea").last()).toContainText("The second page body", {
+    await expect(page.locator(".cm-content")).toContainText("The second page body", {
       timeout: 10_000,
     });
-    // The "Refresh preview" control is mounted only in Preview mode — absent confirms Source.
-    await expect(page.getByRole("button", { name: "Refresh preview" })).toHaveCount(0);
+    // The WYSIWYG surface is absent in Source mode.
+    await expect(page.locator(".pv-visual .ProseMirror")).toHaveCount(0);
 
-    // Now enter Preview, switch back to the first page, and confirm we stay in Preview (render).
-    await page.getByRole("button", { name: "Preview mode" }).click();
-    await expect(page.getByRole("button", { name: "Refresh preview" })).toBeVisible();
+    // Now enter Visual, switch back to the first page, and confirm we stay in Visual (WYSIWYG).
+    await page.getByRole("button", { name: "Visual mode" }).click();
+    await expect(page.locator(".pv-visual .ProseMirror")).toBeVisible({ timeout: 10_000 });
     await page.getByRole("button", { name: "Home", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Refresh preview" })).toBeVisible();
-    await expect(page.locator('iframe[title="Live preview"]')).toBeVisible();
+    await expect(page.locator(".pv-visual .ProseMirror")).toBeVisible();
+    await expect(page.locator(".cm-content")).toHaveCount(0);
   });
 
   // A keystroke still inside the 700ms autosave debounce must not be lost when you switch pages —
@@ -117,17 +117,16 @@ test.describe("web editor @external", () => {
     await page.goto(sitePath(SLUG, "editor"));
     await page.getByRole("button", { name: "Source mode" }).click();
 
-    const textarea = page.locator("textarea").last();
-    await expect(textarea).toContainText("Original body text", { timeout: 10_000 });
-    await textarea.click();
-    await textarea.press("End");
-    await textarea.pressSequentially("\n\nFlushed on switch.");
+    const cm = page.locator(".cm-content");
+    await expect(cm).toContainText("Original body text", { timeout: 10_000 });
+    await cm.click();
+    await page.keyboard.type(" Flushed on switch.");
 
     // No debounce wait: jump to the second page and straight back. The edit must have been
     // flushed to the draft buffer on the way out, so it's still here on return.
     await page.getByRole("button", { name: "Second Page" }).click();
     await page.getByRole("button", { name: "Home", exact: true }).click();
-    await expect(page.locator("textarea").last()).toContainText("Flushed on switch.", {
+    await expect(page.locator(".cm-content")).toContainText("Flushed on switch.", {
       timeout: 10_000,
     });
   });
@@ -161,5 +160,69 @@ test.describe("web editor @external", () => {
     // Dismissible immediately (it also auto-dismisses on a timer). sonner labels its close "Close toast".
     await page.getByRole("button", { name: "Close toast" }).click();
     await expect(toast).toBeHidden();
+  });
+
+  // Regression gate for React-correctness bugs that a DOM/screenshot check can't see — only the
+  // console can (this is exactly how the collaborative Visual editor's `flushSync`-during-render and
+  // "Maximum update depth exceeded" render-loop bugs slipped past screenshot verification). Loading
+  // the Visual editor and toggling modes exercises the re-seed (setContent) and awareness-nudge
+  // paths that regressed; any React error here fails the build.
+  test("the Visual editor loads and toggles modes with no React console errors", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    await page.goto(sitePath(SLUG, "editor"));
+    // Default is Visual (WYSIWYG).
+    await expect(page.locator(".pv-visual .ProseMirror")).toBeVisible({ timeout: 10_000 });
+    // Toggle Source ⇄ Visual — the mode swaps that re-seed content and (re)bind the carets plugin.
+    await page.getByRole("button", { name: "Source mode" }).click();
+    await expect(page.locator(".cm-content")).toBeVisible({ timeout: 10_000 });
+    await page.getByRole("button", { name: "Visual mode" }).click();
+    await expect(page.locator(".pv-visual .ProseMirror")).toBeVisible();
+    // Let deferred effects flush (the queueMicrotask setContent + the one-shot awareness nudge).
+    await page.waitForTimeout(500);
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat/i.test(e),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+  });
+
+  // Cross-machine remote carets in Visual mode (SPEC §9.2). Two independent browser contexts open
+  // the same page; one's cursor must appear as a coloured, name-labelled caret in the other. This
+  // needs the real collab service — same-browser BroadcastChannel doesn't sync cursor awareness,
+  // and two Playwright contexts don't share a channel anyway — so it's gated on NEXT_PUBLIC_COLLAB_URL
+  // (start apps/collab and export it; playwright.config forwards it to the app). Skips otherwise.
+  test("shows a peer's caret in the other Visual editor when the collab service is configured", async ({
+    browser,
+  }) => {
+    test.skip(
+      !process.env.NEXT_PUBLIC_COLLAB_URL,
+      "needs the collab service — set NEXT_PUBLIC_COLLAB_URL and start apps/collab",
+    );
+    const state = "tests/e2e/.auth/user.json";
+    const ctxA = await browser.newContext({ storageState: state });
+    const ctxB = await browser.newContext({ storageState: state });
+    try {
+      const a = await ctxA.newPage();
+      const b = await ctxB.newPage();
+      await a.goto(sitePath(SLUG, "editor"));
+      await b.goto(sitePath(SLUG, "editor"));
+      await expect(a.locator(".pv-visual .ProseMirror")).toBeVisible({ timeout: 10_000 });
+      await expect(b.locator(".pv-visual .ProseMirror")).toBeVisible({ timeout: 10_000 });
+
+      // A places its caret in the document; B should render A's remote caret + name label.
+      await a.locator(".pv-visual .ProseMirror").click();
+      await expect(b.locator(".pv-remote-caret")).toBeVisible({ timeout: 10_000 });
+      await expect(b.locator(".pv-remote-caret-label").first()).toHaveText(/\w+/);
+    } finally {
+      await ctxA.close();
+      await ctxB.close();
+    }
   });
 });

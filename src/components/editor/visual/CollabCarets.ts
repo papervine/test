@@ -3,6 +3,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import type { EditorState } from "@tiptap/pm/state";
 import type { Awareness } from "y-protocols/awareness";
+import { planRemoteCarets, rgba } from "./caret-plan";
 
 // Remote collaborator carets for the Visual (ProseMirror) editor. The paved-path way
 // (y-prosemirror's yCursorPlugin) needs ProseMirror to be the canonical CRDT bound to a
@@ -27,21 +28,6 @@ export interface CollabCaretsOptions {
   getAwareness: () => Awareness | null;
 }
 
-interface RemoteUser {
-  name?: string;
-  color?: string;
-}
-interface VisualCursor {
-  anchor: number;
-  head: number;
-}
-
-function rgba(hex: string, alpha: number): string {
-  const m = /^#?([\da-f]{2})([\da-f]{2})([\da-f]{2})$/i.exec(hex);
-  if (!m) return hex;
-  return `rgba(${parseInt(m[1], 16)}, ${parseInt(m[2], 16)}, ${parseInt(m[3], 16)}, ${alpha})`;
-}
-
 /** A zero-width caret with the collaborator's name label, coloured to their presence colour. */
 function caretElement(color: string, name: string): HTMLElement {
   const span = document.createElement("span");
@@ -57,36 +43,27 @@ function caretElement(color: string, name: string): HTMLElement {
 
 function buildDecorations(awareness: Awareness | null, state: EditorState): DecorationSet {
   if (!awareness) return DecorationSet.empty;
+  const carets = planRemoteCarets(awareness.getStates(), awareness.clientID, state.doc.content.size);
   const decos: Decoration[] = [];
-  const size = state.doc.content.size;
-  const clamp = (n: number) => Math.max(0, Math.min(n, size));
-  awareness.getStates().forEach((s, clientId) => {
-    if (clientId === awareness.clientID) return; // not our own
-    const cur = (s as Record<string, unknown>).visualCursor as VisualCursor | null | undefined;
-    if (!cur || typeof cur.head !== "number") return;
-    const user = ((s as Record<string, unknown>).user as RemoteUser) ?? {};
-    const color = user.color ?? "#8b5cf6";
-    const name = user.name ?? "Editor";
-    const head = clamp(cur.head);
-    const anchor = clamp(typeof cur.anchor === "number" ? cur.anchor : cur.head);
-    // Selection band (skip when it's just a caret).
-    if (anchor !== head) {
+  for (const c of carets) {
+    // Selection band (only for a non-empty selection).
+    if (c.selection) {
       decos.push(
-        Decoration.inline(Math.min(anchor, head), Math.max(anchor, head), {
+        Decoration.inline(c.selection.from, c.selection.to, {
           class: "pv-remote-selection",
-          style: `background-color:${rgba(color, 0.22)}`,
+          style: `background-color:${rgba(c.color, 0.22)}`,
         }),
       );
     }
     // The caret itself — keyed by client so PM reuses the DOM (no flicker) as it moves.
     decos.push(
-      Decoration.widget(head, () => caretElement(color, name), {
+      Decoration.widget(c.head, () => caretElement(c.color, c.name), {
         side: 1,
-        key: `pv-caret-${clientId}`,
+        key: `pv-caret-${c.clientId}`,
         ignoreSelection: true,
       }),
     );
-  });
+  }
   return DecorationSet.create(state.doc, decos);
 }
 
