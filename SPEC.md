@@ -1588,6 +1588,12 @@ Minimum to operate the SaaS:
   disagree with the enforced entitlements (verified it bites: an injected "Team SSO=false"
   lie failed the feature-flag assertion). Net: **one file to edit for plans, and the
   displayed copy provably can't drift from what's enforced.**
+  **Catalog auto-syncs on deploy (2026-07-17).** `vercel.json`'s buildCommand chains
+  `node scripts/sync-billing.mjs` after `drizzle-kit migrate` (the build env already has
+  DATABASE_URL), so a catalog.json edit publishes to the prod DB the same way a migration
+  ships — commit + deploy, no manual step. Idempotent, so it's a no-op when nothing
+  changed. Stripe publishing (`billing:publish`) stays OUT of the build deliberately — it
+  needs Stripe keys and creates external objects, so it remains a manual/admin action.
 - **Web editor — BUILT (2026-06-14):** the 3-panel editor at `/:org/:site/editor` (editing-agent
   chat · navigation · multi-modal editor with a Visual⇄Source toggle, branch switcher, and a
   Publish→commit/PR button). It is **the same capability as the authoring MCP (§9.2), not a
