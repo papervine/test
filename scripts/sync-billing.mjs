@@ -1,5 +1,12 @@
 // Publish src/lib/billing/catalog.json into the billing catalog tables. Run:
-//   npm run billing:sync
+//   npm run billing:sync                 (local, reads .env.local)
+//
+// ALSO runs automatically on every Vercel deploy: vercel.json's buildCommand chains it
+// right after `drizzle-kit migrate` (the build env already has DATABASE_URL), so a
+// catalog edit ships the same way a migration does — commit + deploy, no manual step.
+// Needs only DATABASE_URL (plain `node scripts/sync-billing.mjs` in the build; the npm
+// script adds --env-file=.env.local for local runs). Idempotent, so re-running every
+// deploy is a no-op when nothing changed.
 //
 // This is the "repricing is a config edit, not a deploy" mechanism (app-schema.ts
 // BILLING header). Idempotent and append-only:
