@@ -280,6 +280,44 @@ for (const s of DEV.sites) {
 }
 console.log(`• seeded ${DEV.sites.length} sites + ${feed.length} activity rows each`);
 
+// Billing state (SPEC §10 Billing): put dev-org on an ACTIVE Pro subscription with its
+// monthly credit grant, so the seeded environment exercises the whole metered path
+// (assistant/editor-agent authorize -> stream -> usage_event + ledger + balance). An
+// org with NO billing row resolves to Free (no AI) — right for legacy prod orgs, wrong
+// for a dev playground. Requires `npm run billing:sync` to have published the catalog;
+// skipped with a warning otherwise. Idempotent: re-seeding resets to a fresh Pro state.
+const [proVersion] = await sql`
+  select id, included_monthly_credits from billing_plan_version
+  where plan_key = 'pro' order by version desc limit 1`;
+if (!proVersion) {
+  console.warn("• billing skipped — no catalog in DB (run `npm run billing:sync` first)");
+} else {
+  const period = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+  const periodEnd = new Date(now.getTime() + 30 * 86_400_000);
+  await sql`
+    insert into billing_subscription (organization_id, plan_version_id, status, current_period_start, current_period_end)
+    values (${orgId}, ${proVersion.id}, 'active', ${now}, ${periodEnd})
+    on conflict (organization_id) do update set
+      plan_version_id = ${proVersion.id}, status = 'active', trial_ends_at = null,
+      current_period_start = ${now}, current_period_end = ${periodEnd}, updated_at = now()`;
+  // Fresh monthly grant for this period (ledger + balance reset — dev only; prod grants
+  // are written exactly once per period by the renewal webhook, enforced by the partial
+  // unique index on (org, kind, period_key)).
+  await sql`delete from credit_ledger where organization_id = ${orgId}`;
+  await sql`delete from usage_event where organization_id = ${orgId}`;
+  await sql`
+    insert into credit_ledger (id, organization_id, delta, kind, bucket, period_key, expires_at, reason)
+    values (${randomUUID()}, ${orgId}, ${proVersion.included_monthly_credits}, 'grant_monthly',
+            'monthly', ${period}, ${periodEnd}, 'seed: Pro monthly grant')`;
+  await sql`
+    insert into credit_balance (organization_id, trial_credits, monthly_credits, pack_credits)
+    values (${orgId}, 0, ${proVersion.included_monthly_credits}, 0)
+    on conflict (organization_id) do update set
+      trial_credits = 0, monthly_credits = ${proVersion.included_monthly_credits},
+      pack_credits = 0, updated_at = now()`;
+  console.log(`• billing: dev-org on Pro (active), ${proVersion.included_monthly_credits} monthly credits`);
+}
+
 await sql.end();
 
 // 5. Analytics page data — reuse the existing seeder against the primary site.

@@ -1,0 +1,78 @@
+---
+title: "Plans & billing"
+description: "How plans, the 30-day trial, and AI credits work"
+---
+
+Billing is scoped to the **organization**: one plan and one credit pool cover every
+site the org owns. It lives under a site's **Settings**, in the Workspace section:
+
+- **Settings → Billing** — the current plan, changing plans, and downgrading.
+- **Settings → Usage** — the credit meter, the reset date, credit packs, and recent
+  AI usage.
+
+Because the plan and credits are organization-level, every site's Billing and Usage tabs
+show the same subscription.
+
+## Plans
+
+| | Free | Team | Pro | Enterprise |
+| --- | --- | --- | --- | --- |
+| Price | $0 | $50/mo ($40/mo billed annually) | $300/mo ($250/mo billed annually) | Contact us |
+| AI credits | — | 5,000 / month | 25,000 / month | Committed volume |
+| Docs sites | 1 | 3 | 10 | Custom |
+| Editors | 3 | 8 | 25 | Custom |
+| Analytics retention | 7 days | 90 days | 1 year | Custom |
+
+Core docs infrastructure — Git sync, custom domains, reader authentication, the web
+editor, search, analytics, the API playground, and the MCP server — is included on
+**every** plan, Free onward. Paid plans add the AI surfaces (assistant, writing agent,
+workflows), SSO and role-based permissions from **Team**, and advanced insights +
+multi-repo from **Pro**. Enterprise holds the procurement items: SCIM, security and
+legal review, SLAs, migration, and dedicated support.
+
+## The 30-day trial
+
+Every new account starts with **30 days of everything** — Pro-level features plus a
+one-time grant of **5,000 AI credits**, no card required. When the trial ends, the
+organization lands on Free: docs keep rendering exactly as before, and AI features
+pause until a plan is chosen. Settings → Billing shows the countdown, and the trial-gated
+features carry a **Trialing** badge in the dashboard sidebar.
+
+## AI credits
+
+Credits are the accounting unit for AI usage. Every assistant answer, writing-agent
+run, and workflow run meters the model tokens it actually used and converts them to
+credits with a published rate table — a typical assistant answer costs around **10
+credits**. Settings → Usage shows credits remaining, the **reset date**, and a table of
+recent operations with their token count and credit cost.
+
+Credits come from three buckets, consumed in this order:
+
+1. **Trial** — the one-time signup grant (expires with the trial).
+2. **Monthly** — the plan's included pool, refreshed each billing period (the "Next
+   reset" date on the Usage page). Unused monthly credits don't roll over.
+3. **Packs** — one-time top-ups purchased on any paid plan. Packs never expire.
+
+## Hard caps and overage
+
+By default a plan is **hard-capped**: when the credit pool runs out, AI features pause
+until the next period (or a pack purchase) — there are no surprise bills. Owners and
+admins can opt in to **overage** on the Usage page, which lets usage continue past
+the included pool at the plan's per-credit overage rate (Team $0.008, Pro $0.006).
+
+## Managing the subscription
+
+Upgrades go through Stripe Checkout from Settings → Billing (pack purchases from
+Settings → Usage). Once an organization is on a paid plan, choosing a different plan or
+interval switches the existing subscription in place, with proration — no second
+subscription is created.
+
+**Downgrading to Free** is on the current-plan card: it cancels at the end of the
+billing period (with a confirm step), and can be resumed any time before then. Docs
+keep rendering on Free; AI features stop when the plan lapses. Card changes and
+invoices are self-serve through the Stripe customer portal ("Manage billing").
+
+Only organization **owners and admins** can change billing; members can view the page.
+
+Self-hosting? The renderer and control plane are open source — a self-hosted
+deployment has no credit meter and brings its own model keys.

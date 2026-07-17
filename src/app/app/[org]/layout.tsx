@@ -1,5 +1,7 @@
 import { requireOrg } from "@/lib/dashboard-context";
 import { isPlatformAdminEmail } from "@/lib/platform-admin";
+import { getBillingLookup } from "@/lib/billing/store";
+import { trialStatus } from "@/lib/billing/core";
 import { AppRail } from "@/components/app/AppRail";
 import { PlatformAdminBanner } from "@/components/app/PlatformAdminBanner";
 import { PlatformShell } from "@/components/platform/PlatformShell";
@@ -22,6 +24,14 @@ export default async function OrgLayout({
   // it and the read-only bypass are the two cross-tenant states the banner surfaces.
   const impersonating = Boolean(session.session.impersonatedBy);
 
+  // Live-trial flag for the rail's "Trialing" pills (SPEC §10 Billing): the AI items
+  // (Workflows · Agent · Assistant) come from the 30-day trial, not the org's plan, so
+  // the nav says so. getBillingLookup fails safe ('none'/'error' → no pills).
+  const billing = await getBillingLookup(org.id);
+  const trialing =
+    billing.state === "ok" &&
+    trialStatus(billing.sub, new Date()).state === "active";
+
   // "lite" atmosphere: the soft top glow carries the brand, but no grid/grain behind
   // the data-dense dashboard tables and forms.
   return (
@@ -41,6 +51,7 @@ export default async function OrgLayout({
           sites={sites}
           userName={session.user.name}
           role={role}
+          trialing={trialing}
           platformAdmin={isPlatformAdminEmail(
             session.user.email,
             process.env.PLATFORM_ADMIN_EMAILS,

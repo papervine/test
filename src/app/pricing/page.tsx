@@ -1,232 +1,38 @@
 import type { Metadata } from "next";
-import { Fragment } from "react";
 import Link from "next/link";
 import { cookies, headers } from "next/headers";
-import { Rocket, Zap, Briefcase, Plus, Check, ArrowRight } from "lucide-react";
+import { Plus, Check, ArrowRight, Sparkles } from "lucide-react";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Brand } from "@/components/Brand";
 import { appHostFor } from "@/lib/tenant-host";
 import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
-import { ProPrice } from "./ProPrice";
+import {
+  PLAN_TIERS,
+  POSITIONING,
+  CONTACT_HREF,
+  type PlanKey,
+} from "@/lib/billing/plan-content";
+import { PlanMatrix } from "@/components/billing/PlanMatrix";
 
-// Pricing for the SaaS apex (SPEC §2). Uses the landing page chrome + `.db` design
-// language, but positions Papervine against incumbent docs tools rather than cloning
-// their package order: three tiers, a lower Pro anchor, Pro-level SSO/RBAC, and a
-// full comparison matrix. SCIM and high-touch services stay Enterprise.
+// Pricing for the SaaS apex (SPEC §2, §10 Billing). Uses the landing page chrome +
+// `.db` design language, and positions against the docs-platform category's shape
+// (free tier, then a ~$450+ jump, SSO held for enterprise) by filling the gap: a $50
+// Team plan that already carries SSO/RBAC + AI credits, a $300 Pro that undercuts the
+// category's flagship with a bigger credit pool, and a 30-day everything trial on
+// every account. Numbers mirror src/lib/billing/catalog.json — change them THERE
+// (catalog is the source of truth; this page is marketing copy over it).
 export const metadata: Metadata = {
   title: "Pricing — Papervine",
   description:
-    "Simple docs pricing. Start free, move to Pro for agent docs, SSO, and RBAC, or choose Enterprise for SCIM, SLAs, and migration support.",
+    "Every new account starts with 30 days of everything. Free for small docs sites; Team at $50/mo with SSO, RBAC, and AI credits; Pro at $300/mo for production docs; Enterprise for SCIM, SLAs, and migration.",
 };
 
 const GITHUB = "https://github.com/phishy/papervine";
-const CONTACT = "mailto:support@papervine.io?subject=Papervine%20Enterprise";
+const CONTACT = CONTACT_HREF;
 
-// The 90-day SSO & RBAC launch promo, shown as a tag on the Pro card and as matrix
-// cell notes. One constant so the copy can't drift between the two spots.
-const PROMO_TAG = "Free for 90 days";
-
-// A tier-card feature: plain string, or one carrying a promo tag pill.
-type Feature = string | { label: string; tag: string };
-
-// The top-of-page tier cards. `highlight` gives Pro the gradient frame.
-const TIERS = [
-  {
-    icon: Rocket,
-    name: "Starter",
-    price: "$0",
-    blurb: "For individuals and small teams",
-    badge: null as string | null,
-    highlight: false,
-    cta: { label: "Get started", href: "/signup" },
-    lead: null as string | null,
-    features: [
-      "Git-backed docs",
-      "Search and analytics",
-      "Visual + MDX editor",
-      "Custom domains",
-      "Authentication",
-      "API playground",
-      "MCP server",
-    ] as Feature[],
-  },
-  {
-    icon: Zap,
-    name: "Pro",
-    price: null as string | null, // rendered by <ProPrice/> (Monthly/Annual toggle)
-    blurb: "For startups and growing teams",
-    badge: "Popular",
-    highlight: true,
-    cta: { label: "Try for free", href: "/signup" },
-    lead: "Everything in Starter",
-    features: [
-      { label: "SSO & RBAC", tag: PROMO_TAG },
-      "AI assistant and writer",
-      "External knowledge sources",
-      "Preview deployments",
-      "Workflow automations",
-      "Admin APIs",
-    ] as Feature[],
-  },
-  {
-    icon: Briefcase,
-    name: "Enterprise",
-    price: "Contact us",
-    blurb: "For scaling and global teams",
-    badge: null as string | null,
-    highlight: false,
-    cta: { label: "Contact us", href: CONTACT },
-    lead: "Everything in Pro",
-    features: [
-      "SCIM provisioning",
-      "Security and legal review",
-      "Advanced insights",
-      "Performance SLA",
-      "Migration services",
-      "Dedicated support",
-    ] as Feature[],
-  },
-];
-
-// Pro's anchor pricing: annual is the default view, monthly the escape hatch. The
-// annual price deliberately undercuts the $450/mo enterprise-lite anchor common in
-// the docs-platform category while keeping room for infrastructure-heavy AI usage.
-const PRO_PRICE = { monthly: 499, annual: 399 };
-
-const POSITIONING = [
-  {
-    title: "Security before procurement",
-    body: "SSO and role-based access belong in the plan growing teams can actually buy, not behind an enterprise negotiation.",
-  },
-  {
-    title: "One product, not add-on sprawl",
-    body: "Docs, API reference, reader auth, MCP, editor, and assistant workflows are packaged together instead of split across surprise modules.",
-  },
-  {
-    title: "Open-source leverage",
-    body: "Hosted Papervine is the managed path, but the renderer and control plane are built in the open so teams keep an exit path.",
-  },
-];
-
-// Full comparison matrix. A cell is `true` (included), `false` (not included), a
-// string (a qualifier shown inline), or `{ note }` (included, with a footnote —
-// used for the 90-day SSO/RBAC promo). Grouped like the tier cards.
-type Cell = boolean | string | { note: string };
-const MATRIX: {
-  group: string;
-  rows: { label: string; starter: Cell; pro: Cell; enterprise: Cell }[];
-}[] = [
-  {
-    group: "Features",
-    rows: [
-      { label: "Git sync", starter: true, pro: true, enterprise: true },
-      { label: "Search", starter: true, pro: true, enterprise: true },
-      { label: "Visual + MDX editor", starter: true, pro: true, enterprise: true },
-      { label: "API playground", starter: true, pro: true, enterprise: true },
-      { label: "Analytics", starter: true, pro: true, enterprise: true },
-      { label: "User feedback", starter: true, pro: true, enterprise: true },
-      { label: "Integrations", starter: true, pro: true, enterprise: true },
-      { label: "Webhooks", starter: true, pro: true, enterprise: true },
-      { label: "Websockets", starter: true, pro: true, enterprise: true },
-      { label: "Developer API", starter: true, pro: true, enterprise: true },
-      { label: "Admin APIs", starter: false, pro: true, enterprise: true },
-      { label: "Agent analytics", starter: true, pro: true, enterprise: true },
-      { label: "Advanced insights", starter: false, pro: false, enterprise: true },
-      { label: "Multi-repo", starter: false, pro: false, enterprise: true },
-      { label: "Enterprise file types", starter: false, pro: false, enterprise: true },
-    ],
-  },
-  {
-    group: "Agents",
-    rows: [
-      { label: "MCP server", starter: true, pro: true, enterprise: true },
-      {
-        label: "Credits",
-        starter: "10,000 / month",
-        pro: "Custom volume",
-        enterprise: "Custom volume",
-      },
-      { label: "Assistant", starter: false, pro: true, enterprise: true },
-      { label: "Writing agent", starter: false, pro: true, enterprise: true },
-      { label: "External sources", starter: false, pro: true, enterprise: true },
-      { label: "Workflows", starter: false, pro: true, enterprise: true },
-      { label: "Support integrations", starter: false, pro: true, enterprise: true },
-      { label: "Agent skills", starter: false, pro: true, enterprise: true },
-    ],
-  },
-  {
-    group: "Customization",
-    rows: [
-      { label: "Built-in components", starter: true, pro: true, enterprise: true },
-      { label: "Custom components", starter: true, pro: true, enterprise: true },
-      { label: "Custom CSS and JS", starter: true, pro: true, enterprise: true },
-      { label: "White labeling", starter: true, pro: true, enterprise: true },
-    ],
-  },
-  {
-    group: "Publishing",
-    rows: [
-      { label: "Custom domain", starter: true, pro: true, enterprise: true },
-      { label: "Preview deployments", starter: false, pro: true, enterprise: true },
-      { label: "SEO optimizations", starter: true, pro: true, enterprise: true },
-      { label: "Agent-readable output", starter: true, pro: true, enterprise: true },
-      { label: "Generative answer optimization", starter: true, pro: true, enterprise: true },
-      { label: "Grammar and spelling checks", starter: true, pro: true, enterprise: true },
-    ],
-  },
-  {
-    group: "Security",
-    rows: [
-      { label: "Authentication", starter: true, pro: true, enterprise: true },
-      { label: "PDF export", starter: true, pro: true, enterprise: true },
-      {
-        label: "Role-based permissions",
-        starter: false,
-        pro: { note: PROMO_TAG },
-        enterprise: true,
-      },
-      {
-        label: "Dashboard SSO",
-        starter: false,
-        pro: { note: PROMO_TAG },
-        enterprise: true,
-      },
-      { label: "SCIM", starter: false, pro: false, enterprise: true },
-      { label: "Security review", starter: false, pro: false, enterprise: true },
-      { label: "Legal review", starter: false, pro: false, enterprise: true },
-      { label: "Custom SLAs", starter: false, pro: false, enterprise: true },
-    ],
-  },
-  {
-    group: "Services",
-    rows: [
-      { label: "Migration services", starter: false, pro: false, enterprise: true },
-      { label: "Slack support", starter: false, pro: false, enterprise: true },
-      { label: "Dedicated customer success", starter: false, pro: false, enterprise: true },
-      { label: "24/7 incident monitoring", starter: false, pro: false, enterprise: true },
-    ],
-  },
-];
-
-// A matrix cell: ✓ for included, a quiet em dash for not, the qualifier text, or
-// ✓ over a small footnote (the promo case).
-function MatrixCell({ value }: { value: Cell }) {
-  if (value === true)
-    return (
-      <span className="inline-flex">
-        <Check className="h-4 w-4 text-[var(--blue)]" />
-      </span>
-    );
-  if (value === false) return <span className="text-[var(--line)]">—</span>;
-  if (typeof value === "string")
-    return <span className="text-xs text-[var(--muted)]">{value}</span>;
-  return (
-    <span className="inline-flex flex-col items-center gap-0.5">
-      <Check className="h-4 w-4 text-[var(--blue)]" />
-      <span className="text-[11px] leading-tight text-[var(--muted)]">{value.note}</span>
-    </span>
-  );
-}
+// All plan copy — tier cards, feature bullets, comparison matrix, positioning — comes
+// from the catalog (src/lib/billing/catalog.json → plan-content.ts), shared with the
+// in-app Settings→Billing surface. This page adds only the marketing chrome.
 
 export default async function PricingPage() {
   // Same session-aware apex chrome as the landing page (see home/page.tsx for the
@@ -292,19 +98,25 @@ export default async function PricingPage() {
           Pricing on <span className="db-grad">your terms</span>
         </h1>
         <p
-          className="db-rise mx-auto mt-6 max-w-md text-lg leading-relaxed text-[var(--muted)]"
+          className="db-rise mx-auto mt-6 max-w-lg text-lg leading-relaxed text-[var(--muted)]"
           style={{ animationDelay: "80ms" }}
         >
-          Start free. Upgrade when docs become a team workflow.
-          <br />
-          Pro includes SSO &amp; RBAC, free for your first 90 days.
+          Every feature, from day one. SSO from $50, not from a sales call.
+        </p>
+        <p
+          className="db-rise mx-auto mt-5 inline-flex items-center gap-2 rounded-full border border-[rgba(var(--ink-rgb),0.1)] bg-[rgba(var(--ink-rgb),0.04)] px-4 py-2 text-sm text-[var(--fg)]"
+          style={{ animationDelay: "140ms" }}
+        >
+          <Sparkles className="h-4 w-4 text-[var(--blue)]" />
+          Every new account starts with 30 days of everything + 5,000 AI credits — no card
+          required.
         </p>
       </section>
 
       {/* Tier cards */}
-      <section className="mx-auto max-w-6xl px-6">
-        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-          {TIERS.map((tier, i) => {
+      <section className="mx-auto max-w-7xl px-6">
+        <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {PLAN_TIERS.map((tier, i) => {
             const Icon = tier.icon;
             const card = (
               <div
@@ -331,13 +143,14 @@ export default async function PricingPage() {
                 </div>
 
                 <div className="mt-7">
-                  {tier.price !== null ? (
-                    <div className="text-4xl font-semibold tracking-tight">
-                      {tier.price}
-                    </div>
-                  ) : (
-                    <ProPrice monthly={PRO_PRICE.monthly} annual={PRO_PRICE.annual} />
-                  )}
+                  <div className="text-4xl font-semibold tracking-tight">
+                    {tier.price}
+                    {tier.priceNote && (
+                      <span className="ml-1 text-sm font-normal text-[var(--muted)]">
+                        {tier.priceNote}
+                      </span>
+                    )}
+                  </div>
                 </div>
                 <p className="mt-2 text-sm text-[var(--muted)]">{tier.blurb}</p>
 
@@ -352,23 +165,14 @@ export default async function PricingPage() {
                       {tier.lead}
                     </li>
                   )}
-                  {tier.features.map((f) => {
-                    const label = typeof f === "string" ? f : f.label;
-                    const tag = typeof f === "string" ? null : f.tag;
-                    return (
-                      <li key={label} className="flex items-center gap-3">
-                        <span className="grid h-5 w-5 place-items-center rounded-full bg-[rgba(var(--ink-rgb),0.06)]">
-                          <Check className="h-3.5 w-3.5 text-[var(--muted)]" />
-                        </span>
-                        {label}
-                        {tag && (
-                          <span className="rounded-full bg-[var(--blue)]/15 px-2 py-0.5 text-[11px] font-medium text-[var(--blue)]">
-                            {tag}
-                          </span>
-                        )}
-                      </li>
-                    );
-                  })}
+                  {tier.features.map((label) => (
+                    <li key={label} className="flex items-center gap-3">
+                      <span className="grid h-5 w-5 place-items-center rounded-full bg-[rgba(var(--ink-rgb),0.06)]">
+                        <Check className="h-3.5 w-3.5 text-[var(--muted)]" />
+                      </span>
+                      {label}
+                    </li>
+                  ))}
                 </ul>
 
                 <div className="mt-auto pt-10">
@@ -436,93 +240,35 @@ export default async function PricingPage() {
         </div>
       </section>
 
-      {/* Comparison matrix */}
-      <section className="mx-auto max-w-5xl px-6 py-28">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[760px] border-collapse text-sm">
-            {/* Sticky-ish tier header echoing the cards, so the columns stay legible. */}
-            <thead>
-              <tr>
-                <th className="w-2/5" />
-                <th className="px-3 pb-6 text-center align-bottom">
-                  <div className="flex flex-col items-center gap-2">
-                    <span className="flex items-center gap-1.5 text-[var(--fg)]">
-                      <Rocket className="h-4 w-4" />
-                      Starter
-                    </span>
-                    <Link
-                      href="/signup"
-                      className="db-ring rounded-full px-4 py-1.5 text-xs font-medium text-[var(--fg)]"
-                    >
-                      Get started
-                    </Link>
-                  </div>
-                </th>
-                <th className="px-3 pb-6 text-center align-bottom">
-                  <div className="flex flex-col items-center gap-2">
-                    <span className="flex items-center gap-1.5 text-[var(--fg)]">
-                      <Zap className="h-4 w-4" />
-                      Pro
-                    </span>
-                    <Link
-                      href="/signup"
-                      className="db-cta rounded-full px-4 py-1.5 text-xs font-medium text-white"
-                    >
-                      Try for free
-                    </Link>
-                  </div>
-                </th>
-                <th className="px-3 pb-6 text-center align-bottom">
-                  <div className="flex flex-col items-center gap-2">
-                    <span className="flex items-center gap-1.5 text-[var(--fg)]">
-                      <Briefcase className="h-4 w-4" />
-                      Enterprise
-                    </span>
-                    <a
-                      href={CONTACT}
-                      className="db-ring rounded-full px-4 py-1.5 text-xs font-medium text-[var(--fg)]"
-                    >
-                      Contact us
-                    </a>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {MATRIX.map(({ group, rows }) => (
-                <Fragment key={group}>
-                  <tr>
-                    <td
-                      colSpan={4}
-                      className="pb-3 pt-10 text-sm font-semibold text-[var(--fg)]"
-                    >
-                      {group}
-                    </td>
-                  </tr>
-                  {rows.map((row) => (
-                    <tr
-                      key={row.label}
-                      className="border-t border-[rgba(var(--ink-rgb),0.06)]"
-                    >
-                      <td className="py-3 pr-3 text-[var(--muted)]">
-                        {row.label}
-                      </td>
-                      <td className="py-3 text-center">
-                        <MatrixCell value={row.starter} />
-                      </td>
-                      <td className="py-3 text-center">
-                        <MatrixCell value={row.pro} />
-                      </td>
-                      <td className="py-3 text-center">
-                        <MatrixCell value={row.enterprise} />
-                      </td>
-                    </tr>
-                  ))}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+      {/* Comparison matrix (shared with the in-app Billing settings surface). The
+          per-tier CTAs are the marketing signup/contact links. */}
+      <section className="mx-auto max-w-6xl px-6 py-28">
+        <PlanMatrix
+          renderCta={(key: PlanKey) => {
+            if (key === "enterprise")
+              return (
+                <a
+                  href={CONTACT}
+                  className="db-ring rounded-full px-4 py-1.5 text-xs font-medium text-[var(--fg)]"
+                >
+                  Contact us
+                </a>
+              );
+            const label = key === "free" ? "Get started" : "Start trial";
+            return (
+              <Link
+                href="/signup"
+                className={
+                  key === "pro"
+                    ? "db-cta rounded-full px-4 py-1.5 text-xs font-medium text-white"
+                    : "db-ring rounded-full px-4 py-1.5 text-xs font-medium text-[var(--fg)]"
+                }
+              >
+                {label}
+              </Link>
+            );
+          }}
+        />
       </section>
 
       {/* Footer */}

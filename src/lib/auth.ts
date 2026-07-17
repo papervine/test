@@ -87,6 +87,14 @@ export const auth = betterAuth({
             });
           }
         },
+        // Every new org starts on the 30-day all-features trial with its one-time
+        // credit grant (SPEC §10 Billing). startTrial is idempotent and swallows its
+        // own failures — a billing hiccup must never block workspace creation (the
+        // org just resolves to Free until support intervenes).
+        afterCreateOrganization: async ({ organization: org }) => {
+          const { startTrial } = await import("@/lib/billing/store");
+          await startTrial(org.id);
+        },
       },
       // Invitation delivery seam (SPEC §10). v1 has NO email infra — the Members settings
       // action surfaces a shareable accept link directly (Copy-link UI), so a real send isn't

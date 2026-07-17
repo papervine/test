@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npx drizzle-kit migrate && next build",
-  "crons": [{ "path": "/api/reconcile/domains", "schedule": "*/10 * * * *" }]
+  "crons": [
+    { "path": "/api/reconcile/domains", "schedule": "*/10 * * * *" },
+    { "path": "/api/billing/expire-trials", "schedule": "0 * * * *" }
+  ]
 }

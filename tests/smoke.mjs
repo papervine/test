@@ -220,26 +220,30 @@ const CONTROL_PLANE_CHECKS = [
   },
   {
     path: "/pricing",
-    desc: "marketing pricing page renders all three tiers, the Pro price, and the 90-day SSO/RBAC promo",
-    // db-glow proves PlatformShell wraps it; the tier names + a matrix group prove the
-    // table content rendered (not just the chrome). "399" + "billed annually" is Pro's
-    // SSR'd annual price (ProPrice defaults to annual; React splits "$"/"399" with a
-    // comment node, so we can't match "$399" literally); "Free for 90 days" is the
-    // SSO/RBAC launch promo on the Pro card and in the matrix. Try for free → /signup.
+    desc: "marketing pricing page renders all four tiers, the $50/$300 anchors, the trial banner, and the matrix",
+    // db-glow proves PlatformShell wraps it; the tier names + matrix groups prove the
+    // table content rendered (not just the chrome). "$50"/"$300" are the Team/Pro
+    // anchors (SPEC §10 Billing; mirrors billing/catalog.json), "billed annually" the
+    // annual notes, and the 30-day trial banner replaces the old 90-day SSO promo.
     include: [
       "Pricing on",
       "db-glow",
-      "Starter",
+      "Free",
+      "Team",
       "Pro",
       "Enterprise",
-      "Customization",
-      "399",
+      "$50",
+      "$300",
       "billed annually",
-      "Free for 90 days",
+      "30 days of everything",
+      "5,000 AI credits",
+      "25,000 / month",
       "Dashboard SSO",
       "Security before procurement",
       'href="/signup"',
     ],
+    // The 90-day promo is dead; its copy must not resurface.
+    exclude: ["Free for 90 days"],
   },
 ];
 

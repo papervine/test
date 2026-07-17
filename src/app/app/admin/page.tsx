@@ -133,7 +133,15 @@ export default async function PlatformAdminPage() {
           Dashboard
         </Link>
 
-        <h1 className="mt-4 text-xl font-semibold">Platform admin</h1>
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <h1 className="text-xl font-semibold">Platform admin</h1>
+          <Link
+            href="/admin/billing"
+            className="db-ring rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--fg)]"
+          >
+            Billing console
+          </Link>
+        </div>
         <p className="mt-2 text-sm text-[var(--muted)]">
           Every customer organization on this deployment — members, sites, deploys, and
           traffic over the last 30 days. Read-only.

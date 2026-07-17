@@ -101,8 +101,8 @@ review, custom retention, SLAs, migration, and dedicated support. Detailed prici
 research and go-to-market planning are private strategy material and stay outside
 tracked public docs; locally, `_private/` is gitignored for that work. The current
 `/pricing` implementation is still presentational and may lag this thesis until the
-next page update; there is no billing backend, plan enforcement, or credit metering
-yet (§10 "Billing (later)").
+next page update; the billing backend's schema + versioned catalog + credit core landed
+2026-07-16, with enforcement, Stripe, and surfaces to follow (§10 "Billing").
 
 **Landing backdrop: a growing vine, not a grid (landed 2026-06-28).** The marketing
 landing swaps the static `.db-grid` for `VineField` (`src/components/platform/VineField.tsx`,
@@ -1418,7 +1418,176 @@ Minimum to operate the SaaS:
 - **Assistant:** the AI assistant management page (enable/disable, deflection, search domains, bot protection, starter questions, credits) — specified in **§8.6**; its usage analytics live on the Analytics page (§10.1).
 - **MCP:** manage the per-docs read MCP and authoring MCP (enable, opt-in, tokens) — see **§9**.
 - **Analytics:** page views, top pages, search terms with no results, AI unanswered questions, plus the assistant deep-dive — expanded in **§10.1**. PostHog or a lightweight first-party events table.
-- **Billing (later):** Stripe; usage tiers (seats, AI tokens, page views).
+- **Billing:** Stripe; plan tiers + AI credit metering. **Phase 1 landed 2026-07-16 —
+  schema + versioned catalog + pure credit core** (`drizzle/0014`, `src/lib/billing/`).
+  Design rules (the "easy to reconfigure" requirement, encoded structurally):
+  1. **Catalog is data, not code.** Plans, entitlements, credit pools, prices, packs, and
+     token→credit rates live in `src/lib/billing/catalog.json`, published to DB by
+     `npm run billing:sync` (idempotent; verified by double-run + edit/re-mint in dev).
+     Product code reads the org's *pinned* plan version from the DB — no plan constant
+     anywhere in app code. Repricing = config edit + sync, not a deploy.
+  2. **Append-only where money lives.** `billing_plan_version` rows are immutable
+     entitlement snapshots — a catalog change mints a new version; subscriptions pin the
+     version they bought, so grandfathering is the default and repricing live customers
+     is always a deliberate migration. `billing_price` mirrors Stripe's own immutable
+     Prices (archive, never mutate). `credit_ledger` is the credit source of truth —
+     never updated or deleted; corrections are compensating `adjustment` entries with an
+     actor + reason; `credit_balance` is a derived cache the ledger always outranks.
+  3. **Stripe is the billing authority; the DB is the mirror.** Webhooks (recorded in
+     `stripe_event`, keyed by Stripe event id → idempotent redelivery) will be the only
+     mutation path into subscription state (Phase 3).
+  4. **Credits are rated from tokens** via a versioned per-model rate table
+     (`credit_rate_version`): usage events record tokens in/out + model + the rate
+     version they were billed under, so historical charges stay explainable after a
+     rate change. Consumption order trial → monthly → pack; **hard caps by default**,
+     overage is an explicit org-level opt-in (`planDebits` in `billing/core.ts`).
+  5. **No billing row → Free entitlements, never an error** (`resolveEntitlements`):
+     legacy orgs and DB-free render paths (smoke gate) must not throw or gate harder
+     than Free. `past_due` keeps entitlements (dunning ≠ cutoff); `canceled`/expired
+     trial collapse to Free.
+  Lifecycle: every new org starts on a 30-day all-features **trial** (a lifecycle state,
+  not a SKU — `listed:false` plan) with a one-time credit grant; expiry lands on Free,
+  which has no AI. The pure decision layer (`rating`, `planDebits`, `resolveEntitlements`,
+  `trialStatus`, `authorizeAiDecision`) is unit-tested in `tests/unit/billing-core.test.ts`.
+  **Phase 2 landed 2026-07-16 — metering + enforcement + trial lifecycle.** Both AI
+  routes (`/api/assistant`, `/api/editor-agent`) now gate on `authorizeAi(org, feature)`
+  (402 with `upgrade_required` / `out_of_credits`) and meter real token usage in
+  `onFinish` via `recordAiUsage` (fire-and-forget, same never-break-the-request rule as
+  track.ts; the platform's own docs stay unmetered). New orgs get the trial via the
+  `afterCreateOrganization` auth hook; expiry bookkeeping is `/api/billing/expire-trials`
+  (hourly Vercel cron, same CRON_SECRET contract as domain reconcile — enforcement never
+  waits for it, since `resolveEntitlements` already treats a past-end trial as Free).
+  `npm run db:seed` puts dev-org on active Pro with the monthly grant. *Verified live
+  2026-07-16 (dev, real Anthropic calls): Pro org answer = 3,885 in / 124 out tokens →
+  9 credits debited (calibration target ~10 ✓), ledger row linked to the usage event,
+  balance 25,000→24,991; drained org → 402 out_of_credits; drained + overage opt-in →
+  200 with monthly bucket driven negative (−9); no-billing-row org → 402
+  upgrade_required; real signup → trialing sub + 5,000-credit grant ending +30d; expiry
+  sweep flipped status, wrote the −5,000 expiry ledger entry, second run a no-op.*
+  **Phase 3 landed 2026-07-16 — Stripe (checkout, portal, webhooks, publish).**
+  `src/lib/billing/stripe.ts` (lazy client — everything degrades to "billing not
+  configured" without `STRIPE_SECRET_KEY`; see `.env.example`): `publishCatalogToStripe`
+  creates Products/Prices for catalog rows lacking Stripe ids (idempotent, append-only,
+  mirroring Stripe's own immutable Prices; CLI twin `npm run billing:publish`),
+  checkout sessions for plans (subscription mode) and credit packs (payment mode,
+  metadata-carried org/pack), and Customer Portal sessions (card/invoice/cancel
+  self-serve). `/api/webhooks/stripe` + `src/lib/billing/webhooks.ts` are the only
+  writers of paid subscription state: signature-verified, deduped by Stripe event id
+  via `stripe_event` (dedupe on *successful* processing only — a failed handler leaves
+  `processedAt` null so Stripe's retry gets through instead of being swallowed).
+  Monthly credit grants ride `invoice.paid` keyed to the invoice's own period (the
+  partial unique index makes cross-period redelivery safe); rollover expires the old
+  bucket's remainder (negative remainder = unbilled overage, forgiven in v1 — overage
+  *invoicing* is deferred; the opt-in still works, tracked as negative balance).
+  Pack grants are double-guarded (event-id dedupe + one grant per checkout session).
+  *Verified live 2026-07-16 without a Stripe account — the webhook path only checks an
+  HMAC, so signed fixture events drove the real route against the dev DB: bad sig →
+  400; invoice.paid same-period → grant no-oped by the unique index; next-period
+  invoice → −25,000 expiry + fresh 5,000 grant (org had switched plans; packs
+  survived); pack purchase → +5,000 once across two distinct events sharing a checkout
+  session; subscription.updated with a mapped price id → plan flipped pro→team;
+  payment_failed → past_due (entitlements retained). Real-key checkout/portal flows
+  remain unverified until Stripe keys exist.*
+  **Phase 4 landed 2026-07-16 — billing surfaces.** Org billing page at
+  `/:org/billing` (org-level rail item — the subscription/credits belong to the org,
+  not a site): current plan + trial countdown, per-bucket credit meter, plan cards with
+  annual/monthly checkout buttons, credit packs, the overage opt-in switch, recent
+  usage table. Checkout/Portal buttons hard-navigate (`window.location.assign`) per the
+  Host-rewrite gotcha; owner/admin gating is enforced in the server actions
+  (`src/lib/actions/billing.ts`), not just hidden in UI. `/admin/billing` (same §10.10
+  gate) shows the live catalog (read-only — the catalog's source of truth is
+  catalog.json + billing:sync), publishes to Stripe, and hosts the support
+  credit-adjustment form — the only manual credit mutation, writing an `adjustment`
+  ledger entry with actor + mandatory reason. *Verified in a real browser 2026-07-16
+  (light + dark, console clean): trial/active states render, overage toggle
+  round-trips UI↔DB, +1000/−1000 adjustment produced actor-attributed ledger entries
+  and correct balances, publish button degrades to "STRIPE_SECRET_KEY is not set".*
+  Regression: `tests/e2e/billing.spec.ts` (deterministic — seeds its own catalog,
+  backfills the trial the way the signup hook writes it, asserts the page + rail
+  journey with the editor.spec console-clean pattern).
+  **Phase 5 landed 2026-07-16 — public pricing + docs.** `/pricing` rebuilt to the
+  locked shape: four tiers (Free $0 · Team $50/mo, $40 annual · Pro $300/mo, $250
+  annual, highlighted · Enterprise contact), the 30-day/5,000-credit trial banner, and
+  a four-column matrix whose placements mirror `billing/catalog.json` entitlements
+  (SSO/RBAC from Team — the 90-day promo is retired; advanced insights/multi-repo from
+  Pro; SCIM/services in Enterprise) plus a Limits group (sites/editors/retention) and
+  the credit/overage rows. The old Monthly/Annual toggle (`ProPrice.tsx`) is gone —
+  both prices show inline. Smoke's `/pricing` check now pins the new anchors and
+  *excludes* the dead promo copy. `docs/control-plane/billing.mdx` is the evergreen
+  reference (plans, trial, credit buckets + consumption order, hard caps/overage,
+  portal self-serve, org-scoped billing, self-host = no meter). *Verified in-browser
+  light + dark 2026-07-16, console clean; `node tests/crawl.mjs docs` 30/30, 0×500.*
+  §2's pricing-thesis paragraph is superseded by this section for plan shape; the
+  wedge ("all features from day one, security before procurement, open-source exit")
+  is unchanged.
+  **Plan switching + downgrade landed 2026-07-17** (gap found dogfooding: no way to
+  downgrade). `changePlan` routes by billing state — a live Stripe sub gets an
+  in-place `subscriptions.update` with proration (a second Checkout would mint a
+  second subscription; the webhook mirrors the switch), everyone else goes through
+  Checkout. **Downgrade to Free** = cancel-at-period-end with confirm + resume, on the
+  current-plan card; a Stripe-backed sub cancels through Stripe, while a sub with NO
+  Stripe backing (dev seed, support-granted) flips directly in the DB and the hourly
+  sweep (`expireTrials`, extended) finalizes it at period end — the sweep is the
+  period-end biller Stripe would otherwise be, writing the same expiry bookkeeping as
+  `handleSubscriptionDeleted`. *Verified live 2026-07-17 (dev-org, non-Stripe path):
+  downgrade → confirm → `cancel_at_period_end=true` + "Cancels/Downgrades on Aug 15" +
+  Resume; resume → flag cleared, "Renews" restored; lapsed cancellation swept →
+  status canceled, −25,000 monthly expiry ledger entry; plan-switch button without
+  Stripe keys → clean "isn't configured" error. Regression: the downgrade/resume
+  journey is pinned in `billing.spec.ts` (4/4 green). Stripe-backed switch/cancel
+  still needs real keys to verify.*
+  **Trial visibility + meter semantics (2026-07-17, from dogfooding):** (1) the credit
+  meter renders USAGE semantics — "N / M used", bar fills as credits burn, red past
+  quota — never remaining-as-full-bar, which a real user read as "all used up"; trial/
+  pack buckets are quota-less "N left" lines. (2) During a live trial the rail's AI
+  items (Workflows · Agent · Assistant) carry an amber **"Trialing"** pill
+  (`trialBadge` on the rail items; the org layout passes a `trialing` flag from
+  `getBillingLookup` + `trialStatus`, failing safe to no-pill) so trial-granted access
+  is visibly distinct from the plan's own. Both pinned in `billing.spec.ts`; the
+  downgrade affordance is a real bordered button after the quiet-text version was
+  overlooked in testing.
+  **Billing moved into Settings + split (2026-07-17, competitor-parity IA).** The single
+  org-level `/:org/billing` page is retired as a standalone rail item and split into two
+  site-Settings surfaces under the Workspace nav group (matching hosted-docs-platform
+  settings IA): **Settings → Billing** (`/:org/:site/settings/billing` — current plan,
+  change-plan cards, portal, downgrade) and **Settings → Usage**
+  (`/:org/:site/settings/usage` — credit meter, **Next-reset date**, overage toggle,
+  credit packs, recent usage). Data stays **org-level** — both pages resolve `org` via
+  `requireSite` and read `getBillingSummary(org.id)`; every site's tabs show the same
+  subscription. Shared read model + derivation in `src/lib/billing/summary.ts`
+  (`getBillingSummary`/`deriveBillingState`/`getPlanOffers`/`getCreditPacks`); the
+  interactive bits (`BillingActions`/`CancelPlanButton`/`OverageToggle`) and the meters
+  moved to `src/components/billing/`. `/:org/billing` is kept as a **redirect** to the
+  first site's Settings→Billing (Connect if the org has no site yet), which keeps the
+  Stripe return URLs — still `${base}/:org/billing`, org-level being the right scope —
+  landing correctly without threading a site slug through the billing actions. The
+  "Next reset" is the subscription's `currentPeriodEnd` (or the trial's end date), a
+  competitor detail we liked. `billing.spec.ts` rewritten to the two surfaces + the
+  redirect (6 tests). *Verified in-browser 2026-07-17.*
+  **Shared plan content (2026-07-17):** the tier feature bullets + comparison matrix are
+  extracted to `src/lib/billing/plan-content.ts` (`PLAN_TIERS`/`PLAN_MATRIX`, keyed by
+  planKey — mirrors catalog.json copy) + `src/components/billing/PlanMatrix.tsx` (a
+  presentational `.db`-token table with an optional per-tier `renderCta` slot). `/pricing`
+  now consumes them (identical output — smoke still pins the same strings) and the in-app
+  Settings→Billing surface reuses both: feature bullets on the change-plan cards and a
+  "Compare plans" matrix (all four tiers, incl. Free + Enterprise which aren't purchasable
+  cards) plus a "View pricing page" link — so plan copy has one source across marketing +
+  in-app.
+  **Consolidated to ONE editable file (2026-07-17).** The marketing copy that
+  plan-content.ts held was folded back INTO `catalog.json` (which already declared itself
+  the single source): each plan gains a `display` block (icon name, badge, highlight,
+  cta, lead, feature bullets), plus top-level `positioning` and `matrix`. `plan-content.ts`
+  is now a typed LOADER over catalog.json — it maps icon names → lucide components,
+  **derives** the card price strings from `prices[]` (so a price edit updates the cards
+  automatically, no duplicate number), and validates at load. The billing loader
+  (catalog.ts) and `sync-billing.mjs` ignore display/matrix/positioning, so **editing them
+  does NOT mint a new plan version** (verified: adding all the display data → `billing:sync`
+  minted 0 versions) — marketing edits can't reprice legacy customers, only
+  entitlement/credit/price edits do. A drift-guard unit test
+  (`tests/unit/billing-plan-content.test.ts`) fails if the matrix's numeric/flag claims
+  disagree with the enforced entitlements (verified it bites: an injected "Team SSO=false"
+  lie failed the feature-flag assertion). Net: **one file to edit for plans, and the
+  displayed copy provably can't drift from what's enforced.**
 - **Web editor — BUILT (2026-06-14):** the 3-panel editor at `/:org/:site/editor` (editing-agent
   chat · navigation · multi-modal editor with a Visual⇄Source toggle, branch switcher, and a
   Publish→commit/PR button). It is **the same capability as the authoring MCP (§9.2), not a

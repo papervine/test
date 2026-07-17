@@ -1,0 +1,308 @@
+{
+  "$comment": "THE single editable source for EVERYTHING about plans — the billing numbers AND the marketing copy. Two consumers read this file: (1) billing (src/lib/billing/catalog.ts + scripts/sync-billing.mjs) uses plans[].{key,name,blurb,listed,sort,includedMonthlyCredits,overage,entitlements}, prices, creditPacks, creditRates — `npm run billing:sync` publishes them to the DB (append-only: an entitlement/credit change mints a NEW immutable plan version so existing subscriptions stay pinned to what they bought — legacy vs new is automatic — and prices are archived, never mutated); `npm run billing:publish` mirrors them to Stripe. (2) marketing (src/lib/billing/plan-content.ts) uses plans[].display, positioning, and matrix for the /pricing page and the in-app Settings→Billing surface. IMPORTANT: display/matrix/positioning are DISPLAY-ONLY — editing them does NOT mint a new billing plan version (a bullet-wording change must not reprice anyone). Price strings on the cards are DERIVED from prices[] (not stored here), so a price change updates the cards automatically. A unit test (billing-plan-content.test.ts) fails if the matrix's numeric/flag claims disagree with entitlements, so the copy can't silently drift from what's enforced. Money is integer cents; credits are integers.",
+  "trial": {
+    "days": 30,
+    "credits": 5000,
+    "planKey": "trial"
+  },
+  "plans": [
+    {
+      "key": "free",
+      "name": "Free",
+      "blurb": "For open-source projects and small docs sites",
+      "listed": true,
+      "sort": 0,
+      "includedMonthlyCredits": 0,
+      "overageCentsPerThousandCredits": null,
+      "entitlements": {
+        "sites": 1,
+        "editors": 3,
+        "analyticsRetentionDays": 7,
+        "features": {
+          "assistant": false,
+          "writerAgent": false,
+          "workflows": false,
+          "sso": false,
+          "rbac": false,
+          "previewDeployments": false,
+          "adminApis": false,
+          "advancedInsights": false,
+          "multiRepo": false,
+          "scim": false
+        }
+      },
+      "display": {
+        "icon": "Rocket",
+        "badge": null,
+        "highlight": false,
+        "priceOverride": "$0",
+        "cta": { "label": "Get started", "href": "/signup" },
+        "lead": null,
+        "features": [
+          "Git-backed docs",
+          "Custom domain",
+          "Reader authentication",
+          "Visual + MDX editor",
+          "Search and analytics",
+          "API playground",
+          "MCP server"
+        ]
+      }
+    },
+    {
+      "key": "team",
+      "name": "Team",
+      "blurb": "For small teams that want AI docs and real security",
+      "listed": true,
+      "sort": 1,
+      "includedMonthlyCredits": 5000,
+      "overageCentsPerThousandCredits": 800,
+      "entitlements": {
+        "sites": 3,
+        "editors": 8,
+        "analyticsRetentionDays": 90,
+        "features": {
+          "assistant": true,
+          "writerAgent": true,
+          "workflows": true,
+          "sso": true,
+          "rbac": true,
+          "previewDeployments": true,
+          "adminApis": true,
+          "advancedInsights": false,
+          "multiRepo": false,
+          "scim": false
+        }
+      },
+      "display": {
+        "icon": "Users",
+        "badge": null,
+        "highlight": false,
+        "priceOverride": null,
+        "cta": { "label": "Start free trial", "href": "/signup" },
+        "lead": "Everything in Free",
+        "features": [
+          "5,000 AI credits / month",
+          "AI assistant and writing agent",
+          "Workflow automations",
+          "SSO & RBAC",
+          "Preview deployments",
+          "Admin APIs"
+        ]
+      }
+    },
+    {
+      "key": "pro",
+      "name": "Pro",
+      "blurb": "For production docs teams",
+      "listed": true,
+      "sort": 2,
+      "includedMonthlyCredits": 25000,
+      "overageCentsPerThousandCredits": 600,
+      "entitlements": {
+        "sites": 10,
+        "editors": 25,
+        "analyticsRetentionDays": 365,
+        "features": {
+          "assistant": true,
+          "writerAgent": true,
+          "workflows": true,
+          "sso": true,
+          "rbac": true,
+          "previewDeployments": true,
+          "adminApis": true,
+          "advancedInsights": true,
+          "multiRepo": true,
+          "scim": false
+        }
+      },
+      "display": {
+        "icon": "Zap",
+        "badge": "Popular",
+        "highlight": true,
+        "priceOverride": null,
+        "cta": { "label": "Start free trial", "href": "/signup" },
+        "lead": "Everything in Team",
+        "features": [
+          "25,000 AI credits / month",
+          "Advanced insights",
+          "Multi-repo docs",
+          "More sites and editors",
+          "1-year analytics retention",
+          "Priority support"
+        ]
+      }
+    },
+    {
+      "key": "enterprise",
+      "name": "Enterprise",
+      "blurb": "For procurement, compliance, and committed volume",
+      "listed": true,
+      "sort": 3,
+      "includedMonthlyCredits": 0,
+      "overageCentsPerThousandCredits": null,
+      "entitlements": {
+        "sites": -1,
+        "editors": -1,
+        "analyticsRetentionDays": -1,
+        "features": {
+          "assistant": true,
+          "writerAgent": true,
+          "workflows": true,
+          "sso": true,
+          "rbac": true,
+          "previewDeployments": true,
+          "adminApis": true,
+          "advancedInsights": true,
+          "multiRepo": true,
+          "scim": true
+        }
+      },
+      "display": {
+        "icon": "Briefcase",
+        "badge": null,
+        "highlight": false,
+        "priceOverride": "Contact us",
+        "cta": {
+          "label": "Contact us",
+          "href": "mailto:support@papervine.io?subject=Papervine%20Enterprise"
+        },
+        "lead": "Everything in Pro",
+        "features": [
+          "Committed AI credit volume",
+          "SCIM provisioning",
+          "Security and legal review",
+          "Performance SLA",
+          "Migration services",
+          "Dedicated support"
+        ]
+      }
+    },
+    {
+      "key": "trial",
+      "name": "Trial",
+      "blurb": "Every new account: 30 days of everything",
+      "listed": false,
+      "sort": 99,
+      "includedMonthlyCredits": 0,
+      "overageCentsPerThousandCredits": null,
+      "entitlements": {
+        "sites": 10,
+        "editors": 25,
+        "analyticsRetentionDays": 365,
+        "features": {
+          "assistant": true,
+          "writerAgent": true,
+          "workflows": true,
+          "sso": true,
+          "rbac": true,
+          "previewDeployments": true,
+          "adminApis": true,
+          "advancedInsights": true,
+          "multiRepo": true,
+          "scim": false
+        }
+      }
+    }
+  ],
+  "prices": [
+    { "planKey": "team", "interval": "month", "unitAmountCents": 5000, "currency": "usd" },
+    { "planKey": "team", "interval": "year", "unitAmountCents": 48000, "currency": "usd" },
+    { "planKey": "pro", "interval": "month", "unitAmountCents": 30000, "currency": "usd" },
+    { "planKey": "pro", "interval": "year", "unitAmountCents": 300000, "currency": "usd" }
+  ],
+  "creditPacks": [
+    { "key": "pack-5k", "name": "5,000 credits", "credits": 5000, "priceCents": 3500 },
+    { "key": "pack-25k", "name": "25,000 credits", "credits": 25000, "priceCents": 15000 }
+  ],
+  "creditRates": {
+    "$comment": "Credits per 1M tokens, matched by model-id prefix (longest wins), `default` as fallback. Calibrated so a typical assistant answer (~3k in / ~500 out) costs ~9-10 credits: at $0.008/credit retail that's ~$0.07/answer vs ~$0.02 raw model cost. VALIDATE against real token logs before GA (pricing-plan.md revisit prompt).",
+    "version": 1,
+    "default": { "inPer1M": 2000, "outPer1M": 6000 },
+    "models": {
+      "claude-haiku": { "inPer1M": 400, "outPer1M": 1200 }
+    }
+  },
+  "positioning": [
+    {
+      "title": "Security before procurement",
+      "body": "SSO and role-based access live in the $50 plan, not behind an enterprise negotiation. Growing teams shouldn't need a sales call to lock down their docs."
+    },
+    {
+      "title": "A real plan between $0 and $450",
+      "body": "The docs-platform category jumps from free straight to enterprise-lite pricing. Team fills that gap; Pro undercuts the category flagship with 2.5× the AI credits."
+    },
+    {
+      "title": "Open source — never locked in",
+      "body": "Hosted Papervine is the managed path, but the renderer and control plane are built in the open. Self-host any time; heavy AI users can even bring their own infrastructure."
+    }
+  ],
+  "matrix": [
+    {
+      "group": "Limits",
+      "rows": [
+        { "label": "Docs sites", "free": "1", "team": "3", "pro": "10", "enterprise": "Custom" },
+        { "label": "Editors", "free": "3", "team": "8", "pro": "25", "enterprise": "Custom" },
+        { "label": "Analytics retention", "free": "7 days", "team": "90 days", "pro": "1 year", "enterprise": "Custom" }
+      ]
+    },
+    {
+      "group": "AI",
+      "rows": [
+        { "label": "AI credits", "free": "Trial only", "team": "5,000 / month", "pro": "25,000 / month", "enterprise": "Committed volume" },
+        { "label": "Assistant", "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "Writing agent", "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "Workflows", "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "Credit packs", "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "Overage (opt-in, hard caps by default)", "free": false, "team": "$0.008 / credit", "pro": "$0.006 / credit", "enterprise": "Best rate" }
+      ]
+    },
+    {
+      "group": "Features",
+      "rows": [
+        { "label": "Git sync", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Search", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Visual + MDX editor", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "API playground", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "MCP server", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Analytics", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "User feedback", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Admin APIs", "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "Advanced insights", "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "Multi-repo", "free": false, "team": false, "pro": true, "enterprise": true }
+      ]
+    },
+    {
+      "group": "Publishing",
+      "rows": [
+        { "label": "Custom domain", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Preview deployments", "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "SEO optimizations", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Agent-readable output", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Custom components, CSS, and JS", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "White labeling", "free": true, "team": true, "pro": true, "enterprise": true }
+      ]
+    },
+    {
+      "group": "Security",
+      "rows": [
+        { "label": "Reader authentication", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Role-based permissions", "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "Dashboard SSO", "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "SCIM", "free": false, "team": false, "pro": false, "enterprise": true },
+        { "label": "Security review", "free": false, "team": false, "pro": false, "enterprise": true },
+        { "label": "Legal review", "free": false, "team": false, "pro": false, "enterprise": true },
+        { "label": "Custom SLAs", "free": false, "team": false, "pro": false, "enterprise": true }
+      ]
+    },
+    {
+      "group": "Services",
+      "rows": [
+        { "label": "Priority support", "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "Migration services", "free": false, "team": false, "pro": false, "enterprise": true },
+        { "label": "Dedicated customer success", "free": false, "team": false, "pro": false, "enterprise": true },
+        { "label": "24/7 incident monitoring", "free": false, "team": false, "pro": false, "enterprise": true }
+      ]
+    }
+  ]
+}

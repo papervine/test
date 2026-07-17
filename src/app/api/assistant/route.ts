@@ -13,6 +13,7 @@ import { withSearchIndexKey } from "@/lib/search";
 import { getSiteByHost } from "@/lib/tenant";
 import { logEvent, setEventStatus } from "@/lib/track";
 import { outcomeFromText } from "@/lib/assistant-outcome";
+import { aiRefusalResponse, authorizeAi, recordAiUsage } from "@/lib/billing/store";
 
 /** Pull the user's question text out of a UIMessage (its text parts). */
 function questionText(m: UIMessage | undefined): string {
@@ -53,6 +54,15 @@ export async function POST(req: Request) {
       { status: 403 },
     );
   }
+
+  // Billing gate (SPEC §10 Billing): the owning org's plan must include the assistant
+  // and have spendable credits. Tenant sites only — the platform's own docs (record
+  // null) are unmetered. The lookup fails OPEN on DB errors and only `metered:true`
+  // results get charged (billing must never take down a paid surface — billing/core.ts).
+  const billing = record
+    ? await authorizeAi(record.organizationId, "assistant")
+    : ({ allowed: true, metered: false } as const);
+  if (!billing.allowed) return aiRefusalResponse(billing.code);
 
   // Scope every content read — config, current page, and the streaming tool calls
   // (searchDocs / readPage / searchApi) — to the requesting tenant. Without this the
@@ -110,16 +120,31 @@ export async function POST(req: Request) {
       `Be concise and use Markdown.` +
       pageContext;
 
+    const model = process.env.PAPERVINE_AI_MODEL ?? "claude-sonnet-4-6";
     const result = streamText({
-      model: anthropic(process.env.PAPERVINE_AI_MODEL ?? "claude-sonnet-4-6"),
+      model: anthropic(model),
       system,
       messages: await convertToModelMessages(messages),
       tools: assistantTools,
       stopWhen: stepCountIs(8),
       // Record the outcome on the logged event so the Assistant page's answered/unanswered
       // split is real. Fire-and-forget — never block or fail the stream on instrumentation.
-      onFinish: ({ text }) => {
+      onFinish: ({ text, totalUsage }) => {
         if (eventId) void setEventStatus(eventId, outcomeFromText(text));
+        // Meter the whole agentic run (all steps) against the owning org's credits.
+        // Fire-and-forget, same rule as analytics: a metering failure drops the charge,
+        // never the answer (billing/store.ts).
+        if (record && billing.metered) {
+          void recordAiUsage({
+            organizationId: record.organizationId,
+            siteId: record.id,
+            feature: "assistant",
+            model,
+            tokensIn: totalUsage.inputTokens ?? 0,
+            tokensOut: totalUsage.outputTokens ?? 0,
+            requestId: eventId,
+          });
+        }
       },
       onError: () => {
         if (eventId) void setEventStatus(eventId, "unanswered");

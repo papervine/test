@@ -7,6 +7,7 @@ import { findSite } from "@/lib/dashboard-context";
 import { getSession, listOrganizations, getMemberRole } from "@/lib/session";
 import { canSeeFeature } from "@/lib/features";
 import { checkoutBranch } from "@/lib/authoring-core";
+import { aiRefusalResponse, authorizeAi, recordAiUsage } from "@/lib/billing/store";
 
 /**
  * The editor's left-panel agent (SPEC §9.2) — a read/WRITE assistant. It shares the read
@@ -38,6 +39,11 @@ export async function POST(req: Request) {
   const siteRow = await findSite(org, site);
   if (!siteRow) return Response.json({ error: "Site not found." }, { status: 404 });
 
+  // Billing gate (SPEC §10 Billing): the writing agent is a plan feature with credit
+  // metering. Fails open on DB errors; only metered results get charged (billing/core.ts).
+  const billing = await authorizeAi(organization.id, "writerAgent");
+  if (!billing.allowed) return aiRefusalResponse(billing.code);
+
   // The agent always operates on an open session — auto-checkout if the client didn't
   // pass a branch (or passed one with no open session yet).
   const { branch: editBranch } = await checkoutBranch(siteRow, {
@@ -56,12 +62,27 @@ export async function POST(req: Request) {
       `NEVER publish or open a PR unless the user explicitly asks — only then call publish. ` +
       `Use Markdown in your replies.`;
 
+    const model = process.env.PAPERVINE_AI_MODEL ?? "claude-sonnet-4-6";
     const result = streamText({
-      model: anthropic(process.env.PAPERVINE_AI_MODEL ?? "claude-sonnet-4-6"),
+      model: anthropic(model),
       system,
       messages: await convertToModelMessages(messages),
       tools: { ...assistantTools, ...authoringTools(siteRow, editBranch) },
       stopWhen: stepCountIs(12),
+      // Meter the whole run. Fire-and-forget — a metering failure drops the charge,
+      // never the edit (billing/store.ts).
+      onFinish: ({ totalUsage }) => {
+        if (billing.metered) {
+          void recordAiUsage({
+            organizationId: organization.id,
+            siteId: siteRow.id,
+            feature: "writerAgent",
+            model,
+            tokensIn: totalUsage.inputTokens ?? 0,
+            tokensOut: totalUsage.outputTokens ?? 0,
+          });
+        }
+      },
     });
     return result.toUIMessageStreamResponse();
   });
