@@ -33,6 +33,7 @@
         "pages": [
           "control-plane/overview",
           "control-plane/general",
+          "control-plane/billing",
           "control-plane/members",
           "control-plane/editor",
           "control-plane/collaboration",

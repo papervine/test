@@ -42,6 +42,9 @@ type RailItem = {
   // don't fire that work for every rail item on every dashboard page. They keep Next's default
   // (lighter) prefetch and fetch on navigation. Analytics runs time-series aggregation queries.
   heavy?: boolean;
+  // Plan-gated AI surfaces (SPEC §10 Billing): during the org's 30-day trial these
+  // carry a "Trialing" pill so it's clear the access comes from the trial, not the plan.
+  trialBadge?: boolean;
 };
 
 // Grouped rail IA, mirroring hosted docs platforms' sidebar: a lead group, an "Automate" section
@@ -66,18 +69,21 @@ const NAV_SECTIONS: { heading?: string; items: RailItem[] }[] = [
         label: "Workflows",
         icon: Workflow,
         feature: "automate.workflows",
+        trialBadge: true,
       },
       {
         sub: "automate/agent",
         label: "Agent",
         icon: Bot,
         feature: "automate.agent",
+        trialBadge: true,
       },
       {
         sub: "automate/assistant",
         label: "Assistant",
         icon: MessageCircle,
         feature: "automate.assistant",
+        trialBadge: true,
       },
     ],
   },
@@ -95,12 +101,16 @@ export function AppRail({
   sites,
   userName,
   role,
+  trialing = false,
   platformAdmin = false,
 }: {
   orgSlug: string;
   sites: { slug: string; name: string }[];
   userName: string;
   role: string | null;
+  // The org is inside its live 30-day trial — trial-gated items get a "Trialing" pill.
+  // Cosmetic: the real gate is authorizeAi on the API routes.
+  trialing?: boolean;
   // Platform-operator allowlist (SPEC §10.10) — shows the /admin link. Cosmetic only:
   // the real gate is requirePlatformAdmin on the page.
   platformAdmin?: boolean;
@@ -154,7 +164,7 @@ export function AppRail({
                   {section.heading}
                 </h3>
               )}
-              {section.items.map(({ sub, label, icon: Icon, soon, heavy }) => {
+              {section.items.map(({ sub, label, icon: Icon, soon, heavy, trialBadge }) => {
                 if (soon || sub === undefined) {
                   return (
                     <span
@@ -196,6 +206,14 @@ export function AppRail({
                       className={`h-4 w-4 ${active ? "text-[var(--blue)]" : ""}`}
                     />
                     {label}
+                    {trialing && trialBadge && (
+                      <span
+                        className="ml-auto rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-medium text-amber-500"
+                        title="Included in your 30-day trial — pick a plan to keep it"
+                      >
+                        Trialing
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -203,6 +221,10 @@ export function AppRail({
           ))}
         </nav>
       )}
+
+      {/* Billing + Usage live under Settings → Workspace (SPEC §10 Billing) — the
+          settings IA is where the org's plan and credits belong, so there's no
+          standalone rail item. */}
 
       {platformAdmin && (
         <Link

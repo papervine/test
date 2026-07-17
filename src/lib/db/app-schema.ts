@@ -1,6 +1,6 @@
 // DOMAIN SCHEMA — Papervine's own control-plane tables (SPEC §2, §9). Kept separate
 // from the Better Auth generated schema.ts so `better-auth generate` never wipes them.
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   pgTable,
   text,
@@ -296,6 +296,297 @@ export const domainRemoval = pgTable(
   },
   (table) => [index("domainRemoval_createdAt_idx").on(table.createdAt)],
 );
+
+// ============================== BILLING (SPEC §10 "Billing") ==============================
+// Design rules (see _private/pricing-plan.md for the strategy; SPEC gets the sanitized
+// architecture note):
+//   1. CATALOG IS DATA — plans/prices/rates are DB rows seeded from src/lib/billing/
+//      catalog.json (`npm run billing:sync`), never constants in product code, so
+//      repricing is a config edit + publish, not a deploy.
+//   2. APPEND-ONLY WHERE MONEY LIVES — plan versions are immutable snapshots
+//      (subscriptions pin the version they bought → grandfathering is free); prices are
+//      archived, never mutated (mirrors Stripe's own immutable Prices); the credit
+//      ledger is the source of truth and is never updated or deleted.
+//   3. STRIPE IS THE BILLING AUTHORITY, THE DB IS THE MIRROR — webhooks (recorded in
+//      stripe_event for idempotency) are the only mutation path into subscription state.
+
+// A sellable plan. Stable key ('free' | 'team' | 'pro' | 'enterprise' | 'trial') — the
+// key is the identity everything else hangs off; display fields live on the version.
+// `listed` = shown on /pricing and purchasable ('trial' is a lifecycle state, not a SKU).
+export const billingPlan = pgTable("billing_plan", {
+  key: text("key").primaryKey(),
+  name: text("name").notNull(),
+  blurb: text("blurb").default("").notNull(),
+  listed: boolean("listed").default(true).notNull(),
+  sort: integer("sort").default(0).notNull(),
+  // Stripe Product id, set when the catalog is published to Stripe (Phase 3). Test vs
+  // live mode is per-environment: each environment's DB carries its own mode's ids.
+  stripeProductId: text("stripe_product_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// An immutable snapshot of what a plan grants. Changing entitlements/credits in the
+// catalog mints a NEW version row (configHash detects drift); existing subscriptions
+// keep the version they're pinned to until deliberately migrated. Never UPDATE a
+// published version's grants — that would silently reprice live customers.
+export const billingPlanVersion = pgTable(
+  "billing_plan_version",
+  {
+    id: text("id").primaryKey(),
+    planKey: text("plan_key")
+      .notNull()
+      .references(() => billingPlan.key, { onDelete: "cascade" }),
+    version: integer("version").notNull(),
+    // PlanEntitlements (src/lib/billing/catalog.ts): sites/editors/retention + feature
+    // flags. jsonb so adding a gate is a catalog edit + new version, not a migration.
+    entitlements: jsonb("entitlements").notNull(),
+    includedMonthlyCredits: integer("included_monthly_credits").default(0).notNull(),
+    // Retail overage in cents per 1,000 credits (800 = $0.008/credit); null = no
+    // overage offered on this plan.
+    overageCentsPerThousandCredits: integer("overage_cents_per_thousand_credits"),
+    // Hash of the version-relevant catalog fields — billing:sync compares this to skip
+    // no-op publishes.
+    configHash: text("config_hash").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("billingPlanVersion_plan_version_idx").on(table.planKey, table.version),
+  ],
+);
+
+// Purchasable price points, append-only mirror of Stripe Prices (which are themselves
+// immutable): a price change adds a row and archives the old one (active=false — safe,
+// existing Stripe subscriptions keep billing on the archived price until migrated).
+// Attached to the PLAN, not the version: entitlement tweaks shouldn't force new Stripe
+// prices. For interval 'year', unitAmountCents is the per-year charge.
+export const billingPrice = pgTable(
+  "billing_price",
+  {
+    id: text("id").primaryKey(),
+    planKey: text("plan_key")
+      .notNull()
+      .references(() => billingPlan.key, { onDelete: "cascade" }),
+    interval: text("interval").notNull(), // 'month' | 'year'
+    unitAmountCents: integer("unit_amount_cents").notNull(),
+    currency: text("currency").default("usd").notNull(),
+    stripePriceId: text("stripe_price_id").unique(),
+    active: boolean("active").default(true).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("billingPrice_planKey_idx").on(table.planKey)],
+);
+
+// One-time credit top-ups (Team+). Same append-only discipline as billing_price.
+export const creditPack = pgTable("credit_pack", {
+  id: text("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  name: text("name").notNull(),
+  credits: integer("credits").notNull(),
+  priceCents: integer("price_cents").notNull(),
+  stripePriceId: text("stripe_price_id").unique(),
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// org <-> Stripe Customer. Separate from billing_subscription because the customer
+// outlives any subscription (canceled orgs keep their Stripe history/invoices).
+export const billingCustomer = pgTable("billing_customer", {
+  organizationId: text("organization_id")
+    .primaryKey()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  stripeCustomerId: text("stripe_customer_id").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// An org's current billing state — exactly one row per org (created at signup with the
+// trial plan version). Orgs with NO row resolve to Free entitlements (billing/core.ts):
+// legacy orgs and DB-free render paths must never throw or gate harder than Free.
+export const billingSubscription = pgTable(
+  "billing_subscription",
+  {
+    organizationId: text("organization_id")
+      .primaryKey()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    // The pinned immutable grant snapshot (rule 2 above).
+    planVersionId: text("plan_version_id")
+      .notNull()
+      .references(() => billingPlanVersion.id),
+    // 'trialing' | 'active' | 'past_due' | 'canceled'. past_due keeps entitlements
+    // (Stripe dunning is retrying the card, not a cutoff decision); canceled/expired
+    // trial resolve to Free.
+    status: text("status").default("trialing").notNull(),
+    stripeSubscriptionId: text("stripe_subscription_id").unique(),
+    currentPeriodStart: timestamp("current_period_start"),
+    currentPeriodEnd: timestamp("current_period_end"),
+    cancelAtPeriodEnd: boolean("cancel_at_period_end").default(false).notNull(),
+    trialEndsAt: timestamp("trial_ends_at"),
+    // Org-level opt-in to metered overage past the included credits. Default OFF: hard
+    // caps, no surprise bills (_private/pricing-plan.md).
+    overageEnabled: boolean("overage_enabled").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("billingSubscription_status_idx").on(table.status)],
+);
+
+// Every received Stripe webhook, keyed by Stripe's event id — INSERT ... ON CONFLICT DO
+// NOTHING makes redeliveries no-ops (processing must be idempotent), and the payload is
+// the audit trail when a mirror row looks wrong.
+export const stripeEvent = pgTable(
+  "stripe_event",
+  {
+    id: text("id").primaryKey(), // Stripe evt_… id
+    type: text("type").notNull(),
+    payload: jsonb("payload").notNull(),
+    receivedAt: timestamp("received_at").defaultNow().notNull(),
+    processedAt: timestamp("processed_at"),
+    error: text("error"),
+  },
+  (table) => [index("stripeEvent_type_idx").on(table.type)],
+);
+
+// Versioned token->credit rate tables (CreditRateTable in billing/catalog.ts). Append-
+// only: model economics change => publish a new version; historical usage_event rows
+// keep the rateVersion they were billed under, so past charges stay explainable.
+export const creditRateVersion = pgTable("credit_rate_version", {
+  id: text("id").primaryKey(),
+  version: integer("version").notNull().unique(),
+  rates: jsonb("rates").notNull(),
+  effectiveAt: timestamp("effective_at").defaultNow().notNull(),
+  notes: text("notes"),
+});
+
+// The token-level meter: one row per AI operation (assistant answer, writer run,
+// workflow run), rated to credits at write time. This is the drill-down behind the
+// billing page's usage view and the input for rate-table calibration.
+export const usageEvent = pgTable(
+  "usage_event",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    siteId: text("site_id").references(() => site.id, { onDelete: "set null" }),
+    // 'assistant' | 'writer' | 'workflow' — buyer-facing operation, not model detail.
+    feature: text("feature").notNull(),
+    model: text("model").notNull(),
+    tokensIn: integer("tokens_in").default(0).notNull(),
+    tokensOut: integer("tokens_out").default(0).notNull(),
+    credits: integer("credits").notNull(),
+    rateVersion: integer("rate_version").notNull(),
+    // Correlates with request logs / the assistant's own analytics event.
+    requestId: text("request_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("usageEvent_org_createdAt_idx").on(table.organizationId, table.createdAt),
+  ],
+);
+
+// THE credit source of truth — append-only double-entry-ish ledger. Balances are derived
+// (credit_balance is just a cache); support disputes and accounting reconcile from here.
+// Never UPDATE or DELETE a ledger row; corrections are compensating 'adjustment' entries
+// with an actor + reason.
+export const creditLedger = pgTable(
+  "credit_ledger",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    // Positive = grant, negative = burn. Always credits, never money.
+    delta: integer("delta").notNull(),
+    // 'grant_trial' | 'grant_monthly' | 'grant_pack' | 'usage' | 'adjustment' | 'expiry'
+    kind: text("kind").notNull(),
+    // Which bucket this touches: 'trial' | 'monthly' | 'pack'. Consumption order is
+    // trial -> monthly -> pack (billing/core.ts planDebits).
+    bucket: text("bucket").notNull(),
+    // Backrefs: the usage event that burned credits, the Stripe object that paid for a
+    // grant, the staff member (+ mandatory reason) behind an adjustment.
+    usageEventId: text("usage_event_id").references(() => usageEvent.id, {
+      onDelete: "set null",
+    }),
+    stripeRef: text("stripe_ref"),
+    actorUserId: text("actor_user_id").references(() => user.id, { onDelete: "set null" }),
+    reason: text("reason"),
+    // Grants only: when this bucket's remainder evaporates (trial end / period end).
+    expiresAt: timestamp("expires_at"),
+    // Monthly grants: the UTC period ("2026-07") they belong to — renewal expires
+    // exactly one period and re-runs can't double-grant (unique below).
+    periodKey: text("period_key"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("creditLedger_org_createdAt_idx").on(table.organizationId, table.createdAt),
+    // One monthly grant per org per period, DB-enforced (partial: other kinds repeat).
+    uniqueIndex("creditLedger_monthly_grant_uidx")
+      .on(table.organizationId, table.kind, table.periodKey)
+      .where(sql`${table.kind} = 'grant_monthly'`),
+  ],
+);
+
+// Hot-path balance cache (checked on every AI call), rebuilt from the ledger — on any
+// disagreement the ledger wins. Split by bucket so planDebits can run off one read.
+export const creditBalance = pgTable("credit_balance", {
+  organizationId: text("organization_id")
+    .primaryKey()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  trialCredits: integer("trial_credits").default(0).notNull(),
+  monthlyCredits: integer("monthly_credits").default(0).notNull(),
+  packCredits: integer("pack_credits").default(0).notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export const billingPlanRelations = relations(billingPlan, ({ many }) => ({
+  versions: many(billingPlanVersion),
+  prices: many(billingPrice),
+}));
+
+export const billingPlanVersionRelations = relations(billingPlanVersion, ({ one }) => ({
+  plan: one(billingPlan, {
+    fields: [billingPlanVersion.planKey],
+    references: [billingPlan.key],
+  }),
+}));
+
+export const billingPriceRelations = relations(billingPrice, ({ one }) => ({
+  plan: one(billingPlan, {
+    fields: [billingPrice.planKey],
+    references: [billingPlan.key],
+  }),
+}));
+
+export const billingSubscriptionRelations = relations(billingSubscription, ({ one }) => ({
+  organization: one(organization, {
+    fields: [billingSubscription.organizationId],
+    references: [organization.id],
+  }),
+  planVersion: one(billingPlanVersion, {
+    fields: [billingSubscription.planVersionId],
+    references: [billingPlanVersion.id],
+  }),
+}));
+
+export const usageEventRelations = relations(usageEvent, ({ one }) => ({
+  organization: one(organization, {
+    fields: [usageEvent.organizationId],
+    references: [organization.id],
+  }),
+  site: one(site, { fields: [usageEvent.siteId], references: [site.id] }),
+}));
+
+export const creditLedgerRelations = relations(creditLedger, ({ one }) => ({
+  organization: one(organization, {
+    fields: [creditLedger.organizationId],
+    references: [organization.id],
+  }),
+  usageEvent: one(usageEvent, {
+    fields: [creditLedger.usageEventId],
+    references: [usageEvent.id],
+  }),
+}));
 
 export const siteRelations = relations(site, ({ one, many }) => ({
   organization: one(organization, {
