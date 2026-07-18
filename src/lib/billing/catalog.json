@@ -3,7 +3,8 @@
   "trial": {
     "days": 30,
     "credits": 5000,
-    "planKey": "trial"
+    "planKey": "trial",
+    "representsPlanKey": "pro"
   },
   "plans": [
     {

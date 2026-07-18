@@ -15,7 +15,7 @@ import {
   stripeEvent,
 } from "@/lib/db/app-schema";
 import { PlatformShell } from "@/components/platform/PlatformShell";
-import { AdjustCreditsForm, PublishButton } from "./AdminBillingActions";
+import { AdjustCreditsForm, GrantPlanForm, PublishButton } from "./AdminBillingActions";
 
 // Platform-admin billing console (SPEC §10 Billing, Phase 4; same §10.10 gate as
 // /admin). The CATALOG here is read-only by design — the source of truth is
@@ -162,6 +162,27 @@ export default async function AdminBillingPage() {
             Credit rates: v{rate?.version ?? "—"}
           </span>
         </div>
+
+        {/* Grant a plan for free (comp) */}
+        <h2 className="mt-12 text-sm font-semibold">Grant plan (comp)</h2>
+        <p className="mt-1 text-sm text-[var(--muted)]">
+          Put an org on a paid plan for free — a non-Stripe subscription with the plan&rsquo;s
+          monthly credits. Leave <em>months</em> blank for an indefinite comp; a number
+          lapses it to Free after ~N months. Downgrade a comp from the org&rsquo;s own billing
+          page.
+        </p>
+        <GrantPlanForm
+          orgs={orgs.map((o) => ({
+            id: o.id,
+            label: `${o.name} (${o.slug}) — ${o.status ?? "free"}`,
+          }))}
+          plans={plans
+            .filter((p) => p.key !== "free" && p.key !== "trial")
+            .map((p) => ({
+              key: p.key,
+              label: `${p.name} · ${(p.includedMonthlyCredits ?? 0).toLocaleString()} cr/mo`,
+            }))}
+        />
 
         {/* Credit adjustment */}
         <h2 className="mt-12 text-sm font-semibold">Adjust credits (support)</h2>

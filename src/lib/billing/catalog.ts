@@ -82,7 +82,15 @@ export type CreditRateTable = {
 };
 
 export type BillingCatalog = {
-  trial: { days: number; credits: number; planKey: PlanKey };
+  // `representsPlanKey` = the listed tier the trial's all-features grant is equivalent
+  // to (Pro). The billing UI badges that tier's card "Trialing until <date>" so a
+  // trialing user sees which plan they're sampling.
+  trial: {
+    days: number;
+    credits: number;
+    planKey: PlanKey;
+    representsPlanKey: PlanKey;
+  };
   plans: CatalogPlan[];
   prices: CatalogPrice[];
   creditPacks: CreditPack[];
@@ -132,6 +140,8 @@ export function parseCatalog(raw: unknown): BillingCatalog {
   if (!c.trial || !isPosInt(c.trial.days) || !isPosInt(c.trial.credits))
     fail("trial.days/credits must be non-negative integers");
   if (!keys.has(c.trial.planKey)) fail(`trial.planKey ${c.trial.planKey} not a plan`);
+  if (!keys.has(c.trial.representsPlanKey))
+    fail(`trial.representsPlanKey ${c.trial.representsPlanKey} not a plan`);
   for (const pr of c.prices ?? []) {
     if (!keys.has(pr.planKey)) fail(`price for unknown plan ${pr.planKey}`);
     if (pr.interval !== "month" && pr.interval !== "year")

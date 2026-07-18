@@ -11,6 +11,7 @@ import {
 } from "@/lib/billing/catalog";
 import {
   authorizeAiDecision,
+  compGrantPeriod,
   overageCents,
   periodKey,
   planDebits,
@@ -257,6 +258,31 @@ describe("trialStatus / trialEndDate", () => {
   });
 });
 
+describe("compGrantPeriod (platform-admin plan comps)", () => {
+  const now = new Date("2026-07-18T12:00:00Z");
+
+  it("blank/zero/negative months → indefinite comp (no end, not cancel-at-period-end)", () => {
+    for (const m of [null, 0, -3]) {
+      const p = compGrantPeriod(now, m);
+      expect(p.periodStart).toEqual(now);
+      expect(p.periodEnd).toBeNull();
+      expect(p.cancelAtPeriodEnd).toBe(false);
+    }
+  });
+
+  it("positive months → time-boxed comp that lapses (cancel-at-period-end, ~N*30d out)", () => {
+    const p = compGrantPeriod(now, 3);
+    expect(p.periodStart).toEqual(now);
+    expect(p.cancelAtPeriodEnd).toBe(true);
+    expect(p.periodEnd).toEqual(new Date(now.getTime() + 3 * 30 * 86_400_000));
+  });
+
+  it("fractional months are truncated", () => {
+    const p = compGrantPeriod(now, 2.9);
+    expect(p.periodEnd).toEqual(new Date(now.getTime() + 2 * 30 * 86_400_000));
+  });
+});
+
 describe("periodKey", () => {
   it("is UTC year-month", () => {
     expect(periodKey(new Date("2026-07-16T23:59:00Z"))).toBe("2026-07");
@@ -267,7 +293,12 @@ describe("periodKey", () => {
 describe("catalog", () => {
   it("the shipped catalog.json parses (bad edits fail here, not in checkout)", () => {
     expect(CATALOG.plans.length).toBeGreaterThanOrEqual(5);
-    expect(CATALOG.trial).toEqual({ days: 30, credits: 5000, planKey: "trial" });
+    expect(CATALOG.trial).toEqual({
+      days: 30,
+      credits: 5000,
+      planKey: "trial",
+      representsPlanKey: "pro",
+    });
   });
   it("locked pricing shape: Team $50/mo, Pro $300/mo, annual $40/$250-per-month equiv", () => {
     const cents = (plan: string, interval: string) =>
