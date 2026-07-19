@@ -447,6 +447,95 @@ export const stripeEvent = pgTable(
   (table) => [index("stripeEvent_type_idx").on(table.type)],
 );
 
+// An automation configured on a site (SPEC §10.2): a per-site instance of a catalog
+// automation (catalog_key names the preset in src/lib/automations/catalog.ts) or a
+// custom one (catalog_key 'custom' + a user-given name). This is the *intent* half of
+// the executor-as-projection design — the executor (Trigger.dev) only ever reflects
+// what these rows say, so the executor stays swappable (SPEC §18).
+export const automation = pgTable(
+  "automation",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    catalogKey: text("catalog_key").notNull(),
+    // Custom automations only; predefined ones take the catalog title.
+    name: text("name"),
+    enabled: boolean("enabled").default(false).notNull(),
+    // 'content_update' | 'cron' | 'code_change' (AutomationTriggerType)
+    triggerType: text("trigger_type").notNull(),
+    // cron trigger only: raw 5-field cron expression, UTC.
+    cronExpression: text("cron_expression"),
+    // The executor's schedule handle for the registered cron — null until registered.
+    // Stored so a config change or disable can find and deregister the old schedule
+    // instead of leaking it (same reconcile-against-reality posture as domains, §2).
+    executorScheduleId: text("executor_schedule_id"),
+    // code_change trigger only: "owner/repo" whose merged PRs / base-branch pushes fire
+    // this. Distinct from contextRepos: these *trigger*, those are read-only context.
+    triggerRepos: jsonb("trigger_repos").$type<string[]>(),
+    // Read-only repos cloned into the run environment for context. Never trigger.
+    contextRepos: jsonb("context_repos").$type<string[]>(),
+    // 'auto' = commit directly through the authoring backend; 'review' = open a PR.
+    applyMode: text("apply_mode").default("review").notNull(),
+    // Appended to the catalog basePrompt on every run (custom: this IS the prompt).
+    additionalPrompt: text("additional_prompt"),
+    // Per-automation extras; shape owned by the catalog entry (translate locales, …).
+    extras: jsonb("extras"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("automation_siteId_idx").on(table.siteId),
+    // One instance of each predefined automation per site; customs repeat freely.
+    uniqueIndex("automation_site_catalog_uidx")
+      .on(table.siteId, table.catalogKey)
+      .where(sql`${table.catalogKey} != 'custom'`),
+  ],
+);
+
+// One row per automation run — the run history behind the Automations tab, and the
+// durable record the executor projection converges on. Every run's AI spend lands in
+// usage_event rows correlated by requestId = this id; creditsUsed denormalizes their
+// sum for cheap history rendering.
+export const automationRun = pgTable(
+  "automation_run",
+  {
+    id: text("id").primaryKey(),
+    automationId: text("automation_id")
+      .notNull()
+      .references(() => automation.id, { onDelete: "cascade" }),
+    // Denormalized: the run history is a per-site view and must survive an automation
+    // being reconfigured mid-history.
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    // What fired it: 'content_update' | 'cron' | 'code_change' | 'manual' (run-now).
+    triggerType: text("trigger_type").notNull(),
+    // The firing event: commit sha (content_update), PR/push ref (code_change), or the
+    // triggering user id (manual). Debuggability + idempotency (skip an already-run ref).
+    triggerRef: text("trigger_ref"),
+    // 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
+    status: text("status").default("queued").notNull(),
+    // The executor's run handle (Trigger.dev run_… id) — correlation for logs/replays.
+    executorRunId: text("executor_run_id"),
+    // What the run produced through the authoring backend: a commit sha or PR URL;
+    // null = the run decided no changes were needed (a valid success).
+    resultRef: text("result_ref"),
+    // Agent-authored one-paragraph summary of what it did (shown in run history).
+    summary: text("summary"),
+    error: text("error"),
+    creditsUsed: integer("credits_used").default(0).notNull(),
+    queuedAt: timestamp("queued_at").defaultNow().notNull(),
+    startedAt: timestamp("started_at"),
+    finishedAt: timestamp("finished_at"),
+  },
+  (table) => [
+    index("automationRun_site_queuedAt_idx").on(table.siteId, table.queuedAt),
+    index("automationRun_automation_queuedAt_idx").on(table.automationId, table.queuedAt),
+  ],
+);
+
 // Versioned token->credit rate tables (CreditRateTable in billing/catalog.ts). Append-
 // only: model economics change => publish a new version; historical usage_event rows
 // keep the rateVersion they were billed under, so past charges stay explainable.
