@@ -65,6 +65,7 @@
     "@tiptap/starter-kit": "^3.27.1",
     "@tiptap/suggestion": "^3.27.1",
     "@tiptap/y-tiptap": "^3.0.5",
+    "@trigger.dev/sdk": "^4.5.4",
     "@types/diff": "^7.0.2",
     "ai": "^6.0.197",
     "better-auth": "^1.6.15",
@@ -106,6 +107,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
+    "@trigger.dev/build": "^4.5.4",
     "@types/mdx": "2.0.13",
     "@types/node": "22.10.7",
     "@types/react": "19.0.7",

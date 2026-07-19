@@ -1683,6 +1683,58 @@ and empty states (`/dashboard/automate/{workflows,agent,assistant}`); none of th
 toggles, prompts, or inputs post anywhere yet. This section is the speculative target the
 scaffold is shaped toward — record decisions here as we build, don't treat it as built.
 
+> **Decision — Automations architecture (2026-07-19).** Studied the reference's shipped
+> surfaces (Automations catalog + per-automation config modals, workspace-level
+> Integrations settings, agent-integration docs). Recorded before slice 1 lands:
+>
+> - **Rename "Workflows" → "Automations"** (nav `Automate › Automations`; tabs
+>   `Configure | Automations`, the second being run history), matching the reference's
+>   shipped naming. The scaffold's "Workflows" naming migrates as slice 1 touches each
+>   surface.
+> - **One run primitive, three frontends.** An *agent run* is `{ trigger, context,
+>   prompt, applyMode, output }`. Automations (cron/event trigger → commit/PR), Agent
+>   (Slack `app_mention` → thread reply ± PR), and Assistant (in-docs question → answer)
+>   are thin frontends over the same core; all writes go through the §9.2 shared
+>   authoring backend, never a parallel write path.
+> - **Executor: Trigger.dev Cloud.** The §2 executor-choice trigger condition is met —
+>   this is the second background-job use case, and multi-minute sandboxed agent runs
+>   with git checkouts can't live in Vercel functions. Intent stays in Postgres
+>   (`automation` config + `automation_run` history); Trigger.dev is the projection that
+>   executes it, so the executor remains swappable (Inngest/Temporal/self-host) per §18.
+>   Toolchain landed 2026-07-19: `trigger.config.ts` + `src/trigger/` (project
+>   `proj_rjriwuagrstnzwseaytk`), verified end-to-end (local worker registered;
+>   `hello-world` run triggered and completed).
+>   *Isolation rule:* no existing gate may depend on Trigger.dev. Run-core logic
+>   (trigger evaluation, config parsing, apply-mode, prompt assembly, credit accounting)
+>   is pure modules behind an executor interface — unit-tested with no executor; no
+>   executor configured ⇒ automations show "not configured", never a broken control
+>   plane; e2e specs needing real runs `test.skip` unless their env is set (the collab
+>   service pattern).
+> - **Context model, two tiers.** Repos are **cloned into the run environment**: the
+>   docs repo plus optional *context repositories* (read-only clones that never trigger).
+>   Integrations are **live read-only API calls** through org-level OAuth connections at
+>   run time — no advance indexing, no durable copy, permissions inherited live from the
+>   authorizing account (disconnect = instantly revoked). Only first-party docs content
+>   is indexed (§6/§8). Consequence: *trigger repositories* ("PR targets the base branch,
+>   or direct push") and context repos require the GitHub App connection model to support
+>   **multiple repos per site/org** — the biggest new plumbing this feature adds.
+> - **Uniform config schema** — predefined automations are presets over one shape:
+>   `{ trigger: content_update | cron | code_change` (+ cron expression | trigger repos)`,
+>   applyMode: auto` (commit directly) `| review` (open a PR)`, contextRepos,
+>   additionalPrompt` (appended to the base prompt every run)`, extras }` (e.g. translate
+>   target locales). Catalog metadata per automation: `allowedTriggers`,
+>   `recommendedTrigger`, `recommended`, `defaultEnabled`. Cron UX: preset chips + raw
+>   cron field + human-readable timezone preview. A manual **run-now** affordance exists
+>   alongside cron/webhook triggers (also how you test an automation).
+> - **Billing.** Every run is metered: `automation_run` records credit usage and debits
+>   the plan's AI credits (§10 "Billing" catalog: `includedMonthlyCredits` / credit packs);
+>   config surfaces say "billed by usage with credits".
+> - **Build order.** (1) Run core + `Fix broken links` on the content-update trigger,
+>   end-to-end (needs only the docs repo and our own sync as the trigger — exercises the
+>   whole spine: trigger → queued run → checkout → agent → apply-mode → run history →
+>   credit debit); (2) cron + config modals + code-change triggers/context repos;
+>   (3) Agent over Chat SDK/Slack (§18); (4) integrations connection store + tool layer.
+
 - **Workflows** — a catalog of scheduled/triggered jobs that open content changes as
   PRs. Two built-in families plus custom:
   - *Self-updating content* — `Update from code changes` (watch a source repo; when
@@ -2928,3 +2980,46 @@ Org/auth/RBAC, custom domains + TLS, analytics views. Beta-ready.
 - Embeddable AI on third-party sites
 - Marketplace / plugin ecosystem
 - On-prem enterprise deploys
+
+---
+
+## 18. Cost & Performance Posture
+
+Standing principles for infra/tooling choices, in priority order. (Originally recorded
+2026-07-06; that draft was discarded uncommitted and re-recorded 2026-07-19 — treat this
+section as the durable home for decisions of this kind.)
+
+1. **Performance is paramount.** Slow is a product bug, not a cost optimization.
+2. **Vendor lock-in is unacceptable.** A managed service is adopted only with a named,
+   **tested** escape hatch (self-host or drop-in alternative) — verified before paying
+   customers depend on the feature, not after.
+3. **Cost is managed with escape hatches and metering, not bans.** No absolute technology
+   bans; frame posture as defaults with measured escalation triggers.
+
+Derived rules:
+
+- **Use the datastore a dependency was designed for.** If a library asks for Redis, run
+  Redis (commodity API — Valkey/Upstash/any `REDIS_URL` — so no lock-in); don't hand-write
+  a Postgres shim. Postgres stays home for our own domain state and metering.
+- **OSS libraries in our own compute over hosted runtimes.** (Vercel Eve rejected; Chat
+  SDK adopted — below.)
+- **Direct Anthropic API** — no gateway middlemen.
+- **"Vercel for everything until the BIG BILL"** — acceptable only because each managed
+  dependency's escape hatch pre-exists, so the exit is an engineering task, not a
+  re-architecture (see §2's custom-domain proxy plan for the pattern).
+- **Metering-first.** Every AI surface lands with usage metering from day one (per-run
+  usage rows + the §10.2 credit accounting), so cost consequences are visible before the
+  bill arrives.
+
+Decisions under this posture:
+
+- **Agent chat transport: Vercel Chat SDK + `@chat-adapter/slack`** (2026-07-06,
+  re-affirmed 2026-07-19) — over hand-rolled Slack webhooks and over Vercel Eve. OSS
+  (`vercel/chat`), runs in our compute; its state backend wants Redis, which we run per
+  the datastore rule. Since adoption the adapter gained native Slack agent-experience
+  support (Agent badge, Messages-tab conversations, token-streamed replies with
+  post-and-edit fallback), which strengthens the call.
+- **Background/agent-run executor: Trigger.dev Cloud** (2026-07-19) — resolves the §2
+  executor-choice note's "not yet"; architecture + isolation rules in the §10.2 decision
+  note. Escape hatch: Trigger.dev is Apache-2.0 and self-hostable; one verified self-host
+  dry run is owed before GA of automations.
