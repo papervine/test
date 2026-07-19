@@ -10,6 +10,7 @@ import { revalidateSite } from "./s3-source";
 import { revalidateSiteRow } from "./tenant";
 import { syncErrorDetail } from "./sync-error";
 import { triggerActivity } from "./realtime";
+import { fireContentUpdateAutomations } from "./automations/runs";
 
 type SiteRow = typeof siteTable.$inferSelect;
 
@@ -164,6 +165,10 @@ export async function runSync(
     // fresh. Immediate for a manual sync (server-action context); a no-op for the push webhook,
     // whose runSync is in after() — there the SITE_ROW_TTL backstop applies (see tenant.ts).
     revalidateSiteRow({ slug: site.slug, domains: [site.customDomain] });
+    // Content just went live → fan out to the site's enabled content_update automations
+    // (SPEC §10.2). Never throws; idempotent per commit sha, which is also what stops an
+    // automation's own commit from re-firing itself; no-op when no executor is configured.
+    await fireContentUpdateAutomations(site.id, commit?.sha ?? null);
   }
 
   return { result, error, commitSha: commit?.sha ?? null };
