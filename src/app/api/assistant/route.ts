@@ -1,5 +1,5 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
+import { aiModel, aiModelId, aiProviderStatus } from "@/lib/ai-model";
 import { assistantTools } from "@/lib/assistant-tools";
 import { contentContext, loadConfig, loadPage } from "@papervine/renderer/lib/content";
 import {
@@ -30,9 +30,10 @@ function questionText(m: UIMessage | undefined): string {
  * until it can answer, then streams the response (with inline citation links).
  */
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const provider = aiProviderStatus();
+  if (!provider.ok) {
     return Response.json(
-      { error: "ANTHROPIC_API_KEY is not set — the assistant is unavailable." },
+      { error: `${provider.error} — the assistant is unavailable.` },
       { status: 503 },
     );
   }
@@ -120,9 +121,9 @@ export async function POST(req: Request) {
       `Be concise and use Markdown.` +
       pageContext;
 
-    const model = process.env.PAPERVINE_AI_MODEL ?? "claude-sonnet-4-6";
+    const model = aiModelId();
     const result = streamText({
-      model: anthropic(model),
+      model: aiModel(model),
       system,
       messages: await convertToModelMessages(messages),
       tools: assistantTools,

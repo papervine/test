@@ -1760,10 +1760,17 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 > - *Verified:* in-browser (seeded login, light+dark; config save confirmed in psql;
 >   run-now degradation toast; history rendering a real failed run); a dev-executor run
 >   executed the full lifecycle (queued→running→failed with the error captured, session
->   discarded) — it reached the Anthropic API and stopped at "credit balance too low",
->   so **the agent loop + publish path remain unverified until the Anthropic key is
->   funded**.
-> - *Follow-ups:* fund the key and verify agent+publish; cron scheduling (Trigger.dev
+>   discarded). **Agent loop verified 2026-07-19 via the AI Gateway** (§18 provider
+>   config): a real fix-broken-links run on `papervine/starter` found and fixed an
+>   actual broken Quickstart href across two pages (drafts in the session buffer),
+>   returned a coherent summary, and metered 55k/2k tokens → 123 credits
+>   (`usage_event` feature `workflow`, requestId = run id; ledger debited −123 trial).
+>   The run then failed at publish with GitHub `createTree 401` — **expected**: dev
+>   starter has no write creds. Publish is the one seam still unverified end-to-end
+>   from a run (its git mechanics are unit-tested); it needs the GitHub App or a
+>   PAT-connected repo in dev.
+> - *Follow-ups:* verify run→publish with real write creds; mint a durable
+>   `AI_GATEWAY_API_KEY` for the deployed executor (OIDC expires); cron scheduling (Trigger.dev
 >   schedules API — `executorScheduleId` is ready for it) and code-change webhooks are
 >   slice 2; the pre-existing AppRail "Switch site" radix-id hydration warning fires on
 >   every dashboard page (excluded from the e2e console gate; fix separately); the
@@ -3038,7 +3045,20 @@ Derived rules:
   a Postgres shim. Postgres stays home for our own domain state and metering.
 - **OSS libraries in our own compute over hosted runtimes.** (Vercel Eve rejected; Chat
   SDK adopted — below.)
-- **Direct Anthropic API** — no gateway middlemen.
+- **AI provider is env-configurable; the route must never be load-bearing.** One var
+  expresses model AND route (`src/lib/ai-model.ts`, used by every Claude surface):
+  `PAPERVINE_AI_MODEL=claude-sonnet-4-6` calls Anthropic directly;
+  `PAPERVINE_AI_MODEL=anthropic/claude-sonnet-4.6` (any provider-prefixed id) routes
+  via the **Vercel AI Gateway** (auth: `AI_GATEWAY_API_KEY`, or `VERCEL_OIDC_TOKEN`
+  on-Vercel/locally via `vercel env pull` — OIDC expires ~12h, so any long-lived
+  worker, e.g. the Trigger.dev executor, needs the API key). Adopted 2026-07-19,
+  replacing the earlier "direct API, no gateway" line: the gateway is where the funded
+  credits and model flexibility live today, and the escape hatch runs both directions
+  as a pure env change. Credit rating strips the provider prefix
+  (`billing/core.ts rateForModel`) so a family costs the same on either route.
+  *Bundling gotcha:* `@vercel/oidc` dynamic-imports siblings by relative path and dies
+  inside an esbuild bundle — the Trigger.dev build marks it `external`
+  (trigger.config.ts).
 - **"Vercel for everything until the BIG BILL"** — acceptable only because each managed
   dependency's escape hatch pre-exists, so the exit is an engineering task, not a
   re-architecture (see §2's custom-domain proxy plan for the pattern).

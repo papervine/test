@@ -18,11 +18,16 @@ export type TokenUsage = { tokensIn: number; tokensOut: number; model: string };
 
 // Longest-prefix model match so "claude-haiku-4-5-20251001" hits the "claude-haiku" rate
 // and unknown/future models safely fall back to `default` (rates are chosen per family,
-// not per dated snapshot — a new model id must never make rating throw).
+// not per dated snapshot — a new model id must never make rating throw). Gateway-routed
+// ids carry a provider prefix ("anthropic/claude-haiku-4.5", see src/lib/ai-model.ts);
+// rate by the bare model so the same family costs the same on either route — without
+// this, a prefixed haiku would silently bill at the pricier `default` rate.
 export function rateForModel(model: string, table: CreditRateTable) {
+  const slash = model.indexOf("/");
+  const bare = slash >= 0 ? model.slice(slash + 1) : model;
   let best: { prefix: string; rate: { inPer1M: number; outPer1M: number } } | null = null;
   for (const [prefix, rate] of Object.entries(table.models)) {
-    if (model.startsWith(prefix) && (!best || prefix.length > best.prefix.length)) {
+    if (bare.startsWith(prefix) && (!best || prefix.length > best.prefix.length)) {
       best = { prefix, rate };
     }
   }

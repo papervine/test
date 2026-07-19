@@ -6,7 +6,6 @@
 // `server-only` + `next/cache` (see trigger.config.ts) so the Next-tangled authoring
 // stack loads in plain Node.
 import { logger, task } from "@trigger.dev/sdk/v3";
-import { anthropic } from "@ai-sdk/anthropic";
 import { generateText, stepCountIs } from "ai";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../lib/db";
@@ -23,6 +22,7 @@ import { authoringTools, draftContentSource } from "../lib/authoring-tools";
 import { assistantTools } from "../lib/assistant-tools";
 import { findOpenSession, listDraftFiles } from "../lib/draft-store";
 import { authorizeAi, recordAiUsage } from "../lib/billing/store";
+import { aiModel, aiModelId, aiProviderStatus } from "../lib/ai-model";
 import { contentContext } from "@papervine/renderer/lib/content";
 
 export const automationRunTask = task({
@@ -71,7 +71,8 @@ export const automationRunTask = task({
       return { ok: false as const, canceled: true };
     }
     if (!siteRow.repoOwner || !siteRow.repoName) return fail("site has no connected repo");
-    if (!process.env.ANTHROPIC_API_KEY) return fail("ANTHROPIC_API_KEY is not configured");
+    const provider = aiProviderStatus();
+    if (!provider.ok) return fail(provider.error);
 
     const prompt = buildRunPrompt({
       catalogKey: auto.catalogKey,
@@ -108,7 +109,7 @@ export const automationRunTask = task({
     const { branch } = await checkoutBranch(siteRow, { actorUserId: null });
 
     try {
-      const model = process.env.PAPERVINE_AI_MODEL ?? "claude-sonnet-4-6";
+      const model = aiModelId();
       // The agent drafts; it never publishes. Publishing is the deterministic apply
       // step below, governed by applyMode — so drop the session-management tools.
       const { write_page, edit_page, delete_page } = authoringTools(siteRow, branch);
@@ -125,7 +126,7 @@ export const automationRunTask = task({
         draftContentSource(siteRow, branch),
         async () =>
           generateText({
-            model: anthropic(model),
+            model: aiModel(model),
             system,
             prompt,
             tools: { ...assistantTools, write_page, edit_page, delete_page },

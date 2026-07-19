@@ -23,6 +23,11 @@ export default defineConfig({
   },
   dirs: ["./src/trigger"],
   build: {
+    // @vercel/oidc must load from real files, not the bundle: getVercelOidcToken()
+    // dynamic-imports sibling modules by relative path ("./token-util.js"), which
+    // resolves on disk but not inside an esbuild bundle — bundled, every gateway call
+    // dies as GatewayAuthenticationError even with a valid VERCEL_OIDC_TOKEN.
+    external: ["@vercel/oidc"],
     extensions: [
       // The tasks reuse the app's authoring/billing stack, which is written for the
       // Next server runtime. Two imports in that closure are Next-only and need

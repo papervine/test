@@ -1,5 +1,5 @@
-import { anthropic } from "@ai-sdk/anthropic";
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
+import { aiModel, aiModelId, aiProviderStatus } from "@/lib/ai-model";
 import { assistantTools } from "@/lib/assistant-tools";
 import { authoringTools, draftContentSource } from "@/lib/authoring-tools";
 import { contentContext, loadConfig } from "@papervine/renderer/lib/content";
@@ -16,8 +16,9 @@ import { aiRefusalResponse, authorizeAi, recordAiUsage } from "@/lib/billing/sto
  * writes the SAME draft buffer the human editor uses. One backend, two front-ends.
  */
 export async function POST(req: Request) {
-  if (!process.env.ANTHROPIC_API_KEY) {
-    return Response.json({ error: "ANTHROPIC_API_KEY is not set." }, { status: 503 });
+  const provider = aiProviderStatus();
+  if (!provider.ok) {
+    return Response.json({ error: provider.error }, { status: 503 });
   }
 
   const { messages, org, site, branch } = (await req.json()) as {
@@ -62,9 +63,9 @@ export async function POST(req: Request) {
       `NEVER publish or open a PR unless the user explicitly asks — only then call publish. ` +
       `Use Markdown in your replies.`;
 
-    const model = process.env.PAPERVINE_AI_MODEL ?? "claude-sonnet-4-6";
+    const model = aiModelId();
     const result = streamText({
-      model: anthropic(model),
+      model: aiModel(model),
       system,
       messages: await convertToModelMessages(messages),
       tools: { ...assistantTools, ...authoringTools(siteRow, editBranch) },

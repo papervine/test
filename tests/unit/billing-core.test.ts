@@ -41,6 +41,11 @@ describe("rateForModel", () => {
   it("unknown model falls back to default (a new model id must never throw)", () => {
     expect(rateForModel("gpt-next", TABLE)).toEqual(TABLE.default);
   });
+  it("gateway provider prefixes rate as their bare family (same cost either route)", () => {
+    expect(rateForModel("anthropic/claude-haiku-4.5", TABLE).inPer1M).toBe(400);
+    expect(rateForModel("anthropic/claude-haiku-4-5-20251001", TABLE).inPer1M).toBe(500);
+    expect(rateForModel("openai/gpt-next", TABLE)).toEqual(TABLE.default);
+  });
 });
 
 describe("rateTokensToCredits", () => {
