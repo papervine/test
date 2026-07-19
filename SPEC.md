@@ -1734,6 +1734,41 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   whole spine: trigger → queued run → checkout → agent → apply-mode → run history →
 >   credit debit); (2) cron + config modals + code-change triggers/context repos;
 >   (3) Agent over Chat SDK/Slack (§18); (4) integrations connection store + tool layer.
+>
+> **Status — slice 1 landed (2026-07-19): the spine works.** Four commits: toolchain,
+> domain model, run service + sync hook, and the wired surface.
+> - *Run core:* `src/lib/automations/` — catalog (9 presets + trigger matrix + pure
+>   config validation), prompt assembly, executor seam (`getExecutor()` null without
+>   `TRIGGER_SECRET_KEY`), and the run service (enqueue idempotent on
+>   automation+trigger+ref; executor rejection = visible failed run; nothing persists
+>   when unconfigured). `fireContentUpdateAutomations` hooks the sync-runner success
+>   block. 40 unit tests on injectable stores, no DB/executor.
+> - *Executor task:* `src/trigger/automation-run.ts` — loads the run, gates on
+>   `authorizeAi(org, "workflows")`, checks out a §9.2 session, runs `generateText`
+>   (read tools + write_page/edit_page/delete_page; the agent never publishes), then
+>   deterministically applies per applyMode via `publishDraft` (auto→commit,
+>   review→PR); meters `usage_event` by `requestId = runId` and rolls the credit sum
+>   onto the run row. The Next-tangled stack loads in plain Node via esbuild stubs for
+>   `server-only` + `next/cache` (trigger.config.ts).
+> - *Surface:* route renamed `automate/workflows → automate/automations`; Configure tab
+>   wired (optimistic toggles create rows with catalog defaults; settings dialog covers
+>   the full schema; custom automations create/edit/delete), run-history tab, Run now,
+>   and an executor-unconfigured banner. Mounted the missing dashboard-wide sonner
+>   `<Toaster>` (org layout) — action errors were invisible before. E2E:
+>   `automations.spec.ts` (catalog render, toggle persistence, dialog, run history,
+>   console-clean gate).
+> - *Verified:* in-browser (seeded login, light+dark; config save confirmed in psql;
+>   run-now degradation toast; history rendering a real failed run); a dev-executor run
+>   executed the full lifecycle (queued→running→failed with the error captured, session
+>   discarded) — it reached the Anthropic API and stopped at "credit balance too low",
+>   so **the agent loop + publish path remain unverified until the Anthropic key is
+>   funded**.
+> - *Follow-ups:* fund the key and verify agent+publish; cron scheduling (Trigger.dev
+>   schedules API — `executorScheduleId` is ready for it) and code-change webhooks are
+>   slice 2; the pre-existing AppRail "Switch site" radix-id hydration warning fires on
+>   every dashboard page (excluded from the e2e console gate; fix separately); the
+>   pricing matrix label still says "Workflows" (billing catalog copy — rename with the
+>   next catalog version).
 
 - **Workflows** — a catalog of scheduled/triggered jobs that open content changes as
   PRs. Two built-in families plus custom:

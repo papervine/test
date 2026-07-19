@@ -1,57 +1,95 @@
 ---
 title: Automate
-description: Workflows, the Slack agent, and the assistant — the three surfaces where Papervine acts on the docs (roadmap).
+description: Automations, the Slack agent, and the assistant — the three surfaces where Papervine acts on the docs.
 ---
 
 The **Automate** rail groups the three surfaces where Papervine *acts on* the docs rather than
-just rendering them: **Workflows**, **Agent**, and **Assistant**. All three live in the
+just rendering them: **Automations**, **Agent**, and **Assistant**. All three live in the
 Automate area and are gated behind a per-org **Trialing** entitlement.
 
 <Note>
-  **This is mostly a roadmap target, not a built feature.** The Automate pages are UI scaffolds —
-  the catalog, onboarding, and empty states render, but almost none of the toggles, prompts, or
-  inputs post anywhere yet. The exception is the Assistant's two **operational toggles** (Status
-  and Invisible CAPTCHA), which persist (see [below](#where-each-toggles-state-lives)). This page
-  describes the shape we're building *toward*. Where the spec and the implementation diverge, the
-  spec wins; treat everything else below as the design intent.
+  **Automations is functional; Agent is still a scaffold.** Automations can be configured,
+  toggled, and run — runs execute on the background executor and land through the shared
+  authoring backend. The Agent page (Slack + integrations) is UI only, and parts of the
+  Assistant page persist while others are scaffold (see
+  [below](#where-each-toggles-state-lives)). Where the spec and the implementation diverge,
+  the spec wins.
 </Note>
 
 ## Why one section
 
-Workflows, Agent, and Assistant all run Claude over the tenant's content with tools, and all
+Automations, Agent, and Assistant all run Claude over the tenant's content with tools, and all
 three write through a **single shared authoring backend**: GitHub-App write credentials → a
 session branch → a draft buffer → `save` as a commit or PR. This is the same pipeline as the
-[authoring MCP](/features/mcp-servers) and the web editor — never a parallel write path.
+[authoring MCP](/features/mcp-servers) and the web editor — never a parallel write path. Under
+the hood they share one *run primitive* — `{ trigger, context, prompt, applyMode, output }` —
+with three frontends: scheduled/triggered (Automations), interactive from chat (Agent), and
+in-docs Q&A (Assistant).
 
-Building that backend once unblocks all three. Until it exists, these remain scaffolds.
+## Automations
 
-## Workflows
+Agent runs that keep the docs current on their own: each automation is a trigger, a prompt, and
+an apply mode. When it fires, an agent reads the site's content, makes the required edits on a
+draft session branch, and the result lands as a **direct commit or a pull request** — the same
+authoring pipeline a human editor uses, so every change is reviewable in Git.
 
-A catalog of scheduled or triggered jobs that open content changes as PRs. Each workflow is
-`{ enabled, trigger (event | cron), config }`; runs land as commits or PRs through the shared
-authoring backend. Two built-in families, plus custom:
+The page has two tabs: **Configure** (the catalog below) and **Automations** (the run history —
+every run with its status, what fired it, the resulting commit or PR, credits used, and the
+agent's summary or the error).
+
+### The catalog
+
+Two built-in families, plus custom:
 
 <CardGroup cols={2}>
   <Card title="Self-updating content">
     `Update from code changes` (watch a source repo and draft doc updates when APIs or features
-    change), `Draft changelog`, `Draft improvements from assistant conversations` (feed the
-    [analytics](/control-plane/analytics) content-gap engine into PRs), and `Draft improvements
+    change), `Draft changelog`, `Fill gaps from assistant conversations` (feed the
+    [analytics](/control-plane/analytics) content-gap engine into PRs), and `Improve docs
     from user feedback`.
   </Card>
   <Card title="Maintenance">
-    `Translate content` (keep configured locales in sync), `Fix broken links`, `Audit SEO
-    metadata`, `Fix grammar & typos`, and `Apply style guide`.
+    `Translate content` (keep configured locales in sync), `Fix broken links`, `Fix SEO
+    issues`, `Fix grammar & typos`, and `Enforce your style guide`.
   </Card>
 </CardGroup>
 
-A **Custom** workflow is a user-defined `{ trigger, prompt, action }`. The page splits into a
-**Configure** tab (the catalog) and a **Workflows** tab (the run history and log).
+A **custom automation** is the same configuration with your own name and prompt. Flipping any
+card's toggle on creates it with recommended defaults; the gear opens its settings.
+
+### Configuration
+
+Every automation — predefined or custom — shares one config schema:
+
+- **Trigger** — `Content update` (fires when a sync publishes new content), `Custom schedule`
+  (a cron expression, with presets), or `Code change` (when a PR merges in a connected source
+  repository). Each catalog entry offers the triggers that make sense for it and recommends
+  one.
+- **Apply mode** — `Automatically` commits changes directly to the deploy branch;
+  `Require review` opens a pull request instead.
+- **Context repositories** — extra repositories cloned read-only into the run environment so
+  the agent can consult their code. They never trigger the automation.
+- **Additional prompt** — instructions appended to the automation's base prompt on every run
+  (voice, formatting rules, edge cases to watch for).
+
+Enabled automations also expose **Run now** — a manual trigger, which is also how you test one.
+
+### How runs execute
+
+Runs are queued in Postgres and executed by a background executor (Trigger.dev; configured via
+`TRIGGER_SECRET_KEY`). Without an executor configured, the page says so and automations simply
+don't run — nothing else in the dashboard or renderer depends on it. Each run is metered: its
+model usage is recorded and debited against the plan's [AI credits](/control-plane/billing),
+and the total shows in the run history.
+
+A content-update automation whose own commit re-syncs the site does **not** re-fire itself:
+runs are deduplicated per commit, which is also what makes webhook redeliveries harmless.
 
 <Warning>
-  The open risk is the **output quality and auditability** of agent-authored PRs. Because every
-  run lands as a commit or PR through the same pipeline a human uses, the changes are
-  reviewable — but a workflow that drafts low-quality updates at scale is noise. This is the
-  reason the backend is the long pole, not the UI.
+  The open risk is the **output quality and auditability** of agent-authored changes. Because
+  every run lands as a commit or PR through the same pipeline a human uses, the changes are
+  reviewable — but an automation that drafts low-quality updates at scale is noise. Prefer
+  `Require review` until you trust an automation's output.
 </Warning>
 
 ## Agent
@@ -68,8 +106,8 @@ Confluence, Salesforce, HubSpot, Intercom, Plain, and more — each grouped by w
 (documentation, communication, project management, customer support, CRM). Connecting a source
 lets the agent reference it when it answers and authors.
 
-It shares the authoring backend with Workflows — the distinction is **interactive (Agent) vs
-scheduled/triggered (Workflows)**, over the same underlying tools.
+It shares the authoring backend with Automations — the distinction is **interactive (Agent) vs
+scheduled/triggered (Automations)**, over the same underlying tools.
 
 <Info>
   **Why Slack.** The reference product treats Agent as "your docs teammate in Slack" — it lives
