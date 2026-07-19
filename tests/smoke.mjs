@@ -148,7 +148,7 @@ const CONTROL_PLANE_CHECKS = [
   },
   {
     host: "app.localhost",
-    path: "/acme/docs/automate/workflows",
+    path: "/acme/docs/automate/automations",
     desc: "unauthenticated app host automate redirects to /login (SPEC §10.2)",
     redirectTo: "/login",
   },

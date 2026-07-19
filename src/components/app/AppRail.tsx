@@ -65,8 +65,8 @@ const NAV_SECTIONS: { heading?: string; items: RailItem[] }[] = [
     heading: "Automate",
     items: [
       {
-        sub: "automate/workflows",
-        label: "Workflows",
+        sub: "automate/automations",
+        label: "Automations",
         icon: Workflow,
         feature: "automate.workflows",
         trialBadge: true,

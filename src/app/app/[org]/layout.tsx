@@ -5,6 +5,7 @@ import { trialStatus } from "@/lib/billing/core";
 import { AppRail } from "@/components/app/AppRail";
 import { PlatformAdminBanner } from "@/components/app/PlatformAdminBanner";
 import { PlatformShell } from "@/components/platform/PlatformShell";
+import { Toaster } from "@/components/ui/sonner";
 
 // Control-plane shell (SPEC §9/§10). Wraps every URL-scoped dashboard route
 // (/:org/:site/…) — resolves + authorizes the org in the path (redirects signed-out
@@ -58,6 +59,9 @@ export default async function OrgLayout({
           )}
         />
         <div className="min-w-0 flex-1 overflow-auto">{children}</div>
+        {/* Dashboard-wide action feedback (sonner). The editor mounts its own inside
+            EditorShell; this covers every AppRail surface (automations, settings, …). */}
+        <Toaster />
       </div>
     </PlatformShell>
   );
