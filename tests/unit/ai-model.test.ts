@@ -3,6 +3,7 @@ import {
   aiConfigured,
   aiModel,
   aiModelId,
+  aiProviderOptions,
   aiProviderStatus,
   isLocalProvider,
   localBaseUrl,
@@ -21,6 +22,7 @@ const ENV_KEYS = [
   "VERCEL",
   "AI_BASE_URL",
   "AI_LOCAL_API_KEY",
+  "AI_LOCAL_REASONING",
 ] as const;
 let saved: Record<string, string | undefined>;
 
@@ -103,6 +105,29 @@ describe("self-hosted (local) providers", () => {
     const m = aiModel("ollama/qwen3.5") as { modelId: string; specificationVersion: string };
     expect(m.modelId).toBe("qwen3.5");
     expect(m.specificationVersion).toBe("v3");
+  });
+
+  it("disables reasoning for local models, and only for them", () => {
+    // Regression: local thinking models spend their whole response on reasoning —
+    // measured 40s/3.8k reasoning chars vs 1.9s with it off, and the assistant's reply
+    // came back EMPTY because the thinking crowded out the content.
+    const local = aiProviderOptions("ollama/qwen3.5") as { openai?: { reasoningEffort?: string } };
+    expect(local.openai?.reasoningEffort).toBe("none");
+
+    const hosted = aiProviderOptions("anthropic/claude-haiku-4-5") as { openai?: unknown };
+    expect(hosted.openai).toBeUndefined();
+
+    // Opt back in for a machine that can afford it.
+    process.env.AI_LOCAL_REASONING = "1";
+    const optedIn = aiProviderOptions("ollama/qwen3.5") as { openai?: unknown };
+    expect(optedIn.openai).toBeUndefined();
+  });
+
+  it("always carries the Anthropic prompt-cache option, on every route", () => {
+    for (const id of ["anthropic/claude-haiku-4-5", "ollama/qwen3.5", "openai/gpt-5-nano"]) {
+      const opts = aiProviderOptions(id) as { anthropic?: { cacheControl?: { type: string } } };
+      expect(opts.anthropic?.cacheControl?.type, id).toBe("ephemeral");
+    }
   });
 
   it("isLocalProvider distinguishes self-hosted prefixes from vendors", () => {

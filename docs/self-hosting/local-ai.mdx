@@ -53,6 +53,24 @@ docker compose --profile local-ai exec ollama ollama pull qwen3
 LM Studio has no container: start its local server from the app and point `AI_BASE_URL`
 at it (or use the `lmstudio/` prefix, which assumes the default port).
 
+## Thinking models: off by default
+
+Most capable open models released recently — Qwen3, Gemma, DeepSeek-R1 and friends —
+*think* before they answer, emitting a long internal monologue that never reaches the
+reader. On a laptop that reasoning dominates everything: measured on an 8B-class Qwen,
+the same one-sentence question took **40 seconds with thinking and 1.9 seconds without**,
+having produced 3,800 characters of reasoning to deliver a 212-character answer. Multiply
+that across the two dozen steps of an agent run and a workable feature becomes an
+unusable one.
+
+Worse, the thinking can consume the entire response: the model finishes its monologue and
+returns *empty* content. That's what an assistant answer looks like when it shows its
+tool steps and then simply stops.
+
+So Papervine asks local models not to think. Set `AI_LOCAL_REASONING=1` to opt back in on
+hardware that can afford it. Hosted models are unaffected — their reasoning is fast and
+priced accordingly.
+
 ## Choose a model that can use tools
 
 This is the part that decides whether self-hosting works for you. Papervine's AI is

@@ -1,5 +1,5 @@
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
-import { aiModel, aiModelId, aiProviderStatus } from "@/lib/ai-model";
+import { aiModel, aiModelId, aiProviderOptions, aiProviderStatus } from "@/lib/ai-model";
 import { assistantTools } from "@/lib/assistant-tools";
 import { contentContext, loadConfig, loadPage } from "@papervine/renderer/lib/content";
 import {
@@ -127,6 +127,7 @@ export async function POST(req: Request) {
       system,
       messages: await convertToModelMessages(messages),
       tools: assistantTools,
+      providerOptions: aiProviderOptions(model),
       stopWhen: stepCountIs(8),
       // Record the outcome on the logged event so the Assistant page's answered/unanswered
       // split is real. Fire-and-forget — never block or fail the stream on instrumentation.

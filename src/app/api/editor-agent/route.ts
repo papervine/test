@@ -1,5 +1,5 @@
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
-import { aiModel, aiModelId, aiProviderStatus } from "@/lib/ai-model";
+import { aiModel, aiModelId, aiProviderOptions, aiProviderStatus } from "@/lib/ai-model";
 import { assistantTools } from "@/lib/assistant-tools";
 import { authoringTools, draftContentSource } from "@/lib/authoring-tools";
 import { contentContext, loadConfig } from "@papervine/renderer/lib/content";
@@ -69,6 +69,7 @@ export async function POST(req: Request) {
       system,
       messages: await convertToModelMessages(messages),
       tools: { ...assistantTools, ...authoringTools(siteRow, editBranch) },
+      providerOptions: aiProviderOptions(model),
       stopWhen: stepCountIs(12),
       // Meter the whole run. Fire-and-forget — a metering failure drops the charge,
       // never the edit (billing/store.ts).

@@ -169,3 +169,24 @@ export function aiProviderStatus(id: string = aiModelId()):
 export function aiConfigured(): boolean {
   return aiProviderStatus().ok;
 }
+
+// Provider options every AI surface passes to generateText/streamText. Each key is
+// namespaced by provider and ignored by the others, so one object serves every route.
+export function aiProviderOptions(id: string = aiModelId()) {
+  const { provider } = splitModel(id);
+  return {
+    // Prompt caching: an agentic loop resends its whole conversation each step, so
+    // caching the stable prefix bills those resends at a fraction of the input rate.
+    anthropic: { cacheControl: { type: "ephemeral" as const, ttl: "1h" as const } },
+    // Reasoning OFF for local models. Modern open models (Qwen3, Gemma, DeepSeek-R1…)
+    // think before answering, and on laptop hardware that dominates everything:
+    // measured 40s with thinking vs 1.9s without for the same one-sentence answer —
+    // 3.8k characters of reasoning to produce 212 characters of reply. Across an agent
+    // loop's ~24 steps that's a ten-minute run instead of a usable one, and the
+    // thinking can crowd out the reply entirely (an empty assistant answer). Set
+    // AI_LOCAL_REASONING=1 to opt back in; hosted routes are unaffected either way.
+    ...(isLocalProvider(provider) && !process.env.AI_LOCAL_REASONING?.trim()
+      ? { openai: { reasoningEffort: "none" as const } }
+      : {}),
+  };
+}
