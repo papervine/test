@@ -946,7 +946,8 @@ cited from hosted docs platforms' own docs/blog where noted.
 > Vercel AI SDK v6 + tool calling over `searchDocs`/`readPage`/`listPages`/`searchApi`
 > in `src/lib/assistant-tools.ts`), slide-out panel (`src/components/assistant/`) using
 > `useChat` + `streamdown`, navbar "Ask Assistant" button, `Cmd/Ctrl-I`, and
-> `?assistant=` deep link. Requires `ANTHROPIC_API_KEY` (graceful 503 without it).
+> `?assistant=` deep link. AI is configured via `src/lib/ai-model.ts` (see the Model
+> bullet in §8.1) — graceful 503 when no route is configured.
 > **Next:** dedicated `Sources` citation UI, multi-modal attach, current-page context
 > polish, embeddings-backed `searchDocs`.
 
@@ -959,7 +960,7 @@ for us because **the tools are thin wrappers
 over capabilities we already have** (M1 content loader, M2 nav, M3 search, M4 OpenAPI):
 
 ```
-User question ──▶ /api/assistant (Vercel AI SDK streamText, Claude)
+User question ──▶ /api/assistant (Vercel AI SDK streamText, model via ai-model.ts)
                     │  loop: model calls tools until it can answer
                     ├─ search_docs(query)      → M3 search index (titles/headings/body)
                     ├─ read_page(slug)         → full MDX (src/lib/content.ts)
@@ -969,9 +970,27 @@ User question ──▶ /api/assistant (Vercel AI SDK streamText, Claude)
                  streamed answer + Sources (cited page hrefs / #anchors)
 ```
 
-- **Model:** Claude via the Vercel AI SDK (`@ai-sdk/anthropic`). Default
-  `claude-sonnet-4-6` (cost/latency); `claude-opus-4-8` as an optional "high quality"
-  tier. See the `claude-api` skill for current IDs, streaming, and tool-use patterns.
+- **Model & routing (config-driven, provider-agnostic — updated 2026-07-18):** the
+  model and how we reach it are env config in `src/lib/ai-model.ts`, NOT hardcoded. Both
+  AI routes (`/api/assistant`, `/api/editor-agent`) call `aiModel()`.
+  - `PAPERVINE_AI_MODEL` = a `provider/model` id (default `anthropic/claude-haiku-4-5`).
+  - `AI_ROUTING=gateway` (default) routes through the **Vercel AI Gateway** (one key via
+    `AI_GATEWAY_API_KEY`, or Vercel OIDC in prod — unified access to ~all providers/models);
+    `AI_ROUTING=direct` bypasses Vercel and calls the provider SDK directly
+    (`@ai-sdk/anthropic|google|openai`) with that provider's own key. So we can use the
+    gateway when convenient and go direct (own keys, cheaper, no middleman) when we prefer.
+  - **Why Haiku is the default:** the assistant is agentic (several model calls/question),
+    and the Vercel Gateway's FREE tier hard-throttles the cheap models. *Tested 2026-07-18
+    (6-call burst per model): only `anthropic/claude-haiku-4-5` survived 6/6; `amazon/
+    nova-micro` 5/6 but leaks reasoning + still throttles mid-conversation; gemini-2.5-flash-lite,
+    gpt-5-nano, nova-lite, gpt-oss-20b, glm-4.7-flash, ministral-3b all 0/6; gemini-3.x is
+    blocked (paid-only).* So Haiku is the only free-tier-viable model. The **cheap path**
+    (~10× less) is `AI_ROUTING=direct` + a Google AI Studio key →
+    `google/gemini-3.1-flash-lite`, which sidesteps the gateway's free-tier limits entirely
+    (Google's own free/pay-as-you-go pricing). See the two documented model lines +
+    routing block in `.env.example`. Prompt caching (provider-level; explicit for Anthropic
+    via `prepareStep`, automatic for Gemini/OpenAI) is a noted follow-up for token savings.
+    See the `claude-api` skill for current Anthropic model IDs/patterns.
 - **Why tools over pure top-k:** multi-step retrieval handles vague questions, lets the
   model read a whole page when a snippet isn't enough, and unifies with §8.5.
 - **Embeddings are optional for v1.** Agentic search can run on the M3 keyword/Orama
@@ -1080,7 +1099,7 @@ instant effect. Self-host reads it all from `docs.json` + env, no dashboard requ
 > hiding the launcher can't be bypassed by calling the endpoint). Both resolve the row via a new
 > `requestSiteRecord` helper (`request-source.ts`), the same tenant resolution the content source
 > uses; the apex/preview host (no row) keeps the platform's own docs assistant working. The 403 sits
-> *after* the `ANTHROPIC_API_KEY` 503 check so the DB-free smoke (no key → 503 before any DB read)
+> *after* the `aiConfigured()` 503 check so the DB-free smoke (no AI route → 503 before any DB read)
 > is unaffected. Regression: `tests/e2e/tenant-render.spec.ts` asserts a disabled site renders but
 > hides the launcher. **CAPTCHA is still not enforced** — `assistant_captcha_enabled` persists but
 > there's no hCaptcha integration on `/api/assistant` yet (separate follow-up).
@@ -1545,7 +1564,10 @@ Minimum to operate the SaaS:
   `getBillingLookup` + `trialStatus`, failing safe to no-pill) so trial-granted access
   is visibly distinct from the plan's own. Both pinned in `billing.spec.ts`; the
   downgrade affordance is a real bordered button after the quiet-text version was
-  overlooked in testing.
+  overlooked in testing. The Settings→Billing change-plan cards also badge the tier the
+  trial samples (Pro) with an amber outline + "Trialing until <date>" during an active
+  trial — the tier is configurable via `catalog.json` `trial.representsPlanKey` (the
+  trial grants Pro-level features, so it shows as trialing Pro).
   **Billing moved into Settings + split (2026-07-17, competitor-parity IA).** The single
   org-level `/:org/billing` page is retired as a standalone rail item and split into two
   site-Settings surfaces under the Workspace nav group (matching hosted-docs-platform
@@ -1594,6 +1616,40 @@ Minimum to operate the SaaS:
   ships — commit + deploy, no manual step. Idempotent, so it's a no-op when nothing
   changed. Stripe publishing (`billing:publish`) stays OUT of the build deliberately — it
   needs Stripe keys and creates external objects, so it remains a manual/admin action.
+  **Stripe verified working locally (2026-07-17, test mode).** With real test keys +
+  `stripe listen`: checkout session creation (real `cs_test_` session, customer, correct
+  Team $480/yr price), `billing:publish` (real Products/Prices), the Customer Portal
+  (real `billing.stripe.com` session), and the full webhook→mirror — a real
+  `customer.subscription.updated` (real sub/customer/price ids, real signature) flipped
+  dev-org to Team active, plan-version pinned, period end set, and the UI + rail
+  reflected it (trial pills gone). Real-signature verification confirmed on live
+  forwarded events. **Setup gotcha (now in `.env.example`):** `stripe listen` must use
+  `--api-key $STRIPE_SECRET_KEY` — `stripe login`'s default account can differ from the
+  app key's account, and if it does the app's webhooks fire in one account while the
+  forwarder watches another, so nothing mirrors (this bit the first attempt). Only the
+  final "Subscribe" click on Stripe's hosted Checkout can't be automated — Stripe blocks
+  bot submissions (it now surfaces an "I am an AI agent" checkbox) — but checkout
+  creation and the post-completion webhook are both proven, so a real human purchase
+  works. Credit-rate calibration against real token logs is still the remaining pre-GA item.
+  **Admin plan comps landed 2026-07-18 (support lever).** The `/admin/billing` console
+  gains a **Grant plan** form beside credit-adjustment: put any org on a paid plan for
+  free (partner/support comps). It reuses the non-Stripe subscription shape the seed and
+  downgrade path already understand — `store.grantPlan` upserts an `active` sub with
+  `stripe_subscription_id = NULL`, pins the latest plan version, and grants the plan's
+  included monthly credits with an actor-attributed `grant_monthly` ledger entry
+  (idempotent per period via the unique index). **Blank months = indefinite** comp (no
+  period end, never swept); **N months** sets `cancel_at_period_end=true` + a period end,
+  so the existing `expireTrials` non-Stripe branch lapses it to Free — no new sweep. The
+  period math is the pure `compGrantPeriod(now, months)` in `core.ts` (unit-tested:
+  indefinite vs time-boxed, fractional truncation). Downstream is unchanged: entitlements
+  resolve from the pinned version, and the org downgrades the comp from its own
+  Settings→Billing. Free/trial are rejected (Free is a downgrade, trial is the signup
+  lifecycle); the picker offers only Team/Pro/Enterprise. *Verified in a real browser
+  2026-07-18 against the dev DB: Acme→Pro indefinite (`cancel_at_period_end=false`,
+  no period end, 25,000 monthly credits, reason on the ledger) and Pixwel→Team 2-month
+  (`cancel_at_period_end=true` + period end set, 5,000 credits). Regression:
+  `tests/e2e/admin.spec.ts` grants Team through the UI and asserts the non-Stripe sub +
+  monthly grant + actor/reason in the DB.*
 - **Web editor — BUILT (2026-06-14):** the 3-panel editor at `/:org/:site/editor` (editing-agent
   chat · navigation · multi-modal editor with a Visual⇄Source toggle, branch switcher, and a
   Publish→commit/PR button). It is **the same capability as the authoring MCP (§9.2), not a
@@ -2798,7 +2854,7 @@ then **⑤ (optional) PPR**.
 | Cache | **Redis** | domain→tenant map, page cache |
 | Object storage | **S3 API** — hosted: **Cloudflare R2**, local: **MinIO** | compiled bundles, assets. Code to the S3 API (pluggable `S3_ENDPOINT`); R2 chosen for **zero egress** (docs serving is read-heavy) + built-in CDN; self-hosters point at any S3-compatible store |
 | Queue/workers | **BullMQ** / serverless functions | git sync jobs |
-| AI | **Vercel AI SDK** + `@ai-sdk/anthropic` (Claude); **AI Elements** for chat UI | agentic assistant (§8) |
+| AI | **Vercel AI SDK** (`ai`) via config-driven `ai-model.ts` — Vercel AI Gateway or direct provider (`@ai-sdk/anthropic\|google\|openai`); **AI Elements** for chat UI | agentic assistant (§8) |
 | Auth (platform) | **Better Auth** (+ `organization`) | OSS, self-hostable, orgs + RBAC; WorkOS for enterprise SSO later (§11) |
 | Hosting | Vercel (render) + workers elsewhere | mirrors hosted docs platforms' Vercel approach |
 | Monorepo | pnpm + Turborepo | shared packages |

@@ -33,19 +33,23 @@ test.describe("billing settings", () => {
           multiRepo: ai, scim: false,
         },
       });
-    for (const [key, name, listed, sort] of [
-      ["free", "Free", true, 0],
-      ["team", "Team", true, 1],
-      ["trial", "Trial", false, 99],
+    for (const [key, name, listed, sort, credits] of [
+      ["free", "Free", true, 0, 0],
+      ["team", "Team", true, 1, 5000],
+      ["pro", "Pro", true, 2, 25000],
+      ["trial", "Trial", false, 99, 0],
     ] as const) {
       await sql`insert into billing_plan (key, name, listed, sort) values (${key}, ${name}, ${listed}, ${sort})
                 on conflict (key) do nothing`;
       await sql`insert into billing_plan_version (id, plan_key, version, entitlements, included_monthly_credits, config_hash)
-                values (${`bpv-${key}-e2e`}, ${key}, 1, ${ents(key !== "free")}::jsonb, ${key === "team" ? 5000 : 0}, ${"e2e"})
+                values (${`bpv-${key}-e2e`}, ${key}, 1, ${ents(key !== "free")}::jsonb, ${credits}, ${"e2e"})
                 on conflict do nothing`;
     }
+    // Team + Pro need a published price to render as change-plan cards.
     await sql`insert into billing_price (id, plan_key, interval, unit_amount_cents)
               values ('bp-team-month-e2e', 'team', 'month', 5000) on conflict do nothing`;
+    await sql`insert into billing_price (id, plan_key, interval, unit_amount_cents)
+              values ('bp-pro-month-e2e', 'pro', 'month', 30000) on conflict do nothing`;
 
     // Backfill the trial the signup hook would have written.
     const [org] = await sql`select id from organization where slug = ${ORG_SLUG}`;
@@ -93,6 +97,8 @@ test.describe("billing settings", () => {
     await expect(page.getByText("SSO & RBAC")).toBeVisible();
     await expect(page.getByRole("heading", { name: "Compare plans" })).toBeVisible();
     await expect(page.getByText("Docs sites")).toBeVisible();
+    // Mid-trial: the tier the trial samples (Pro) is badged "Trialing until <date>".
+    await expect(page.getByText(/Trialing until/)).toBeVisible();
 
     expect(errors, `billing console must stay clean:\n${errors.join("\n")}`).toEqual([]);
   });
@@ -162,6 +168,11 @@ test.describe("billing settings", () => {
 
     await page.getByRole("button", { name: "Resume plan" }).click();
     await expect(page.getByText(/Renews /)).toBeVisible();
+    // After resume the control must return to the initial "Downgrade to Free" state —
+    // NOT the mid-confirm "Confirm downgrade" (the `confirming` flag leaked across the
+    // refresh and stuck the button on the confirm step; regression guard).
+    await expect(page.getByRole("button", { name: "Downgrade to Free" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Confirm downgrade" })).toHaveCount(0);
     const [afterResume] = await sql`select cancel_at_period_end from billing_subscription
                                     where organization_id = ${org.id}`;
     expect(afterResume.cancel_at_period_end).toBe(false);

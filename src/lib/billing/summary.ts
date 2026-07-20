@@ -14,6 +14,7 @@ import {
   creditBalance,
   creditPack,
 } from "@/lib/db/app-schema";
+import { CATALOG, catalogPlan } from "./catalog";
 import { trialStatus, type TrialStatus } from "./core";
 
 export type BillingSubSummary = {
@@ -94,7 +95,11 @@ export function deriveBillingState(
   const effectivePlanName =
     !sub || sub.status === "canceled" || trial.state === "expired"
       ? "Free"
-      : sub.planName;
+      : trial.state === "active"
+        ? // Trialing → show the tier being sampled (Pro), not the internal "Trial" plan
+          // name — the trial grants that tier's features (catalog.trial.representsPlanKey).
+          catalogPlan(CATALOG.trial.representsPlanKey).name
+        : sub.planName;
   return {
     trial,
     effectivePlanName,

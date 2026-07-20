@@ -302,6 +302,35 @@ export async function adminAdjustCredits(input: {
   return { ok: true };
 }
 
+/**
+ * Platform-admin comp: put an org on a paid plan for free (support / partner grants).
+ * Gated by the PLATFORM_ADMIN_EMAILS allowlist. Delegates to store.grantPlan, which
+ * writes a non-Stripe subscription + monthly credit grant (never touches Stripe).
+ * `months` null/blank → indefinite comp; a positive N → lapses to Free after ~N months.
+ */
+export async function adminGrantPlan(input: {
+  organizationId: string;
+  planKey: string;
+  months: number | null;
+  reason: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  const { requirePlatformAdmin } = await import("@/lib/dashboard-context");
+  const session = await requirePlatformAdmin();
+  if (!input.organizationId) return { ok: false, error: "Pick an organization." };
+  if (!input.planKey) return { ok: false, error: "Pick a plan." };
+  if (!input.reason.trim()) return { ok: false, error: "A reason is required." };
+  const months =
+    input.months == null || input.months <= 0 ? null : Math.trunc(input.months);
+  const { grantPlan } = await import("@/lib/billing/store");
+  return grantPlan({
+    organizationId: input.organizationId,
+    planKey: input.planKey,
+    months,
+    actorUserId: session.user.id,
+    reason: input.reason.trim(),
+  });
+}
+
 /** Platform-admin: publish the DB catalog to Stripe (the admin-UI twin of
  *  `npm run billing:publish`). */
 export async function adminPublishToStripe(): Promise<{

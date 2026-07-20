@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Switch } from "@/components/ui/switch";
 import {
   changePlan,
   openBillingPortal,
@@ -147,6 +148,14 @@ export function CancelPlanButton({
   const { pending, error, run } = useAction();
   const [confirming, setConfirming] = useState(false);
 
+  // The confirm step is a transient local decision — clear it whenever the actual
+  // cancel state changes (after a confirm or a resume). Without this, the `confirming`
+  // flag set by "Downgrade to Free" survives the router.refresh() and, once you Resume,
+  // the initial view wrongly shows "Confirm downgrade" again.
+  useEffect(() => {
+    setConfirming(false);
+  }, [cancelAtPeriodEnd]);
+
   if (cancelAtPeriodEnd) {
     return (
       <div className="mt-3">
@@ -238,22 +247,15 @@ export function OverageToggle({
   return (
     <div className="mt-4 border-t border-[rgba(var(--ink-rgb),0.06)] pt-4">
       <label className="flex items-start gap-3">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={enabled}
+        {/* shadcn Switch — structural thumb geometry (the hand-rolled toggle floated the
+            thumb off the right edge). */}
+        <Switch
+          checked={enabled}
+          onCheckedChange={toggle}
           disabled={!canManage || pending}
-          onClick={toggle}
-          className={`relative mt-0.5 h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-50 ${
-            enabled ? "bg-[var(--blue)]" : "bg-[rgba(var(--ink-rgb),0.15)]"
-          }`}
-        >
-          <span
-            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${
-              enabled ? "translate-x-[18px]" : "translate-x-0.5"
-            }`}
-          />
-        </button>
+          className="mt-0.5"
+          aria-label="Allow overage"
+        />
         <span className="text-sm">
           <span className="font-medium">Allow overage</span>
           <span className="block text-[var(--muted)]">

@@ -153,6 +153,10 @@ export function AppRail({
         onNavigate={onNavigate}
       />
 
+      {/* Scrollable middle (site switcher pinned above, profile pinned below): the nav
+          scrolls internally so the profile/sign-out stay visible without scrolling even
+          when the nav is tall. -mx-3/px-3 keeps the scrollbar at the rail's edge. */}
+      <div className="-mx-3 min-h-0 flex-1 overflow-y-auto px-3">
       {/* The nav is per-site; with no site yet the switcher's New-site affordance is the
           only thing to show. */}
       {current && (
@@ -236,8 +240,10 @@ export function AppRail({
           Platform Admin
         </Link>
       )}
+      </div>
 
-      <div className="mt-auto flex items-center justify-between gap-2 px-2 pt-4 text-sm">
+      {/* Pinned to the bottom of the (viewport-height) rail — always visible, no scroll. */}
+      <div className="flex shrink-0 items-center justify-between gap-2 border-t border-[rgba(var(--ink-rgb),0.06)] px-2 pt-4 text-sm">
         <span className="truncate text-[var(--muted)]">{userName}</span>
         <div className="flex shrink-0 items-center gap-1">
           <ThemeToggle />
@@ -258,7 +264,7 @@ export function AppRail({
   return (
     <>
       {/* Desktop: a fixed-width sidebar (lg+). Hidden on mobile, where the drawer takes over. */}
-      <aside className="db-glass hidden w-60 shrink-0 flex-col border-r border-[rgba(var(--ink-rgb),0.06)] px-3 py-4 lg:flex">
+      <aside className="db-glass sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-[rgba(var(--ink-rgb),0.06)] px-3 py-4 lg:flex">
         {railBody()}
       </aside>
 
