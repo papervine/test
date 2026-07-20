@@ -1822,9 +1822,19 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   returned a coherent summary, and metered 55k/2k tokens → 123 credits
 >   (`usage_event` feature `workflow`, requestId = run id; ledger debited −123 trial).
 >   The run then failed at publish with GitHub `createTree 401` — **expected**: dev
->   starter has no write creds. Publish is the one seam still unverified end-to-end
->   from a run (its git mechanics are unit-tested); it needs the GitHub App or a
->   PAT-connected repo in dev.
+>   starter had no write creds.
+>   **Publish verified 2026-07-20 — the loop is fully closed.** With a fine-grained
+>   PAT (Contents+PR write) on a connected site, a UI Run-now produced an
+>   agent-authored commit on the real `papervine/starter`
+>   (`c51359c "[automation] Fix broken links"` — a genuine fix to a genuinely broken
+>   Quickstart href), and an immediate second run correctly finished "no changes
+>   needed" (resultRef null). So every stage is live-verified: UI enqueue
+>   (`TRIGGER_SECRET_KEY`) → executor → agent via gateway → drafts → publishDraft →
+>   real Git → run history. Only PR-mode's incremental delta (createBranch +
+>   openPullRequest, unit-tested) hasn't produced a live PR — the broken link is now
+>   fixed, so fix-broken-links has nothing left to draft. PAT gotcha for the docs:
+>   fine-grained tokens need **Contents: Read and write** (`createTree` 403s with the
+>   header naming the missing permission) and the org as resource owner.
 > **Status — slice 2a landed (2026-07-19): cron scheduling.** Schedules live on the
 > executor as a projection (`schedules.create` with `deduplicationKey` = automation id
 > → idempotent upsert; `externalId` = automation id), registered/deregistered by
