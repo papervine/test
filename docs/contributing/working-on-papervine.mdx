@@ -8,6 +8,38 @@ site from a Git repo of MDX + a `docs.json`. This page is the contract for how t
 follow it for every change. Start with the [architecture](/architecture) overview for the
 big picture, and [renderer internals](/rendering/internals) for how MDX actually renders.
 
+## First run
+
+```bash
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+That's the whole setup. `npm run dev` brings up the local services, the app, and the
+automations worker together, and every layer it can't reach degrades on its own — you get a
+working docs renderer and dashboard immediately.
+
+**The AI features need one more choice**, because there's no sensible default: they stay
+switched off (returning a clear "not configured") until you pick a profile in `.env.local`.
+The free one runs on your own machine:
+
+```bash
+brew install ollama          # or download from ollama.com; Linux: curl -fsSL https://ollama.com/install.sh | sh
+ollama pull qwen3.5          # ~6.5 GB, and it's the smallest model that reliably drives our agents
+```
+
+Then uncomment **Profile A** in `.env.local` and restart. If you'd rather use a hosted
+provider, uncomment Profile B or C instead and add a key. See
+[Self-hosted AI](/self-hosting/local-ai) for what local models can and can't do well —
+briefly: they handle the assistant comfortably, and automation runs slowly but correctly.
+
+<Note>
+  Working on the renderer, the dashboard, or anything that isn't AI? Skip the model setup
+  entirely. Those surfaces don't need it, and the test suites (`npm test`,
+  `npm run test:unit`) run without any AI configuration at all.
+</Note>
+
 ## Definition of done
 
 A feature or fix is not done until **all** of these pass. State plainly what you ran and
