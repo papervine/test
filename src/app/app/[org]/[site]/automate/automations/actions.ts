@@ -230,7 +230,9 @@ export async function runAutomationNow(ref: SiteRef, id: string): Promise<Automa
   if (!result.ok) {
     return {
       error:
-        result.reason === "enqueue_failed"
+        result.reason === "daily_cap"
+          ? "This automation hit its daily run limit. It will resume tomorrow."
+          : result.reason === "enqueue_failed"
           ? `Could not queue the run: ${result.error}`
           : "Could not queue the run.",
     };

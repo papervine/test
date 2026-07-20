@@ -135,6 +135,16 @@ export const automationRunTask = task({
             prompt,
             tools: { ...assistantTools, write_page, edit_page, delete_page },
             stopWhen: stepCountIs(24),
+            // Prompt caching (SPEC §10.2 cost guardrails). An agentic run resends the
+            // whole accumulated conversation on every step — ~24 steps is where the
+            // measured ~57k input tokens/run comes from. Caching the stable prefix
+            // (system + tool definitions, which never change within a run) makes those
+            // resends cache reads at ~10% of the input price. Anthropic-specific and
+            // ignored by other providers, so it's safe on every route; the 1h TTL also
+            // spans consecutive runs of the same automation.
+            providerOptions: {
+              anthropic: { cacheControl: { type: "ephemeral", ttl: "1h" } },
+            },
           }),
       );
 

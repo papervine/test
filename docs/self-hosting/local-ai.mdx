@@ -85,3 +85,18 @@ model is all they need. [Automations](/control-plane/automate) additionally requ
 background executor to run jobs and fire schedules. Without one, the Automations page says
 so plainly and nothing else in the product is affected — automations are the only feature
 that stops working.
+
+### Can a scheduled run reach a model on my machine?
+
+It depends on where the **worker** runs, not where the schedule lives. Scheduling and
+execution are separate: a scheduler decides *when*, a worker does the *work*, and only the
+worker talks to your model.
+
+- **Local development** — the worker runs on your own machine, so it reaches
+  `localhost:11434` normally. Scheduled automations firing from a hosted scheduler still
+  execute locally against your local model.
+- **Self-hosted deployment** — run the worker on the same network as your inference
+  server, and everything stays inside your infrastructure.
+- **A hosted worker** — a worker running in someone else's cloud cannot reach a model on
+  your private network. That deployment shape needs a hosted model (or an inference
+  endpoint you expose deliberately).

@@ -94,6 +94,29 @@ database before doing anything, so an automation you disabled or re-triggered st
 even if its schedule outlives it. Ticks are deduplicated by their timestamp: a redelivered
 tick never runs twice.
 
+### What keeps runs from wasting credits
+
+An agent run is the expensive part of Papervine — it reads your documentation and reasons
+over it across many model calls. Three things keep that from turning into a surprise bill:
+
+- **Unchanged docs don't run.** Before an automated run starts, Papervine compares your
+  site's current commit with the one its last successful run saw. If nothing has changed,
+  the run is skipped entirely — no model call, no credits, no history entry. A nightly
+  schedule on documentation nobody edited costs nothing. This applies to automations that
+  only read your docs (the maintenance family); automations that also read a source
+  repository, assistant conversations, or reader feedback always run, because their input
+  can change while your docs sit still.
+- **A daily run limit.** Each automation runs at most 500 times a day. Runs that fail
+  before reaching the model don't count against it, so a misconfigured schedule can't
+  drain an account and a broken automation can still retry. **Run now** is never blocked
+  by the limit — you asked for that one.
+- **Prompt caching.** Within a run, the instructions and tool definitions that stay
+  constant are cached with the model provider, so the repeated context across a run's
+  steps is billed at a fraction of the normal input rate.
+
+Clicking **Run now** always executes, even when a scheduled run would have been skipped —
+useful when you want to re-check a site you haven't edited.
+
 A content-update automation whose own commit re-syncs the site does **not** re-fire itself:
 runs are deduplicated per commit, which is also what makes webhook redeliveries harmless.
 

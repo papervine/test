@@ -519,6 +519,10 @@ export const automationRun = pgTable(
     status: text("status").default("queued").notNull(),
     // The executor's run handle (Trigger.dev run_… id) — correlation for logs/replays.
     executorRunId: text("executor_run_id"),
+    // The site's head commit at enqueue time — what this run's docs looked like. Lets
+    // the next trigger skip entirely when nothing has changed since the last success
+    // (SPEC §10.2 cost guardrails).
+    sourceSha: text("source_sha"),
     // What the run produced through the authoring backend: a commit sha or PR URL;
     // null = the run decided no changes were needed (a valid success).
     resultRef: text("result_ref"),

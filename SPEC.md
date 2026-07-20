@@ -1844,12 +1844,35 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 > pages × steps. **This does not scale linearly to real customers** — a 200-page site
 > would multiply the base, and every automation re-reads from scratch on every trigger.
 > Credit rating currently covers it (haiku: 795 credits ≈ $6.36 retail against a few
-> dollars of spend), but the levers to build before this is a paid product are:
-> (1) scope `content_update` runs to the **changed files** rather than the whole site;
-> (2) prefer targeted `searchDocs` over exhaustive `listPages`+`readPage` in the run
-> prompt; (3) a per-automation **daily run cap** (the reference caps at 500/day, failed
-> runs excluded) so a misconfigured every-minute cron can't drain an account;
-> (4) surface a credit-burn warning before the balance cliff.
+> dollars of spend).
+>
+> **Guardrails landed 2026-07-20** (a deliberate `* * * * *` stress test ran **88 ticks
+> over 2h11m** and was still firing when we caught it — the only thing that stopped the
+> spend was the provider running out of money):
+> 1. **Skip-unchanged** — an automated run is abandoned before any model call when the
+>    site's head sha equals the one the automation's last *successful* run saw
+>    (`automation_run.source_sha`, migration 0017). Catalog-aware: entries carry
+>    `inputs: ["docs"] | ["docs","external"]`, and only docs-only automations may skip —
+>    a changelog/feedback/code-change automation's input moves while the docs sit still.
+>    Nightly crons on idle docs now cost **zero**, which is where nearly all of the 88
+>    wasted runs went.
+> 2. **Daily run cap** — 500/automation/24h matching the reference (they document
+>    "runs that fail do not count"); we count only runs that *reached the model*, so a
+>    failing automation may retry while a spending one cannot run away. Manual Run-now
+>    is never capped.
+> 3. **Prompt caching** — `providerOptions.anthropic.cacheControl` (ephemeral, 1h) on
+>    the agent loop, so the constant prefix resent across ~24 steps bills at cache-read
+>    rates. Provider-specific and ignored elsewhere, so it's safe on every route.
+>
+> *Deliberately not a minimum cron interval:* the reference documents no floor (only
+> "queues within 10 minutes of the scheduled time" + the 500/day cap), and a per-minute
+> schedule is the user's business — the cap plus skip-unchanged bound the damage without
+> forbidding it.
+>
+> Still open: (a) scope `content_update` runs to the **changed files** rather than the
+> whole site — the deeper fix for the ~57k-token base cost; (b) prefer targeted
+> `searchDocs` over exhaustive `listPages`+`readPage` in the run prompt; (c) a
+> credit-burn warning before the balance cliff.
 >
 > **Status — slice 2a landed (2026-07-19): cron scheduling.** Schedules live on the
 > executor as a projection (`schedules.create` with `deduplicationKey` = automation id

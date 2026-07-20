@@ -30,6 +30,12 @@ export type AutomationCatalogEntry = {
   title: string;
   desc: string;
   family: "self_updating" | "maintenance";
+  // What the run reads. "docs" = the site's own content only — such a run has nothing
+  // to do when the docs haven't changed since its last success, so it can be skipped
+  // for free (SPEC §10.2 cost guardrails). Automations that also read *external*
+  // inputs — a source repo, assistant logs, reader feedback — must always run, because
+  // their input changes without the docs changing.
+  inputs: ("docs" | "external")[];
   allowedTriggers: AutomationTriggerType[];
   recommendedTrigger: AutomationTriggerType;
   // The catalog card's "Recommended" badge / default-on state.
@@ -59,6 +65,7 @@ export const AUTOMATION_CATALOG: AutomationCatalogEntry[] = [
     title: "Update from code changes",
     desc: "Updates content when source code for products, features, or APIs changes.",
     family: "self_updating",
+    inputs: ["docs", "external"],
     allowedTriggers: ["cron", "code_change"],
     recommendedTrigger: "cron",
     recommended: true,
@@ -71,6 +78,7 @@ export const AUTOMATION_CATALOG: AutomationCatalogEntry[] = [
     title: "Draft changelog",
     desc: "Drafts a changelog entry from recent product updates on a recurring schedule.",
     family: "self_updating",
+    inputs: ["docs", "external"],
     allowedTriggers: ["content_update", "cron", "code_change"],
     recommendedTrigger: "content_update",
     defaultApplyMode: "auto",
@@ -82,6 +90,7 @@ export const AUTOMATION_CATALOG: AutomationCatalogEntry[] = [
     title: "Fill gaps from assistant conversations",
     desc: "Spots what users ask your assistant most, then drafts updates to fill the gaps.",
     family: "self_updating",
+    inputs: ["docs", "external"],
     allowedTriggers: ["cron"],
     recommendedTrigger: "cron",
     defaultApplyMode: "auto",
@@ -93,6 +102,7 @@ export const AUTOMATION_CATALOG: AutomationCatalogEntry[] = [
     title: "Improve docs from user feedback",
     desc: "Turns user feedback on pages into targeted doc improvements, on a schedule.",
     family: "self_updating",
+    inputs: ["docs", "external"],
     allowedTriggers: ["cron"],
     recommendedTrigger: "cron",
     defaultApplyMode: "auto",
@@ -105,6 +115,7 @@ export const AUTOMATION_CATALOG: AutomationCatalogEntry[] = [
     title: "Translate content",
     desc: "Updates translated pages in your selected languages whenever the original content changes.",
     family: "maintenance",
+    inputs: ["docs"],
     allowedTriggers: CONTENT_OR_CRON,
     recommendedTrigger: "content_update",
     defaultApplyMode: "auto",
@@ -116,6 +127,7 @@ export const AUTOMATION_CATALOG: AutomationCatalogEntry[] = [
     title: "Fix broken links",
     desc: "Finds and fixes broken internal links whenever content changes.",
     family: "maintenance",
+    inputs: ["docs"],
     allowedTriggers: CONTENT_OR_CRON,
     recommendedTrigger: "content_update",
     defaultApplyMode: "auto",
@@ -127,6 +139,7 @@ export const AUTOMATION_CATALOG: AutomationCatalogEntry[] = [
     title: "Fix SEO issues",
     desc: "Checks and fixes titles, descriptions, and tags whenever content changes.",
     family: "maintenance",
+    inputs: ["docs"],
     allowedTriggers: CONTENT_OR_CRON,
     recommendedTrigger: "content_update",
     defaultApplyMode: "auto",
@@ -138,6 +151,7 @@ export const AUTOMATION_CATALOG: AutomationCatalogEntry[] = [
     title: "Fix grammar & typos",
     desc: "Finds and fixes typos, spelling mistakes, and grammar errors whenever content changes.",
     family: "maintenance",
+    inputs: ["docs"],
     allowedTriggers: CONTENT_OR_CRON,
     recommendedTrigger: "content_update",
     defaultApplyMode: "auto",
@@ -149,6 +163,7 @@ export const AUTOMATION_CATALOG: AutomationCatalogEntry[] = [
     title: "Enforce your style guide",
     desc: "Keeps voice, tone, and writing rules consistent whenever content changes.",
     family: "maintenance",
+    inputs: ["docs"],
     allowedTriggers: CONTENT_OR_CRON,
     recommendedTrigger: "content_update",
     defaultApplyMode: "auto",

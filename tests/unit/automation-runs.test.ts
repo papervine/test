@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  DAILY_RUN_CAP,
   enqueueAutomationRun,
   fireContentUpdateAutomations,
   type AutomationRow,
@@ -9,9 +10,29 @@ import type { AutomationExecutor } from "@/lib/automations/executor";
 
 // In-memory store mirroring dbRunStore's contract (the domain-reconcile pattern:
 // decision logic tested with no DB).
-function memStore(automations: Array<Partial<AutomationRow>> = []) {
+function memStore(
+  automations: Array<Partial<AutomationRow>> = [],
+  siteShas: Record<string, string | null> = {},
+) {
   const runs: Array<Record<string, unknown>> = [];
   const store: RunStore = {
+    async countBillableRunsSince(automationId, since) {
+      return runs.filter(
+        (r) =>
+          r.automationId === automationId &&
+          (r.queuedAt === undefined || (r.queuedAt as Date) >= since) &&
+          (r.status !== "failed" || Number(r.creditsUsed ?? 0) > 0),
+      ).length;
+    },
+    async lastSucceededSourceSha(automationId) {
+      const hit = [...runs]
+        .reverse()
+        .find((r) => r.automationId === automationId && r.status === "succeeded");
+      return (hit?.sourceSha as string | undefined) ?? null;
+    },
+    async siteSourceSha(siteId) {
+      return siteShas[siteId] ?? null;
+    },
     async findRunByTrigger(automationId, triggerType, triggerRef) {
       const hit = runs.find(
         (r) =>
@@ -22,7 +43,7 @@ function memStore(automations: Array<Partial<AutomationRow>> = []) {
       return hit ? { id: hit.id as string } : null;
     },
     async insertRun(row) {
-      runs.push({ ...row, status: "queued" });
+      runs.push({ ...row, status: "queued", queuedAt: new Date() });
     },
     async updateRun(id, patch) {
       const row = runs.find((r) => r.id === id);
@@ -54,7 +75,10 @@ const failingExecutor: Pick<AutomationExecutor, "enqueueRun"> = {
   },
 };
 
-const AUTO = { id: "auto-1", siteId: "site-1" };
+// fix-broken-links reads only the docs (inputs: ["docs"]) — the skip-unchanged case.
+const AUTO = { id: "auto-1", siteId: "site-1", catalogKey: "fix-broken-links" };
+// draft-changelog also reads external inputs, so it must never be skipped.
+const EXTERNAL_AUTO = { id: "auto-2", siteId: "site-1", catalogKey: "draft-changelog" };
 
 describe("enqueueAutomationRun", () => {
   it("creates a queued run and records the executor correlation id", async () => {
@@ -101,6 +125,92 @@ describe("enqueueAutomationRun", () => {
     expect(runs).toHaveLength(1);
   });
 
+  // --- cost guardrails (SPEC §10.2) ---
+
+  it("caps automated runs at the daily limit but never blocks a manual one", async () => {
+    const { store, runs } = memStore([], { "site-1": "sha-1" });
+    const executor = okExecutor();
+    const deps = { store, executor };
+    // Fill the day's budget with billable runs.
+    for (let i = 0; i < DAILY_RUN_CAP; i++) {
+      runs.push({
+        id: `r${i}`,
+        automationId: EXTERNAL_AUTO.id,
+        status: "succeeded",
+        queuedAt: new Date(),
+      });
+    }
+    const capped = await enqueueAutomationRun(EXTERNAL_AUTO, { triggerType: "cron" }, deps);
+    expect(capped).toEqual({ ok: false, reason: "daily_cap" });
+    // A human clicking Run now is neither unattended nor repeating.
+    const manual = await enqueueAutomationRun(EXTERNAL_AUTO, { triggerType: "manual" }, deps);
+    expect(manual.ok).toBe(true);
+  });
+
+  it("runs that failed before spending don't count toward the cap", async () => {
+    const { store, runs } = memStore([], { "site-1": "sha-1" });
+    const executor = okExecutor();
+    for (let i = 0; i < DAILY_RUN_CAP + 5; i++) {
+      runs.push({
+        id: `f${i}`,
+        automationId: EXTERNAL_AUTO.id,
+        status: "failed",
+        creditsUsed: 0,
+        queuedAt: new Date(),
+      });
+    }
+    const result = await enqueueAutomationRun(
+      EXTERNAL_AUTO,
+      { triggerType: "cron" },
+      { store, executor },
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("skips a docs-only automation when the site hasn't changed since its last success", async () => {
+    const { store, runs } = memStore([], { "site-1": "sha-1" });
+    const executor = okExecutor();
+    const deps = { store, executor };
+    const first = await enqueueAutomationRun(AUTO, { triggerType: "cron" }, deps);
+    expect(first.ok).toBe(true);
+    if (first.ok) await store.updateRun(first.runId, { status: "succeeded" });
+
+    // Same sha → nothing to do, no model call, no row.
+    const second = await enqueueAutomationRun(AUTO, { triggerType: "cron" }, deps);
+    expect(second).toEqual({ ok: false, reason: "unchanged" });
+    expect(runs).toHaveLength(1);
+  });
+
+  it("runs again once the docs move", async () => {
+    const shas: Record<string, string | null> = { "site-1": "sha-1" };
+    const { store, runs } = memStore([], shas);
+    const executor = okExecutor();
+    const deps = { store, executor };
+    const first = await enqueueAutomationRun(AUTO, { triggerType: "cron" }, deps);
+    if (first.ok) await store.updateRun(first.runId, { status: "succeeded" });
+    shas["site-1"] = "sha-2";
+    const second = await enqueueAutomationRun(AUTO, { triggerType: "cron" }, deps);
+    expect(second.ok).toBe(true);
+    expect(runs).toHaveLength(2);
+  });
+
+  it("never skips an automation with external inputs, or a manual run", async () => {
+    const { store } = memStore([], { "site-1": "sha-1" });
+    const executor = okExecutor();
+    const deps = { store, executor };
+    // draft-changelog reads a source repo — unchanged docs say nothing about its input.
+    const ext = await enqueueAutomationRun(EXTERNAL_AUTO, { triggerType: "cron" }, deps);
+    expect(ext.ok).toBe(true);
+    if (ext.ok) await store.updateRun(ext.runId, { status: "succeeded" });
+    const extAgain = await enqueueAutomationRun(EXTERNAL_AUTO, { triggerType: "cron" }, deps);
+    expect(extAgain.ok).toBe(true);
+
+    const first = await enqueueAutomationRun(AUTO, { triggerType: "cron" }, deps);
+    if (first.ok) await store.updateRun(first.runId, { status: "succeeded" });
+    const manual = await enqueueAutomationRun(AUTO, { triggerType: "manual" }, deps);
+    expect(manual.ok).toBe(true);
+  });
+
   it("keeps a visible failed run when the executor rejects the enqueue", async () => {
     const { store, runs } = memStore();
     const result = await enqueueAutomationRun(
@@ -117,13 +227,16 @@ describe("enqueueAutomationRun", () => {
 });
 
 describe("fireContentUpdateAutomations", () => {
+  // catalogKey draft-changelog: reads external inputs, so the skip-unchanged guard
+  // never applies and these stay focused on the fan-out logic itself.
+  const ck = { catalogKey: "draft-changelog" };
   const site1Autos = [
-    { id: "a1", siteId: "site-1", enabled: true, triggerType: "content_update" },
-    { id: "a2", siteId: "site-1", enabled: true, triggerType: "content_update" },
+    { id: "a1", siteId: "site-1", enabled: true, triggerType: "content_update", ...ck },
+    { id: "a2", siteId: "site-1", enabled: true, triggerType: "content_update", ...ck },
     // Wrong trigger / disabled / wrong site — must not fire.
-    { id: "a3", siteId: "site-1", enabled: true, triggerType: "cron" },
-    { id: "a4", siteId: "site-1", enabled: false, triggerType: "content_update" },
-    { id: "a5", siteId: "site-2", enabled: true, triggerType: "content_update" },
+    { id: "a3", siteId: "site-1", enabled: true, triggerType: "cron", ...ck },
+    { id: "a4", siteId: "site-1", enabled: false, triggerType: "content_update", ...ck },
+    { id: "a5", siteId: "site-2", enabled: true, triggerType: "content_update", ...ck },
   ];
 
   it("enqueues one run per enabled content_update automation on the site", async () => {
@@ -153,11 +266,15 @@ describe("fireContentUpdateAutomations", () => {
   });
 
   it("never throws — a broken store cannot fail a sync", async () => {
+    const down = () => Promise.reject(new Error("db down"));
     const broken: RunStore = {
-      findRunByTrigger: () => Promise.reject(new Error("db down")),
-      insertRun: () => Promise.reject(new Error("db down")),
-      updateRun: () => Promise.reject(new Error("db down")),
-      listEnabledAutomations: () => Promise.reject(new Error("db down")),
+      findRunByTrigger: down,
+      insertRun: down,
+      updateRun: down,
+      listEnabledAutomations: down,
+      countBillableRunsSince: down,
+      lastSucceededSourceSha: down,
+      siteSourceSha: down,
     };
     await expect(
       fireContentUpdateAutomations("site-1", "sha", { store: broken, executor: okExecutor() }),

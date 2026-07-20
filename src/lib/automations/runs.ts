@@ -4,9 +4,10 @@
 // production callers use the drizzle-backed defaults. Deliberately NOT `server-only`:
 // the Trigger.dev task imports this module too.
 import { randomUUID } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { automation, automationRun } from "@/lib/db/app-schema";
+import { automation, automationRun, site } from "@/lib/db/app-schema";
+import { getCatalogEntry } from "./catalog";
 import { getExecutor, type AutomationExecutor } from "./executor";
 
 export type AutomationRow = typeof automation.$inferSelect;
@@ -20,12 +21,22 @@ export type RunStore = {
     triggerType: RunTriggerType,
     triggerRef: string,
   ): Promise<{ id: string } | null>;
+  // Runs in the last 24h that actually reached the model. Failed-before-spending runs
+  // are excluded so a broken automation can keep retrying while a *spending* one
+  // can't run away (the reference's "failed runs don't count" rule).
+  countBillableRunsSince(automationId: string, since: Date): Promise<number>;
+  // The content sha the automation's most recent SUCCESSFUL run saw, or null if it has
+  // never succeeded. Drives the skip-unchanged guard.
+  lastSucceededSourceSha(automationId: string): Promise<string | null>;
+  // The site's current head sha (what a run would read right now).
+  siteSourceSha(siteId: string): Promise<string | null>;
   insertRun(row: {
     id: string;
     automationId: string;
     siteId: string;
     triggerType: RunTriggerType;
     triggerRef: string | null;
+    sourceSha: string | null;
   }): Promise<void>;
   updateRun(
     id: string,
@@ -65,6 +76,43 @@ export function dbRunStore(): RunStore {
     async insertRun(row) {
       await db.insert(automationRun).values(row);
     },
+    async countBillableRunsSince(automationId, since) {
+      const [row] = await db
+        .select({ n: sql<number>`count(*)` })
+        .from(automationRun)
+        .where(
+          and(
+            eq(automationRun.automationId, automationId),
+            gte(automationRun.queuedAt, since),
+            // Anything that isn't a pre-model failure: succeeded/running/queued, or a
+            // failure that already burned credits.
+            sql`(${automationRun.status} <> 'failed' or ${automationRun.creditsUsed} > 0)`,
+          ),
+        );
+      return Number(row?.n ?? 0);
+    },
+    async lastSucceededSourceSha(automationId) {
+      const [row] = await db
+        .select({ sha: automationRun.sourceSha })
+        .from(automationRun)
+        .where(
+          and(
+            eq(automationRun.automationId, automationId),
+            eq(automationRun.status, "succeeded"),
+          ),
+        )
+        .orderBy(desc(automationRun.queuedAt))
+        .limit(1);
+      return row?.sha ?? null;
+    },
+    async siteSourceSha(siteId) {
+      const [row] = await db
+        .select({ sha: site.lastSyncedCommitSha })
+        .from(site)
+        .where(eq(site.id, siteId))
+        .limit(1);
+      return row?.sha ?? null;
+    },
     async updateRun(id, patch) {
       await db.update(automationRun).set(patch).where(eq(automationRun.id, id));
     },
@@ -90,7 +138,22 @@ export type EnqueueDeps = {
 
 export type EnqueueResult =
   | { ok: true; runId: string }
-  | { ok: false; reason: "duplicate" | "executor_unconfigured" | "enqueue_failed"; error?: string };
+  | {
+      ok: false;
+      reason:
+        | "duplicate"
+        | "executor_unconfigured"
+        | "enqueue_failed"
+        | "daily_cap"
+        | "unchanged";
+      error?: string;
+    };
+
+// Matches the reference's cap (500 runs/day/automation, failures excluded). High enough
+// that no sane schedule hits it, low enough that a runaway stops within a day instead of
+// draining an account — a per-minute cron caps out after ~8 hours. Overridable per
+// deployment.
+export const DAILY_RUN_CAP = Number(process.env.AUTOMATION_DAILY_RUN_CAP ?? 500);
 
 // Create + enqueue one run. Idempotent on (automation, triggerType, triggerRef): a
 // redelivered webhook or double-fired sync enqueues nothing the second time. With no
@@ -98,7 +161,7 @@ export type EnqueueResult =
 // "not configured" instead. If the executor rejects the enqueue, the run row IS kept,
 // marked failed, so the failure is visible in run history rather than swallowed.
 export async function enqueueAutomationRun(
-  auto: Pick<AutomationRow, "id" | "siteId">,
+  auto: Pick<AutomationRow, "id" | "siteId" | "catalogKey">,
   opts: { triggerType: RunTriggerType; triggerRef?: string | null },
   deps: EnqueueDeps = { store: dbRunStore(), executor: getExecutor() },
 ): Promise<EnqueueResult> {
@@ -110,6 +173,30 @@ export async function enqueueAutomationRun(
     if (existing) return { ok: false, reason: "duplicate" };
   }
 
+  // A human clicking Run now always gets a run — the guards below exist to bound
+  // *unattended* spend, and a manual click is neither unattended nor repeating.
+  const automated = opts.triggerType !== "manual";
+  const sourceSha = await deps.store.siteSourceSha(auto.siteId);
+
+  if (automated) {
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const spent = await deps.store.countBillableRunsSince(auto.id, since);
+    if (spent >= DAILY_RUN_CAP) return { ok: false, reason: "daily_cap" };
+
+    // Skip-unchanged: an automation that reads only the site's own docs has nothing to
+    // do when those docs haven't moved since its last success. This is the difference
+    // between a nightly cron costing ~$0.08 every night forever and costing nothing
+    // until someone actually edits the docs. Automations with external inputs (a source
+    // repo, assistant logs, reader feedback) always run — their input changes without
+    // the docs changing.
+    const entry = getCatalogEntry(auto.catalogKey);
+    const docsOnly = !!entry && !entry.inputs.includes("external");
+    if (docsOnly && sourceSha) {
+      const lastSha = await deps.store.lastSucceededSourceSha(auto.id);
+      if (lastSha && lastSha === sourceSha) return { ok: false, reason: "unchanged" };
+    }
+  }
+
   const runId = randomUUID();
   await deps.store.insertRun({
     id: runId,
@@ -117,6 +204,7 @@ export async function enqueueAutomationRun(
     siteId: auto.siteId,
     triggerType: opts.triggerType,
     triggerRef,
+    sourceSha,
   });
 
   try {
@@ -198,6 +286,12 @@ export async function fireContentUpdateAutomations(
       );
       if (!result.ok && result.reason === "enqueue_failed") {
         console.error(`[automations] enqueue failed site=${siteId} automation=${a.id}: ${result.error}`);
+      } else if (!result.ok && result.reason === "daily_cap") {
+        // Visible in logs rather than silent: a capped automation is a misconfiguration
+        // (or an attack on your own wallet), and the operator should be able to find out.
+        console.warn(
+          `[automations] daily run cap (${DAILY_RUN_CAP}) reached site=${siteId} automation=${a.id}`,
+        );
       }
     }
   } catch (err) {
