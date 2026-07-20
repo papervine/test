@@ -4,6 +4,8 @@ import {
   aiModel,
   aiModelId,
   aiProviderStatus,
+  isLocalProvider,
+  localBaseUrl,
   DEFAULT_AI_MODEL,
 } from "@/lib/ai-model";
 
@@ -17,6 +19,8 @@ const ENV_KEYS = [
   "AI_GATEWAY_API_KEY",
   "VERCEL_OIDC_TOKEN",
   "VERCEL",
+  "AI_BASE_URL",
+  "AI_LOCAL_API_KEY",
 ] as const;
 let saved: Record<string, string | undefined>;
 
@@ -58,6 +62,44 @@ describe("aiModel routing", () => {
     process.env.AI_ROUTING = "direct";
     expect(() => aiModel("anthropic/claude-haiku-4-5")).not.toThrow();
     expect(() => aiModel("mistral/mistral-large")).toThrow(/no direct SDK/);
+  });
+});
+
+// Self-hosted inference (SPEC §18): Ollama / LM Studio / any OpenAI-compatible server.
+describe("self-hosted (local) providers", () => {
+  it("resolves known local prefixes to their default endpoints without a key", () => {
+    expect(localBaseUrl("ollama")).toBe("http://localhost:11434/v1");
+    expect(localBaseUrl("lmstudio")).toBe("http://localhost:1234/v1");
+    expect(() => aiModel("ollama/qwen3")).not.toThrow();
+    expect(aiProviderStatus("ollama/qwen3").ok).toBe(true);
+  });
+
+  it("takes the local path regardless of AI_ROUTING (the hosted gateway can't reach localhost)", () => {
+    process.env.AI_ROUTING = "gateway";
+    expect(() => aiModel("ollama/qwen3")).not.toThrow();
+    process.env.AI_ROUTING = "direct";
+    expect(() => aiModel("ollama/qwen3")).not.toThrow();
+  });
+
+  it("AI_BASE_URL overrides the default endpoint (vLLM, LiteLLM, a remote box…)", () => {
+    process.env.AI_BASE_URL = "http://gpu-box.lan:8000/v1";
+    expect(localBaseUrl("ollama")).toBe("http://gpu-box.lan:8000/v1");
+    expect(localBaseUrl("local")).toBe("http://gpu-box.lan:8000/v1");
+  });
+
+  it("the generic local/ prefix requires AI_BASE_URL and says so", () => {
+    expect(localBaseUrl("local")).toBeNull();
+    const status = aiProviderStatus("local/whatever");
+    expect(status.ok).toBe(false);
+    if (!status.ok) expect(status.error).toContain("AI_BASE_URL");
+    expect(() => aiModel("local/whatever")).toThrow(/AI_BASE_URL/);
+  });
+
+  it("isLocalProvider distinguishes self-hosted prefixes from vendors", () => {
+    expect(isLocalProvider("ollama")).toBe(true);
+    expect(isLocalProvider("lmstudio")).toBe(true);
+    expect(isLocalProvider("local")).toBe(true);
+    expect(isLocalProvider("anthropic")).toBe(false);
   });
 });
 

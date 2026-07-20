@@ -27,7 +27,11 @@ export function rateForModel(model: string, table: CreditRateTable) {
   const bare = slash >= 0 ? model.slice(slash + 1) : model;
   let best: { prefix: string; rate: { inPer1M: number; outPer1M: number } } | null = null;
   for (const [prefix, rate] of Object.entries(table.models)) {
-    if (bare.startsWith(prefix) && (!best || prefix.length > best.prefix.length)) {
+    // Match the FULL id first (so provider-scoped keys like "ollama/" can price a
+    // whole route — self-hosted inference is rated at zero, SPEC §18), then the bare
+    // model (so "anthropic/claude-haiku-4.5" still hits the "claude-haiku" family).
+    const hit = model.startsWith(prefix) || bare.startsWith(prefix);
+    if (hit && (!best || prefix.length > best.prefix.length)) {
       best = { prefix, rate };
     }
   }

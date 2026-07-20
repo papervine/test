@@ -1,0 +1,81 @@
+---
+title: Self-hosted AI
+description: Run Papervine's AI features against your own hardware — Ollama, LM Studio, or any OpenAI-compatible server — paying nobody.
+---
+
+Papervine's AI surfaces (the [assistant](/features/ai-assistant), the editor agent, and
+[automation runs](/control-plane/automate)) resolve their model in one place, from
+environment variables. That resolution accepts a **self-hosted endpoint** as readily as a
+hosted provider, so a cost-sensitive deployment can run everything on its own hardware.
+
+## Point Papervine at your server
+
+Set a model id whose prefix names a local runtime, and Papervine sends its requests there
+instead of to a vendor:
+
+```bash
+# Ollama (default endpoint http://localhost:11434/v1)
+PAPERVINE_AI_MODEL=ollama/qwen3
+
+# LM Studio (default endpoint http://localhost:1234/v1)
+PAPERVINE_AI_MODEL=lmstudio/qwen3
+
+# Anything else that speaks the OpenAI API — vLLM, llama.cpp, LiteLLM, a remote GPU box
+PAPERVINE_AI_MODEL=local/qwen3
+AI_BASE_URL=http://gpu-box.lan:8000/v1
+```
+
+`AI_BASE_URL` overrides the default endpoint for any of these prefixes, and is required
+for the generic `local/` one. No API key is needed; set `AI_LOCAL_API_KEY` only if your
+server demands one.
+
+<Note>
+  Self-hosted models always take the direct path, whatever `AI_ROUTING` says — a hosted
+  gateway can't reach an endpoint on your own network.
+</Note>
+
+## Running Ollama
+
+The repository ships an **opt-in** Compose profile, so a plain `docker compose up` never
+pulls multi-gigabyte model weights:
+
+```bash
+docker compose --profile local-ai up -d
+docker compose --profile local-ai exec ollama ollama pull qwen3
+```
+
+<Warning>
+  On macOS, Docker cannot reach the GPU, so a containerized Ollama runs on CPU and will be
+  slow. Use the native Ollama app instead — the endpoint is identical, so no configuration
+  changes. The container is the right choice on Linux hosts with GPU passthrough.
+</Warning>
+
+LM Studio has no container: start its local server from the app and point `AI_BASE_URL`
+at it (or use the `lmstudio/` prefix, which assumes the default port).
+
+## Choose a model that can use tools
+
+This is the part that decides whether self-hosting works for you. Papervine's AI is
+**agentic**, not single-shot: the assistant calls `searchDocs` and `readPage` before
+answering, and an automation run may take a couple dozen tool-calling steps to read pages,
+edit them, and report what it changed.
+
+Small models are unreliable at multi-step tool use — they hallucinate arguments, skip
+calls, or loop. Pick a model with genuine tool-calling support (recent Qwen, Llama, and
+Mistral instruct models are the usual choices), and give it enough context length for a
+documentation page plus its instructions. If runs come back with no changes when changes
+were needed, or with mangled edits, the model is the first thing to suspect.
+
+## Credits and metering
+
+Usage of a self-hosted model is **rated at zero credits**. Papervine still records a usage
+event per run so you can see token volumes, but nothing is debited and the credit gate
+never refuses work — you're not paying anyone, so the meter has nothing to meter.
+
+## Automations need an executor too
+
+The [assistant](/features/ai-assistant) and editor agent run inside the app, so a local
+model is all they need. [Automations](/control-plane/automate) additionally require a
+background executor to run jobs and fire schedules. Without one, the Automations page says
+so plainly and nothing else in the product is affected — automations are the only feature
+that stops working.

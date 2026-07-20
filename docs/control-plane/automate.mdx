@@ -84,7 +84,15 @@ Runs are queued in Postgres and executed by a background executor (Trigger.dev; 
 `TRIGGER_SECRET_KEY`). Without an executor configured, the page says so and automations simply
 don't run — nothing else in the dashboard or renderer depends on it. Each run is metered: its
 model usage is recorded and debited against the plan's [AI credits](/control-plane/billing),
-and the total shows in the run history.
+and the total shows in the run history. A run whose organization has no spendable credits
+fails immediately with "out of AI credits" — before any model call, so a drained account
+never accrues charges it can't pay.
+
+Scheduled automations register their cron expression with the executor when you save them,
+and re-register when you change the schedule. Each tick re-reads the automation from the
+database before doing anything, so an automation you disabled or re-triggered stops running
+even if its schedule outlives it. Ticks are deduplicated by their timestamp: a redelivered
+tick never runs twice.
 
 A content-update automation whose own commit re-syncs the site does **not** re-fire itself:
 runs are deduplicated per commit, which is also what makes webhook redeliveries harmless.

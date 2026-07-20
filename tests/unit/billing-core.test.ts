@@ -47,6 +47,18 @@ describe("rateForModel", () => {
     expect(rateForModel("anthropic/claude-haiku-4-5-20251001", TABLE).inPer1M).toBe(500);
     expect(rateForModel("openai/gpt-next", TABLE)).toEqual(TABLE.default);
   });
+  it("a provider-scoped key prices a whole route (self-hosted inference is free)", () => {
+    const withLocal = {
+      ...TABLE,
+      models: { ...TABLE.models, "ollama/": { inPer1M: 0, outPer1M: 0 } },
+    };
+    expect(rateForModel("ollama/qwen3", withLocal)).toEqual({ inPer1M: 0, outPer1M: 0 });
+    // …and the zero rate must survive the "nonzero usage floors at 1 credit" rule:
+    // self-hosters pay nobody, so they're charged nothing.
+    expect(
+      rateTokensToCredits({ tokensIn: 500_000, tokensOut: 90_000, model: "ollama/qwen3" }, withLocal),
+    ).toBe(0);
+  });
 });
 
 describe("rateTokensToCredits", () => {

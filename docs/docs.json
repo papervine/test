@@ -2,13 +2,25 @@
   "$schema": "https://papervine.io/schema.json",
   "name": "Papervine",
   "description": "Architecture and contributor reference for Papervine — the open-source, self-hostable docs platform. These docs are written in Papervine's own format and render in Papervine itself.",
-  "favicon": { "light": "/favicon.ico", "dark": "/favicon.ico" },
-  "colors": { "primary": "#7C3AED", "light": "#A78BFA", "dark": "#5B21B6" },
+  "favicon": {
+    "light": "/favicon.ico",
+    "dark": "/favicon.ico"
+  },
+  "colors": {
+    "primary": "#7C3AED",
+    "light": "#A78BFA",
+    "dark": "#5B21B6"
+  },
   "navigation": {
     "groups": [
       {
         "group": "Get started",
-        "pages": ["index", "architecture", "tech-stack", "cli"]
+        "pages": [
+          "index",
+          "architecture",
+          "tech-stack",
+          "cli"
+        ]
       },
       {
         "group": "Rendering",
@@ -46,7 +58,17 @@
       },
       {
         "group": "Auth & access",
-        "pages": ["auth/overview", "auth/platform-auth", "auth/reader-auth"]
+        "pages": [
+          "auth/overview",
+          "auth/platform-auth",
+          "auth/reader-auth"
+        ]
+      },
+      {
+        "group": "Self-hosting",
+        "pages": [
+          "self-hosting/local-ai"
+        ]
       },
       {
         "group": "Contributing",

@@ -90,6 +90,23 @@ services:
     ports:
       - "1234:1234" # Yjs WebSocket
 
+  # Self-hosted inference (SPEC §18) — OPT-IN, never part of a plain `docker compose up`:
+  #   docker compose --profile local-ai up -d
+  #   docker compose --profile local-ai exec ollama ollama pull qwen3
+  # Then set AI_ROUTING=direct and PAPERVINE_AI_MODEL=ollama/<model>. Deliberately not a
+  # default service: the model weights are multi-GB, and Docker on macOS can't reach the
+  # GPU (Mac users are better off with the native Ollama app — the URL is the same).
+  ollama:
+    image: ollama/ollama:latest
+    container_name: papervine-ollama
+    profiles: [local-ai]
+    restart: unless-stopped
+    volumes:
+      - ollamadata:/root/.ollama
+    ports:
+      - "11434:11434" # OpenAI-compatible API at /v1
+
 volumes:
   pgdata:
   miniodata:
+  ollamadata:

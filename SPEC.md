@@ -3143,6 +3143,19 @@ Derived rules:
   *Bundling gotcha:* `@vercel/oidc` dynamic-imports siblings by relative path and dies
   inside an esbuild bundle — the Trigger.dev build marks it `external`
   (trigger.config.ts).
+  **Self-hosted inference (2026-07-20).** `ollama/`, `lmstudio/`, and `local/` model ids
+  route to any OpenAI-compatible server (`AI_BASE_URL` overrides the prefix's default
+  endpoint; required for `local/`), always via the direct path — the hosted gateway
+  can't reach a private network. Built with `createOpenAI({ baseURL })` rather than
+  `@ai-sdk/openai-compatible`, whose current release targets provider spec v4 while our
+  `ai` speaks v3; revisit when `ai` moves to v4. Local models are **rated at zero
+  credits** (`creditRates.models["ollama/"]` etc., v2 of the rate table — `rateForModel`
+  now matches the full provider-scoped id before the bare model, so a whole route can be
+  priced). Ollama ships as an **opt-in** compose profile (`--profile local-ai`); never a
+  default service (multi-GB weights; no GPU passthrough on macOS). This is a
+  self-hosting affordance, not the SaaS path — the honest caveat, documented at
+  `/self-hosting/local-ai`, is that our AI is agentic and small models are unreliable at
+  multi-step tool use.
 - **"Vercel for everything until the BIG BILL"** — acceptable only because each managed
   dependency's escape hatch pre-exists, so the exit is an engineering task, not a
   re-architecture (see §2's custom-domain proxy plan for the pattern).

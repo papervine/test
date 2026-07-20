@@ -217,11 +217,14 @@
     { "key": "pack-25k", "name": "25,000 credits", "credits": 25000, "priceCents": 15000 }
   ],
   "creditRates": {
-    "$comment": "Credits per 1M tokens, matched by model-id prefix (longest wins), `default` as fallback. Calibrated so a typical assistant answer (~3k in / ~500 out) costs ~9-10 credits: at $0.008/credit retail that's ~$0.07/answer vs ~$0.02 raw model cost. VALIDATE against real token logs before GA (pricing-plan.md revisit prompt).",
-    "version": 1,
+    "$comment": "Credits per 1M tokens, matched by model-id prefix (longest wins; the FULL provider-scoped id is tried before the bare model, so a whole route can be priced), `default` as fallback. Calibrated so a typical assistant answer (~3k in / ~500 out) costs ~9-10 credits: at $0.008/credit retail that's ~$0.07/answer vs ~$0.02 raw model cost. VALIDATE against real token logs before GA (pricing-plan.md revisit prompt).",
+    "version": 2,
     "default": { "inPer1M": 2000, "outPer1M": 6000 },
     "models": {
-      "claude-haiku": { "inPer1M": 400, "outPer1M": 1200 }
+      "claude-haiku": { "inPer1M": 400, "outPer1M": 1200 },
+      "ollama/": { "inPer1M": 0, "outPer1M": 0 },
+      "lmstudio/": { "inPer1M": 0, "outPer1M": 0 },
+      "local/": { "inPer1M": 0, "outPer1M": 0 }
     }
   },
   "positioning": [

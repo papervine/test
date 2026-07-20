@@ -66,6 +66,14 @@ use. Papervine isn't tied to any single provider:
 - **`AI_ROUTING=direct`** — bypass the gateway and call a provider's SDK **directly** with
   that provider's own key (`ANTHROPIC_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`,
   `OPENAI_API_KEY`). Use this to bring your own keys or avoid the gateway entirely.
+- **A self-hosted endpoint** — an `ollama/`, `lmstudio/`, or `local/` model id runs
+  against your own hardware and pays nobody. See
+  [Self-hosted AI](/self-hosting/local-ai).
+
+Individual surfaces can override the model: **`PAPERVINE_AI_MODEL_AUTOMATIONS`** applies
+only to [automation runs](/control-plane/automate), which write documentation that lands
+in Git — worth a stronger model than the high-volume assistant needs. Anything without an
+override falls back to `PAPERVINE_AI_MODEL`.
 
 Because the assistant is agentic (it makes several model calls per question), pick a model
 that's both capable at tool use and not rate-limited by your provider tier. See

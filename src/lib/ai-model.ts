@@ -1,7 +1,7 @@
 import { gateway } from "ai";
 import { anthropic } from "@ai-sdk/anthropic";
 import { google } from "@ai-sdk/google";
-import { openai } from "@ai-sdk/openai";
+import { openai, createOpenAI } from "@ai-sdk/openai";
 import type { LanguageModel } from "ai";
 
 // The single place the AI model is chosen for every server-side AI call (public
@@ -52,6 +52,35 @@ const DIRECT: Record<string, { make: (model: string) => LanguageModel; keyVar: s
   openai: { make: (m) => openai(m), keyVar: "OPENAI_API_KEY" },
 };
 
+// Self-hosted inference (SPEC §18): any OpenAI-compatible server — Ollama, LM Studio,
+// vLLM, llama.cpp, LiteLLM — reached by URL instead of by vendor SDK. The prefix picks
+// a sensible default endpoint; AI_BASE_URL overrides it (and is required for the
+// generic `local/` prefix). No API key needed: local servers don't authenticate, and
+// the SDK requires a non-empty string, so we pass a placeholder.
+//
+// Built with `createOpenAI({ baseURL })` rather than @ai-sdk/openai-compatible: that
+// package is the more tolerant fit in principle, but its current release targets
+// provider spec v4 while our `ai` version speaks v3 — the type surfaces don't meet.
+// Revisit when `ai` moves to v4. (Ollama and LM Studio both accept OpenAI's request
+// shape, so this works today; a stricter server that rejects OpenAI-only params is the
+// scenario that would justify the extra dependency.)
+const LOCAL_DEFAULT_BASE_URLS: Record<string, string | null> = {
+  ollama: "http://localhost:11434/v1",
+  lmstudio: "http://localhost:1234/v1",
+  local: null, // generic: AI_BASE_URL is mandatory
+};
+
+export function isLocalProvider(provider: string): boolean {
+  return provider in LOCAL_DEFAULT_BASE_URLS;
+}
+
+/** The endpoint a local-provider model resolves to, or null when unconfigured. */
+export function localBaseUrl(provider: string): string | null {
+  const override = process.env.AI_BASE_URL?.trim();
+  if (override) return override;
+  return LOCAL_DEFAULT_BASE_URLS[provider] ?? null;
+}
+
 function splitModel(id: string): { provider: string; model: string } {
   const i = id.indexOf("/");
   return i === -1
@@ -59,15 +88,33 @@ function splitModel(id: string): { provider: string; model: string } {
     : { provider: id.slice(0, i), model: id.slice(i + 1) };
 }
 
-/** The resolved model for streamText/generateText — gateway or direct per AI_ROUTING. */
+/** The resolved model for streamText/generateText — gateway, direct, or self-hosted. */
 export function aiModel(id: string = aiModelId()): LanguageModel {
+  const { provider, model } = splitModel(id);
+
+  // Self-hosted endpoints are reachable only from our own process, never from the
+  // hosted gateway — so they always take the direct path regardless of AI_ROUTING.
+  if (isLocalProvider(provider)) {
+    const baseURL = localBaseUrl(provider);
+    if (!baseURL)
+      throw new Error(
+        `model "${id}" needs AI_BASE_URL (the URL of your OpenAI-compatible server, e.g. http://localhost:11434/v1).`,
+      );
+    return createOpenAI({
+      name: provider,
+      baseURL,
+      apiKey: process.env.AI_LOCAL_API_KEY?.trim() || "local",
+    })(model);
+  }
+
   if (routing() === "direct") {
-    const { provider, model } = splitModel(id);
     const direct = DIRECT[provider];
     if (!direct)
       throw new Error(
         `AI_ROUTING=direct but no direct SDK for provider '${provider}' ` +
-          `(model=${id}). Supported: ${Object.keys(DIRECT).join(", ")}, or use AI_ROUTING=gateway.`,
+          `(model=${id}). Supported: ${Object.keys(DIRECT).join(", ")}, ` +
+          `${Object.keys(LOCAL_DEFAULT_BASE_URLS).join("/")} for a self-hosted endpoint, ` +
+          `or use AI_ROUTING=gateway.`,
       );
     return direct.make(model);
   }
@@ -81,6 +128,17 @@ export function aiModel(id: string = aiModelId()): LanguageModel {
 export function aiProviderStatus(id: string = aiModelId()):
   | { ok: true }
   | { ok: false; error: string } {
+  const { provider: prefix } = splitModel(id);
+  // Self-hosted: "configured" means we know where to send the request. No key needed.
+  if (isLocalProvider(prefix)) {
+    return localBaseUrl(prefix)
+      ? { ok: true }
+      : {
+          ok: false,
+          error: `model "${id}" needs AI_BASE_URL (the URL of your OpenAI-compatible server, e.g. http://localhost:11434/v1)`,
+        };
+  }
+
   if (routing() === "direct") {
     const { provider } = splitModel(id);
     const direct = DIRECT[provider];
