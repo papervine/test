@@ -128,11 +128,15 @@ The schema is **versioned** — every change is a committed SQL migration, never
 ## Command reference
 
 ```bash
-docker compose up -d        # local Postgres (+pgvector) + MinIO (S3) for the control plane
-npm run dev                 # serve the app (singleton: reuses a running server, so parallel agents can't corrupt .next)
-npm run dev:full            # the whole stack in one command: docker services + the app + the
-                            # trigger.dev worker (automations and cron ticks execute only while
-                            # it runs). Each piece degrades independently if unavailable.
+docker compose up -d        # local Postgres (+pgvector) + MinIO (S3) — `npm run dev` does this for you
+npm run dev                 # the whole stack: docker services, the app, and the automations
+                            # worker (cron ticks and runs execute only while it's connected).
+                            # Peripheral layers attach when you've configured them — Stripe
+                            # webhook forwarding starts only if STRIPE_SECRET_KEY,
+                            # STRIPE_WEBHOOK_SECRET, and the `stripe` CLI are all present.
+                            # Every layer degrades independently: no docker → no-DB mode, no
+                            # Trigger.dev login → automations just don't execute.
+npm run dev:app             # just the Next server (renderer-only work)
 npm run dev:fresh           # kill the dev server, wipe .next, restart clean (use when chunks/manifests are corrupted)
 npm run build               # production build
 npm run typecheck           # tsc --noEmit

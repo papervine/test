@@ -296,8 +296,8 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
 
 ```bash
 docker compose up -d        # local Postgres (+pgvector) + MinIO (S3) for the control plane
-npm run dev                 # serve the app (plain `next dev`; if :3000 is busy Next auto-picks the next port, so multiple worktrees coexist)
-npm run dev:full            # the whole stack: docker compose up -d + next dev + the trigger.dev worker (automations execute only while it runs); each piece degrades independently
+npm run dev                 # THE default: docker services + the app + the automations worker (cron/runs execute only while it's connected). Peripheral layers attach when configured (Stripe webhook forwarding when STRIPE_* + the CLI are present); each degrades independently. If :3000 is busy Next auto-picks the next port, so multiple worktrees coexist.
+npm run dev:app             # just the Next server (renderer-only work; also what `dev` spawns)
 npm run dev:fresh           # kill whatever holds PORT, wipe this worktree's .next, restart clean (use when chunks/manifests are corrupted)
 npm run build               # production build
 npm run typecheck           # tsc --noEmit

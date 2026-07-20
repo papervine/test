@@ -12,8 +12,8 @@
   },
   "scripts": {
     "papervine": "node bin/papervine.mjs",
-    "dev": "next dev --turbopack",
-    "dev:full": "node scripts/dev-full.mjs",
+    "dev": "node scripts/dev.mjs",
+    "dev:app": "next dev --turbopack",
     "dev:fresh": "node scripts/dev-fresh.mjs",
     "build": "next build",
     "start": "next start",
