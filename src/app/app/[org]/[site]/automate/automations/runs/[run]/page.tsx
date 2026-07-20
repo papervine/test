@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { ArrowLeft, FileText } from "lucide-react";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
 import { requireSite } from "@/lib/dashboard-context";
-import { siteRoute } from "@/lib/dashboard-nav";
+import { siteHref } from "@/lib/dashboard-nav";
 import { db } from "@/lib/db";
 import { automation, automationRun, usageEvent } from "@/lib/db/app-schema";
 import { CUSTOM_KEY, getCatalogEntry } from "@/lib/automations/catalog";
@@ -55,7 +55,7 @@ export default async function AutomationRunPage({
   const durationMs =
     run.startedAt && run.finishedAt ? run.finishedAt.getTime() - run.startedAt.getTime() : null;
 
-  const basePath = siteRoute(org, site, "automate/automations");
+  const basePath = siteHref(org, site, "automate/automations");
 
   return (
     <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-10">

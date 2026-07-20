@@ -4,7 +4,7 @@ import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
 import { AutomationCard, CreateCustomAutomation } from "@/components/app/automate/AutomationCard";
 import type { AutomationView } from "@/components/app/automate/AutomationConfigDialog";
 import { requireSite } from "@/lib/dashboard-context";
-import { siteRoute } from "@/lib/dashboard-nav";
+import { siteHref } from "@/lib/dashboard-nav";
 import { db } from "@/lib/db";
 import { automation, automationRun } from "@/lib/db/app-schema";
 import {
@@ -68,7 +68,11 @@ export default async function AutomationsPage({
   const maintenance = AUTOMATION_CATALOG.filter((e) => e.family === "maintenance");
 
   const showRuns = tab === "runs";
-  const basePath = siteRoute(org, site, "automate/automations");
+  // PUBLIC path for links (the bare app-host URL). siteRoute's internal /app mount is
+  // only for revalidatePath — leaking it into an href "works" (the rewrite target is a
+  // real route) but exposes the mount in the URL bar. See the app-host gotcha in
+  // CLAUDE.md.
+  const basePath = siteHref(org, site, "automate/automations");
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
