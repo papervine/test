@@ -15,6 +15,7 @@ import {
   type AutomationTriggerType,
 } from "@/lib/automations/catalog";
 import { isExecutorConfigured } from "@/lib/automations/executor";
+import { runDisplayStatus, runStatusChipClass } from "@/lib/automations/run-display";
 
 // Automate › Automations (SPEC §10.2) — the wired surface: Configure tab renders the
 // catalog merged with this site's automation rows (toggles + settings dialogs are
@@ -90,7 +91,7 @@ export default async function AutomationsPage({
       </div>
 
       {showRuns ? (
-        <RunHistory siteId={activeSite.id} />
+        <RunHistory siteId={activeSite.id} basePath={basePath} />
       ) : (
         <>
           <Section
@@ -164,17 +165,10 @@ function Section({
   );
 }
 
-const STATUS_STYLES: Record<string, string> = {
-  queued: "bg-[rgba(var(--ink-rgb),0.08)] text-[var(--muted)]",
-  running: "bg-sky-500/15 text-sky-300",
-  succeeded: "bg-emerald-500/15 text-emerald-300",
-  failed: "bg-red-500/15 text-red-300",
-  canceled: "bg-[rgba(var(--ink-rgb),0.08)] text-[var(--muted)]",
-};
 
 // The run history (the reference's second tab). Newest first; resultRef renders as a
-// PR link or a short commit sha.
-async function RunHistory({ siteId }: { siteId: string }) {
+// PR link or a short commit sha; the title links into the run-detail view.
+async function RunHistory({ siteId, basePath }: { siteId: string; basePath: string }) {
   const runs = await db
     .select({
       id: automationRun.id,
@@ -219,10 +213,16 @@ async function RunHistory({ siteId }: { siteId: string }) {
         <tbody className="divide-y divide-[rgba(var(--ink-rgb),0.06)]">
           {runs.map((r) => {
             const title = r.name ?? getCatalogEntry(r.catalogKey)?.title ?? r.catalogKey;
+            const display = runDisplayStatus(r.status, r.resultRef);
             return (
               <tr key={r.id} className="align-top">
                 <td className="px-4 py-3">
-                  <p className="font-medium">{title}</p>
+                  <Link
+                    href={`${basePath}/runs/${r.id}`}
+                    className="font-medium underline-offset-2 hover:underline"
+                  >
+                    {title}
+                  </Link>
                   {(r.summary ?? r.error) && (
                     <p className="mt-1 max-w-md text-xs text-[var(--muted)]">
                       {(r.error ?? r.summary ?? "").slice(0, 160)}
@@ -231,9 +231,9 @@ async function RunHistory({ siteId }: { siteId: string }) {
                 </td>
                 <td className="px-4 py-3">
                   <span
-                    className={`rounded-md px-1.5 py-0.5 text-xs font-medium ${STATUS_STYLES[r.status] ?? STATUS_STYLES.queued}`}
+                    className={`whitespace-nowrap rounded-md px-1.5 py-0.5 text-xs font-medium ${runStatusChipClass(display)}`}
                   >
-                    {r.status}
+                    {display}
                   </span>
                 </td>
                 <td className="px-4 py-3 text-[var(--muted)]">{r.triggerType.replace("_", " ")}</td>

@@ -524,6 +524,13 @@ export const automationRun = pgTable(
     resultRef: text("result_ref"),
     // Agent-authored one-paragraph summary of what it did (shown in run history).
     summary: text("summary"),
+    // The exact instructions this run's agent received (buildRunPrompt output at
+    // execution time) — the config may be edited later, so the row keeps its own copy
+    // for the run-detail view.
+    prompt: text("prompt"),
+    // Docs-root-relative paths of the files the run drafted (recorded whether or not
+    // the publish succeeded). Empty array = a "no changes" run.
+    changedFiles: jsonb("changed_files").$type<string[]>(),
     error: text("error"),
     creditsUsed: integer("credits_used").default(0).notNull(),
     queuedAt: timestamp("queued_at").defaultNow().notNull(),

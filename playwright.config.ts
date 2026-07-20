@@ -65,6 +65,12 @@ export default defineConfig({
       // Deterministic GitHub App webhook secret so the push-webhook spec can sign payloads
       // the running server will verify (SPEC §3 auto-sync). Test-only.
       GITHUB_APP_WEBHOOK_SECRET: "e2e-webhook-secret",
+      // The default e2e run is executor-free BY CONTRACT (SPEC §10.2 isolation rule):
+      // automations must degrade to the "Executor not configured" state. An operator's
+      // .env.local may carry a real TRIGGER_SECRET_KEY — blank it so the suite behaves
+      // identically on a configured dev machine and in CI (empty string is falsy for
+      // isExecutorConfigured).
+      TRIGGER_SECRET_KEY: "",
       // Platform superadmin allowlist (SPEC §10.10) for admin.spec.ts. Deliberately NOT
       // TEST_USER's email: the shared storageState user must stay a plain customer so the
       // admin rail link / bypass never leaks into the other specs' assertions. The admin

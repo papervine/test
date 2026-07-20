@@ -83,17 +83,43 @@ test.describe("automations", () => {
     expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
   });
 
-  test("run history lists runs with status and error detail", async ({ page }) => {
+  test("run history lists runs with status, no-changes chip, and error detail", async ({
+    page,
+  }) => {
     const [auto] =
       await sql`select id from automation where site_id = ${SITE_ID} and catalog_key = 'fix-broken-links'`;
     expect(auto, "expected the automation created by the toggle test").toBeTruthy();
     await sql`delete from automation_run where site_id = ${SITE_ID}`;
     await sql`insert into automation_run (id, automation_id, site_id, trigger_type, trigger_ref, status, error, credits_used, queued_at, finished_at)
               values ('e2e-run-1', ${auto.id}, ${SITE_ID}, 'manual', 'e2e', 'failed', 'agent exploded (e2e fixture)', 7, now(), now())`;
+    // A succeeded run with no resultRef renders as the distinct "no changes" outcome.
+    await sql`insert into automation_run (id, automation_id, site_id, trigger_type, status, summary, credits_used, queued_at, finished_at)
+              values ('e2e-run-2', ${auto.id}, ${SITE_ID}, 'cron', 'succeeded', 'Everything was already clean.', 5, now() - interval '1 minute', now())`;
 
     await page.goto(sitePath(SLUG, "automate/automations?tab=runs"));
-    await expect(page.getByRole("cell", { name: /Fix broken links/ })).toBeVisible();
     await expect(page.getByText("agent exploded (e2e fixture)")).toBeVisible();
     await expect(page.getByText("failed", { exact: true })).toBeVisible();
+    await expect(page.getByText("no changes", { exact: true })).toBeVisible();
+  });
+
+  test("clicking a run opens the detail view with prompt, files, and summary", async ({
+    page,
+  }) => {
+    const [auto] =
+      await sql`select id from automation where site_id = ${SITE_ID} and catalog_key = 'fix-broken-links'`;
+    await sql`delete from automation_run where site_id = ${SITE_ID}`;
+    await sql`insert into automation_run (id, automation_id, site_id, trigger_type, status, result_ref, summary, prompt, changed_files, credits_used, queued_at, started_at, finished_at)
+              values ('e2e-run-3', ${auto.id}, ${SITE_ID}, 'manual', 'succeeded', 'abc1234def', 'Fixed one broken link in the intro.', 'Find internal links that are broken and fix them.', ${sql.json(["index.mdx", "quickstart.mdx"])}, 12, now(), now(), now())`;
+
+    await page.goto(sitePath(SLUG, "automate/automations?tab=runs"));
+    await page.getByRole("link", { name: "Fix broken links" }).click();
+    await expect(page).toHaveURL(/\/runs\/e2e-run-3/);
+    await expect(page.getByRole("heading", { name: "Fix broken links" })).toBeVisible();
+    await expect(page.getByText("Fixed one broken link in the intro.")).toBeVisible();
+    await expect(page.getByText("Changed files (2)")).toBeVisible();
+    await expect(page.getByText("index.mdx", { exact: true })).toBeVisible();
+    // The prompt is behind a disclosure.
+    await page.getByText("The exact instructions this run received").click();
+    await expect(page.getByText("Find internal links that are broken")).toBeVisible();
   });
 });

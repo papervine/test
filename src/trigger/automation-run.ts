@@ -95,7 +95,9 @@ export const automationRunTask = task({
 
     await db
       .update(automationRunTable)
-      .set({ status: "running", startedAt: new Date() })
+      // Keep the run's own copy of its instructions — config edits later must not
+      // rewrite history (the run-detail view shows this).
+      .set({ status: "running", startedAt: new Date(), prompt })
       .where(eq(automationRunTable.id, runId));
 
     const title =
@@ -159,6 +161,7 @@ export const automationRunTask = task({
       // "nothing needed doing" success with resultRef null.
       const session = await findOpenSession(siteRow.id, branch);
       const drafts = session ? await listDraftFiles(session.id) : [];
+      const changedFiles = drafts.map((d) => d.path);
       let resultRef: string | null = null;
       if (drafts.length === 0) {
         if (session) await discardSession(siteRow, branch);
@@ -171,7 +174,7 @@ export const automationRunTask = task({
         if (!published.ok) {
           await db
             .update(automationRunTable)
-            .set({ creditsUsed: credits, summary })
+            .set({ creditsUsed: credits, summary, changedFiles })
             .where(eq(automationRunTable.id, runId));
           return fail(
             published.conflict
@@ -188,6 +191,7 @@ export const automationRunTask = task({
           status: "succeeded",
           resultRef,
           summary,
+          changedFiles,
           creditsUsed: credits,
           finishedAt: new Date(),
         })

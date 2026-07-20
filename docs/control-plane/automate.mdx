@@ -35,7 +35,11 @@ authoring pipeline a human editor uses, so every change is reviewable in Git.
 
 The page has two tabs: **Configure** (the catalog below) and **Automations** (the run history —
 every run with its status, what fired it, the resulting commit or PR, credits used, and the
-agent's summary or the error).
+agent's summary or the error). A run that finishes without needing any edits shows as
+**no changes** — a real outcome, not a failure. **Click a run** to open its detail view: the
+exact instructions the agent received (the run keeps its own copy, so later config edits don't
+rewrite history), the files it changed, the full agent summary, model and token usage, and the
+resulting commit or pull request.
 
 ### The catalog
 
