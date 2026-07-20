@@ -100,11 +100,15 @@ export function aiModel(id: string = aiModelId()): LanguageModel {
       throw new Error(
         `model "${id}" needs AI_BASE_URL (the URL of your OpenAI-compatible server, e.g. http://localhost:11434/v1).`,
       );
+    // `.chat()`, NOT the provider's default: @ai-sdk/openai now defaults to OpenAI's
+    // *Responses* API, which local runtimes don't implement — Ollama rejects it with
+    // `unknown input item type: "item_reference"`. Every OpenAI-compatible server
+    // implements /v1/chat/completions, which is what .chat() targets.
     return createOpenAI({
       name: provider,
       baseURL,
       apiKey: process.env.AI_LOCAL_API_KEY?.trim() || "local",
-    })(model);
+    }).chat(model);
   }
 
   if (routing() === "direct") {

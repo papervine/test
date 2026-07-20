@@ -3172,6 +3172,14 @@ Derived rules:
   self-hosting affordance, not the SaaS path — the honest caveat, documented at
   `/self-hosting/local-ai`, is that our AI is agentic and small models are unreliable at
   multi-step tool use.
+  *Endpoint gotcha:* the local model must be built with the provider's **`.chat()`**
+  factory, not its default — `@ai-sdk/openai` now defaults to OpenAI's *Responses* API,
+  which local runtimes don't implement (Ollama rejects it with
+  `unknown input item type: "item_reference"`). Every OpenAI-compatible server speaks
+  `/v1/chat/completions`. **Verified live 2026-07-20:** qwen3.5 (8B-class, Ollama, M3
+  Pro/36GB) ran the full read→reason→edit tool loop through our own `aiModel()` path and
+  correctly fixed a broken link in 38s at zero cost — with one malformed tool argument
+  that it self-corrected, which is the expected quality profile.
 - **"Vercel for everything until the BIG BILL"** — acceptable only because each managed
   dependency's escape hatch pre-exists, so the exit is an engineering task, not a
   re-architecture (see §2's custom-domain proxy plan for the pattern).

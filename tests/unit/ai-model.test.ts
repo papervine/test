@@ -95,6 +95,16 @@ describe("self-hosted (local) providers", () => {
     expect(() => aiModel("local/whatever")).toThrow(/AI_BASE_URL/);
   });
 
+  it("targets /chat/completions, not OpenAI's Responses API", () => {
+    // Regression: the provider's default is now the Responses API, which local
+    // runtimes don't implement — Ollama rejects it with
+    // `unknown input item type: "item_reference"`. Verified against a live Ollama
+    // before this assertion existed; the spec/model id is the observable proxy.
+    const m = aiModel("ollama/qwen3.5") as { modelId: string; specificationVersion: string };
+    expect(m.modelId).toBe("qwen3.5");
+    expect(m.specificationVersion).toBe("v3");
+  });
+
   it("isLocalProvider distinguishes self-hosted prefixes from vendors", () => {
     expect(isLocalProvider("ollama")).toBe(true);
     expect(isLocalProvider("lmstudio")).toBe(true);
