@@ -74,15 +74,25 @@ reasoning steps takes **many minutes**, where a hosted model takes well under on
 wobble-then-recover behavior rather than crisp precision, and expect both accuracy and
 patience to be tested as the task grows.
 
-That difference suggests a practical split rather than an all-or-nothing choice:
+That difference suggests choosing per surface rather than all-or-nothing:
 
-| Working on | Use | Why |
+| Surface | Local? | Why |
 |---|---|---|
-| Mechanics — does a run enqueue, draft, publish, meter, appear in history? | Local | Free and unlimited; model quality is irrelevant to whether the plumbing works |
-| Output quality — is this edit good enough to merge? | Hosted | Faster, and it's the model your readers' docs will actually be written by |
+| Assistant, editor agent | Comfortable | A handful of short calls per question — well within a laptop's reach |
+| Automation runs | Demanding | Up to two dozen reasoning steps over your whole site, with the model resident the entire time |
 
-Switching between them is two lines of environment configuration, so it costs nothing to
-keep both configured and flip as needed.
+<Warning>
+  **Give a laptop room to breathe.** A multi-gigabyte model held in memory for the length
+  of a long agentic run competes with everything else you're running — during development
+  that means your database and object storage containers too. We wedged a 36 GB machine's
+  container runtime this way: the containers' ports still accepted connections while
+  nothing behind them responded, and it took a restart to recover. If you want local
+  inference for automation runs, give it a machine that isn't also hosting your services,
+  or use a smaller model.
+</Warning>
+
+Switching between local and hosted is two lines of environment configuration, so it costs
+nothing to keep both configured and flip as the task demands.
 
 ## Credits and metering
 
