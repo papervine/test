@@ -83,7 +83,10 @@ export function dbRunStore(): RunStore {
   };
 }
 
-export type EnqueueDeps = { store: RunStore; executor: AutomationExecutor | null };
+export type EnqueueDeps = {
+  store: RunStore;
+  executor: Pick<AutomationExecutor, "enqueueRun"> | null;
+};
 
 export type EnqueueResult =
   | { ok: true; runId: string }
@@ -129,6 +132,46 @@ export async function enqueueAutomationRun(
     });
     return { ok: false, reason: "enqueue_failed", error: message };
   }
+}
+
+// Converge the executor's cron schedule to an automation's config and persist the
+// resulting schedule handle. Called after every config mutation (save / toggle /
+// delete). No executor → no-op (the page's "not configured" banner covers messaging).
+// Returns ok:false with the executor's error when convergence fails — the config is
+// already saved, so callers surface it as a warning, not a rollback.
+export async function syncAutomationSchedule(
+  auto: Pick<
+    AutomationRow,
+    "id" | "enabled" | "triggerType" | "cronExpression" | "executorScheduleId"
+  >,
+  deps: {
+    executor: Pick<AutomationExecutor, "syncCronSchedule"> | null;
+    persist: (scheduleId: string | null) => Promise<void>;
+  },
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  if (!deps.executor) return { ok: true };
+  try {
+    const scheduleId = await deps.executor.syncCronSchedule({
+      automationId: auto.id,
+      enabled: auto.enabled,
+      triggerType: auto.triggerType,
+      cronExpression: auto.cronExpression,
+      existingScheduleId: auto.executorScheduleId,
+    });
+    if (scheduleId !== auto.executorScheduleId) await deps.persist(scheduleId);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export function dbSchedulePersist(automationId: string) {
+  return async (scheduleId: string | null) => {
+    await db
+      .update(automation)
+      .set({ executorScheduleId: scheduleId, updatedAt: new Date() })
+      .where(eq(automation.id, automationId));
+  };
 }
 
 // The content_update fan-out, called from the sync success path. Must never throw —

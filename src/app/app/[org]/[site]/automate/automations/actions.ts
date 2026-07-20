@@ -13,13 +13,38 @@ import {
   validateAutomationConfig,
   type AutomationConfig,
 } from "@/lib/automations/catalog";
-import { isExecutorConfigured } from "@/lib/automations/executor";
-import { enqueueAutomationRun } from "@/lib/automations/runs";
+import { getExecutor, isExecutorConfigured } from "@/lib/automations/executor";
+import {
+  dbSchedulePersist,
+  enqueueAutomationRun,
+  syncAutomationSchedule,
+} from "@/lib/automations/runs";
 
-export type AutomationActionState = { ok?: boolean; error?: string };
+// `warning` = the action succeeded but a best-effort follow-up (schedule sync) didn't;
+// the UI toasts it without rolling anything back.
+export type AutomationActionState = { ok?: boolean; error?: string; warning?: string };
 export type SiteRef = { org: string; site: string };
 
 const automationsPath = (ref: SiteRef) => siteRoute(ref.org, ref.site, "automate/automations");
+
+// Converge the executor's cron schedule to the row's current config (SPEC §10.2:
+// intent in Postgres, schedule as projection). Returns a user-facing warning when the
+// executor rejected the sync — the config itself is already saved.
+async function syncScheduleFor(
+  siteId: string,
+  key: { id?: string; catalogKey?: string },
+): Promise<string | undefined> {
+  const where = key.id
+    ? and(eq(automation.id, key.id), eq(automation.siteId, siteId))
+    : and(eq(automation.siteId, siteId), eq(automation.catalogKey, key.catalogKey!));
+  const [row] = await db.select().from(automation).where(where).limit(1);
+  if (!row) return undefined;
+  const res = await syncAutomationSchedule(row, {
+    executor: getExecutor(),
+    persist: dbSchedulePersist(row.id),
+  });
+  return res.ok ? undefined : `Saved, but the schedule could not be updated: ${res.error}`;
+}
 
 export type SaveAutomationInput = AutomationConfig & {
   // Predefined: the catalog key (row is found/created per site). Custom: 'custom' plus
@@ -56,6 +81,7 @@ export async function saveAutomation(
     updatedAt: new Date(),
   };
 
+  let syncKey: { id?: string; catalogKey?: string };
   if (input.catalogKey === CUSTOM_KEY) {
     if (input.id) {
       const [existing] = await db
@@ -68,15 +94,18 @@ export async function saveAutomation(
         .update(automation)
         .set({ ...config, name: input.name?.trim() || null })
         .where(eq(automation.id, input.id));
+      syncKey = { id: input.id };
     } else {
+      const id = randomUUID();
       await db.insert(automation).values({
-        id: randomUUID(),
+        id,
         siteId: active.id,
         catalogKey: CUSTOM_KEY,
         name: input.name?.trim() || null,
         enabled: input.enabled ?? false,
         ...config,
       });
+      syncKey = { id };
     }
   } else {
     await db
@@ -93,10 +122,12 @@ export async function saveAutomation(
         targetWhere: sqlNotCustom(),
         set: config,
       });
+    syncKey = { catalogKey: input.catalogKey };
   }
 
+  const warning = await syncScheduleFor(active.id, syncKey);
   revalidatePath(automationsPath(ref));
-  return { ok: true };
+  return { ok: true, warning };
 }
 
 // Flip an automation on/off from the card switch. Toggling a predefined automation on
@@ -138,14 +169,33 @@ export async function setAutomationEnabled(
       });
   }
 
+  const warning = await syncScheduleFor(
+    active.id,
+    key.id ? { id: key.id } : { catalogKey: key.catalogKey },
+  );
   revalidatePath(automationsPath(ref));
-  return { ok: true };
+  return { ok: true, warning };
 }
 
 // Custom automations can be removed outright; predefined ones only disable.
 export async function deleteAutomation(ref: SiteRef, id: string): Promise<AutomationActionState> {
   const active = await findSite(ref.org, ref.site);
   if (!active) return { error: "No active site." };
+  // Deregister any schedule BEFORE the row goes away (the row holds the handle). A
+  // failure here is survivable: the automation-cron task self-cleans stale schedules.
+  const [row] = await db
+    .select()
+    .from(automation)
+    .where(and(eq(automation.id, id), eq(automation.siteId, active.id)))
+    .limit(1);
+  let warning: string | undefined;
+  if (row?.executorScheduleId) {
+    const res = await syncAutomationSchedule(
+      { ...row, enabled: false },
+      { executor: getExecutor(), persist: async () => undefined },
+    );
+    if (!res.ok) warning = `Deleted, but the schedule could not be removed: ${res.error}`;
+  }
   await db
     .delete(automation)
     .where(
@@ -156,7 +206,7 @@ export async function deleteAutomation(ref: SiteRef, id: string): Promise<Automa
       ),
     );
   revalidatePath(automationsPath(ref));
-  return { ok: true };
+  return { ok: true, warning };
 }
 
 // The manual "run now" trigger (SPEC §10.2) — also how an automation is tested.

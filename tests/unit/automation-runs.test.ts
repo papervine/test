@@ -37,7 +37,7 @@ function memStore(automations: Array<Partial<AutomationRow>> = []) {
   return { store, runs };
 }
 
-const okExecutor = (): AutomationExecutor & { enqueued: string[] } => {
+const okExecutor = (): Pick<AutomationExecutor, "enqueueRun"> & { enqueued: string[] } => {
   const enqueued: string[] = [];
   return {
     enqueued,
@@ -48,7 +48,7 @@ const okExecutor = (): AutomationExecutor & { enqueued: string[] } => {
   };
 };
 
-const failingExecutor: AutomationExecutor = {
+const failingExecutor: Pick<AutomationExecutor, "enqueueRun"> = {
   async enqueueRun() {
     throw new Error("cloud says no");
   },

@@ -4,14 +4,28 @@
 // degrade to a visible "not configured" state, never throw on a render path (the same
 // no-DB discipline as the renderer). No repo gate may require a live executor.
 
+export type CronSyncInput = {
+  automationId: string;
+  enabled: boolean;
+  triggerType: string;
+  cronExpression: string | null;
+  // The schedule handle currently stored on the automation row (if any).
+  existingScheduleId: string | null;
+};
+
 export type AutomationExecutor = {
   // Enqueue the background run for an already-persisted automation_run row. Returns
   // the executor's correlation id (Trigger.dev run_… id).
   enqueueRun(input: { runId: string }): Promise<{ executorRunId: string }>;
+  // Converge the executor's cron schedule to the automation's config (register,
+  // reschedule, or deregister as needed). Returns the schedule id the row should
+  // store — null when no schedule should exist.
+  syncCronSchedule(input: CronSyncInput): Promise<string | null>;
 };
 
-// The Trigger.dev task id the adapter enqueues (defined in src/trigger/).
+// The Trigger.dev task ids the adapter targets (defined in src/trigger/).
 export const AUTOMATION_RUN_TASK_ID = "automation-run";
+export const AUTOMATION_CRON_TASK_ID = "automation-cron";
 
 // Env is read per-call, not at module load, so tests and long-lived dev servers see
 // changes without a module-cache reset (the collab-secret lesson).
@@ -28,6 +42,27 @@ export function getExecutor(): AutomationExecutor | null {
       const { tasks } = await import("@trigger.dev/sdk/v3");
       const handle = await tasks.trigger(AUTOMATION_RUN_TASK_ID, { runId });
       return { executorRunId: handle.id };
+    },
+    async syncCronSchedule(input) {
+      const { schedules } = await import("@trigger.dev/sdk/v3");
+      const wanted =
+        input.enabled && input.triggerType === "cron" && !!input.cronExpression?.trim();
+      if (!wanted) {
+        if (input.existingScheduleId) {
+          // Tolerate an already-gone schedule: convergence, not bookkeeping.
+          await schedules.del(input.existingScheduleId).catch(() => undefined);
+        }
+        return null;
+      }
+      // deduplicationKey = automation id makes create an upsert: re-saving a config
+      // reschedules the same schedule instead of leaking a second one.
+      const schedule = await schedules.create({
+        task: AUTOMATION_CRON_TASK_ID,
+        cron: input.cronExpression!.trim(),
+        externalId: input.automationId,
+        deduplicationKey: input.automationId,
+      });
+      return schedule.id;
     },
   };
 }

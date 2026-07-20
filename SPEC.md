@@ -1825,6 +1825,20 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   starter has no write creds. Publish is the one seam still unverified end-to-end
 >   from a run (its git mechanics are unit-tested); it needs the GitHub App or a
 >   PAT-connected repo in dev.
+> **Status — slice 2a landed (2026-07-19): cron scheduling.** Schedules live on the
+> executor as a projection (`schedules.create` with `deduplicationKey` = automation id
+> → idempotent upsert; `externalId` = automation id), registered/deregistered by
+> `syncAutomationSchedule` from every config mutation (save / toggle / delete —
+> failures surface as action *warnings*, config stays saved). The `automation-cron`
+> `schedules.task` re-checks intent in Postgres on every tick — a tick for a
+> deleted/disabled/re-triggered automation self-cleans its own schedule — then
+> enqueues a normal run with `triggerRef = cron-<tick timestamp>` (redelivered ticks
+> dedupe). Verified in dev via simulated ticks: enqueue→chained agent run, duplicate
+> tick → `duplicate`, stale tick → `stale schedule`. *Unverified:* real
+> `schedules.create` registration from the app actions — the dev Next app has no
+> `TRIGGER_SECRET_KEY` yet (grab the `tr_dev_…` key from the Trigger.dev dashboard;
+> that also unlocks run-now/content_update enqueues from the dev app).
+>
 > - *Follow-ups:* verify run→publish with real write creds; mint a durable
 >   `AI_GATEWAY_API_KEY` for the deployed executor (OIDC expires); cron scheduling (Trigger.dev
 >   schedules API — `executorScheduleId` is ready for it) and code-change webhooks are

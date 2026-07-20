@@ -99,7 +99,8 @@ export function AutomationConfigDialog({
         toast.error(res.error);
         return;
       }
-      toast.success(enable ? `${isCustom ? name : view.title} turned on` : "Automation saved");
+      if (res.warning) toast.warning(res.warning);
+      else toast.success(enable ? `${isCustom ? name : view.title} turned on` : "Automation saved");
       onOpenChange(false);
       router.refresh();
     });

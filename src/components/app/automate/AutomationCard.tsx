@@ -39,6 +39,7 @@ export function AutomationCard({ view, siteRef }: { view: AutomationView; siteRe
         toast.error(res.error);
         return;
       }
+      if (res.warning) toast.warning(res.warning);
       router.refresh();
     });
   }
