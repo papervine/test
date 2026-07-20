@@ -18,6 +18,8 @@ import {
 import { CATALOG, type CreditRateTable, type PlanEntitlements } from "./catalog";
 import {
   authorizeAiDecision,
+  compGrantPeriod,
+  periodKey,
   planDebits,
   rateTokensToCredits,
   trialEndDate,
@@ -94,6 +96,112 @@ export async function startTrial(organizationId: string): Promise<void> {
   } catch (err) {
     console.warn("[billing] startTrial failed (org will resolve to Free):", err);
   }
+}
+
+/**
+ * Platform-admin comp: grant an org a paid plan for free (SPEC §10 Billing, support
+ * lever). Writes a NON-Stripe active subscription — the exact shape the dev seed creates
+ * and the rest of the system already understands: getBillingLookup resolves entitlements
+ * from the pinned plan version, setPlanCancelation can downgrade it, and the expireTrials
+ * sweep finalizes it if time-boxed. `months` null → indefinite (never swept); N → lapses
+ * to Free after ~N months. Grants the plan's included monthly credits fresh for the
+ * current period, with an actor-attributed ledger entry — idempotent per period via the
+ * grant_monthly unique index (re-comping the same month updates the grant, not double-
+ * grants). Only the platform-admin action calls this; it never touches Stripe.
+ */
+export async function grantPlan(input: {
+  organizationId: string;
+  planKey: string;
+  months: number | null;
+  actorUserId: string;
+  reason: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  // Free/trial aren't comps: Free is a downgrade (setPlanCancelation), trial is the
+  // signup lifecycle. Guard here too, not just in the picker.
+  if (input.planKey === "free" || input.planKey === "trial")
+    return { ok: false, error: "Comp a paid plan — use downgrade for Free." };
+  const [version] = await db
+    .select({
+      id: billingPlanVersion.id,
+      includedMonthlyCredits: billingPlanVersion.includedMonthlyCredits,
+    })
+    .from(billingPlanVersion)
+    .where(eq(billingPlanVersion.planKey, input.planKey))
+    .orderBy(desc(billingPlanVersion.version))
+    .limit(1);
+  if (!version)
+    return { ok: false, error: `No published version for plan "${input.planKey}".` };
+
+  const now = new Date();
+  const { periodStart, periodEnd, cancelAtPeriodEnd } = compGrantPeriod(now, input.months);
+  const credits = version.includedMonthlyCredits;
+
+  // Pin the comped plan version. stripeSubscriptionId stays NULL — that's what marks this
+  // a non-Stripe (comped) sub that the sweep, not a Stripe webhook, will finalize.
+  await db
+    .insert(billingSubscription)
+    .values({
+      organizationId: input.organizationId,
+      planVersionId: version.id,
+      status: "active",
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      cancelAtPeriodEnd,
+      trialEndsAt: null,
+    })
+    .onConflictDoUpdate({
+      target: billingSubscription.organizationId,
+      set: {
+        planVersionId: version.id,
+        status: "active",
+        stripeSubscriptionId: null,
+        currentPeriodStart: periodStart,
+        currentPeriodEnd: periodEnd,
+        cancelAtPeriodEnd,
+        trialEndsAt: null,
+        updatedAt: now,
+      },
+    });
+
+  // Fresh monthly grant for the current period (bucket=monthly so it spends and expires
+  // like real plan credits). Upsert on the per-period unique index so re-comping the same
+  // month updates the grant rather than violating it. Enterprise (0 included) skips the
+  // ledger row but still resets the balance below.
+  if (credits > 0) {
+    await db
+      .insert(creditLedger)
+      .values({
+        id: randomUUID(),
+        organizationId: input.organizationId,
+        delta: credits,
+        kind: "grant_monthly",
+        bucket: "monthly",
+        periodKey: periodKey(now),
+        expiresAt: periodEnd,
+        actorUserId: input.actorUserId,
+        reason: input.reason,
+      })
+      .onConflictDoUpdate({
+        target: [creditLedger.organizationId, creditLedger.kind, creditLedger.periodKey],
+        targetWhere: sql`${creditLedger.kind} = 'grant_monthly'`,
+        set: {
+          delta: credits,
+          expiresAt: periodEnd,
+          actorUserId: input.actorUserId,
+          reason: input.reason,
+        },
+      });
+  }
+  // Set the monthly balance to the comped plan's credits (authoritative reset — a comp is
+  // "here's your plan, fresh"); leave trial/pack buckets untouched.
+  await db
+    .insert(creditBalance)
+    .values({ organizationId: input.organizationId, monthlyCredits: credits })
+    .onConflictDoUpdate({
+      target: creditBalance.organizationId,
+      set: { monthlyCredits: credits, updatedAt: now },
+    });
+  return { ok: true };
 }
 
 /** One read joining subscription + pinned plan version + balance into the pure core's

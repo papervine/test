@@ -8,12 +8,13 @@ docs and OpenAPI spec. It is an agentic "Ask Assistant": the model *navigates* t
 find answers, cites its sources, and admits when it doesn't know.
 
 <Info>
-  A first slice is built: an agentic `/api/assistant` route (Claude via the Vercel AI SDK,
-  calling `searchDocs` / `readPage` / `listPages` / `searchApi` tools), the slide-out panel,
+  A first slice is built: an agentic `/api/assistant` route (the Vercel AI SDK calling
+  `searchDocs` / `readPage` / `listPages` / `searchApi` tools), the slide-out panel,
   the navbar **Ask Assistant** button, the `Cmd/Ctrl-I` shortcut, and the `?assistant=` deep
   link. A dedicated Sources citation UI, multi-modal attachments, and an embeddings-backed
-  `searchDocs` are in progress. Bring your own `ANTHROPIC_API_KEY` — without it the endpoint
-  returns a graceful `503` and the panel is unavailable.
+  `searchDocs` are in progress. The model is configurable (see **Model & routing** below) —
+  without a configured AI route the endpoint returns a graceful `503` and the panel is
+  unavailable.
 </Info>
 
 ## Agentic retrieval, not single-shot RAG
@@ -28,7 +29,7 @@ already has — the content loader, the navigation tree, [search](/features/sear
 [OpenAPI pipeline](/features/api-playground):
 
 ```
-User question ──▶ /api/assistant  (Vercel AI SDK streamText, Claude)
+User question ──▶ /api/assistant  (Vercel AI SDK streamText, configured model)
                     │  loop: the model calls tools until it can answer
                     ├─ search_docs(query)   → search index (titles / headings / body)
                     ├─ read_page(slug)      → full MDX for a page
@@ -51,12 +52,24 @@ Why tools instead of pure top-`k`:
   later without changing the tool contract.
 </Note>
 
-### Model
+### Model & routing
 
-The assistant runs **Claude via the Vercel AI SDK** (`@ai-sdk/anthropic`):
+The model and how it's reached are **configuration, not code** — set via environment,
+resolved in one place (`src/lib/ai-model.ts`) that both the assistant and the editor agent
+use. Papervine isn't tied to any single provider:
 
-- **`claude-sonnet-4-6`** by default, tuned for cost and latency.
-- **`claude-opus-4-8`** as an optional higher-quality tier.
+- **`PAPERVINE_AI_MODEL`** — a `provider/model` id (e.g. `anthropic/claude-haiku-4-5`,
+  `google/gemini-3.1-flash-lite`, `openai/gpt-5-nano`).
+- **`AI_ROUTING=gateway`** (default) — route through the **Vercel AI Gateway**: one key
+  (`AI_GATEWAY_API_KEY`, or Vercel OIDC when deployed there) unlocks nearly every provider
+  and model without per-provider SDKs.
+- **`AI_ROUTING=direct`** — bypass the gateway and call a provider's SDK **directly** with
+  that provider's own key (`ANTHROPIC_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`,
+  `OPENAI_API_KEY`). Use this to bring your own keys or avoid the gateway entirely.
+
+Because the assistant is agentic (it makes several model calls per question), pick a model
+that's both capable at tool use and not rate-limited by your provider tier. See
+`.env.example` for the documented defaults and trade-offs.
 
 ### Current-page context
 

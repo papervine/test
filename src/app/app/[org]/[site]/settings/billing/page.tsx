@@ -1,7 +1,8 @@
-import { ChevronRight, Check, Plus, ArrowUpRight } from "lucide-react";
+import { ChevronRight, Check, Plus, ArrowUpRight, Timer } from "lucide-react";
 import Link from "next/link";
 import { requireSite } from "@/lib/dashboard-context";
 import { canSee } from "@/lib/features";
+import { CATALOG } from "@/lib/billing/catalog";
 import {
   deriveBillingState,
   getBillingSummary,
@@ -40,6 +41,12 @@ export default async function BillingSettingsPage({
     summary,
     new Date(),
   );
+
+  // During the trial, the user has all-features (Pro-level) access — badge that tier's
+  // card "Trialing until <date>" so they see what they're sampling (catalog decides the
+  // tier via trial.representsPlanKey).
+  const trialTierKey = CATALOG.trial.representsPlanKey;
+  const trialEndLabel = trial.state === "active" ? dateFmt.format(trial.endsAt) : null;
 
   const statusLabel =
     trial.state === "active"
@@ -113,11 +120,32 @@ export default async function BillingSettingsPage({
         {offers.map((offer) => {
           // Feature bullets come from the shared plan content (same copy as /pricing).
           const content = PLAN_TIER_BY_KEY[offer.planKey as PlanKey];
+          // The tier the active trial is sampling gets an amber outline + badge.
+          const isTrialTier = trial.state === "active" && offer.planKey === trialTierKey;
           return (
             <div
               key={offer.planKey}
-              className="flex flex-col rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.03)] p-5"
+              className={`relative flex flex-col rounded-2xl border bg-[rgba(var(--ink-rgb),0.03)] p-5 ${
+                isTrialTier
+                  ? "border-amber-500/60"
+                  : "border-[rgba(var(--ink-rgb),0.08)]"
+              }`}
             >
+              {isTrialTier && (
+                // OPAQUE fill (amber tint composited over the solid page bg) so the
+                // card's amber outline is masked behind the pill instead of running
+                // through the text. z-10 keeps it above the border.
+                <span
+                  className="absolute -top-3 left-1/2 z-10 inline-flex -translate-x-1/2 items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-500/40 px-3 py-1 text-xs font-medium text-amber-500"
+                  style={{
+                    background:
+                      "linear-gradient(rgba(245,158,11,0.15), rgba(245,158,11,0.15)), var(--bg)",
+                  }}
+                >
+                  <Timer className="h-3.5 w-3.5" />
+                  Trialing until {trialEndLabel}
+                </span>
+              )}
               <div className="flex items-baseline justify-between">
                 <div className="text-lg font-semibold">{offer.planName}</div>
                 {offer.monthlyCents !== undefined && (

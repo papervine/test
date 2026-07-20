@@ -71,7 +71,7 @@ export const automationRunTask = task({
       return { ok: false as const, canceled: true };
     }
     if (!siteRow.repoOwner || !siteRow.repoName) return fail("site has no connected repo");
-    const provider = aiProviderStatus();
+    const provider = aiProviderStatus(aiModelId("automations"));
     if (!provider.ok) return fail(provider.error);
 
     const prompt = buildRunPrompt({
@@ -109,7 +109,9 @@ export const automationRunTask = task({
     const { branch } = await checkoutBranch(siteRow, { actorUserId: null });
 
     try {
-      const model = aiModelId();
+      // Automations write docs that land in Git — they may run a stronger model than
+      // the high-volume assistant (PAPERVINE_AI_MODEL_AUTOMATIONS, ai-model.ts).
+      const model = aiModelId("automations");
       // The agent drafts; it never publishes. Publishing is the deterministic apply
       // step below, governed by applyMode — so drop the session-management tools.
       const { write_page, edit_page, delete_page } = authoringTools(siteRow, branch);

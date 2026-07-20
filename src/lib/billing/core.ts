@@ -214,3 +214,27 @@ export function authorizeAiDecision(
 export function periodKey(date: Date): string {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
+
+// ---------- support comps (platform-admin plan grants) ----------
+
+/**
+ * The subscription period for a platform-admin plan comp (billing/store.grantPlan).
+ * `months` null/≤0 → an INDEFINITE comp: no period end, never swept — it runs until an
+ * admin downgrades it. A positive N → a TIME-BOXED comp: it lapses to Free after ~N
+ * months, finalized by the non-Stripe branch of the expireTrials sweep, which keys on
+ * cancelAtPeriodEnd=true + a past currentPeriodEnd. Months are 30-day approximations,
+ * matching the seed's period math (a comp isn't a billed invoice, so exactness is moot).
+ */
+export function compGrantPeriod(
+  now: Date,
+  months: number | null,
+): { periodStart: Date; periodEnd: Date | null; cancelAtPeriodEnd: boolean } {
+  if (!months || months <= 0) {
+    return { periodStart: now, periodEnd: null, cancelAtPeriodEnd: false };
+  }
+  return {
+    periodStart: now,
+    periodEnd: new Date(now.getTime() + Math.trunc(months) * 30 * 86_400_000),
+    cancelAtPeriodEnd: true,
+  };
+}
