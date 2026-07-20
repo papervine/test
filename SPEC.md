@@ -1835,6 +1835,22 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   fixed, so fix-broken-links has nothing left to draft. PAT gotcha for the docs:
 >   fine-grained tokens need **Contents: Read and write** (`createTree` 403s with the
 >   header naming the missing permission) and the org as resource owner.
+> **Measured cost per run (2026-07-20) — the scaling risk.** First real spend data,
+> from a day of dev testing against the 9-page `papervine/starter`: 42 runs consumed
+> **2.09M input / 77k output tokens** — averaging **~57k input tokens per run** on
+> haiku, ≈$0.10–0.12/run, and it exhausted a $5 gateway balance. The driver isn't the
+> content, it's the shape: an agentic loop makes ~15 model calls per run and each call
+> resends the accumulated conversation, so "read the docs, then edit" costs
+> pages × steps. **This does not scale linearly to real customers** — a 200-page site
+> would multiply the base, and every automation re-reads from scratch on every trigger.
+> Credit rating currently covers it (haiku: 795 credits ≈ $6.36 retail against a few
+> dollars of spend), but the levers to build before this is a paid product are:
+> (1) scope `content_update` runs to the **changed files** rather than the whole site;
+> (2) prefer targeted `searchDocs` over exhaustive `listPages`+`readPage` in the run
+> prompt; (3) a per-automation **daily run cap** (the reference caps at 500/day, failed
+> runs excluded) so a misconfigured every-minute cron can't drain an account;
+> (4) surface a credit-burn warning before the balance cliff.
+>
 > **Status — slice 2a landed (2026-07-19): cron scheduling.** Schedules live on the
 > executor as a projection (`schedules.create` with `deduplicationKey` = automation id
 > → idempotent upsert; `externalId` = automation id), registered/deregistered by
