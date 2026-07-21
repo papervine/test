@@ -13,6 +13,12 @@ export type PromptInput = {
   extras?: Record<string, unknown> | null;
   // What fired the run, e.g. "content_update @ 3f2c1a9" or "manual by <user>".
   triggerContext?: string | null;
+  // code_change runs only: the source push that triggered this run, so the agent knows
+  // which repo/files changed and can read them with its repo tools (SPEC §10.2).
+  change?: { repo: string; sha: string; changedFiles: string[] } | null;
+  // "owner/name" repos the agent may read this run (context repos + the trigger repo).
+  // Rendered so the agent knows what's available to read_repo_file / list_repo_files.
+  readableRepos?: string[] | null;
 };
 
 // Returns the task instructions for a run, or null when the automation has no
@@ -40,8 +46,21 @@ export function buildRunPrompt(input: PromptInput): string | null {
     if (extra) parts.push(`Additional instructions from the site owner:\n${extra}`);
   }
 
-  if (input.triggerContext?.trim()) {
+  if (input.change) {
+    const { repo, sha, changedFiles } = input.change;
+    const fileList =
+      changedFiles.length > 0
+        ? `The following files changed in that push — read them with read_repo_file to see the current code, then update any documentation they affect:\n${changedFiles.map((f) => `- ${f}`).join("\n")}`
+        : `The list of changed files is unavailable (large push); use list_repo_files to survey the repo and read what's relevant.`;
+    parts.push(`A push landed on the source repository ${repo} at commit ${sha}.\n${fileList}`);
+  } else if (input.triggerContext?.trim()) {
     parts.push(`This run was triggered by: ${input.triggerContext.trim()}.`);
+  }
+
+  if (input.readableRepos?.length) {
+    parts.push(
+      `You can read files from these repositories with list_repo_files and read_repo_file: ${input.readableRepos.join(", ")}. These are read-only context; make your documentation changes only through write_page / edit_page / delete_page.`,
+    );
   }
 
   return parts.join("\n\n");

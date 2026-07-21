@@ -23,6 +23,8 @@ import { assistantTools } from "../lib/assistant-tools";
 import { findOpenSession, listDraftFiles } from "../lib/draft-store";
 import { authorizeAi, recordAiUsage } from "../lib/billing/store";
 import { aiModel, aiModelId, aiProviderOptions, aiProviderStatus } from "../lib/ai-model";
+import { getInstallationToken } from "../lib/github-app";
+import { repoReadTools } from "../lib/automations/repo-tools";
 import { contentContext } from "@papervine/renderer/lib/content";
 
 export const automationRunTask = task({
@@ -74,12 +76,39 @@ export const automationRunTask = task({
     const provider = aiProviderStatus(aiModelId("automations"));
     if (!provider.ok) return fail(provider.error);
 
+    // Repos the agent may READ this run (SPEC §10.2): configured context repos plus, for
+    // a code_change run, the source repo whose push triggered it (or, for a manual run of
+    // a code_change automation, its trigger repos at default branch). Reading any of them
+    // needs the org's GitHub App installation token — the App is the access grant.
+    const change =
+      (run.triggerContext as { repo: string; sha: string; changedFiles: string[] } | null) ?? null;
+    const contextRepos = (auto.contextRepos as string[] | null) ?? [];
+    const triggerRepos = (auto.triggerRepos as string[] | null) ?? [];
+    const readableRepos = Array.from(
+      new Set([...contextRepos, ...(change ? [change.repo] : triggerRepos)]),
+    );
+
+    let repoToken: string | undefined;
+    if (readableRepos.length > 0) {
+      if (siteRow.githubInstallationId == null) {
+        return fail(
+          "this automation reads other repositories (code-change trigger or context repos), which requires the site to be connected with the GitHub App",
+        );
+      }
+      repoToken = await getInstallationToken(siteRow.githubInstallationId);
+      if (!repoToken) {
+        return fail("could not obtain a GitHub App token to read the source/context repositories");
+      }
+    }
+
     const prompt = buildRunPrompt({
       catalogKey: auto.catalogKey,
       name: auto.name,
       additionalPrompt: auto.additionalPrompt,
       extras: (auto.extras ?? null) as Record<string, unknown> | null,
       triggerContext: run.triggerRef ? `${run.triggerType} @ ${run.triggerRef}` : run.triggerType,
+      change,
+      readableRepos: readableRepos.length ? readableRepos : null,
     });
     if (!prompt) return fail("automation has no effective prompt");
 
@@ -117,9 +146,23 @@ export const automationRunTask = task({
       // The agent drafts; it never publishes. Publishing is the deterministic apply
       // step below, governed by applyMode — so drop the session-management tools.
       const { write_page, edit_page, delete_page } = authoringTools(siteRow, branch);
+      // Read-only tools over the automation's source/context repos, at the trigger sha
+      // for the pushed repo and default branch otherwise. Absent when nothing's readable.
+      const repoTools =
+        repoToken && readableRepos.length
+          ? repoReadTools({
+              token: repoToken,
+              allowed: readableRepos,
+              refFor: (r) =>
+                change && r.toLowerCase() === change.repo.toLowerCase() ? change.sha : undefined,
+            })
+          : {};
       const system =
         `You are running the "${title}" automation for a documentation site. ` +
         `Work autonomously: read the docs with the read tools (searchDocs, readPage, listPages), ` +
+        (readableRepos.length
+          ? `read the configured source/context repositories with list_repo_files and read_repo_file, `
+          : "") +
         `then make the required changes with write_page / edit_page / delete_page. ` +
         `Edits buffer on a draft branch; they are applied after you finish — never mention ` +
         `publishing. Make the smallest set of changes that completes the task. If nothing ` +
@@ -133,7 +176,7 @@ export const automationRunTask = task({
             model: aiModel(model),
             system,
             prompt,
-            tools: { ...assistantTools, write_page, edit_page, delete_page },
+            tools: { ...assistantTools, write_page, edit_page, delete_page, ...repoTools },
             stopWhen: stepCountIs(24),
             // Per-provider tuning (prompt caching, local-model reasoning) — ai-model.ts.
             providerOptions: aiProviderOptions(model),

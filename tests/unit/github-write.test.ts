@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
 import {
   getRef,
+  getRepoFile,
+  listRepoTree,
   createBranch,
   commitFiles,
   updateRef,
@@ -172,5 +174,73 @@ describe("openPullRequest", () => {
     });
     const res = await openPullRequest("o", "r", { head: "dup", base: "main", title: "t" });
     expect(res).toEqual({ number: 3, url: "https://gh/pr/3" });
+  });
+});
+
+// Read path — automations read source/context repos (SPEC §10.2).
+describe("getRepoFile", () => {
+  it("decodes a file's base64 content at a ref", async () => {
+    const calls = stubFetch(({ url }) => {
+      expect(url).toContain("/repos/o/r/contents/src/api.ts?ref=abc123");
+      return {
+        json: { type: "file", content: Buffer.from("export const x = 1;\n").toString("base64") },
+      };
+    });
+    const res = await getRepoFile("o", "r", "src/api.ts", "abc123", "tok");
+    expect(res).toEqual({ content: "export const x = 1;\n" });
+    expect(calls[0].url).toContain("ref=abc123");
+  });
+
+  it("strips a leading slash from the path", async () => {
+    const calls = stubFetch(() => ({ json: { type: "file", content: "" } }));
+    await getRepoFile("o", "r", "/README.md", "main");
+    expect(calls[0].url).toContain("/contents/README.md?");
+    expect(calls[0].url).not.toContain("/contents/%2F");
+  });
+
+  it("returns null for a directory, a 404, or missing content", async () => {
+    stubFetch(() => ({ json: [{ name: "a" }, { name: "b" }] })); // directory → array
+    expect(await getRepoFile("o", "r", "src", "main")).toBeNull();
+    stubFetch(() => ({ status: 404 }));
+    expect(await getRepoFile("o", "r", "nope", "main")).toBeNull();
+    stubFetch(() => ({ json: { type: "file" } })); // oversize → no content field
+    expect(await getRepoFile("o", "r", "huge.bin", "main")).toBeNull();
+  });
+});
+
+describe("listRepoTree", () => {
+  it("resolves ref → tree and returns only blob paths", async () => {
+    stubFetch(({ url }) => {
+      if (url.includes("/commits/")) return { json: { commit: { tree: { sha: "t1" } } } };
+      if (url.includes("/git/trees/t1")) {
+        return {
+          json: {
+            tree: [
+              { path: "src", type: "tree" },
+              { path: "src/a.ts", type: "blob" },
+              { path: "README.md", type: "blob" },
+            ],
+          },
+        };
+      }
+      return { status: 404 };
+    });
+    const res = await listRepoTree("o", "r", "main", "tok");
+    expect(res).toEqual(["src/a.ts", "README.md"]);
+  });
+
+  it("caps the number of paths returned", async () => {
+    stubFetch(({ url }) => {
+      if (url.includes("/commits/")) return { json: { commit: { tree: { sha: "t1" } } } };
+      const tree = Array.from({ length: 20 }, (_, i) => ({ path: `f${i}.md`, type: "blob" }));
+      return { json: { tree } };
+    });
+    const res = await listRepoTree("o", "r", "main", undefined, { limit: 5 });
+    expect(res).toHaveLength(5);
+  });
+
+  it("returns null when the ref or tree can't be resolved", async () => {
+    stubFetch(() => ({ status: 404 }));
+    expect(await listRepoTree("o", "r", "bogus")).toBeNull();
   });
 });

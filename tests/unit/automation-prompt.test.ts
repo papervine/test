@@ -58,4 +58,32 @@ describe("buildRunPrompt", () => {
     });
     expect(p).toContain("triggered by: content_update @ 3f2c1a9");
   });
+
+  it("renders a code_change push with its changed files", () => {
+    const p = buildRunPrompt({
+      catalogKey: "update-from-code-changes",
+      change: { repo: "acme/api", sha: "abc123", changedFiles: ["src/widgets.ts", "src/auth.ts"] },
+    })!;
+    expect(p).toContain("push landed on the source repository acme/api at commit abc123");
+    expect(p).toContain("src/widgets.ts");
+    expect(p).toContain("src/auth.ts");
+  });
+
+  it("handles a truncated (empty) changed-files list gracefully", () => {
+    const p = buildRunPrompt({
+      catalogKey: "update-from-code-changes",
+      change: { repo: "acme/api", sha: "abc123", changedFiles: [] },
+    })!;
+    expect(p).toContain("changed files is unavailable");
+    expect(p).toContain("list_repo_files");
+  });
+
+  it("lists readable repos when provided", () => {
+    const p = buildRunPrompt({
+      catalogKey: "update-from-code-changes",
+      readableRepos: ["acme/api", "acme/sdk"],
+    })!;
+    expect(p).toContain("acme/api, acme/sdk");
+    expect(p).toContain("read-only context");
+  });
 });

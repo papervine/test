@@ -523,6 +523,14 @@ export const automationRun = pgTable(
     // the next trigger skip entirely when nothing has changed since the last success
     // (SPEC §10.2 cost guardrails).
     sourceSha: text("source_sha"),
+    // code_change runs only: the triggering push the task can't otherwise reconstruct
+    // from runId → row. `{ repo, sha, changedFiles }` — feeds the run prompt (what
+    // changed) and scopes the trigger-repo read tool to the right ref (SPEC §10.2).
+    triggerContext: jsonb("trigger_context").$type<{
+      repo: string;
+      sha: string;
+      changedFiles: string[];
+    }>(),
     // What the run produced through the authoring backend: a commit sha or PR URL;
     // null = the run decided no changes were needed (a valid success).
     resultRef: text("result_ref"),

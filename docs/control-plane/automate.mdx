@@ -66,15 +66,26 @@ card's toggle on creates it with recommended defaults; the gear opens its settin
 Every automation — predefined or custom — shares one config schema:
 
 - **Trigger** — `Content update` (fires when a sync publishes new content), `Custom schedule`
-  (a cron expression, with presets), or `Code change` (when a PR merges in a connected source
-  repository). Each catalog entry offers the triggers that make sense for it and recommends
-  one.
+  (a cron expression, with presets), or `Code change` (fires when a push lands on a **trigger
+  repository** — typically a product's source repo whose merged PRs should update the docs).
+  Each catalog entry offers the triggers that make sense for it and recommends one.
+- **Trigger repositories** (`Code change` only) — the `owner/name` source repos whose pushes
+  fire the automation. When one is pushed, the run is told which files changed and can read
+  them to update the affected documentation.
 - **Apply mode** — `Automatically` commits changes directly to the deploy branch;
   `Require review` opens a pull request instead.
-- **Context repositories** — extra repositories cloned read-only into the run environment so
-  the agent can consult their code. They never trigger the automation.
+- **Context repositories** — extra `owner/name` repositories the run may read (never trigger
+  it), so the agent can consult their code while writing docs.
 - **Additional prompt** — instructions appended to the automation's base prompt on every run
   (voice, formatting rules, edge cases to watch for).
+
+<Note>
+  **Code-change triggers and context repositories need the GitHub App.** Push webhooks only
+  arrive from the App, and the run reads other repositories with the App's installation token
+  — a personal-access-token or public connection has neither. Connect the site with the GitHub
+  App to use these; the automation's configuration form says so if it isn't. The repositories
+  are read-only to the agent: its only way to change anything is the documentation itself.
+</Note>
 
 Enabled automations also expose **Run now** — a manual trigger, which is also how you test one.
 

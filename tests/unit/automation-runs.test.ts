@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   DAILY_RUN_CAP,
   enqueueAutomationRun,
+  fireCodeChangeAutomations,
   fireContentUpdateAutomations,
   type AutomationRow,
   type RunStore,
@@ -13,6 +14,7 @@ import type { AutomationExecutor } from "@/lib/automations/executor";
 function memStore(
   automations: Array<Partial<AutomationRow>> = [],
   siteShas: Record<string, string | null> = {},
+  orgBySite: Record<string, string> = {},
 ) {
   const runs: Array<Record<string, unknown>> = [];
   const store: RunStore = {
@@ -52,6 +54,16 @@ function memStore(
     async listEnabledAutomations(siteId, triggerType) {
       return automations.filter(
         (a) => a.siteId === siteId && a.enabled && a.triggerType === triggerType,
+      ) as AutomationRow[];
+    },
+    async listCodeChangeAutomationsForRepo(repo, organizationId) {
+      const repoLc = repo.toLowerCase();
+      return automations.filter(
+        (a) =>
+          a.enabled &&
+          a.triggerType === "code_change" &&
+          orgBySite[a.siteId as string] === organizationId &&
+          ((a.triggerRepos as string[] | undefined) ?? []).some((t) => t.toLowerCase() === repoLc),
       ) as AutomationRow[];
     },
   };
@@ -272,6 +284,7 @@ describe("fireContentUpdateAutomations", () => {
       insertRun: down,
       updateRun: down,
       listEnabledAutomations: down,
+      listCodeChangeAutomationsForRepo: down,
       countBillableRunsSince: down,
       lastSucceededSourceSha: down,
       siteSourceSha: down,
@@ -292,6 +305,90 @@ describe("fireContentUpdateAutomations", () => {
       },
     };
     await fireContentUpdateAutomations("site-1", "sha", { store: spyStore, executor: null });
+    expect(queried).toBe(false);
+  });
+});
+
+describe("fireCodeChangeAutomations", () => {
+  // Two orgs; org-1 has a matching code_change automation, org-2 references the same
+  // repo but is a different tenant and must NOT be triggered by org-1's push.
+  const autos = [
+    {
+      id: "c1",
+      siteId: "site-1",
+      catalogKey: "update-from-code-changes",
+      enabled: true,
+      triggerType: "code_change",
+      triggerRepos: ["acme/API"], // stored with different casing than the push
+    },
+    // disabled / wrong-trigger / different-repo on the same org — must not fire.
+    {
+      id: "c2",
+      siteId: "site-1",
+      catalogKey: "update-from-code-changes",
+      enabled: false,
+      triggerType: "code_change",
+      triggerRepos: ["acme/api"],
+    },
+    {
+      id: "c3",
+      siteId: "site-1",
+      catalogKey: "update-from-code-changes",
+      enabled: true,
+      triggerType: "code_change",
+      triggerRepos: ["acme/other"],
+    },
+    // org-2's automation referencing the same repo.
+    {
+      id: "c4",
+      siteId: "site-2",
+      catalogKey: "update-from-code-changes",
+      enabled: true,
+      triggerType: "code_change",
+      triggerRepos: ["acme/api"],
+    },
+  ];
+  const orgBySite = { "site-1": "org-1", "site-2": "org-2" };
+  const change = { repo: "acme/api", sha: "sha-1", changedFiles: ["src/a.ts"] };
+
+  it("fires only the matching, enabled automation in the pushing org (case-insensitive)", async () => {
+    const { store, runs } = memStore(autos, {}, orgBySite);
+    const executor = okExecutor();
+    await fireCodeChangeAutomations("acme/api", "org-1", change, { store, executor });
+    expect(runs.map((r) => r.automationId)).toEqual(["c1"]);
+    expect(runs[0].triggerType).toBe("code_change");
+    expect(runs[0].triggerRef).toBe("sha-1");
+    expect(runs[0].triggerContext).toEqual(change);
+  });
+
+  it("does not cross-trigger another org referencing the same repo", async () => {
+    const { store, runs } = memStore(autos, {}, orgBySite);
+    await fireCodeChangeAutomations("acme/api", "org-2", change, {
+      store,
+      executor: okExecutor(),
+    });
+    expect(runs.map((r) => r.automationId)).toEqual(["c4"]);
+  });
+
+  it("re-firing the same push sha is a no-op (idempotent)", async () => {
+    const { store, runs } = memStore(autos, {}, orgBySite);
+    const deps = { store, executor: okExecutor() };
+    await fireCodeChangeAutomations("acme/api", "org-1", change, deps);
+    await fireCodeChangeAutomations("acme/api", "org-1", change, deps);
+    expect(runs).toHaveLength(1);
+  });
+
+  it("never throws and skips the query without an executor", async () => {
+    let queried = false;
+    const { store } = memStore(autos, {}, orgBySite);
+    const spy: RunStore = {
+      ...store,
+      listCodeChangeAutomationsForRepo: async (...a) => {
+        queried = true;
+        return store.listCodeChangeAutomationsForRepo(...a);
+      },
+    };
+    await fireCodeChangeAutomations("acme/api", "org-1", change, { store: spy, executor: null });
     expect(queried).toBe(false);
   });
 });

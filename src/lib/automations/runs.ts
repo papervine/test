@@ -15,6 +15,10 @@ export type AutomationRunRow = typeof automationRun.$inferSelect;
 
 export type RunTriggerType = "content_update" | "cron" | "code_change" | "manual";
 
+// The triggering push for a code_change run — the task reads it off the run row to build
+// its prompt and scope the trigger-repo read tool (SPEC §10.2).
+export type TriggerContext = { repo: string; sha: string; changedFiles: string[] };
+
 export type RunStore = {
   findRunByTrigger(
     automationId: string,
@@ -37,6 +41,7 @@ export type RunStore = {
     triggerType: RunTriggerType;
     triggerRef: string | null;
     sourceSha: string | null;
+    triggerContext?: TriggerContext | null;
   }): Promise<void>;
   updateRun(
     id: string,
@@ -55,6 +60,10 @@ export type RunStore = {
     >,
   ): Promise<void>;
   listEnabledAutomations(siteId: string, triggerType: RunTriggerType): Promise<AutomationRow[]>;
+  // Enabled code_change automations in `organizationId` whose triggerRepos include
+  // `repo` ("owner/name"). Org-scoped so two tenants that both reference the same public
+  // repo don't cross-trigger each other (SPEC §10.2).
+  listCodeChangeAutomationsForRepo(repo: string, organizationId: string): Promise<AutomationRow[]>;
 };
 
 export function dbRunStore(): RunStore {
@@ -128,6 +137,28 @@ export function dbRunStore(): RunStore {
           ),
         );
     },
+    async listCodeChangeAutomationsForRepo(repo, organizationId) {
+      // Pull the org's enabled code_change automations (few per org) and match the repo
+      // in JS, case-insensitively — GitHub repo names are case-insensitive and the user
+      // types triggerRepos freehand, so a jsonb `@>` exact match would miss casing.
+      const repoLc = repo.toLowerCase();
+      const rows = await db
+        .select({ automation })
+        .from(automation)
+        .innerJoin(site, eq(site.id, automation.siteId))
+        .where(
+          and(
+            eq(site.organizationId, organizationId),
+            eq(automation.enabled, true),
+            eq(automation.triggerType, "code_change"),
+          ),
+        );
+      return rows
+        .map((r) => r.automation)
+        .filter((a) =>
+          ((a.triggerRepos as string[] | null) ?? []).some((t) => t.toLowerCase() === repoLc),
+        );
+    },
   };
 }
 
@@ -162,7 +193,11 @@ export const DAILY_RUN_CAP = Number(process.env.AUTOMATION_DAILY_RUN_CAP ?? 500)
 // marked failed, so the failure is visible in run history rather than swallowed.
 export async function enqueueAutomationRun(
   auto: Pick<AutomationRow, "id" | "siteId" | "catalogKey">,
-  opts: { triggerType: RunTriggerType; triggerRef?: string | null },
+  opts: {
+    triggerType: RunTriggerType;
+    triggerRef?: string | null;
+    triggerContext?: TriggerContext | null;
+  },
   deps: EnqueueDeps = { store: dbRunStore(), executor: getExecutor() },
 ): Promise<EnqueueResult> {
   if (!deps.executor) return { ok: false, reason: "executor_unconfigured" };
@@ -205,6 +240,7 @@ export async function enqueueAutomationRun(
     triggerType: opts.triggerType,
     triggerRef,
     sourceSha,
+    triggerContext: opts.triggerContext ?? null,
   });
 
   try {
@@ -296,5 +332,37 @@ export async function fireContentUpdateAutomations(
     }
   } catch (err) {
     console.error(`[automations] content_update fan-out failed site=${siteId}:`, err);
+  }
+}
+
+// The code_change fan-out, called from the GitHub push webhook. `repo` is "owner/name"
+// of the pushed source repo; `organizationId` comes from the push's installation.id →
+// github_installation. Mirrors fireContentUpdateAutomations: never throws (a broken
+// automations layer can't be allowed to 500 the webhook), no-op without an executor,
+// idempotent per commit sha. The change context rides onto each run row so the task can
+// tell the agent what changed and read the trigger repo at that sha.
+export async function fireCodeChangeAutomations(
+  repo: string,
+  organizationId: string,
+  change: TriggerContext,
+  deps: EnqueueDeps = { store: dbRunStore(), executor: getExecutor() },
+): Promise<void> {
+  try {
+    if (!deps.executor) return;
+    const autos = await deps.store.listCodeChangeAutomationsForRepo(repo, organizationId);
+    for (const a of autos) {
+      const result = await enqueueAutomationRun(
+        a,
+        { triggerType: "code_change", triggerRef: change.sha, triggerContext: change },
+        deps,
+      );
+      if (!result.ok && result.reason === "enqueue_failed") {
+        console.error(`[automations] code_change enqueue failed automation=${a.id}: ${result.error}`);
+      } else if (!result.ok && result.reason === "daily_cap") {
+        console.warn(`[automations] daily run cap (${DAILY_RUN_CAP}) reached automation=${a.id}`);
+      }
+    }
+  } catch (err) {
+    console.error(`[automations] code_change fan-out failed repo=${repo}:`, err);
   }
 }

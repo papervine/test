@@ -69,6 +69,18 @@ export async function saveAutomation(
   const errors = validateAutomationConfig(input.catalogKey, input, { name: input.name });
   if (errors.length) return { error: errors.join(" ") };
 
+  // Code-change triggers and context repositories both read repos via the org's GitHub
+  // App installation (webhooks only fire from the App, and runs read repos with its
+  // token). A PAT/public site has neither, so require the App before saving one of
+  // these — otherwise the automation would fail every run (SPEC §10.2).
+  const needsApp = input.triggerType === "code_change" || !!input.contextRepos?.length;
+  if (needsApp && active.githubInstallationId == null) {
+    return {
+      error:
+        "Connect this site with the GitHub App to use code-change triggers or context repositories.",
+    };
+  }
+
   const config = {
     triggerType: input.triggerType,
     cronExpression: input.triggerType === "cron" ? (input.cronExpression ?? null) : null,

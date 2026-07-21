@@ -1888,6 +1888,28 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 > `TRIGGER_SECRET_KEY` yet (grab the `tr_dev_…` key from the Trigger.dev dashboard;
 > that also unlocks run-now/content_update enqueues from the dev app).
 >
+> **Status — slice 2b landed (2026-07-20): code-change triggers + context repos.**
+> The trigger matrix is complete. (1) `github.ts` gains read-only `getRepoFile` /
+> `listRepoTree` (plain-Node, Trigger-bundle-safe). (2) The push webhook, after its
+> site-sync loop, resolves `payload.installation.id → github_installation → org` and, in
+> `after()`, calls `fireCodeChangeAutomations(owner/repo, orgId, {repo,sha,changedFiles})`
+> — org-scoped so two tenants referencing the same public repo don't cross-trigger; runs
+> independent of site sync (a trigger repo need not be a synced site). Matching is
+> case-insensitive; idempotent per push sha; never throws (can't 500 the webhook). (3)
+> `automation_run.trigger_context` (jsonb, migration 0018) carries the push to the task,
+> which threads it into `buildRunPrompt` (what changed) and mounts read-only
+> `list_repo_files`/`read_repo_file` tools (`repo-tools.ts`) scoped to the automation's
+> context+trigger repos, reading the trigger repo at the push sha and context repos at
+> default branch, authenticated by the installation token. (4) Save-time guard: a
+> code_change automation (or any with contextRepos) requires `site.githubInstallationId`,
+> else a clear error. **Requires the GitHub App** — webhooks and repo reads both need it;
+> PAT/public sites can't use these triggers. Unit-tested throughout (fan-out matching +
+> org-scoping + idempotency with injectable store; github reads with mocked fetch; prompt
+> change-context); e2e proves the webhook 202s and org-resolves for a code_change repo no
+> site syncs (executor-blank ⇒ no run row, same degradation as content_update).
+> *Unverified live:* a real push → run needs the GitHub App installed in dev (same gap as
+> publish); the read tools are exercised only when a run has an installation token.
+>
 > - *Follow-ups:* verify run→publish with real write creds; mint a durable
 >   `AI_GATEWAY_API_KEY` for the deployed executor (OIDC expires); cron scheduling (Trigger.dev
 >   schedules API — `executorScheduleId` is ready for it) and code-change webhooks are

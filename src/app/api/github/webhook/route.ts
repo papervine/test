@@ -8,6 +8,7 @@ import {
   shouldSyncSite,
 } from "@/lib/github-webhook";
 import { runSync } from "@/lib/sync-runner";
+import { fireCodeChangeAutomations } from "@/lib/automations/runs";
 
 // The push sync runs in after() (below); give it real headroom so a large repo's sync
 // isn't killed mid-flight after we've already returned 202 — 60s sat right AT a big
@@ -79,11 +80,27 @@ export async function POST(req: NextRequest) {
     );
 
   const toSync = sites.filter((s) => shouldSyncSite(push, s));
-  if (toSync.length === 0) return new Response(null, { status: 204 });
 
-  // Run the syncs after responding so GitHub gets its fast 2xx. A webhook sync has no
-  // actor (it's a system sync); the push payload carries the head commit, so the runner
-  // skips its own commit lookup.
+  // Independently of site sync, this push may TRIGGER code_change automations whose
+  // `triggerRepos` include this repo (SPEC §10.2) — a source repo that no site syncs
+  // from. Resolve the push's installation → org so the fan-out is org-scoped (the App is
+  // the access grant; two tenants referencing the same public repo don't cross-trigger).
+  const installationId = payload.installation?.id as number | undefined;
+  let codeChangeOrgId: string | null = null;
+  if (installationId != null) {
+    const [inst] = await db
+      .select({ orgId: githubInstallation.organizationId })
+      .from(githubInstallation)
+      .where(eq(githubInstallation.installationId, installationId))
+      .limit(1);
+    codeChangeOrgId = inst?.orgId ?? null;
+  }
+
+  if (toSync.length === 0 && !codeChangeOrgId) return new Response(null, { status: 204 });
+
+  // Run the (potentially slow) sync + fan-out after responding so GitHub gets its fast
+  // 2xx. A webhook sync has no actor (system sync); the push carries the head commit, so
+  // the runner skips its own commit lookup.
   after(async () => {
     for (const s of toSync) {
       await runSync(s, {
@@ -92,7 +109,18 @@ export async function POST(req: NextRequest) {
         commit: { sha: push.headSha, message: push.headMessage },
       });
     }
+    if (codeChangeOrgId) {
+      const repo = `${push.owner}/${push.repo}`;
+      await fireCodeChangeAutomations(repo, codeChangeOrgId, {
+        repo,
+        sha: push.headSha,
+        changedFiles: push.changedPaths,
+      });
+    }
   });
 
-  return new Response(`syncing ${toSync.length} site(s)`, { status: 202 });
+  return new Response(
+    `syncing ${toSync.length} site(s)${codeChangeOrgId ? " + code_change fan-out" : ""}`,
+    { status: 202 },
+  );
 }

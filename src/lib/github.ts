@@ -125,6 +125,68 @@ export async function fetchLatestCommit(
   return { sha: data.sha, message: data.commit?.message ?? "" };
 }
 
+// ---- Read path for automations (SPEC §10.2 — code-change triggers + context repos) ---
+// An automation run may need to READ files from repos other than the docs repo — the
+// source repo whose push triggered it, or a context repo it was told to consult. These
+// power the agent's read_repo_file / list_repo_files tools. Same `token` seam (an
+// installation token for the org's GitHub App); same never-throw contract.
+
+// Read one file's text at a ref (branch or sha). Null on 404, a directory, or a file too
+// large for the contents API (>1MB — GitHub omits `content` there, and a doc-writing
+// agent has no use for a megabyte blob anyway).
+export async function getRepoFile(
+  owner: string,
+  name: string,
+  path: string,
+  ref: string,
+  token?: string,
+): Promise<{ content: string } | null> {
+  const clean = path.replace(/^\/+/, "");
+  const res = await fetch(
+    `${API}/repos/${owner}/${name}/contents/${clean.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(ref)}`,
+    { headers: ghHeaders(token) },
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  // A directory returns an array; only files carry base64 content.
+  if (Array.isArray(data) || data?.type !== "file" || typeof data.content !== "string") {
+    return null;
+  }
+  try {
+    return { content: Buffer.from(data.content, "base64").toString("utf8") };
+  } catch {
+    return null;
+  }
+}
+
+// List a repo's file paths at a ref (branch or sha), capped so a huge monorepo can't
+// blow the agent's context. Resolves ref → commit tree → recursive tree. Null on failure.
+export async function listRepoTree(
+  owner: string,
+  name: string,
+  ref: string,
+  token?: string,
+  opts: { limit?: number } = {},
+): Promise<string[] | null> {
+  const limit = opts.limit ?? 500;
+  const commitRes = await fetch(`${API}/repos/${owner}/${name}/commits/${encodeURIComponent(ref)}`, {
+    headers: ghHeaders(token),
+  });
+  if (!commitRes.ok) return null;
+  const treeSha: string | undefined = (await commitRes.json()).commit?.tree?.sha;
+  if (!treeSha) return null;
+  const treeRes = await fetch(`${API}/repos/${owner}/${name}/git/trees/${treeSha}?recursive=1`, {
+    headers: ghHeaders(token),
+  });
+  if (!treeRes.ok) return null;
+  const tree = (await treeRes.json())?.tree as Array<{ path: string; type: string }> | undefined;
+  if (!Array.isArray(tree)) return null;
+  return tree
+    .filter((e) => e.type === "blob" && typeof e.path === "string")
+    .map((e) => e.path)
+    .slice(0, limit);
+}
+
 // ---- Write path (the authoring backend, SPEC §9.2) ----------------------------------
 // These power "edit docs on a branch → commit/PR". They use the same `token` seam as
 // the read calls above, but the token must carry **write** scope: a GitHub App

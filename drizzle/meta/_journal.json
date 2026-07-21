@@ -127,6 +127,13 @@
       "when": 1784536569346,
       "tag": "0017_safe_madame_web",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784592971408,
+      "tag": "0018_secret_korath",
+      "breakpoints": true
     }
   ]
 }
