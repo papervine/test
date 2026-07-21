@@ -174,10 +174,22 @@ export function aiConfigured(): boolean {
 // namespaced by provider and ignored by the others, so one object serves every route.
 export function aiProviderOptions(id: string = aiModelId()) {
   const { provider } = splitModel(id);
+  // Is this model actually served through the Vercel AI Gateway? (Local providers force
+  // the direct openai-compatible path regardless of AI_ROUTING — see aiModel.)
+  const viaGateway = routing() === "gateway" && !isLocalProvider(provider);
   return {
-    // Prompt caching: an agentic loop resends its whole conversation each step, so
-    // caching the stable prefix bills those resends at a fraction of the input rate.
-    anthropic: { cacheControl: { type: "ephemeral" as const, ttl: "1h" as const } },
+    // Prompt caching: an agentic loop resends its whole conversation each step, so caching
+    // the stable prefix bills those resends at a fraction of the input rate. Two routes,
+    // mutually exclusive so Anthropic never gets both auto- AND hand-placed markers:
+    //  - Through the gateway, `caching: 'auto'` is provider-agnostic — implicit for
+    //    Google/OpenAI/DeepSeek, and the gateway auto-injects cache_control breakpoints for
+    //    Anthropic (tail + stable prefix, purpose-built for tool-use loops). So caching keeps
+    //    working whatever model PAPERVINE_AI_MODEL* points at — not just Anthropic.
+    //  - Direct (AI_ROUTING=direct): the gateway isn't in the path, so set Anthropic's own
+    //    ephemeral cache_control here. Ignored by every non-Anthropic direct route.
+    ...(viaGateway
+      ? { gateway: { caching: "auto" as const } }
+      : { anthropic: { cacheControl: { type: "ephemeral" as const, ttl: "1h" as const } } }),
     // Reasoning OFF for local models. Modern open models (Qwen3, Gemma, DeepSeek-R1…)
     // think before answering, and on laptop hardware that dominates everything:
     // measured 40s with thinking vs 1.9s without for the same one-sentence answer —

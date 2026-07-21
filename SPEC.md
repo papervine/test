@@ -988,8 +988,10 @@ User question ──▶ /api/assistant (Vercel AI SDK streamText, model via ai-m
     (~10× less) is `AI_ROUTING=direct` + a Google AI Studio key →
     `google/gemini-3.1-flash-lite`, which sidesteps the gateway's free-tier limits entirely
     (Google's own free/pay-as-you-go pricing). See the two documented model lines +
-    routing block in `.env.example`. Prompt caching (provider-level; explicit for Anthropic
-    via `prepareStep`, automatic for Gemini/OpenAI) is a noted follow-up for token savings.
+    routing block in `.env.example`. Prompt caching is wired (2026-07-21): on the gateway
+    route `aiProviderOptions` sets `gateway.caching:'auto'` — provider-agnostic (implicit for
+    Gemini/OpenAI, auto-injected `cache_control` for Anthropic), so token savings hold for any
+    model; direct route keeps `anthropic.cacheControl`. See §10.2 guardrails note.
     See the `claude-api` skill for current Anthropic model IDs/patterns.
 - **Why tools over pure top-k:** multi-step retrieval handles vague questions, lets the
   model read a whole page when a snippet isn't enough, and unifies with §8.5.
@@ -1860,9 +1862,16 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >    "runs that fail do not count"); we count only runs that *reached the model*, so a
 >    failing automation may retry while a spending one cannot run away. Manual Run-now
 >    is never capped.
-> 3. **Prompt caching** — `providerOptions.anthropic.cacheControl` (ephemeral, 1h) on
->    the agent loop, so the constant prefix resent across ~24 steps bills at cache-read
->    rates. Provider-specific and ignored elsewhere, so it's safe on every route.
+> 3. **Prompt caching** — the constant prefix resent across ~24 agent steps bills at
+>    cache-read rates. **Provider-agnostic since 2026-07-21:** on the gateway route
+>    `aiProviderOptions` sets `gateway.caching:'auto'` (implicit for Google/OpenAI/DeepSeek;
+>    the gateway auto-injects Anthropic `cache_control` breakpoints — tail + stable prefix,
+>    built for tool-use loops), so caching survives *any* `PAPERVINE_AI_MODEL*` choice, not
+>    just Anthropic. The direct route (`AI_ROUTING=direct`) still uses
+>    `anthropic.cacheControl` (ephemeral, 1h); the two are mutually exclusive so Anthropic
+>    never gets both auto- and hand-placed markers. This retires the §"AI assistant" caching
+>    follow-up and unlocks cheap non-Anthropic automations models (e.g.
+>    `google/gemini-2.5-flash-lite` at $0.10/$0.40) without losing the cache discount.
 >
 > *Deliberately not a minimum cron interval:* the reference documents no floor (only
 > "queues within 10 minutes of the scheduled time" + the 500/day cap), and a per-minute

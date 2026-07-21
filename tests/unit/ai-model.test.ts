@@ -123,11 +123,42 @@ describe("self-hosted (local) providers", () => {
     expect(optedIn.openai).toBeUndefined();
   });
 
-  it("always carries the Anthropic prompt-cache option, on every route", () => {
-    for (const id of ["anthropic/claude-haiku-4-5", "ollama/qwen3.5", "openai/gpt-5-nano"]) {
-      const opts = aiProviderOptions(id) as { anthropic?: { cacheControl?: { type: string } } };
-      expect(opts.anthropic?.cacheControl?.type, id).toBe("ephemeral");
+  it("caches on every route: gateway-agnostic via caching:auto, direct via Anthropic markers", () => {
+    // Through the gateway (default route), caching is provider-agnostic — `caching: 'auto'`
+    // covers whatever model is picked (Gemini/OpenAI implicitly, Anthropic via auto-injected
+    // markers), so we do NOT also hand-place Anthropic cache_control (that would double-mark).
+    for (const id of [
+      "anthropic/claude-haiku-4-5",
+      "google/gemini-2.5-flash-lite",
+      "openai/gpt-5-nano",
+    ]) {
+      const opts = aiProviderOptions(id) as {
+        gateway?: { caching?: string };
+        anthropic?: unknown;
+      };
+      expect(opts.gateway?.caching, id).toBe("auto");
+      expect(opts.anthropic, id).toBeUndefined();
     }
+
+    // Direct route (AI_ROUTING=direct): the gateway isn't in the path, so Anthropic's own
+    // ephemeral cache_control carries caching, and there is no gateway key.
+    process.env.AI_ROUTING = "direct";
+    const direct = aiProviderOptions("anthropic/claude-haiku-4-5") as {
+      gateway?: unknown;
+      anthropic?: { cacheControl?: { type: string } };
+    };
+    expect(direct.gateway).toBeUndefined();
+    expect(direct.anthropic?.cacheControl?.type).toBe("ephemeral");
+
+    // Local models force the direct path regardless of AI_ROUTING (the hosted gateway can't
+    // reach localhost), so they take the Anthropic-key branch, never the gateway key.
+    process.env.AI_ROUTING = "gateway";
+    const local = aiProviderOptions("ollama/qwen3.5") as {
+      gateway?: unknown;
+      anthropic?: { cacheControl?: { type: string } };
+    };
+    expect(local.gateway).toBeUndefined();
+    expect(local.anthropic?.cacheControl?.type).toBe("ephemeral");
   });
 
   it("isLocalProvider distinguishes self-hosted prefixes from vendors", () => {
