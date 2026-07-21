@@ -1,5 +1,19 @@
 import { defineConfig } from "@trigger.dev/sdk/v3";
 import { esbuildPlugin } from "@trigger.dev/build/extensions";
+import { syncVercelEnvVars } from "@trigger.dev/build/extensions/core";
+
+// The executor runs in Trigger.dev's cloud, NOT on Vercel — it does not inherit the web
+// app's environment. Its tasks import the full authoring/billing/db/renderer stack, which
+// reads DATABASE_URL, the S3 draft-buffer creds, the AI route, and the GitHub App keys; a
+// missing/stale one fails a run on its first DB query (the "Failed query … automation_run"
+// symptom, SPEC §10.2). syncVercelEnvVars mirrors the Vercel project's env into the matching
+// Trigger environment at DEPLOY time (prod→production), so the two never drift. Gated on the
+// deploy shell providing Vercel API creds — CI's deploy-trigger job sets them from secrets;
+// a local `trigger.dev deploy` without them simply skips the sync (and `trigger.dev dev` is
+// never affected: the extension self-skips the dev target). Best-effort by design: an
+// expired token warns and deploys unsynced rather than failing the deploy.
+const vercelEnvSync =
+  process.env.VERCEL_ACCESS_TOKEN && process.env.VERCEL_PROJECT_ID ? [syncVercelEnvVars()] : [];
 
 export default defineConfig({
   project: "proj_rjriwuagrstnzwseaytk",
@@ -64,6 +78,8 @@ export default defineConfig({
         },
         { placement: "first" },
       ),
+      // Keep the executor's env in lockstep with Vercel's (see vercelEnvSync above).
+      ...vercelEnvSync,
     ],
   },
 });

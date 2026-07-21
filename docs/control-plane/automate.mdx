@@ -102,6 +102,14 @@ but has no published version to pick it up stays pending. In this project's host
 the main branch deploys both halves together (the site build, and a CI job that deploys the
 tasks), so the two never drift apart; self-hosters run the deploy as part of their own release.
 
+Because the executor runs in its own environment, it also needs its **own copy of the server
+configuration** — it does not inherit the web app's. A run reaches the database, the draft
+storage, the model provider, and the connected repositories, so the executor's environment must
+carry the same database URL, object-storage credentials, AI configuration, and GitHub-App keys
+the app uses. A missing value surfaces as a run that fails immediately on its first step rather
+than as a degraded feature. This project keeps the two environments in sync automatically at
+deploy time; a self-hosted executor is configured wherever its tasks are deployed.
+
 Each run is metered: its
 model usage is recorded and debited against the plan's [AI credits](/control-plane/billing),
 and the total shows in the run history. A run whose organization has no spendable credits

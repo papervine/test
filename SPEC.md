@@ -1921,6 +1921,21 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 > builds remotely (no Docker on the runner). Locally, `npx trigger.dev dev` runs the tasks
 > from the dev machine, so no deploy step there.
 >
+> **Ops — the executor needs its own env, kept in sync from Vercel (2026-07-21).** The
+> deployed task runs in Trigger.dev's cloud and does *not* inherit Vercel's env; its import
+> graph (authoring/billing/db/renderer) reads `DATABASE_URL`, the `S3_*` draft-buffer creds,
+> the AI route, and the `GITHUB_APP_*` keys. The first prod run failed on its very first
+> query (`Failed query … from "automation_run"`) because the Trigger prod env lacked
+> `DATABASE_URL` — proven a config gap, not code: the app's insert (which *sets*
+> `trigger_context`) had succeeded, so the column exists in the DB the app writes to; the
+> task was hitting a different/unconfigured DB. Fix: `syncVercelEnvVars()` in
+> `trigger.config.ts` mirrors the Vercel project's env into the matching Trigger environment
+> (prod→production) at deploy time, gated on the deploy shell providing `VERCEL_ACCESS_TOKEN`
+> + `VERCEL_PROJECT_ID` (CI sets them from secrets; a local deploy without them skips the
+> sync; the dev target is self-skipped). Best-effort: the core catches a bad/expired token
+> and warns rather than failing the deploy — so a broken token drifts *silently*, which is
+> the one thing to watch. Manual dashboard vars remain a valid alternative to the sync.
+>
 > - *Follow-ups:* verify run→publish with real write creds; mint a durable
 >   `AI_GATEWAY_API_KEY` for the deployed executor (OIDC expires); cron scheduling (Trigger.dev
 >   schedules API — `executorScheduleId` is ready for it) and code-change webhooks are
