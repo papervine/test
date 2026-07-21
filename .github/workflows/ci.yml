@@ -125,7 +125,12 @@ jobs:
             echo "::notice::TRIGGER_ACCESS_TOKEN not set — skipping executor deploy. Add it in Settings → Secrets and variables → Actions to enable automated deploys."
             exit 0
           fi
-          npx trigger.dev@latest deploy
+          # Pin the CLI to the installed SDK version — `trigger.dev deploy` aborts on any
+          # CLI/@trigger.dev/* version drift. Deriving it from the installed package keeps
+          # them in lockstep with a single source of truth (package.json), no second bump.
+          VERSION="$(node -p "require('@trigger.dev/sdk/package.json').version")"
+          echo "Deploying with trigger.dev@${VERSION}"
+          npx "trigger.dev@${VERSION}" deploy
 
 # Real-repo validation (crawling papervine/starter or papervine/docs) lives in
 # tests/crawl.mjs and is run locally — see README → Testing. It's intentionally
