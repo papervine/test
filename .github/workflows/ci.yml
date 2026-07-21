@@ -93,6 +93,40 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # Deploy the automations executor (SPEC §10.2). Vercel ships the Next app that
+  # *enqueues* runs; the Trigger.dev tasks (automation-run, automation-cron) run on
+  # Trigger.dev's cloud and only exist there once deployed — a release separate from
+  # Vercel. Without this, task-code changes land on main but prod keeps executing the
+  # old version (or, on first deploy, runs sit at "Pending version" forever). Gated on
+  # `verify` so a bundle that fails typecheck/unit/build/smoke never reaches prod, and
+  # only on a real push to main (never PRs). Needs a TRIGGER_ACCESS_TOKEN repo secret
+  # (Trigger.dev dashboard → your profile → Personal Access Tokens); absent → the step
+  # no-ops with a notice instead of failing the run, so forks/unconfigured repos stay
+  # green. trigger.dev v4 builds remotely, so no Docker on the runner.
+  deploy-trigger:
+    needs: verify
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Deploy Trigger.dev tasks
+        env:
+          TRIGGER_ACCESS_TOKEN: ${{ secrets.TRIGGER_ACCESS_TOKEN }}
+        run: |
+          if [ -z "$TRIGGER_ACCESS_TOKEN" ]; then
+            echo "::notice::TRIGGER_ACCESS_TOKEN not set — skipping executor deploy. Add it in Settings → Secrets and variables → Actions to enable automated deploys."
+            exit 0
+          fi
+          npx trigger.dev@latest deploy
+
 # Real-repo validation (crawling papervine/starter or papervine/docs) lives in
 # tests/crawl.mjs and is run locally — see README → Testing. It's intentionally
 # not in CI: it boots a dev server per run, which is environment-sensitive on

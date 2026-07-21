@@ -1910,6 +1910,17 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 > *Unverified live:* a real push → run needs the GitHub App installed in dev (same gap as
 > publish); the read tools are exercised only when a run has an installation token.
 >
+> **Ops — the executor is a separate deploy (2026-07-20).** `TRIGGER_SECRET_KEY` lets the
+> app *enqueue*; the tasks run on Trigger.dev's cloud and exist there only once published
+> with `npx trigger.dev deploy`. This is distinct from the Vercel deploy — the first prod
+> automation run surfaced "Run cannot execute until a version includes the task and queue"
+> (i.e. enqueued, no published version). Fixed by wiring a CI `deploy-trigger` job
+> (`.github/workflows/ci.yml`) that runs `trigger.dev deploy` on every push to main, gated
+> on `verify` (a bundle failing typecheck/unit/build/smoke never ships) and skipped without
+> a `TRIGGER_ACCESS_TOKEN` secret — so a main push now deploys both halves atomically. v4
+> builds remotely (no Docker on the runner). Locally, `npx trigger.dev dev` runs the tasks
+> from the dev machine, so no deploy step there.
+>
 > - *Follow-ups:* verify run→publish with real write creds; mint a durable
 >   `AI_GATEWAY_API_KEY` for the deployed executor (OIDC expires); cron scheduling (Trigger.dev
 >   schedules API — `executorScheduleId` is ready for it) and code-change webhooks are
