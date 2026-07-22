@@ -106,9 +106,12 @@ Each connected site is served at its own host — `{slug}.papervine.io` in produ
 npm test                              # render every fixture page, assert no 500s
 node tests/crawl.mjs <docs-dir>       # crawl a real docs repo, report rendered/degraded/500
 node tests/crawl.mjs <dir> --sample=120
+npm run eval                          # benchmark automation models (paid; not CI — see evals/README.md)
 ```
 
 `tests/fixtures/` deliberately exercises edge cases (object `favicon`, `languages` nav, `.md` files, unknown components, malformed frontmatter, unresolved snippet imports, `hidden` pages) so fixes can't silently regress. CI runs typecheck + build + smoke test.
+
+`npm run eval` ([`evals/`](./evals/)) is a **model benchmark**, not a CI test: it runs candidate automation models through the real agent loop over a corpus with planted errors and scores accuracy / over-editing / code-safety. It calls paid, non-deterministic models (needs `AI_GATEWAY_API_KEY`), so it's run on demand when choosing an automations model — never in CI.
 
 ## Tech
 

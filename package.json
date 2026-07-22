@@ -22,6 +22,7 @@
     "test": "node tests/smoke.mjs",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "eval": "node --env-file=.env.local evals/run.mjs",
     "db:generate": "node node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs migrate",
     "db:seed": "node --env-file=.env.local scripts/seed-dev.mjs",

@@ -1,0 +1,12 @@
+---
+title: Deployment
+---
+
+Deploys are automaticaly triggered when you push to your default branch. You can
+also manualy deploy from the dashboard if you want to ship a specific commit.
+
+Each site gets it's own domain, and you can attach a custom domain once the
+first deploy succeeds. Certificates are provisioned for you.
+
+Rollbacks are instant: every deploy is immutable, so returning to a previous
+version just repoints the domain at an earlier build.

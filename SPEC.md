@@ -1883,6 +1883,18 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 > `searchDocs` over exhaustive `listPages`+`readPage` in the run prompt; (c) a
 > credit-burn warning before the balance cliff.
 >
+> **Model selection is backed by a committed eval (2026-07-22).** `evals/` (`npm run eval`)
+> runs candidate models through the real read→edit agent loop over a fixture corpus with
+> planted grammar/typo errors and scores accuracy, over-editing, and code-safety. Not a CI
+> test — it calls paid, non-deterministic gateway models (needs `AI_GATEWAY_API_KEY`) —
+> run on demand when choosing an automations model. First bake-off (grammar-typos, 9 planted
+> errors): **`deepseek/deepseek-v4-flash` 9/9, 0 over-edits, ~$0.001/run**; `claude-haiku-4.5`
+> also 9/9 but ~12× the cost; **`gemini-2.5-flash-lite` was worst — 7/9, over-edited, and
+> corrupted a technical term ("renderer"→"deployer")**, a caution that "cheapest slug" ≠
+> "cheapest in practice" when a bad edit ships as a commit. Provisional pick: DeepSeek-flash
+> (weigh its provenance for a customer-facing SaaS), Haiku as the premium fallback. Keep
+> `Require review` regardless. Re-run with `--runs=3` before committing the env var.
+>
 > **Status — slice 2a landed (2026-07-19): cron scheduling.** Schedules live on the
 > executor as a projection (`schedules.create` with `deduplicationKey` = automation id
 > → idempotent upsert; `externalId` = automation id), registered/deregistered by

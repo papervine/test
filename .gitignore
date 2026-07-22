@@ -34,3 +34,5 @@ _private/
 .env.sentry-build-plugin
 
 .trigger
+# Model eval outputs (evals/run.mjs writes edited corpus copies here)
+evals/.out/

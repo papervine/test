@@ -1,0 +1,21 @@
+---
+title: Configuration
+---
+
+The `docs.json` file configure your entire site: navigation, theme, and
+metadata. Each fields is optional, so you can start with an almost empty file
+and add settings as you need them.
+
+Keep your navigation and content in seperate sections. The `navigation` key
+describes the sidebar, while the pages themselves live as MDX files anywhere in
+the repository.
+
+```json
+{
+  "theme": "mint",
+  "name": "Acme Docs"
+}
+```
+
+Unknown keys are ignored with a warning, so a newer `docs.json` will not break
+an older renderer.
