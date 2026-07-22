@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Automation model eval</title>
+<style>
+  :root {
+    --bg: #fafafa; --panel: #fff; --ink: #18181b; --muted: #71717a; --line: #e4e4e7;
+    --accent: #4f46e5; --accent-ink: #fff;
+    --ok-bg: #dcfce7; --ok-ink: #166534; --warn-bg: #fef9c3; --warn-ink: #854d0e;
+    --bad-bg: #fee2e2; --bad-ink: #991b1b; --code: #f4f4f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0b0e; --panel: #17171b; --ink: #ececee; --muted: #8b8b93; --line: #2a2a30;
+      --accent: #7c74ff; --accent-ink: #fff;
+      --ok-bg: #0f2e1c; --ok-ink: #7ee2a8; --warn-bg: #332a06; --warn-ink: #f2d675;
+      --bad-bg: #331617; --bad-ink: #f7a3a3; --code: #1e1e24;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 960px; margin: 0 auto; padding: 28px 20px 80px; }
+  h1 { font-size: 20px; margin: 0 0 2px; }
+  .sub { color: var(--muted); margin: 0 0 20px; font-size: 13px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-bottom: 20px; }
+  .controls { display: grid; grid-template-columns: 1fr auto; gap: 16px; align-items: end; }
+  @media (max-width: 640px) { .controls { grid-template-columns: 1fr; } }
+  .field-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; margin-bottom: 6px; }
+  .models { display: flex; flex-direction: column; gap: 6px; }
+  .models label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  .models .price { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .row2 { display: flex; gap: 16px; margin-top: 12px; align-items: end; flex-wrap: wrap; }
+  select, input[type=number] {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 8px; padding: 7px 9px; font: inherit;
+  }
+  input[type=number] { width: 64px; }
+  button {
+    background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px;
+    padding: 9px 18px; font: inherit; font-weight: 600; cursor: pointer;
+  }
+  button:disabled { opacity: .5; cursor: default; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; }
+  td.num, th.num { text-align: right; }
+  .slug { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+  .badge { display: inline-block; padding: 1px 7px; border-radius: 99px; font-size: 12px; font-weight: 600; }
+  .badge.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .badge.warn { background: var(--warn-bg); color: var(--warn-ink); }
+  .badge.err { background: var(--bad-bg); color: var(--bad-ink); }
+  .card { border: 1px solid var(--line); border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
+  .card > header { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 14px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .card > header .meta { color: var(--muted); font-size: 12px; margin-left: auto; font-variant-numeric: tabular-nums; }
+  .card .body { padding: 12px 14px; }
+  .gt { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 3px; }
+  .gt li { font-size: 13px; }
+  .gt .mark { display: inline-block; width: 1.3em; }
+  .gt .fix { color: var(--ok-ink); } .gt .miss { color: var(--bad-ink); }
+  .gt .exp { color: var(--muted); }
+  .edits { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; display: grid; gap: 2px; margin: 8px 0; }
+  .edit { padding: 3px 8px; border-radius: 6px; background: var(--code); }
+  .edit.fix { border-left: 3px solid var(--ok-ink); }
+  .edit.over { border-left: 3px solid var(--warn-ink); background: var(--warn-bg); }
+  .edit.failfind { border-left: 3px solid var(--muted); opacity: .7; text-decoration: line-through; }
+  .edit .del { color: var(--bad-ink); } .edit .add { color: var(--ok-ink); }
+  .banner { background: var(--bad-bg); color: var(--bad-ink); border-radius: 8px; padding: 7px 10px; margin: 8px 0; font-size: 13px; font-weight: 600; }
+  .tag { font-size: 11px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; margin: 12px 0 4px; }
+  .summary { color: var(--muted); font-size: 13px; margin-top: 8px; white-space: pre-wrap; }
+  .spin { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--line); border-top-color: var(--accent); border-radius: 50%; animation: sp .7s linear infinite; }
+  @keyframes sp { to { transform: rotate(360deg); } }
+  .hint { color: var(--muted); font-size: 12px; }
+  .empty { color: var(--muted); text-align: center; padding: 30px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Automation model eval</h1>
+  <p class="sub">Runs candidate models through the real read→edit agent loop over a corpus with planted errors, and scores accuracy, over-editing, and code-safety. Runs server-side — your API key never reaches the browser.</p>
+
+  <div class="panel">
+    <div class="controls">
+      <div>
+        <div class="field-label">Models</div>
+        <div class="models" id="models"></div>
+      </div>
+      <div>
+        <button id="run">Run ▶</button>
+      </div>
+    </div>
+    <div class="row2">
+      <div>
+        <div class="field-label">Task</div>
+        <select id="task"></select>
+      </div>
+      <div>
+        <div class="field-label">Runs each</div>
+        <input type="number" id="runs" value="1" min="1" max="10" />
+      </div>
+      <div class="hint" id="planted-hint"></div>
+    </div>
+  </div>
+
+  <div id="board-wrap" class="panel" hidden>
+    <div class="field-label">Leaderboard <span class="hint" id="board-note"></span></div>
+    <table>
+      <thead><tr>
+        <th>Model</th><th></th><th class="num">Fixed</th><th class="num">Over-edit</th>
+        <th class="num">Broke code</th><th class="num">$/run</th><th class="num">Time</th>
+      </tr></thead>
+      <tbody id="board"></tbody>
+    </table>
+  </div>
+
+  <div id="results"><div class="empty">Pick models and press Run.</div></div>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+let CONFIG = { models: [], tasks: [] };
+let results = [];   // accumulated result events
+let es = null;
+
+function esc(s) { return String(s).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+function currentTask() { return CONFIG.tasks.find((t) => t.id === $("#task").value); }
+function plantedBads(task) { return task.planted.map((p) => p[1]); }
+function isPlantedFind(task, find) {
+  const f = find.trim();
+  return plantedBads(task).some((b) => find.includes(b) || b.includes(f));
+}
+
+async function init() {
+  CONFIG = await (await fetch("/api/config")).json();
+  $("#models").innerHTML = CONFIG.models.map((m, i) => `
+    <label><input type="checkbox" value="${esc(m.slug)}" ${i < 2 ? "checked" : ""} />
+      <span class="slug">${esc(m.slug)}</span>
+      <span class="price">${m.in != null ? "$" + m.in + " / $" + m.out + " per 1M" : ""}</span>
+    </label>`).join("");
+  $("#task").innerHTML = CONFIG.tasks.map((t) => `<option value="${esc(t.id)}">${esc(t.title)}</option>`).join("");
+  updatePlantedHint();
+  $("#task").addEventListener("change", updatePlantedHint);
+  $("#run").addEventListener("click", run);
+}
+function updatePlantedHint() {
+  const t = currentTask();
+  $("#planted-hint").textContent = t ? `${t.planted.length} planted errors · ${t.protected.length} protected strings` : "";
+}
+
+function run() {
+  const slugs = [...document.querySelectorAll("#models input:checked")].map((c) => c.value);
+  if (!slugs.length) return alert("Select at least one model.");
+  const task = $("#task").value;
+  const runs = Math.max(1, Math.min(10, parseInt($("#runs").value, 10) || 1));
+
+  results = [];
+  $("#board").innerHTML = "";
+  $("#board-wrap").hidden = false;
+  $("#board-note").textContent = "";
+  $("#results").innerHTML = "";
+  setRunning(true);
+
+  if (es) es.close();
+  es = new EventSource(`/api/run?models=${encodeURIComponent(slugs.join(","))}&task=${encodeURIComponent(task)}&runs=${runs}`);
+  es.addEventListener("start", (e) => {
+    const { slug, run, runs } = JSON.parse(e.data);
+    addPending(slug, run, runs);
+  });
+  es.addEventListener("result", (e) => {
+    const r = JSON.parse(e.data);
+    results.push(r);
+    renderResult(r);
+    renderBoard();
+  });
+  es.addEventListener("done", (e) => {
+    $("#board-note").textContent = "· complete";
+    setRunning(false);
+    es.close();
+  });
+  es.addEventListener("fail", (e) => {
+    const { error } = JSON.parse(e.data);
+    $("#results").insertAdjacentHTML("afterbegin", `<div class="banner">Run failed: ${esc(error)}</div>`);
+    setRunning(false);
+    es.close();
+  });
+  es.onerror = () => {
+    if ($("#run").disabled) { // errored mid-run
+      $("#results").insertAdjacentHTML("afterbegin", `<div class="banner">Connection lost. Is the server still running?</div>`);
+      setRunning(false);
+    }
+    es.close();
+  };
+}
+function setRunning(on) {
+  $("#run").disabled = on;
+  $("#run").innerHTML = on ? '<span class="spin"></span> Running…' : "Run ▶";
+}
+
+function pendId(slug, run) { return "pend-" + slug.replace(/\W/g, "_") + "-" + run; }
+function addPending(slug, run, runs) {
+  if ($("#results .empty")) $("#results").innerHTML = "";
+  const id = pendId(slug, run);
+  if (document.getElementById(id)) return;
+  const rl = runs > 1 ? ` <span class="hint">run ${run}/${runs}</span>` : "";
+  $("#results").insertAdjacentHTML("beforeend",
+    `<div class="card" id="${id}"><header><span class="spin"></span> <span class="slug">${esc(slug)}</span>${rl}<span class="meta">running…</span></header></div>`);
+}
+
+function renderResult(r) {
+  const task = currentTask();
+  const pend = document.getElementById(pendId(r.slug, r.run));
+  const el = pend || document.createElement("div");
+  el.className = "card";
+  if (r.err) {
+    el.innerHTML = `<header><span class="badge err">error</span> <span class="slug">${esc(r.slug)}</span></header>
+      <div class="body"><div class="banner">${esc(r.err)}</div></div>`;
+    if (!pend) $("#results").appendChild(el);
+    return;
+  }
+  const ok = r.fixed === r.total && r.extra === 0 && r.brokeProtected.length === 0;
+  const runLbl = r.run && document.querySelectorAll('#runs').length ? "" : "";
+  const missedSet = new Set(r.missed);
+  const gt = task.planted.map(([file, bad, good]) => {
+    const goods = Array.isArray(good) ? good.join(" / ") : good;
+    const fixed = !missedSet.has(`${file}: "${bad}"`);
+    return `<li><span class="mark ${fixed ? "fix" : "miss"}">${fixed ? "✓" : "✗"}</span>
+      <span class="slug">${esc(file)}</span>: <span class="del">${esc(bad)}</span>
+      ${fixed ? "" : `<span class="exp">→ expected: ${esc(goods)}</span>`}</li>`;
+  }).join("");
+  const edits = r.edits.map((e) => {
+    const cls = !e.applied ? "failfind" : isPlantedFind(task, e.find) ? "fix" : "over";
+    const clip = (s) => esc(s.replace(/\n/g, "⏎").slice(0, 90));
+    return `<div class="edit ${cls}"><span class="slug">${esc(e.path)}</span> <span class="del">− ${clip(e.find)}</span> <span class="add">+ ${clip(e.replace)}</span></div>`;
+  }).join("");
+  const badge = ok ? `<span class="badge ok">✓ clean</span>` : `<span class="badge warn">⚠ review</span>`;
+  const runTag = r.run ? ` <span class="hint">run ${r.run}</span>` : "";
+  el.innerHTML = `
+    <header>${badge} <span class="slug">${esc(r.slug)}</span>${runTag}
+      <span class="meta">fixed ${r.fixed}/${r.total} · over ${r.extra} · broke ${r.brokeProtected.length} · ${r.tin}in/${r.tout}out${r.cost != null ? " · ~$" + r.cost.toFixed(5) : ""} · ${r.secs}s</span>
+    </header>
+    <div class="body">
+      ${r.brokeProtected.length ? `<div class="banner">Changed protected text: ${r.brokeProtected.map(esc).join(", ")}</div>` : ""}
+      <div class="tag">Ground truth (${r.fixed}/${r.total})</div>
+      <ul class="gt">${gt}</ul>
+      <div class="tag">Edits made (${r.edits.filter((e) => e.applied).length} applied${r.failed ? ", " + r.failed + " find-miss" : ""})</div>
+      <div class="edits">${edits || '<div class="hint">no edits</div>'}</div>
+      ${r.summary ? `<div class="tag">Summary</div><div class="summary">${esc(r.summary)}</div>` : ""}
+    </div>`;
+  if (!pend) $("#results").appendChild(el);
+}
+
+function renderBoard() {
+  const bySlug = {};
+  for (const r of results) if (!r.err) (bySlug[r.slug] ||= []).push(r);
+  const rows = Object.entries(bySlug).map(([slug, rs]) => {
+    const avg = (k) => rs.reduce((s, r) => s + r[k], 0) / rs.length;
+    const brokeCode = rs.reduce((s, r) => s + r.brokeProtected.length, 0) / rs.length;
+    const cost = rs[0].cost != null ? avg("cost") : null;
+    return { slug, fixed: avg("fixed"), total: rs[0].total, over: avg("extra"), brokeCode, cost, secs: avg("secs"), runs: rs.length };
+  }).sort((a, b) => b.fixed - a.fixed || a.over - b.over || (a.cost ?? 9) - (b.cost ?? 9));
+
+  $("#board").innerHTML = rows.map((b) => {
+    const ok = b.fixed === b.total && b.over === 0 && b.brokeCode === 0;
+    return `<tr>
+      <td class="slug">${esc(b.slug)}</td>
+      <td>${ok ? '<span class="badge ok">✓</span>' : '<span class="badge warn">⚠</span>'}</td>
+      <td class="num">${(+b.fixed.toFixed(2))}/${b.total}</td>
+      <td class="num">${+b.over.toFixed(2)}</td>
+      <td class="num">${+b.brokeCode.toFixed(2)}</td>
+      <td class="num">${b.cost != null ? "$" + b.cost.toFixed(5) : "—"}</td>
+      <td class="num">${b.secs.toFixed(1)}s</td>
+    </tr>`;
+  }).join("");
+}
+
+init();
+</script>
+</body>
+</html>

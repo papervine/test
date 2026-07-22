@@ -31,6 +31,22 @@ npm run --silent eval -- --json > evals/.out/last.json   # machine-readable, for
 The final edited files for each (task, model) are written to `evals/.out/` (gitignored) so
 you can eyeball the actual diffs, not just the scores.
 
+## Web UI
+
+For a human-friendly version — pick models, click Run, watch results stream in live with
+color-coded diffs:
+
+```bash
+npm run eval:web        # → http://127.0.0.1:4321  (Ctrl-C to stop)
+```
+
+It's a tiny local server (`evals/serve.mjs`): it runs the models **server-side** (holding the
+gateway key from `.env.local`) and streams each result to a self-contained page over SSE — the
+**browser never receives the key**. The page shows a live leaderboard (✓ clean / ⚠ review) and
+per-model cards with a ground-truth checklist (fixed vs. missed) and every edit color-coded:
+**green** = planted fix, **amber** = over-edit (not asked for), **struck-through** =
+find-not-found. Same run/score logic as the CLI (both import `evals/core.mjs`).
+
 ## Reading the leaderboard
 
 Sorted by accuracy, then fewest over-edits, then cost. A model that scores `fixed N/N` with

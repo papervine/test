@@ -107,6 +107,7 @@ npm test                              # render every fixture page, assert no 500
 node tests/crawl.mjs <docs-dir>       # crawl a real docs repo, report rendered/degraded/500
 node tests/crawl.mjs <dir> --sample=120
 npm run eval                          # benchmark automation models (paid; not CI — see evals/README.md)
+npm run eval:web                      # same, as a local web UI with live color-coded diffs
 ```
 
 `tests/fixtures/` deliberately exercises edge cases (object `favicon`, `languages` nav, `.md` files, unknown components, malformed frontmatter, unresolved snippet imports, `hidden` pages) so fixes can't silently regress. CI runs typecheck + build + smoke test.
