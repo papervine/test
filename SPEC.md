@@ -1894,6 +1894,11 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 > "cheapest in practice" when a bad edit ships as a commit. Provisional pick: DeepSeek-flash
 > (weigh its provenance for a customer-facing SaaS), Haiku as the premium fallback. Keep
 > `Require review` regardless. Re-run with `--runs=3` before committing the env var.
+> Broadened to an 8-model default set (2026-07-22: + gpt-5-nano, mistral-small, gpt-4o-mini,
+> deepseek-v4-pro, gemini-3-flash): DeepSeek-flash held 9/9 across every run; gemini-2.5-flash-lite
+> is confirmed high-variance (8/9 → 7/9 → 2/9); `deepseek-v4-pro` matched flash at 2.5× cost;
+> gpt-5-nano was perfect but 34s (too slow interactive); gemini-3-flash fixes the flash-lite
+> over-editing but costs more. A local web UI (`npm run eval:web`) renders the same live.
 >
 > **Status — slice 2a landed (2026-07-19): cron scheduling.** Schedules live on the
 > executor as a projection (`schedules.create` with `deduplicationKey` = automation id
