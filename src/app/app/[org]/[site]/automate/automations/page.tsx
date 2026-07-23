@@ -2,7 +2,9 @@ import Link from "next/link";
 import { desc, eq } from "drizzle-orm";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
 import { AutomationCard, CreateCustomAutomation } from "@/components/app/automate/AutomationCard";
+import { RunReviewActions } from "@/components/app/automate/RunReviewActions";
 import type { AutomationView } from "@/components/app/automate/AutomationConfigDialog";
+import type { SiteRef } from "@/app/app/[org]/[site]/automate/automations/actions";
 import { requireSite } from "@/lib/dashboard-context";
 import { siteHref } from "@/lib/dashboard-nav";
 import { db } from "@/lib/db";
@@ -95,7 +97,7 @@ export default async function AutomationsPage({
       </div>
 
       {showRuns ? (
-        <RunHistory siteId={activeSite.id} basePath={basePath} />
+        <RunHistory siteId={activeSite.id} basePath={basePath} siteRef={siteRef} />
       ) : (
         <>
           <Section
@@ -172,13 +174,23 @@ function Section({
 
 // The run history (the reference's second tab). Newest first; resultRef renders as a
 // PR link or a short commit sha; the title links into the run-detail view.
-async function RunHistory({ siteId, basePath }: { siteId: string; basePath: string }) {
+async function RunHistory({
+  siteId,
+  basePath,
+  siteRef,
+}: {
+  siteId: string;
+  basePath: string;
+  siteRef: SiteRef;
+}) {
   const runs = await db
     .select({
       id: automationRun.id,
       status: automationRun.status,
       triggerType: automationRun.triggerType,
       resultRef: automationRun.resultRef,
+      reviewBranch: automationRun.reviewBranch,
+      changedFiles: automationRun.changedFiles,
       summary: automationRun.summary,
       error: automationRun.error,
       creditsUsed: automationRun.creditsUsed,
@@ -242,7 +254,14 @@ async function RunHistory({ siteId, basePath }: { siteId: string; basePath: stri
                 </td>
                 <td className="px-4 py-3 text-[var(--muted)]">{r.triggerType.replace("_", " ")}</td>
                 <td className="px-4 py-3">
-                  {r.resultRef ? (
+                  {r.status === "review_needed" && r.reviewBranch ? (
+                    <RunReviewActions
+                      siteRef={siteRef}
+                      runId={r.id}
+                      reviewBranch={r.reviewBranch}
+                      changedFiles={(r.changedFiles as string[] | null) ?? []}
+                    />
+                  ) : r.resultRef ? (
                     r.resultRef.startsWith("http") ? (
                       <a
                         href={r.resultRef}

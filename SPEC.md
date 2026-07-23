@@ -1908,6 +1908,21 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 > gpt-5-nano was perfect but 34s (too slow interactive); gemini-3-flash fixes the flash-lite
 > over-editing but costs more. A local web UI (`npm run eval:web`) renders the same live.
 >
+> **Status — in-app review landed (2026-07-22): `Require review` is now an in-app draft, not
+> a PR.** Inspired by the reference's Accept / View-changes flow. Instead of publishing a PR at
+> run end, a `review` run leaves its `editor_session` open (the buffered `draft_file` overlay in
+> Postgres — the same object a human editor's draft is) and ends `review_needed`, storing
+> `automation_run.review_branch` (migration 0019). The run row / detail show **Accept** →
+> `publishDraft(commit)`, **Reject** → `discardSession` (both existing authoring-core calls, with
+> the optimistic base-SHA guard), and **View changes** → the editor at `?branch=<review_branch>
+> &review=1&slug=<first changed page>`, which auto-opens the existing line-level `DiffView` (base
+> S3 vs draft overlay). The terminal decision is a pure `applyOutcome()` (apply.ts, unit-tested);
+> `run-display` gained `review_needed`/`rejected` chips. Decision (locked): **Accept = commit
+> only, no PR path** (re-addable as an Accept option later). *v1 limitation:* a pending review
+> doesn't suppress the automation's next scheduled run — accept/reject to clear. The genuinely-new
+> "inline strikethrough diff in ProseMirror" (the reference's exact look) is deferred; the split
+> `DiffView` is the v1.
+>
 > **Status — slice 2a landed (2026-07-19): cron scheduling.** Schedules live on the
 > executor as a projection (`schedules.create` with `deduplicationKey` = automation id
 > → idempotent upsert; `externalId` = automation id), registered/deregistered by

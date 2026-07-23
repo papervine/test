@@ -30,17 +30,17 @@ in-docs Q&A (Ask).
 ## Routines
 
 Agent runs that keep the docs current on their own: each automation is a trigger, a prompt, and
-an apply mode. When it fires, an agent reads the site's content, makes the required edits on a
-draft session branch, and the result lands as a **direct commit or a pull request** — the same
-authoring pipeline a human editor uses, so every change is reviewable in Git.
+an apply mode. When it fires, an agent reads the site's content and makes the required edits on a
+draft session branch — the same authoring pipeline a human editor uses. Depending on the apply
+mode, the result either **commits directly** or **waits for your review** in the editor.
 
-The page has two tabs: **Configure** (the catalog below) and **Automations** (the run history —
-every run with its status, what fired it, the resulting commit or PR, credits used, and the
-agent's summary or the error). A run that finishes without needing any edits shows as
-**no changes** — a real outcome, not a failure. **Click a run** to open its detail view: the
-exact instructions the agent received (the run keeps its own copy, so later config edits don't
-rewrite history), the files it changed, the full agent summary, model and token usage, and the
-resulting commit or pull request.
+The page has two tabs: **Configure** (the catalog below) and **Runs** (the run history —
+every run with its status, what fired it, its result, credits used, and the agent's summary or
+the error). A run that finishes without needing any edits shows as **no changes** — a real
+outcome, not a failure; a run awaiting review shows **review needed**. **Click a run** to open
+its detail view: the exact instructions the agent received (the run keeps its own copy, so later
+config edits don't rewrite history), the files it changed, the full agent summary, model and
+token usage, and the resulting commit — or, for a pending run, the review actions.
 
 ### The catalog
 
@@ -74,7 +74,8 @@ Every automation — predefined or custom — shares one config schema:
   fire the automation. When one is pushed, the run is told which files changed and can read
   them to update the affected documentation.
 - **Apply mode** — `Automatically` commits changes directly to the deploy branch;
-  `Require review` opens a pull request instead.
+  `Require review` holds the change as an **in-app draft** for you to review before it lands
+  (see [Reviewing a change](#reviewing-a-change) below).
 - **Context repositories** — extra `owner/name` repositories the run may read (never trigger
   it), so the agent can consult their code while writing docs.
 - **Additional prompt** — instructions appended to the automation's base prompt on every run
@@ -123,6 +124,22 @@ database before doing anything, so an automation you disabled or re-triggered st
 even if its schedule outlives it. Ticks are deduplicated by their timestamp: a redelivered
 tick never runs twice.
 
+### Reviewing a change
+
+When an automation runs with `Require review`, its edits **don't ship** — they wait as a draft
+for you to approve. The run lands as **review needed** in the history, with three actions:
+
+- **View changes** opens the change in the [editor](/control-plane/editor), landing on the first
+  edited page with the diff already showing — the same live editor a human uses, so you can also
+  keep editing the draft before accepting.
+- **Accept** commits the change to your deploy branch (the same as an `Automatically` run would).
+- **Reject** discards the draft; nothing lands.
+
+The draft lives in the authoring layer as an ordinary edit session until you decide, so a pending
+review is just a draft with your name not yet on it. Until then it hasn't touched your published
+docs. (A pending review doesn't block the automation's next scheduled run — accept or reject it to
+keep the queue clear.)
+
 ### What keeps runs from wasting credits
 
 An agent run is the expensive part of Papervine — it reads your documentation and reasons
@@ -152,10 +169,10 @@ A content-update automation whose own commit re-syncs the site does **not** re-f
 runs are deduplicated per commit, which is also what makes webhook redeliveries harmless.
 
 <Warning>
-  The open risk is the **output quality and auditability** of agent-authored changes. Because
-  every run lands as a commit or PR through the same pipeline a human uses, the changes are
-  reviewable — but an automation that drafts low-quality updates at scale is noise. Prefer
-  `Require review` until you trust an automation's output.
+  The open risk is the **output quality and auditability** of agent-authored changes. Every run
+  lands through the same authoring pipeline a human uses, so its changes are reviewable in the
+  editor and in Git history — but an automation that drafts low-quality updates at scale is noise.
+  Prefer `Require review` until you trust an automation's output.
 </Warning>
 
 ## Teammate

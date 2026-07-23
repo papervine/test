@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { and, eq } from "drizzle-orm";
 import { ArrowLeft, FileText } from "lucide-react";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
+import { RunReviewActions } from "@/components/app/automate/RunReviewActions";
 import { requireSite } from "@/lib/dashboard-context";
 import { siteHref } from "@/lib/dashboard-nav";
 import { db } from "@/lib/db";
@@ -76,6 +77,25 @@ export default async function AutomationRunPage({
           {display}
         </span>
       </div>
+
+      {run.status === "review_needed" && run.reviewBranch && (
+        <div className="mt-6 flex flex-col gap-3 rounded-xl border border-amber-500/25 bg-amber-500/5 p-5 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-medium">This change is waiting for your review.</p>
+            <p className="mt-0.5 text-sm text-[var(--muted)]">
+              Review the diff in the editor, then accept to commit it to your docs — or reject to
+              discard.
+            </p>
+          </div>
+          <RunReviewActions
+            siteRef={{ org, site }}
+            runId={run.id}
+            reviewBranch={run.reviewBranch}
+            changedFiles={changedFiles}
+            size="md"
+          />
+        </div>
+      )}
 
       {/* Meta grid */}
       <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-4 rounded-xl border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)] p-5 text-sm sm:grid-cols-3">

@@ -516,6 +516,8 @@ export const automationRun = pgTable(
     // triggering user id (manual). Debuggability + idempotency (skip an already-run ref).
     triggerRef: text("trigger_ref"),
     // 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled'
+    // | 'review_needed' (applyMode "review": draft left open for in-app review)
+    // | 'rejected' (a review_needed run the operator discarded).
     status: text("status").default("queued").notNull(),
     // The executor's run handle (Trigger.dev run_… id) — correlation for logs/replays.
     executorRunId: text("executor_run_id"),
@@ -534,6 +536,10 @@ export const automationRun = pgTable(
     // What the run produced through the authoring backend: a commit sha or PR URL;
     // null = the run decided no changes were needed (a valid success).
     resultRef: text("result_ref"),
+    // status 'review_needed' only: the still-open editor_session branch holding the buffered
+    // draft, so the run row's "View changes" can deep-link the editor to it and Accept can
+    // publish it. Null once accepted/rejected (SPEC §10.2 in-app review).
+    reviewBranch: text("review_branch"),
     // Agent-authored one-paragraph summary of what it did (shown in run history).
     summary: text("summary"),
     // The exact instructions this run's agent received (buildRunPrompt output at

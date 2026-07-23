@@ -122,4 +122,40 @@ test.describe("automations", () => {
     await page.getByText("The exact instructions this run received").click();
     await expect(page.getByText("Find internal links that are broken")).toBeVisible();
   });
+
+  test("a review_needed run offers Accept/View changes/Reject; Reject discards the draft", async ({
+    page,
+  }) => {
+    const [auto] =
+      await sql`select id from automation where site_id = ${SITE_ID} and catalog_key = 'fix-broken-links'`;
+    const SESSION = "e2e-review-session";
+    const BRANCH = "papervine/review-e2e";
+    await sql`delete from automation_run where site_id = ${SITE_ID}`;
+    await sql`delete from editor_session where id = ${SESSION}`;
+    // A run in review leaves an OPEN edit session + its buffered draft (SPEC §10.2 in-app review).
+    await sql`insert into editor_session (id, site_id, branch, base_branch, status)
+              values (${SESSION}, ${SITE_ID}, ${BRANCH}, 'main', 'open')`;
+    await sql`insert into draft_file (id, session_id, path, content)
+              values ('e2e-review-draft', ${SESSION}, 'index.mdx', '# Fixed' || chr(10))`;
+    await sql`insert into automation_run (id, automation_id, site_id, trigger_type, status, review_branch, summary, changed_files, credits_used, queued_at, finished_at)
+              values ('e2e-review-1', ${auto.id}, ${SITE_ID}, 'manual', 'review_needed', ${BRANCH}, 'Fixed a typo, pending review.', ${sql.json(["index.mdx"])}, 9, now(), now())`;
+
+    await page.goto(sitePath(SLUG, "automate/automations/runs/e2e-review-1"));
+    await expect(page.getByText("review needed", { exact: true })).toBeVisible();
+    await expect(page.getByText("waiting for your review")).toBeVisible();
+    await expect(page.getByRole("link", { name: /View changes/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Accept/ })).toBeVisible();
+
+    // Reject discards the session (no git needed) and marks the run rejected.
+    await page.getByRole("button", { name: /Reject/ }).click();
+    await expect
+      .poll(async () => {
+        const [r] =
+          await sql`select status, review_branch from automation_run where id = 'e2e-review-1'`;
+        return r ? `${r.status}:${r.review_branch ?? "null"}` : "missing";
+      })
+      .toBe("rejected:null");
+    const [s] = await sql`select status from editor_session where id = ${SESSION}`;
+    expect(s.status).toBe("discarded");
+  });
 });

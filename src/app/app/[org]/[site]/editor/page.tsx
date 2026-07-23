@@ -3,6 +3,7 @@ import { requestContentSource } from "@/lib/request-source";
 import { contentContext } from "@papervine/renderer/lib/content";
 import { buildNav, type NavSection, type NavLeaf, type NavNode } from "@papervine/renderer/lib/nav";
 import { resolvePagePath, listSessions } from "@/lib/authoring-core";
+import { siteHref } from "@/lib/dashboard-nav";
 import { EditorShell } from "@/components/editor/EditorShell";
 
 // The first page slug in the nav (the editor opens on it). Empty string → index.
@@ -27,10 +28,10 @@ export default async function EditorPage({
   searchParams,
 }: {
   params: Promise<{ org: string; site: string }>;
-  searchParams: Promise<{ branch?: string; slug?: string }>;
+  searchParams: Promise<{ branch?: string; slug?: string; review?: string; run?: string }>;
 }) {
   const { org, site } = await params;
-  const { branch: branchParam, slug: slugParam } = await searchParams;
+  const { branch: branchParam, slug: slugParam, review, run } = await searchParams;
   const ctx = await requireSite(org, site);
   const siteRow = ctx.site;
 
@@ -84,6 +85,10 @@ export default async function EditorPage({
       initialSlug={initialSlug}
       initialPath={initialPath}
       initialMarkdown={initialMarkdown}
+      review={review === "1"}
+      reviewBackHref={
+        run ? siteHref(org, site, `automate/automations/runs/${run}`) : undefined
+      }
     />
   );
 }

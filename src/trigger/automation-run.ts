@@ -16,6 +16,7 @@ import {
   usageEvent,
 } from "../lib/db/app-schema";
 import { CUSTOM_KEY, getCatalogEntry } from "../lib/automations/catalog";
+import { applyOutcome } from "../lib/automations/apply";
 import { buildRunPrompt } from "../lib/automations/prompt";
 import { checkoutBranch, discardSession, publishDraft } from "../lib/authoring-core";
 import { authoringTools, draftContentSource } from "../lib/authoring-tools";
@@ -202,17 +203,38 @@ export const automationRunTask = task({
 
       const summary = result.text.trim().slice(0, 2000) || null;
 
-      // Apply: drafts → git through publishDraft, per applyMode. No drafts = a valid
-      // "nothing needed doing" success with resultRef null.
+      // Apply: what happens to the buffered draft at run end, per applyMode (apply.ts):
+      //   no_changes → discard, succeed with no commit;
+      //   commit     → publish straight to the deploy branch;
+      //   review     → leave the session OPEN for in-app review — the run ends `review_needed`
+      //                and Accept (dashboard) commits it later, Reject discards it.
       const session = await findOpenSession(siteRow.id, branch);
       const drafts = session ? await listDraftFiles(session.id) : [];
       const changedFiles = drafts.map((d) => d.path);
+      const outcome = applyOutcome({ applyMode: auto.applyMode, draftCount: drafts.length });
+
+      if (outcome === "review") {
+        await db
+          .update(automationRunTable)
+          .set({
+            status: "review_needed",
+            reviewBranch: branch, // the still-open session the dashboard reviews + accepts/rejects
+            summary,
+            changedFiles,
+            creditsUsed: credits,
+            finishedAt: new Date(),
+          })
+          .where(eq(automationRunTable.id, runId));
+        logger.log("automation run needs review", { runId, branch, credits, drafts: drafts.length });
+        return { ok: true as const, reviewNeeded: true, credits };
+      }
+
       let resultRef: string | null = null;
-      if (drafts.length === 0) {
+      if (outcome === "no_changes") {
         if (session) await discardSession(siteRow, branch);
       } else {
         const published = await publishDraft(siteRow, branch, {
-          mode: auto.applyMode === "auto" ? "commit" : "pr",
+          mode: "commit",
           message: `[automation] ${title}`,
           actorUserId: null,
         });

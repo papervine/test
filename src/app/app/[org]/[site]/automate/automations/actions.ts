@@ -4,7 +4,8 @@ import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { automation } from "@/lib/db/app-schema";
+import { automation, automationRun } from "@/lib/db/app-schema";
+import { publishDraft, discardSession } from "@/lib/authoring-core";
 import { findSite } from "@/lib/dashboard-context";
 import { siteRoute } from "@/lib/dashboard-nav";
 import {
@@ -249,6 +250,83 @@ export async function runAutomationNow(ref: SiteRef, id: string): Promise<Automa
           : "Could not queue the run.",
     };
   }
+  revalidatePath(automationsPath(ref));
+  return { ok: true };
+}
+
+// A run in `review_needed` left its draft on an open session branch (SPEC §10.2 in-app
+// review). Load it, scoped to the site, and confirm it's still awaiting review.
+async function loadReviewRun(siteId: string, runId: string) {
+  const [row] = await db
+    .select()
+    .from(automationRun)
+    .where(and(eq(automationRun.id, runId), eq(automationRun.siteId, siteId)))
+    .limit(1);
+  if (!row) return { error: "Run not found." as const };
+  if (row.status !== "review_needed" || !row.reviewBranch)
+    return { error: "This run is not awaiting review." as const };
+  return { row };
+}
+
+// The commit message for an accepted run — mirror the run task's title derivation.
+async function runTitle(automationId: string): Promise<string> {
+  const [auto] = await db
+    .select({ catalogKey: automation.catalogKey, name: automation.name })
+    .from(automation)
+    .where(eq(automation.id, automationId))
+    .limit(1);
+  if (!auto) return "automation";
+  return auto.catalogKey === CUSTOM_KEY
+    ? (auto.name ?? "Custom automation")
+    : (getCatalogEntry(auto.catalogKey)?.title ?? auto.catalogKey);
+}
+
+// Accept a reviewed run: commit its buffered draft to the deploy branch through the shared
+// authoring backend, then mark the run succeeded (SPEC §10.2). publishDraft's optimistic
+// base-SHA check guards against the deploy branch moving under the pending review.
+export async function acceptRun(ref: SiteRef, runId: string): Promise<AutomationActionState> {
+  const active = await findSite(ref.org, ref.site);
+  if (!active) return { error: "No active site." };
+  const loaded = await loadReviewRun(active.id, runId);
+  if ("error" in loaded) return { error: loaded.error };
+
+  const published = await publishDraft(active, loaded.row.reviewBranch!, {
+    mode: "commit",
+    message: `[automation] ${await runTitle(loaded.row.automationId)}`,
+    actorUserId: null,
+  });
+  if (!published.ok) {
+    return {
+      error: published.conflict
+        ? "The deploy branch moved since this run. Reject it and run the automation again."
+        : (published.error ?? "Could not apply the change."),
+    };
+  }
+  await db
+    .update(automationRun)
+    .set({
+      status: "succeeded",
+      resultRef: published.mode === "commit" ? published.commitSha : published.prUrl,
+      reviewBranch: null,
+    })
+    .where(eq(automationRun.id, runId));
+  revalidatePath(automationsPath(ref));
+  return { ok: true };
+}
+
+// Reject a reviewed run: discard its draft session (the change never lands) and mark the run
+// rejected. discardSession closes the session; the buffered draft rows fall away with it.
+export async function rejectRun(ref: SiteRef, runId: string): Promise<AutomationActionState> {
+  const active = await findSite(ref.org, ref.site);
+  if (!active) return { error: "No active site." };
+  const loaded = await loadReviewRun(active.id, runId);
+  if ("error" in loaded) return { error: loaded.error };
+
+  await discardSession(active, loaded.row.reviewBranch!);
+  await db
+    .update(automationRun)
+    .set({ status: "rejected", reviewBranch: null })
+    .where(eq(automationRun.id, runId));
   revalidatePath(automationsPath(ref));
   return { ok: true };
 }

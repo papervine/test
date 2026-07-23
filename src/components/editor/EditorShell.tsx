@@ -29,6 +29,8 @@ export function EditorShell({
   initialSlug,
   initialPath,
   initialMarkdown,
+  review = false,
+  reviewBackHref,
 }: {
   org: string;
   site: string;
@@ -40,6 +42,9 @@ export function EditorShell({
   initialSlug: string;
   initialPath: string;
   initialMarkdown: string;
+  // Automation-review mode (?review=1): show a review banner and auto-open the diff per page.
+  review?: boolean;
+  reviewBackHref?: string;
 }) {
   const [branch, setBranch] = useState(initialBranch);
   const [slug, setSlug] = useState(initialSlug);
@@ -239,6 +244,21 @@ export function EditorShell({
           </div>
           <PublishButton org={org} site={site} branch={branch} deployBranch={deployBranch} />
         </header>
+        {review && (
+          <div className="flex items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm">
+            <span className="text-amber-700 dark:text-amber-300">
+              Reviewing an automation change — the diff below shows what it edited on this page.
+            </span>
+            {reviewBackHref && (
+              <a
+                href={reviewBackHref}
+                className="shrink-0 font-medium text-amber-700 underline underline-offset-2 dark:text-amber-300"
+              >
+                Back to run
+              </a>
+            )}
+          </div>
+        )}
         <div className="min-h-0 flex-1">
           <MdxEditorPane
             key={docKey}
@@ -252,6 +272,7 @@ export function EditorShell({
             onSave={save}
             mode={mode}
             onModeChange={setMode}
+            autoDiff={review}
           />
         </div>
         {/* Anchored inside <main> so the panel opens just right of the nav tree (over the editor),

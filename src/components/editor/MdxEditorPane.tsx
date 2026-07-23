@@ -34,10 +34,13 @@ type MdxEditorPaneProps = {
   // (this pane is `key`ed by page and would otherwise reset each nav click).
   mode: Mode;
   onModeChange: (mode: Mode) => void;
+  // Open the diff overlay automatically on mount (the automation-review deep-link, ?review=1).
+  // The pane is keyed by page, so this opens the diff for each changed page you land on.
+  autoDiff?: boolean;
 };
 
 export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(function MdxEditorPane(
-  { initialMarkdown, path, org, site, branch, slug, onSave, mode, onModeChange },
+  { initialMarkdown, path, org, site, branch, slug, onSave, mode, onModeChange, autoDiff },
   ref,
 ) {
   const [value, setValue] = useState(initialMarkdown);
@@ -121,6 +124,12 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
       toast.error("Couldn't copy");
     }
   };
+
+  // Automation-review deep-link (?review=1): open the diff for this page on mount.
+  useEffect(() => {
+    if (autoDiff) void openDiff();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Shortcuts: ⌘⇧M toggles Visual/Source, ⌘⇧D toggles the diff. Set the glyph per OS.
   useEffect(() => {
