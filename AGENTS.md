@@ -292,6 +292,15 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   cookies, so the flag (and thus `www`'s Dashboard link) only works in prod (`.papervine.io`);
   the redirect-to-dashboard behavior works everywhere. Don't "fix" the missing dev label by
   sharing the real session cookie.
+- **A stale session cookie can loop `/login` forever — clear it on the `?stale=1` self-heal.**
+  The edge middleware gate is **presence-only** (`getSessionCookie` — no DB call), so a cookie
+  that's *present but invalid* (server-side session gone: expiry, a revoke, or a dev `db:seed`
+  reset) reads as "authed": `/login` → `/` (bounce), the app-side `getSession()` finds no session
+  → `redirect("/login")` → bounce again → `ERR_TOO_MANY_REDIRECTS`. Fix (don't regress it): the
+  authoritative checks redirect to **`/login?stale=1`** (`app/page.tsx`, `dashboard-context.ts`),
+  and middleware, on `/login?stale=1` with a cookie present, **clears the session cookie(s) +
+  the flag** and renders login instead of bouncing. The middleware gate stays presence-only (no
+  per-request DB); the `?stale=1` signal is what makes it self-heal. Guarded by a smoke check.
 - **Two theme systems — `dark:` only works in the platform via `.db`.** The *docs/marketing*
   appearance toggles the `.dark` class (`localStorage['theme']`); the *platform* toggles
   `data-db-theme` on `<html>` (`localStorage['pv-theme']`, default dark), read by the `.db`

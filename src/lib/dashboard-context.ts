@@ -37,7 +37,7 @@ export type SiteContext = OrgContext & { site: SiteRow };
  */
 export async function requireOrg(orgSlug: string): Promise<OrgContext> {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect("/login?stale=1"); // ?stale=1 → middleware clears a lingering invalid cookie (no loop)
 
   const orgs = await listOrganizations();
   const match = orgs?.find((o) => o.slug === orgSlug);
@@ -109,7 +109,7 @@ export async function requireSite(
  */
 export async function requirePlatformAdmin() {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect("/login?stale=1"); // ?stale=1 → middleware clears a lingering invalid cookie (no loop)
   if (
     !isPlatformAdminEmail(
       session.user.email,

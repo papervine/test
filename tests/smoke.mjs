@@ -135,6 +135,17 @@ const CONTROL_PLANE_CHECKS = [
     redirectTo: "/login",
   },
   {
+    // Stale-session self-heal: a lingering-but-invalid session cookie must NOT loop
+    // /login → / → /login (ERR_TOO_MANY_REDIRECTS). The server redirects to /login?stale=1
+    // and middleware clears the cookie + renders login. Middleware-only (no DB), so smoke covers it.
+    host: "app.localhost",
+    path: "/login?stale=1",
+    cookie: "better-auth.session_token=stale-smoke",
+    expectStatus: 200,
+    clearsCookie: "better-auth.session_token",
+    desc: "stale session cookie on /login?stale=1 renders login + clears the cookie (no redirect loop)",
+  },
+  {
     host: "app.localhost",
     path: "/acme/connect",
     desc: "unauthenticated app host /:org/connect redirects to /login",
@@ -254,15 +265,18 @@ function log(msg) {
 // Raw GET that honors a custom Host header — undici's fetch silently drops `Host` (a
 // forbidden header), so we can't use it to address the `app.` control-plane host. Manual
 // redirect (no follow), so we can assert the gate's 30x → /login.
-function rawGet(pathname, hostHeader) {
+function rawGet(pathname, hostHeader, cookie) {
   return new Promise((resolve, reject) => {
+    const headers = {};
+    if (hostHeader) headers.host = hostHeader;
+    if (cookie) headers.cookie = cookie;
     const req = http.request(
       {
         host: "127.0.0.1",
         port: PORT,
         path: pathname,
         method: "GET",
-        headers: hostHeader ? { host: hostHeader } : {},
+        headers,
       },
       (res) => {
         let body = "";
@@ -271,6 +285,7 @@ function rawGet(pathname, hostHeader) {
           resolve({
             status: res.statusCode,
             location: res.headers.location ?? "",
+            setCookie: res.headers["set-cookie"] ?? [],
             body,
           }),
         );
@@ -471,8 +486,17 @@ async function run() {
       const tag = `control-plane ${check.host ? `${check.host}` : ""}${check.path}`;
       try {
         // rawGet (not fetch) so a check can address the `app.` host via a real Host header.
-        const res = await rawGet(check.path, check.host);
-        if (check.redirectTo) {
+        const res = await rawGet(check.path, check.host, check.cookie);
+        if (check.expectStatus) {
+          if (res.status !== check.expectStatus) {
+            failures.push(`[${tag}] expected ${check.expectStatus}, got ${res.status} → "${res.location}" — ${check.desc}`);
+          } else if (check.clearsCookie) {
+            const cleared = res.setCookie.some(
+              (c) => c.startsWith(`${check.clearsCookie}=`) && /max-age=0|expires=/i.test(c),
+            );
+            if (!cleared) failures.push(`[${tag}] expected Set-Cookie clearing ${check.clearsCookie} — ${check.desc}`);
+          }
+        } else if (check.redirectTo) {
           if (![301, 302, 303, 307, 308].includes(res.status) || !res.location.includes(check.redirectTo)) {
             failures.push(`[${tag}] expected redirect to ${check.redirectTo}, got ${res.status} → "${res.location}" — ${check.desc}`);
           }

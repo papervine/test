@@ -11,7 +11,7 @@ import { siteBase, connectHref } from "@/lib/dashboard-nav";
 // for signed-out visitors.) Reached internally as /app via the app-host rewrite.
 export default async function DashboardEntry() {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect("/login?stale=1"); // ?stale=1 → middleware clears a lingering invalid cookie (no loop)
   const org = (await listOrganizations())?.[0];
   if (!org) redirect("/onboarding");
 

@@ -51,6 +51,24 @@ function withHost(req: NextRequest, host: string) {
   return { request: { headers: requestHeaders } };
 }
 
+/**
+ * Clear Better Auth's session cookies + the signed-in flag on `res`. Used by the stale-session
+ * self-heal: when a session cookie is present but the server-side check found it invalid, the
+ * lingering cookie must be cleared or the presence-only edge bounce loops /login → / → /login.
+ * Better Auth's cookies are `<prefix>.session_token` / `.session_data` (with a `__Secure-` prefix
+ * when secure), so match by suffix to catch both prefixes.
+ */
+function clearAuthCookies(req: NextRequest, res: NextResponse, host: string) {
+  for (const c of req.cookies.getAll()) {
+    if (/\.session_token$|\.session_data$/.test(c.name)) {
+      res.cookies.set(c.name, "", { path: "/", maxAge: 0 });
+    }
+  }
+  if (req.cookies.get(SIGNED_IN_FLAG)) {
+    res.cookies.set(SIGNED_IN_FLAG, "", { domain: parentDomain(host), path: "/", maxAge: 0 });
+  }
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const reqHost = req.headers.get("host");
@@ -103,6 +121,16 @@ export function middleware(req: NextRequest) {
       return syncFlag(NextResponse.next());
     }
     if (isAuthPath(pathname)) {
+      // Stale-session self-heal: the app-side check (getSession → null) redirects here with
+      // ?stale=1 when a session COOKIE is present but INVALID (expiry, a revoke, a dev DB
+      // reset). Clear the lingering cookie(s) + flag and render the login page — otherwise the
+      // presence-only bounce below sends /login → / → (invalid) → /login forever
+      // (ERR_TOO_MANY_REDIRECTS). syncFlag is skipped: we've just cleared the flag ourselves.
+      if (authed && req.nextUrl.searchParams.get("stale") === "1") {
+        const res = NextResponse.next();
+        clearAuthCookies(req, res, reqHost!);
+        return res;
+      }
       // Already logged in? Skip the auth form and go to the dashboard — the way
       // the app-host signup flow bounces a signed-in user straight to their workspace.
       // EXCEPT /onboarding, which exists FOR the just-signed-in: the dashboard resolver
