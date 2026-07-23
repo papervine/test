@@ -1733,6 +1733,14 @@ gaps" all derive from this. Backed by PostHog or a first-party events table; res
 
 ### 10.2 Automate — Workflows · Agent · Assistant (speculative)
 
+> **UI relabel (2026-07-22): the left rail is renamed to its own identity** (was too close
+> to the inspiration's). Routes and internal names are unchanged — this is display-label +
+> icon + section-heading only, in `AppRail.tsx` and the matching page headers/docs. Mapping
+> (old → new): Home→**Overview**, Editor→**Studio**, Analytics→**Insights**; section
+> "Automate"→**"Autopilot"** with Automations→**Routines**, Agent→**Teammate**,
+> Assistant→**Ask**; section "Admin"→**"Workspace"** (MCP kept), Platform Admin→**Operator**.
+> Design-log prose below keeps the original names; the product surfaces the new ones.
+
 The **Automate** rail section groups the three surfaces where Papervine *acts on* the
 docs instead of just rendering them. All three mirror hosted docs platforms' "Automate" area and are
 gated behind a per-org **Trialing** entitlement (the rail/page badge). **Status

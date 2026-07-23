@@ -134,7 +134,7 @@ export default async function PlatformAdminPage() {
         </Link>
 
         <div className="mt-4 flex items-center justify-between gap-4">
-          <h1 className="text-xl font-semibold">Platform admin</h1>
+          <h1 className="text-xl font-semibold">Operator</h1>
           <Link
             href="/admin/billing"
             className="db-ring rounded-lg px-3 py-1.5 text-sm font-medium text-[var(--fg)]"

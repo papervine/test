@@ -4,14 +4,14 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  Home,
-  BarChart3,
-  Settings,
-  FileEdit,
-  Plug,
-  Workflow,
-  Bot,
-  MessageCircle,
+  LayoutDashboard,
+  LineChart,
+  SlidersHorizontal,
+  PenLine,
+  Cable,
+  CalendarClock,
+  MessagesSquare,
+  CircleHelp,
   Menu,
   ShieldCheck,
   type LucideIcon,
@@ -47,51 +47,51 @@ type RailItem = {
   trialBadge?: boolean;
 };
 
-// Grouped rail IA, mirroring hosted docs platforms' sidebar: a lead group, an "Automate" section
-// (Workflows · Agent · Assistant — SPEC §10.2), then an "Admin" section header
-// (MCP + Settings). Deferred surfaces (Editor) render disabled with a "Soon" pill;
-// the Automate surfaces are scaffolded UI only — they navigate but nothing they show
-// is wired up yet. Hrefs are built per-site from the URL (SPEC §10), so the items hold
-// only the sub-path.
+// Grouped rail IA. A lead group (Overview · Studio · Insights), an "Autopilot" section — the
+// three agentic surfaces: Routines (scheduled/triggered runs), Teammate (the chat agent), and
+// Ask (reader Q&A) — then a "Workspace" section (MCP + Settings). Routes (`sub`) are stable
+// (SPEC §10.2: automate/automations, automate/agent, automate/assistant); the rail carries only
+// the display label + sub-path, and hrefs are built per-site from the URL. The Autopilot
+// surfaces are scaffolded UI only beyond Routines — they navigate but aren't all wired yet.
 const NAV_SECTIONS: { heading?: string; items: RailItem[] }[] = [
   {
     items: [
-      { sub: "", label: "Home", icon: Home },
-      { sub: "editor", label: "Editor", icon: FileEdit, feature: "editor.workspace" },
-      { sub: "analytics", label: "Analytics", icon: BarChart3, heavy: true },
+      { sub: "", label: "Overview", icon: LayoutDashboard },
+      { sub: "editor", label: "Studio", icon: PenLine, feature: "editor.workspace" },
+      { sub: "analytics", label: "Insights", icon: LineChart, heavy: true },
     ],
   },
   {
-    heading: "Automate",
+    heading: "Autopilot",
     items: [
       {
         sub: "automate/automations",
-        label: "Automations",
-        icon: Workflow,
+        label: "Routines",
+        icon: CalendarClock,
         feature: "automate.workflows",
         trialBadge: true,
       },
       {
         sub: "automate/agent",
-        label: "Agent",
-        icon: Bot,
+        label: "Teammate",
+        icon: MessagesSquare,
         feature: "automate.agent",
         trialBadge: true,
       },
       {
         sub: "automate/assistant",
-        label: "Assistant",
-        icon: MessageCircle,
+        label: "Ask",
+        icon: CircleHelp,
         feature: "automate.assistant",
         trialBadge: true,
       },
     ],
   },
   {
-    heading: "Admin",
+    heading: "Workspace",
     items: [
-      { sub: "mcp", label: "MCP", icon: Plug },
-      { sub: "settings", label: "Settings", icon: Settings },
+      { sub: "mcp", label: "MCP", icon: Cable },
+      { sub: "settings", label: "Settings", icon: SlidersHorizontal },
     ],
   },
 ];
@@ -237,7 +237,7 @@ export function AppRail({
           className="mt-4 flex items-center gap-2 rounded-md px-2 py-2.5 text-sm text-[var(--muted)] transition-colors hover:bg-[rgba(var(--ink-rgb),0.04)] hover:text-[var(--fg)] lg:py-1.5"
         >
           <ShieldCheck className="h-4 w-4" />
-          Platform Admin
+          Operator
         </Link>
       )}
       </div>

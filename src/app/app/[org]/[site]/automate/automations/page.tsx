@@ -76,7 +76,7 @@ export default async function AutomationsPage({
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
-      <AutomateHeader page="Automations" />
+      <AutomateHeader page="Routines" />
 
       {!isExecutorConfigured() && (
         <div className="mt-6 rounded-xl border border-amber-500/25 bg-amber-500/5 px-5 py-4 text-sm">
@@ -88,10 +88,10 @@ export default async function AutomationsPage({
         </div>
       )}
 
-      {/* Configure / Automations (run history) tabs */}
+      {/* Configure / Runs (run history) tabs */}
       <div className="mt-6 inline-flex gap-1 rounded-lg border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)] p-1 text-sm">
         <Tab href={basePath} active={!showRuns} label="Configure" />
-        <Tab href={`${basePath}?tab=runs`} active={showRuns} label="Automations" />
+        <Tab href={`${basePath}?tab=runs`} active={showRuns} label="Runs" />
       </div>
 
       {showRuns ? (

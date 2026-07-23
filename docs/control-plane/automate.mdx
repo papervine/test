@@ -1,32 +1,33 @@
 ---
-title: Automate
-description: Automations, the Slack agent, and the assistant — the three surfaces where Papervine acts on the docs.
+title: Autopilot
+description: Routines, the Teammate, and Ask — the three surfaces where Papervine acts on the docs.
 ---
 
-The **Automate** rail groups the three surfaces where Papervine *acts on* the docs rather than
-just rendering them: **Automations**, **Agent**, and **Assistant**. All three live in the
-Automate area and are gated behind a per-org **Trialing** entitlement.
+The **Autopilot** rail groups the three surfaces where Papervine *acts on* the docs rather than
+just rendering them: **Routines** (scheduled and triggered agent runs), **Teammate** (the chat
+agent), and **Ask** (the in-docs reader assistant). All three are gated behind a per-org
+**Trialing** entitlement.
 
 <Note>
-  **Automations is functional; Agent is still a scaffold.** Automations can be configured,
+  **Routines are functional; Teammate is still a scaffold.** Routines can be configured,
   toggled, and run — runs execute on the background executor and land through the shared
-  authoring backend. The Agent page (Slack + integrations) is UI only, and parts of the
-  Assistant page persist while others are scaffold (see
+  authoring backend. The Teammate page (Slack + integrations) is UI only, and parts of the
+  Ask page persist while others are scaffold (see
   [below](#where-each-toggles-state-lives)). Where the spec and the implementation diverge,
   the spec wins.
 </Note>
 
 ## Why one section
 
-Automations, Agent, and Assistant all run Claude over the tenant's content with tools, and all
+Routines, Teammate, and Ask all run Claude over the tenant's content with tools, and all
 three write through a **single shared authoring backend**: GitHub-App write credentials → a
 session branch → a draft buffer → `save` as a commit or PR. This is the same pipeline as the
 [authoring MCP](/features/mcp-servers) and the web editor — never a parallel write path. Under
 the hood they share one *run primitive* — `{ trigger, context, prompt, applyMode, output }` —
-with three frontends: scheduled/triggered (Automations), interactive from chat (Agent), and
-in-docs Q&A (Assistant).
+with three frontends: scheduled/triggered (Routines), interactive from chat (Teammate), and
+in-docs Q&A (Ask).
 
-## Automations
+## Routines
 
 Agent runs that keep the docs current on their own: each automation is a trigger, a prompt, and
 an apply mode. When it fires, an agent reads the site's content, makes the required edits on a
@@ -157,14 +158,14 @@ runs are deduplicated per commit, which is also what makes webhook redeliveries 
   `Require review` until you trust an automation's output.
 </Warning>
 
-## Agent
+## Teammate
 
 An interactive agent reachable from chat. The surface is **Slack-centric**: you invoke it with
-`@papervine <prompt>` in a channel, and the agent answers questions and opens doc changes on
+`@papervine <prompt>` in a channel, and the teammate answers questions and opens doc changes on
 request.
 
-The **Agent settings** page is where you wire it up. A **Connect your Slack workspace** banner
-installs the Slack app — the agent's home. Below it, **Enabled integrations** lists the
+The **Teammate settings** page is where you wire it up. A **Connect your Slack workspace** banner
+installs the Slack app — the teammate's home. Below it, **Enabled integrations** lists the
 connectors the agent can currently draw on (empty until you connect one), and **Available to
 your team** is the catalog of connectors you can add — Notion, Google Drive, Linear, Jira,
 Confluence, Salesforce, HubSpot, Intercom, Plain, and more — each grouped by what it brings
@@ -185,10 +186,10 @@ The plumbing (none of it built yet) needs a Slack OAuth app and per-org install 
 `channels:read` and `chat:write` scopes, a channel allowlist, and an events endpoint for
 `app_mention`.
 
-## Assistant
+## Ask
 
 The management page for the **same in-docs [AI assistant](/features/ai-assistant)**, surfaced
-under Automate. This is not a fourth system — it is the settings surface the assistant calls
+under Autopilot. This is not a fourth system — it is the settings surface the assistant calls
 for. The layout:
 
 - A **usage overview** strip (Total questions / Answered properly / Not Answered, each with a

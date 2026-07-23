@@ -46,7 +46,7 @@ export default async function AssistantPage({
   ];
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
-      <AutomateHeader page="Assistant" />
+      <AutomateHeader page="Ask" />
 
       {/* Usage overview — links to the Analytics deep-dive (§10.1) */}
       <div className="mt-6 grid grid-cols-1 divide-y divide-[rgba(var(--ink-rgb),0.06)] overflow-hidden rounded-xl border border-[rgba(var(--ink-rgb),0.06)] sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">

@@ -59,7 +59,7 @@ export default async function AutomationRunPage({
 
   return (
     <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-10">
-      <AutomateHeader page="Automations" />
+      <AutomateHeader page="Routines" />
 
       <Link
         href={`${basePath}?tab=runs`}
