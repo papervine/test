@@ -165,6 +165,17 @@ export async function publishDraft(
   if (!session) return { ok: false, error: "No open edit session for this branch." };
 
   const token = await repoTokenForSite(site);
+  // A public repo reads token-less, but every WRITE needs credentials — without them the git
+  // calls (createTree/…) fail deep with an opaque 401. Surface the real reason up front: this
+  // site has no GitHub App installation and no stored token (see repoTokenForSite precedence).
+  if (!token) {
+    return {
+      ok: false,
+      error:
+        "This site has no write access to its repository. Connect it with the GitHub App to " +
+        "publish edits, sync changes back, or accept automation runs.",
+    };
+  }
   const base = await getRef(site.repoOwner!, site.repoName!, session.baseBranch, token);
   if (!base) return { ok: false, error: `Can't read the ${session.baseBranch} branch (check write access).` };
 
