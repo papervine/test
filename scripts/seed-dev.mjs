@@ -36,7 +36,12 @@ function genReaderKeypair() {
   };
 }
 import { hashPassword } from "better-auth/crypto";
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
+} from "@aws-sdk/client-s3";
 import { imageSize } from "image-size";
 
 const DEV = {
@@ -168,6 +173,50 @@ async function syncToStorage({ id, repoOwner, repoName, branch }) {
     }),
   );
   return count;
+}
+
+// 0. Reset to ONLY seeded data (prod-guarded above). Truncate every dev/tenant table so
+// leftover experiments — extra orgs, hand-connected sites, orphaned automations/sessions — are
+// gone; the seed below rebuilds the fixtures from scratch. The billing CATALOG survives (it's
+// `billing:sync` output, not dev data, and the seed reads it to put dev-org on Pro).
+const CATALOG_TABLES = new Set([
+  "billing_plan",
+  "billing_plan_version",
+  "billing_price",
+  "credit_pack",
+  "credit_rate_version",
+]);
+async function wipeDb() {
+  const rows = await sql`select tablename from pg_tables where schemaname = 'public'`;
+  const wipe = rows.map((r) => r.tablename).filter((t) => !CATALOG_TABLES.has(t));
+  if (wipe.length) {
+    await sql.unsafe(`TRUNCATE ${wipe.map((t) => `"${t}"`).join(", ")} RESTART IDENTITY CASCADE`);
+  }
+  console.log(`• reset: truncated ${wipe.length} tables (kept the billing catalog)`);
+}
+// The content bucket only holds seed-regenerable site content (`sites/<id>/…`); clearing it
+// keeps orphaned blobs from piling up as site ids change across reseeds. Non-fatal.
+async function wipeStorage() {
+  let removed = 0;
+  let token;
+  do {
+    const list = await s3.send(
+      new ListObjectsV2Command({ Bucket: S3_BUCKET, Prefix: "sites/", ContinuationToken: token }),
+    );
+    const objs = (list.Contents ?? []).map((o) => ({ Key: o.Key }));
+    if (objs.length) {
+      await s3.send(new DeleteObjectsCommand({ Bucket: S3_BUCKET, Delete: { Objects: objs } }));
+      removed += objs.length;
+    }
+    token = list.IsTruncated ? list.NextContinuationToken : undefined;
+  } while (token);
+  console.log(`• reset: cleared ${removed} objects under sites/ in ${S3_BUCKET}`);
+}
+await wipeDb();
+try {
+  await wipeStorage();
+} catch (e) {
+  console.warn(`• storage wipe skipped (${e.message})`);
 }
 
 // 1. User + credential account (Better Auth's `account` row holds the password hash).
