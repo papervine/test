@@ -317,7 +317,20 @@ npm run db:generate         # generate a versioned SQL migration from schema cha
 npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
 node bin/papervine.mjs dev <dir>     # preview any docs repo (docs dev analogue)
 node tests/crawl.mjs <dir>        # crawl a real repo, report rendered/degraded/500
+npm run worktree:setup            # a fresh worktree: symlink .env.local to main (share one env), then npm ci
 ```
+
+## Working across worktrees (share one `.env.local`, not copies)
+
+`.env.local` is gitignored, so every worktree keeps its own — and they **drift** (a key added
+in one is missing in another, which quietly breaks whatever needs it). Don't copy it. Instead
+each worktree's `.env.local` is a **symlink to the main checkout's** — the single canonical
+secrets file. Editing `<main>/.env.local` updates every worktree at once; both Next dev and the
+`--env-file=.env.local` scripts follow the symlink, and `.env.local*` stays gitignored so the
+link is never committed. A **fresh worktree**: `npm run worktree:setup` (symlinks `.env.local`,
+then run `npm ci`). **Deps are NOT shared** — a worktree on a different branch can need different
+dependencies, so `node_modules` stays per-worktree (`npm ci`); symlinking it to main breaks the
+branch's own deps.
 
 ## Database migrations (GitOps — schema changes ship as commits)
 

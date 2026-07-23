@@ -24,6 +24,7 @@
     "test:e2e": "playwright test",
     "eval": "node --env-file=.env.local evals/run.mjs",
     "eval:web": "node --env-file=.env.local evals/serve.mjs",
+    "worktree:setup": "bash bin/setup-worktree.sh",
     "db:generate": "node node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs migrate",
     "db:seed": "node --env-file=.env.local scripts/seed-dev.mjs",
