@@ -201,6 +201,14 @@ export function GitSettingsForm({
   }
 
   const live = status === "live";
+  // Whether THIS site actually publishes through the App (write access), vs. the org merely
+  // having the App installed somewhere. Conflating the two made a public/read-only connection
+  // look App-backed — the status below is keyed on the site, not the org.
+  const siteUsesApp = saved.installationId != null;
+  const orgHasApp = installations.length > 0;
+  const siteInstallLogin = installations.find(
+    (i) => i.installationId === saved.installationId,
+  )?.accountLogin;
 
   return (
     <>
@@ -415,17 +423,23 @@ export function GitSettingsForm({
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <h3 className="text-sm font-medium">Configure GitHub App</h3>
-                  {installations.length > 0 && (
+                  {siteUsesApp ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400">
                       <CheckCircle2 className="h-3.5 w-3.5" />
-                      Installed
+                      This site
                     </span>
-                  )}
+                  ) : orgHasApp ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-400">
+                      Not used by this site
+                    </span>
+                  ) : null}
                 </div>
                 <p className="mt-1 text-sm text-[var(--muted)]">
-                  {installations.length > 0
-                    ? `GitHub app installed successfully to the ${installations[0].accountLogin} organization`
-                    : "Install the GitHub app to connect private repositories and get automatic deploys on push."}
+                  {siteUsesApp
+                    ? `This site publishes to ${saved.owner}/${saved.name} through the GitHub App on ${siteInstallLogin ?? "your organization"} — edits, automation runs, and sync-back all have write access.`
+                    : orgHasApp
+                      ? "The app is installed on your organization, but this site is connected to a public repo (read-only) — it can't publish edits, sync changes back, or run automations. To enable that, choose an installed organization under Source above and pick the repo."
+                      : "Install the GitHub app to connect private repositories and get automatic deploys on push."}
                 </p>
               </div>
               {installHref &&
