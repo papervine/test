@@ -225,6 +225,7 @@ export async function EndpointReference({ op, baseUrl }: { op: Operation; baseUr
     auth: tryItAuth,
     bodySample,
     siblings,
+    specPath: op.specPath,
   };
 
   return (

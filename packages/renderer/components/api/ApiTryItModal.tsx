@@ -6,6 +6,14 @@ import Link from "next/link";
 import clsx from "clsx";
 import { Play, Loader2, X, ChevronDown, ChevronRight, Copy, Check, Eye, EyeOff } from "lucide-react";
 import { methodColor } from "../../lib/method-colors";
+import {
+  authFieldKeys,
+  clearCredentials,
+  readCredentials,
+  sessionCredentialStore,
+  writeCredentials,
+  type TryItAuth,
+} from "../../lib/try-it-credentials";
 
 /**
  * The interactive API "Try it" playground (hosted docs platforms model): the trigger lives on the endpoint
@@ -28,13 +36,7 @@ export type TryItParam = {
   type?: string;
   description?: string;
 };
-export type TryItAuth = {
-  key: string;
-  type: "basic" | "bearer" | "apiKey" | "oauth2" | "other";
-  in?: "header" | "query" | "cookie";
-  name?: string;
-  description?: string;
-};
+export type { TryItAuth };
 export type TryItSibling = { slug: string; method: string; summary: string };
 export type TryItProps = {
   method: string;
@@ -45,6 +47,9 @@ export type TryItProps = {
   auth: TryItAuth[];
   bodySample?: string;
   siblings: TryItSibling[];
+  // Which spec these credentials belong to — scopes the remembered credentials so two specs
+  // (or two tenants sharing an origin in apex path mode) never prefill each other's.
+  specPath: string;
 };
 
 type LiveResponse = { status: number; statusText: string; body: string; ok: boolean };
@@ -108,23 +113,30 @@ function CopyButton({ text }: { text: string }) {
 function Section({
   title,
   defaultOpen = true,
+  action,
   children,
 }: {
   title: string;
   defaultOpen?: boolean;
+  // Optional control in the header row. Kept a sibling of the toggle, not a child — a button
+  // nested inside a button is invalid HTML and swallows its own clicks.
+  action?: React.ReactNode;
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/40">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-4 py-3 text-sm font-semibold text-zinc-200"
-      >
-        {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        {title}
-      </button>
+      <div className="flex items-center gap-2 pr-4">
+        <button
+          type="button"
+          onClick={() => setOpen((o) => !o)}
+          className="flex min-w-0 flex-1 items-center gap-2 px-4 py-3 text-sm font-semibold text-zinc-200"
+        >
+          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+          {title}
+        </button>
+        {action}
+      </div>
       {open && <div className="space-y-4 px-4 pb-4">{children}</div>}
     </div>
   );
@@ -194,13 +206,34 @@ function Field({
 
 export function ApiTryItModal(props: TryItProps) {
   const [open, setOpen] = useState(false);
-  const { method, path, summary, params, auth } = props;
+  const { method, path, summary, params, auth, specPath } = props;
 
   const [base, setBase] = useState(props.baseUrl);
   const [values, setValues] = useState<Record<string, string>>(() =>
     Object.fromEntries(params.map((p) => [fieldKey(p), p.example ?? ""])),
   );
+  // Credentials are remembered for the tab (sessionStorage) so you type them once, not once per
+  // endpoint — every operation page mounts its own modal, so state alone is lost on navigation.
+  // Restored in an effect rather than a lazy initializer: storage doesn't exist during SSR, and
+  // seeding state post-hydration keeps the server and client trees identical.
   const [authValues, setAuthValues] = useState<Record<string, string>>({});
+  useEffect(() => {
+    const stored = readCredentials(sessionCredentialStore(), specPath, auth);
+    if (Object.keys(stored).length > 0) setAuthValues(stored);
+    // Restore once per spec: re-running on a new `auth` array identity would overwrite whatever
+    // the reader is mid-way through typing.
+  }, [specPath]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Every credential edit writes through, so the next endpoint page starts filled in.
+  const setAuthValue = (key: string, value: string) => {
+    const next = { ...authValues, [key]: value };
+    setAuthValues(next);
+    writeCredentials(sessionCredentialStore(), specPath, auth, next);
+  };
+  const forgetAuth = () => {
+    setAuthValues(Object.fromEntries(auth.flatMap(authFieldKeys).map((k) => [k, ""])));
+    clearCredentials(sessionCredentialStore(), specPath);
+  };
   const [body, setBody] = useState(props.bodySample ?? "");
   const [lang, setLang] = useState<"cURL" | "JavaScript" | "Python">("cURL");
   const [sending, setSending] = useState(false);
@@ -307,7 +340,7 @@ export function ApiTryItModal(props: TryItProps) {
         Try it <Play className="h-3.5 w-3.5" />
       </button>
 
-      {open && <Modal {...{ props, method, path, summary, base, setBase, values, setValues, authValues, setAuthValues, body, setBody, hasBody, grouped, auth, lang, setLang, sample, sending, send, live, setLive, setOpen, built }} />}
+      {open && <Modal {...{ props, method, path, summary, base, setBase, values, setValues, authValues, setAuthValue, forgetAuth, body, setBody, hasBody, grouped, auth, lang, setLang, sample, sending, send, live, setLive, setOpen, built }} />}
     </>
   );
 }
@@ -323,7 +356,8 @@ function Modal(p: {
   values: Record<string, string>;
   setValues: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   authValues: Record<string, string>;
-  setAuthValues: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  setAuthValue: (key: string, value: string) => void;
+  forgetAuth: () => void;
   body: string;
   setBody: (v: string) => void;
   hasBody: boolean;
@@ -390,9 +424,26 @@ function Modal(p: {
             <h2 className="text-lg font-semibold text-zinc-100">{p.summary}</h2>
 
             {p.auth.length > 0 && (
-              <Section title="Authorization">
+              <Section
+                title="Authorization"
+                action={
+                  hasStoredAuth(p.auth, p.authValues) ? (
+                    <button
+                      type="button"
+                      onClick={p.forgetAuth}
+                      className="shrink-0 text-xs text-zinc-400 underline-offset-2 hover:text-zinc-200 hover:underline"
+                    >
+                      Forget
+                    </button>
+                  ) : null
+                }
+              >
+                <p className="text-xs text-zinc-500">
+                  Kept for this browser tab so you don&rsquo;t retype it on every endpoint. Closing
+                  the tab forgets it.
+                </p>
                 {p.auth.map((a) => (
-                  <AuthFields key={a.key} auth={a} values={p.authValues} set={p.setAuthValues} />
+                  <AuthFields key={a.key} auth={a} values={p.authValues} set={p.setAuthValue} />
                 ))}
               </Section>
             )}
@@ -569,6 +620,12 @@ function ParamField({
   );
 }
 
+/** Any credential currently filled in — gates the "Forget" control so it only shows when there's
+ *  something to forget. */
+function hasStoredAuth(auth: TryItAuth[], values: Record<string, string>): boolean {
+  return auth.flatMap(authFieldKeys).some((k) => (values[k] ?? "") !== "");
+}
+
 function AuthFields({
   auth,
   values,
@@ -576,9 +633,9 @@ function AuthFields({
 }: {
   auth: TryItAuth;
   values: Record<string, string>;
-  set: React.Dispatch<React.SetStateAction<Record<string, string>>>;
+  set: (key: string, value: string) => void;
 }) {
-  const upd = (k: string) => (v: string) => set((s) => ({ ...s, [k]: v }));
+  const upd = (k: string) => (v: string) => set(k, v);
   if (auth.type === "basic") {
     return (
       <>

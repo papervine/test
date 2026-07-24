@@ -934,6 +934,42 @@ Ship a styled component set resolved at compile time. Parity targets with hosted
 > an inline notice. Verified in-browser on `starter` (bearer-auth section, live send echoing
 > `color=red`, 200).
 
+> **Status — the playground remembers credentials for the tab (2026-07-24).** Credentials lived
+> in `ApiTryItModal`'s component state, and **every operation page mounts its own modal** — so a
+> Basic-auth spec meant retyping username + password on *every single endpoint*. They now persist
+> through `packages/renderer/lib/try-it-credentials.ts`, with an explicit **Forget** control in the
+> Authorization header row and a line of copy stating the lifetime (the reader should never have to
+> guess where their password went).
+>
+> Two deliberate choices. **`sessionStorage`, not `localStorage`:** it survives navigation between
+> endpoints — the actual pain — while staying scoped to the tab and cleared when it closes, rather
+> than persisting on the machine indefinitely. Threat model, stated plainly: this is **not** an
+> isolation boundary (any script on the origin reads every key, so the per-spec keying is
+> correctness, not defense) and **not** memory-only (browsers back session storage on disk for
+> crash/tab restore). What it buys is a *bounded lifetime*. The exposure delta over not remembering
+> at all is narrow — the playground is client-side by design, so the credential is in page memory
+> and on the wire from the browser either way; remembering widens the window during which an XSS
+> that lands *later* could scoop it up without the modal ever being open. A durable
+> `localStorage` entry would widen that to "forever, on this machine", which is the line we don't
+> cross for a convenience feature. **Keyed by spec path, not origin:** in apex path mode (`/sites/{slug}`) every
+> tenant shares an origin, and a scheme named `BasicAuth` on one site must not prefill another's;
+> the same key also isolates two specs on one site. Reads are filtered to the field keys the
+> current schemes declare, so a stale or hand-edited entry can't inject fields into a request, and
+> every storage access is guarded (Safari private mode throws on `sessionStorage` access itself) —
+> a browser that refuses storage degrades to "doesn't remember", never to a broken modal.
+>
+> The store is a pure module (the `Storage` slice is injected) and unit-tested —
+> `try-it-credentials.test.ts`: round-trip, per-spec scoping, clearing really clearing, foreign/
+> corrupt entries ignored, throwing storage. Verified in-browser against the fixtures spec (which
+> gained a `BasicAuth` security scheme): filled on `list-users`, credentials prefilled on
+> `get-user` after a full navigation, cURL sample showing the right `Authorization: Basic …`,
+> **Forget** clearing both pages, console clean.
+>
+> Still typing them *once* per tab. The zero-typing path is `apiPlaygroundInputs` on the reader-auth
+> JWT (§11.2) — the IdP asserts the reader's own API credentials at login and the playground
+> prefills from the session. The field is already in `ReaderJwtUser`; wiring it to the playground is
+> unbuilt.
+
 ---
 
 ## 8. AI Assistant (M5)

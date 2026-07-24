@@ -72,7 +72,7 @@ collapsible sections:
   password fields, Bearer (and OAuth2) a token field, and an API key its header or query value.
   Credential values (password, token, API key) are **masked**, with an eye toggle to reveal them.
   Whatever you enter is folded into the request the right way (Basic base64, `Bearer …`, or the
-  named header/query) at send time.
+  named header/query) at send time, and **remembered for the tab** — see below.
 - **Headers**, **Path**, and **Query** — one input per parameter, pre-filled from the spec's
   examples, with the parameter's type and description inline. An **`Accept`** header is added
   automatically from what the operation produces (preferring `application/json`) — many APIs
@@ -90,6 +90,43 @@ or Python, regenerated as you type — and, once you press **Send**, the respons
   you can copy the request sample instead. The optional [request proxy](#cors-and-the-request-proxy)
   is what removes that constraint.
 </Note>
+
+### Credentials are entered once, not once per endpoint
+
+Every operation is its own page, so credentials typed on one endpoint would be gone by the next
+one. They aren't: the playground **remembers what you entered for the rest of the browser tab**,
+and prefills the Authorization section on every other endpoint of the same spec. A reader working
+through a Basic-auth API types their username and password once.
+
+The remembered values are scoped two ways:
+
+- **To the tab.** They live in `sessionStorage`, so they're gone when the tab closes rather than
+  sitting in the browser indefinitely the way a `localStorage` entry would. A **Forget** control in
+  the Authorization header row clears them immediately.
+- **To the spec.** Credentials for one OpenAPI spec never prefill another's, even when two sites
+  share an origin — so a scheme called `BasicAuth` on one docs site can't leak into another's
+  playground.
+
+<Note>
+  This is a convenience for the reader's *own* credentials, which stay in their browser. It is not
+  a way to hand readers access to your API — for that, either have your identity provider assert
+  them (below) or keep the secret server-side with the [request
+  proxy](#cors-and-the-request-proxy).
+</Note>
+
+<Warning>
+  A browser playground is client-side by nature: whatever a reader types is in page memory and is
+  sent from their browser, whether or not it's remembered. Remembering widens *when* it can be
+  read, not *who* can read it — any script running on the docs origin could reach it either way.
+  So prefer a scoped, revocable credential (an API key or short-lived token) over a
+  password-equivalent one for playground use, and reach for the
+  [proxy](#cors-and-the-request-proxy) whenever the request must carry a real secret.
+</Warning>
+
+For docs behind [reader authentication](/auth/reader-auth), the signed reader payload carries an
+`apiPlaygroundInputs` field: the path for a reader's credentials to arrive from your identity
+provider at login, so the playground is filled in before they type anything at all. The field is
+accepted on the token today; prefilling the playground from it is not wired up yet.
 
 ### Auth methods
 
