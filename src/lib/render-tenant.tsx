@@ -212,7 +212,7 @@ export async function TenantDocsArticle({
       if (op) {
         return (
           <div className="flex items-start gap-10 px-8 py-10">
-            <EndpointReference op={op} baseUrl={op.baseUrl} />
+            <EndpointReference op={op} baseUrl={op.baseUrl} siteBase={base} />
           </div>
         );
       }

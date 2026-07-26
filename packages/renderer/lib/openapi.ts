@@ -33,8 +33,21 @@ export type AuthScheme = {
   type: "basic" | "bearer" | "apiKey" | "oauth2" | "other";
   in?: "header" | "query" | "cookie"; // apiKey location
   name?: string; // apiKey header/query name
+  format?: string; // http bearerFormat, e.g. JWT — shown as a hint on the token field
   description?: string;
 };
+/**
+ * The alternatives that satisfy an operation: **outer array is OR, inner is AND** — exactly what
+ * OpenAPI's `security` list means. `[{BasicAuth: []}, {BearerAuth: []}]` is "either works" and
+ * resolves to two options; `[{BasicAuth: [], BearerAuth: []}]` is "send both" and resolves to one
+ * option holding two schemes. An empty inner array is a legal "no auth needed" alternative
+ * (`security: [{}]`).
+ *
+ * We used to read only the first requirement, which meant a spec offering Basic *or* Bearer showed
+ * only Basic and silently dropped the other — so the playground now carries every alternative and
+ * lets the reader pick one.
+ */
+export type AuthOptions = AuthScheme[][];
 export type Operation = {
   slug: string; // URL slug for the generated page
   method: string; // GET, POST, …
@@ -49,7 +62,7 @@ export type Operation = {
   // Response media types the operation can return (the keys under each response's `content`),
   // deduped. Drives the "Try it" Accept header — many APIs 406/return HTML without it.
   produces: string[];
-  auth: AuthScheme[];
+  auth: AuthOptions;
   baseUrl: string;
   specPath: string;
 };
@@ -70,6 +83,68 @@ function operationSlug(method: string, p: string, op: Record<string, unknown>): 
   return kebab(`${method}-${p}`);
 }
 
+/** One `components.securitySchemes` entry → the playground's input model. */
+function resolveScheme(s: Record<string, unknown> | undefined, key: string): AuthScheme[] {
+  if (!s) return [];
+  const type = s.type as string;
+  const scheme = (s.scheme as string | undefined)?.toLowerCase();
+  const description = s.description as string | undefined;
+  if (type === "http" && scheme === "basic") return [{ key, type: "basic", description }];
+  if (type === "http")
+    return [{ key, type: "bearer", format: s.bearerFormat as string | undefined, description }];
+  if (type === "apiKey")
+    return [
+      {
+        key,
+        type: "apiKey",
+        in: (s.in as AuthScheme["in"]) ?? "header",
+        name: (s.name as string) ?? key,
+        description,
+      },
+    ];
+  if (type === "oauth2" || type === "openIdConnect") return [{ key, type: "oauth2", description }];
+  return [{ key, type: "other", description }];
+}
+
+/**
+ * What the request carries for an auth alternative, with the credential itself elided — for the
+ * read-only cURL/JS/Python samples on the page. The interactive playground builds the same shapes
+ * from real input (`ApiTryItModal`), so a spec that declares auth gets a sample that shows it,
+ * rather than an unauthenticated snippet beside a playground sending `Authorization: Basic …`.
+ *
+ * They agree on *shape*, not always on *which* alternative: these samples are server-rendered from
+ * the operation's first credential-bearing alternative, while the playground restores whichever one
+ * the reader last picked. A reader who chose Bearer sees a Basic sample beside a Bearer playground
+ * — inherent to rendering the sample on the server, and the picker above it says which is live.
+ */
+export function sampleAuth(schemes: AuthScheme[]): {
+  headers: [string, string][];
+  query: [string, string][];
+} {
+  // One name, one value: an AND requirement combining two Authorization-header schemes can't send
+  // both, and emitting the header twice would print a duplicate `-H` (and a duplicate key in the
+  // JavaScript object literal). Later scheme wins, matching how the playground folds them in — the
+  // playground also flags the collision to the reader.
+  const headers = new Map<string, string>();
+  const query: [string, string][] = [];
+  // Cookies accumulate rather than overwrite: one `Cookie` header carries them all, and a spec
+  // pairing a session cookie with a CSRF cookie is ordinary.
+  const cookies: string[] = [];
+  for (const s of schemes) {
+    if (s.type === "basic") headers.set("Authorization", "Basic <credentials>");
+    else if (s.type === "apiKey") {
+      const name = s.name ?? s.key;
+      if (s.in === "query") query.push([name, "<key>"]);
+      // A cookie-located key is `Cookie: name=value`, not a header named after the cookie —
+      // emitting the latter produces a snippet that 401s when pasted.
+      else if (s.in === "cookie") cookies.push(`${name}=<key>`);
+      else headers.set(name, "<key>");
+    } else headers.set("Authorization", `Bearer <${s.format?.toLowerCase() ?? "token"}>`);
+  }
+  if (cookies.length) headers.set("Cookie", cookies.join("; "));
+  return { headers: [...headers], query };
+}
+
 /** Load, upgrade (2.0→3), and dereference a spec. Cached per spec path. Reads through the
  *  active ContentSource so it works for both filesystem previews and synced tenants. */
 const loadSpec = cache(async (specPath: string): Promise<Schema | null> => {
@@ -81,9 +156,10 @@ const loadSpec = cache(async (specPath: string): Promise<Schema | null> => {
   return (schema as Schema) ?? null;
 });
 
-/** Resolve an operation's security requirement into the auth inputs the playground renders.
- *  Reads `components.securitySchemes`, preferring the op's `security` over the spec root's. */
-function resolveAuth(schema: Schema | null, op: Record<string, unknown>): AuthScheme[] {
+/** Resolve an operation's security requirements into the auth inputs the playground renders.
+ *  Reads `components.securitySchemes`, preferring the op's `security` over the spec root's.
+ *  Every alternative is kept — see `AuthOptions` for what the nesting means. */
+function resolveAuth(schema: Schema | null, op: Record<string, unknown>): AuthOptions {
   const schemes = (schema?.components as { securitySchemes?: Record<string, Record<string, unknown>> })
     ?.securitySchemes;
   if (!schemes) return [];
@@ -91,29 +167,38 @@ function resolveAuth(schema: Schema | null, op: Record<string, unknown>): AuthSc
     | Record<string, unknown>[]
     | undefined;
   if (!Array.isArray(requirement) || requirement.length === 0) return [];
-  // Each requirement object ANDs its keys; take the first requirement's schemes (the common case).
-  const keys = Object.keys(requirement[0] ?? {});
-  return keys.flatMap((key): AuthScheme[] => {
-    const s = schemes[key];
-    if (!s) return [];
-    const type = s.type as string;
-    const scheme = (s.scheme as string | undefined)?.toLowerCase();
-    const description = s.description as string | undefined;
-    if (type === "http" && scheme === "basic") return [{ key, type: "basic", description }];
-    if (type === "http") return [{ key, type: "bearer", description }]; // bearer + other http
-    if (type === "apiKey")
-      return [
-        {
-          key,
-          type: "apiKey",
-          in: (s.in as AuthScheme["in"]) ?? "header",
-          name: (s.name as string) ?? key,
-          description,
-        },
-      ];
-    if (type === "oauth2" || type === "openIdConnect")
-      return [{ key, type: "oauth2", description }];
-    return [{ key, type: "other", description }];
+  // Each requirement object ANDs its keys; each element of the list is an OR alternative.
+  const seen = new Set<string>();
+  return requirement.flatMap((req): AuthOptions => {
+    const keys = Object.keys(req ?? {});
+    const resolved = keys.flatMap((key) => resolveScheme(schemes[key], key));
+    // A requirement naming only schemes the spec never defines is broken, not "auth optional" —
+    // drop it, or the playground would offer a no-auth alternative the API doesn't actually have.
+    // An empty requirement object (`{}`) *is* the spec's way to say auth is optional, so it stays.
+    //
+    // Warn rather than fail, per the config layer's posture: the author owns the typo, and they're
+    // the only one who can fix it. Note the residual — if the *only* requirement is broken, the
+    // operation resolves to no auth at all and the page reads as an open endpoint. Surfacing that
+    // to readers would mean plumbing "there was a requirement we couldn't resolve" through to the
+    // modal; the warning is what the author needs, and a spec this broken is loud elsewhere.
+    if (resolved.length < keys.length) {
+      const missing = keys.filter((k) => !schemes[k]);
+      console.warn(
+        `openapi: security requirement references undefined scheme(s) ${missing.join(", ")} — ` +
+          `add them to components.securitySchemes or the playground can't offer that auth.`,
+      );
+      // Nothing resolved: drop the alternative entirely, or the playground would offer a no-auth
+      // option the API doesn't have. Some resolved: keep what we can — a partial alternative still
+      // beats none — but the warning above is the only signal that it's short a credential.
+      if (resolved.length === 0) return [];
+    }
+    // Alternatives differing only by OAuth2 scopes (`[{OAuth2: ["read"]}, {OAuth2: ["write"]}]`)
+    // collapse to the same schemes, since scopes don't change the input or the request we build.
+    // Keeping both would put two identical, unpickable buttons in the picker.
+    const signature = resolved.map((s) => s.key).join("+");
+    if (seen.has(signature)) return [];
+    seen.add(signature);
+    return [resolved];
   });
 }
 
@@ -182,6 +267,10 @@ export const apiOperations = cache(async (specPath: string): Promise<Operation[]
 export function sampleFromSchema(schema?: Schema, seen: Set<Schema> = new Set(), depth = 0): unknown {
   if (!schema || depth > 6) return null;
   if (schema.example !== undefined) return schema.example;
+  // `upgrade()` rewrites 3.0's `example: x` into 3.1's `examples: [x]`, so reading only `example`
+  // meant every author-written example in a 3.0 spec — which is most of them — was dropped on the
+  // floor and replaced with a `"string"` placeholder.
+  if (Array.isArray(schema.examples) && schema.examples.length > 0) return schema.examples[0];
   if (schema.default !== undefined) return schema.default;
   if (Array.isArray(schema.enum) && schema.enum.length) return schema.enum[0];
   if (seen.has(schema)) return null;

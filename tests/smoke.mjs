@@ -91,6 +91,28 @@ const CHECKS = [
     include: ["The user ID"],
   },
   {
+    // The read-only samples must carry the auth the spec declares (this operation overrides the
+    // root `security` with an apiKey), or the page shows an unauthenticated snippet beside a
+    // playground that sends a credential. The URL is quoted because these get pasted into a shell.
+    slug: "get-user",
+    desc: "OpenAPI: code samples carry the operation's own security scheme, URL shell-quoted",
+    include: ["X-Api-Key: &#x3C;key>", "'https://api.example.com/v1/users/{id}'"],
+  },
+  {
+    slug: "list-users",
+    desc: "OpenAPI: code samples show the root security scheme (Basic), credential elided",
+    include: ["Authorization: Basic &#x3C;credentials>"],
+  },
+  {
+    // Two things at once: the spec's `example` reaches the sample at all (3.0's `example` arrives
+    // as 3.1's `examples: [x]` after `upgrade()`, and reading only `example` dropped it), and the
+    // apostrophe in it is shell-escaped — unquoted it would end the string and hang the pasted
+    // command. Shiki splits `O'\''Brien` across spans, so assert the pieces that survive it.
+    slug: "create-user",
+    desc: "OpenAPI: a spec example reaches the cURL body, with its apostrophe shell-escaped",
+    include: [`"name": "O'`, `>\\'<`],
+  },
+  {
     slug: "mermaid",
     desc: "```mermaid renders as a <Mermaid> diagram, not a highlighted code block",
     // The client <Mermaid> SSRs an aria-label="Diagram" container (positive proof the fence was

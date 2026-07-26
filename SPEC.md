@@ -970,6 +970,218 @@ Ship a styled component set resolved at compile time. Parity targets with hosted
 > prefills from the session. The field is already in `ReaderJwtUser`; wiring it to the playground is
 > unbuilt.
 
+> **Status — the playground honors every `security` alternative, with a picker (2026-07-25).**
+> `resolveAuth` read **only `requirement[0]`**, so a spec whose root said
+> `security: [{BasicAuth: []}, {BearerAuth: []}]` — the ordinary way to say "either works" — showed
+> the Basic fields and **silently dropped Bearer**. Found by probing the resolver with the four
+> real-world spec shapes rather than reading the code: OR → 1 of 2, AND → both, unreferenced
+> scheme → nothing, op-level override → fine.
+>
+> `Operation.auth` is now `AuthOptions = AuthScheme[][]` — **outer array is OR, inner is AND**,
+> exactly mirroring the spec — and the modal renders a picker when there's more than one
+> alternative. Only the selected alternative is folded into the request, which is the point:
+> rendering both would put two values in one `Authorization` header, with the last write winning
+> and a request the reader didn't intend. Credentials are keyed per scheme (`BasicAuth.username`,
+> `BearerAuth.token`), so switching alternatives keeps both, and the **choice is remembered per
+> spec** alongside them — picking Bearer and landing back on Basic at the next endpoint is the same
+> annoyance as retyping. It's stored **by label, not index**, so reordering a spec's `security` list
+> can't silently select a different scheme; an unknown label falls back to the first option. The
+> choice survives **Forget** (a preference, not a secret).
+>
+> Two judgment calls worth recording. An empty requirement (`{}`) is OpenAPI's "auth optional" and
+> is kept as a **No auth** alternative. But a requirement naming *only* schemes the spec never
+> defines is **dropped**, not kept as an empty alternative — it resolves to the same empty array,
+> and rendering it as "No auth" would tell readers a broken spec's endpoint is open when it isn't.
+> Also surfaced `bearerFormat` (e.g. `bearer · JWT`) on the token field, since it's the spec
+> author's hint about what to paste.
+>
+> Unit-tested in `openapi-auth.test.ts` (OR/AND/optional/op-level-override/dangling-ref, plus
+> `bearerFormat`) and `try-it-credentials.test.ts` (label, choice round-trip, label-follows-reorder,
+> fallbacks, out-of-range write, survives clear). The fixtures spec now offers Basic **or** Bearer,
+> so the smoke gate renders the picker. Verified in-browser: picker switches the fields, the cURL
+> sample flips to `Authorization: Bearer …` with no Basic header, both credentials survive
+> switching, choice + token persist across a full navigation to another endpoint, console clean.
+>
+> **Review pass — four real defects, all in the persistence seam.** Worth recording because three
+> of them only appear with a *second* scheme or a *second* operation, which is exactly what the
+> alternatives work introduced:
+>
+> 1. **`writeCredentials` replaced the entry instead of merging.** Each modal knows only its own
+>    operation's schemes, so on a spec where an operation overrides the root `security`, saving on
+>    operation B wiped operation A's credentials — and emptying B's last field deleted the whole
+>    entry. Now merges into what's stored; a scheme's own field going empty still removes that field.
+> 2. **The key wasn't tenant-unique.** `specPath` is repo-relative, so in apex path mode
+>    (`/sites/{slug}`, one origin for every tenant) two sites with `openapi.json` shared a key —
+>    the exact leak the keying claimed to prevent. Added `credentialScope`, which mixes in the
+>    `/sites/{slug}` prefix; the SPEC/docs claim has been corrected to match.
+> 3. **Two OAuth2 alternatives differing only by scope collapsed to one label** → duplicate React
+>    keys (a console error, which this repo gates on), two indistinguishable picker buttons, and a
+>    label lookup that could never restore the second. Scopes don't reach the playground at all, so
+>    `resolveAuth` now dedupes alternatives by resolved-scheme signature — the honest fix, since the
+>    two really are identical to everything downstream.
+> 4. **A batched pair of edits lost one.** `setAuthValue` read `authValues` off the render closure,
+>    so a password manager filling username + password back-to-back persisted the stale copy. Now
+>    goes through a ref mirror.
+>
+> Also: an AND requirement whose schemes both target `Authorization` can't be sent as written (one
+> header, one value). Rather than quietly send the last one, the section flags the collision inline
+> (`authorizationConflicts`) — and the docs no longer claim both are sent.
+>
+> **Soft navigation remounts the endpoint page — measured, after two reviews asserted otherwise.**
+> Both review passes reasoned that because every endpoint page is the same route file at the same
+> tree position, an in-app `<Link>` between operations *reuses* the `ApiTryItModal` instance: pass
+> two concluded state leaks across operations (fixed with a `key`), pass four concluded that same
+> `key` had broken the in-modal operation switcher. A mount/unmount probe settled it: clicking a
+> sidebar link logs `unmount list-users` → `mount get-user`. **The App Router remounts the
+> subtree.** So no state could ever have carried across operations, and the `key` was a no-op —
+> both findings rested on a premise nobody had checked, including me when I "verified" the first
+> fix (`agent-browser open <url>` is a *hard* navigation, which remounts either way and so proves
+> nothing about soft navs).
+>
+> The lesson is the cheap one: a claim about component identity is a five-minute measurement, and
+> two rounds of plausible reasoning got it backwards. The clamp on the choice index stayed — it's
+> correct defensively — and the probe is gone.
+>
+> A restructure done on the false premise (open state hoisted out, per-operation state behind a
+> keyed child) was **reverted**, because it regressed something real: with state in a component
+> that unmounts on close, closing and reopening the playground discarded typed params and body.
+> The consolidated single component keeps them (verified: `limit=25`, which is never persisted,
+> survives a close/reopen) and drops the 25-prop drill the split had required.
+>
+> **Fixed the switcher the remount exposed (2026-07-26).** The in-modal operation switcher had
+> never done its job: picking a sibling operation navigated *and closed the playground*, leaving a
+> control that was a worse version of the sidebar link next to it. `open` dies with the remount, so
+> no `key` could save it — the state had to leave the component. It now lives in the URL as
+> **`?playground=open`** (`lib/playground-url.ts`): the switcher's links carry the flag, a fresh
+> mount reads it back, opening writes it, and closing takes it off so a refresh doesn't reopen
+> something the reader dismissed. A query parameter rather than a hash because docs pages already
+> use the hash for heading anchors — a page with a `## Playground` heading would collide.
+>
+> The flag is read in an effect rather than a lazy initializer: the server renders every page
+> closed, so reading `location` during the first render would be a hydration mismatch. The cost is
+> that a deep-linked playground opens a frame after paint.
+>
+> Falls out for free: **the playground is linkable**. `…/get-user?playground=open` opens the
+> endpoint ready to run, which is what you want to paste into a support thread. Pure core
+> unit-tested (`try-it-playground-url.test.ts` — flag round-trip, other query parameters and the
+> heading anchor preserved, idempotence); verified in-browser: open → URL gains the flag, switch
+> operation → playground stays open showing the *new* operation, close → flag removed, cold load of
+> a flagged URL → opens on arrival, console clean (no hydration warning).
+>
+> The fixture gives `getUser` an operation-level `security: [{ApiKeyAuth: []}]` so the
+> differing-scheme case is in the smoke gate, and the in-browser check is: fill Basic on
+> `list-users` → soft-nav → `get-user` shows its own apiKey field → both credentials in one storage
+> entry.
+>
+> Also from the fourth pass: **"Forget" now appears whenever the *spec* holds credentials**
+> (`hasStoredCredentials`), not only when the current operation's own fields are filled. It clears
+> the whole entry, so gating it on the current fields left a reader on an operation with a
+> different scheme unable to clear a token they'd entered elsewhere. And a **cookie-located apiKey**
+> is emitted as `Cookie: name=value` rather than a header named after the cookie — the old form was
+> a snippet that 401s when pasted. (Browsers forbid scripts from setting `Cookie` on a fetch, so a
+> live Send still won't carry it; the copyable sample is now correct, which is where it matters.)
+>
+> Three smaller ones from the same pass: `defaultAuthChoice` now starts on the first alternative
+> that *asks* for a credential, because index 0 on the common `security: [{}, {Bearer}]` shape
+> selected **No auth** and would send an unauthenticated request from a reader holding a token;
+> `authorizationConflicts` no longer warns about a query-located apiKey that merely shares the name
+> `authorization`; and the banner says "only one of them reaches the API" rather than naming the
+> last, since the builder skips empty fields and the *first* can be the one that survives.
+>
+> **The read-only samples now derive auth from `op.auth`** (`sampleAuth`), not from an explicitly
+> declared `Authorization` *parameter*. That gap predates this work, but declaring security schemes
+> in the fixture made it visible: the page showed an unauthenticated cURL sample beside a playground
+> sending `Authorization: Basic …`. Placeholders elide the credential (`Basic <credentials>`,
+> `Bearer <jwt>` when `bearerFormat` says so, `<key>` in the right header or query parameter).
+> Pinned by smoke checks on both fixture endpoints, since the samples are server-rendered HTML.
+>
+> **Self-review pass — the samples are copy-paste surfaces, and weren't shell-safe.** The cURL
+> samples (both the static one and the playground's live one) emitted the URL **unquoted**. That was
+> latent before — a real URL with two query parameters carries an `&`, which backgrounds the command
+> when pasted — and putting a query-string API key in the sample made it worse: `?api_key=<key>`
+> contains `<`, a redirect. Both now quote the URL. Also: an AND requirement combining two
+> Authorization-header schemes made `sampleAuth` emit the header twice — a duplicate `-H` and a
+> duplicate key in the JS object literal — so it now keeps one value per header name, matching how
+> the playground folds them in and what the collision notice tells the reader.
+>
+> **…and quoting alone wasn't enough (fifth pass).** Single-quoting fixes `&` and `<` but not `'`,
+> which *ends* the quoted string — and `encodeURIComponent` leaves it alone, so a path value like
+> `o'brien` (or a password containing an apostrophe) produced an unbalanced quote that hangs the
+> shell. Every interpolated value now goes through `shellQuote` (`'` → `'\''`), and the JS/Python
+> samples embed values with `JSON.stringify` rather than bare quotes for the same reason. Verified
+> by generating the sample in-browser and running it through `bash -n`: parses clean, and the URL
+> round-trips to exactly `…/users/o'brien`.
+>
+> Three more from that pass. **Two cookie-located apiKeys ANDed** (a session + CSRF pair) both wrote
+> `headers["Cookie"]`, so one credential vanished — they now accumulate into one `Cookie: a=…; b=…`,
+> in both the samples and the request builder. **`authorizationConflicts`** flagged a cookie-located
+> key named `Authorization`, warning about a collision the builder never creates. And
+> `sampleAuthFor` **dropped a documented header**: an operation declaring both a security scheme and
+> an explicit `Authorization` parameter used to show the latter, and the new security-derived path
+> had turned that into an either/or — it's additive again.
+>
+> **Sixth pass — the switcher link never left the apex, and spec examples never arrived.** Two
+> findings that mattered more than their line counts:
+>
+> - The switcher's `href` was root-absolute (`/${slug}`), skipping `withBase` — so in **apex path
+>   mode**, where a tenant's docs are served under `/sites/{slug}`, clicking a sibling operation
+>   left the tenant for the platform apex. Pre-existing, but this branch's headline behavior rides
+>   on that link, so it was load-bearing breakage. `EndpointReference` now takes `siteBase` (threaded
+>   from `render-tenant.tsx`, empty on a tenant's own host) and the link is base-prefixed like every
+>   other internal link.
+> - **Every author-written example was silently dropped from the generated samples.** `upgrade()`
+>   rewrites a 3.0 spec's `example: x` into 3.1's `examples: [x]`, and `sampleFromSchema` /
+>   `paramExample` read only `example` — so a spec saying `example: "O'Brien"` rendered
+>   `"name": "string"`. Most real specs are 3.0, so this was near-universal. Found only because a
+>   fixture example stopped showing up; fixed in both readers.
+>
+> Also from that pass: the static cURL's **request body** was still bare-quoted (the modal's was
+> fixed, one file over) — and a spec `example` is exactly where an apostrophe comes from, so the two
+> bugs above were the same bug meeting itself; the **JS/Python samples** now embed names and URLs
+> with `JSON.stringify`, since a scheme name or server URL can contain a quote; a **cookie
+> *parameter*** (`in: cookie`) was still mapped to a header named after the cookie — the shape this
+> pass had already fixed for cookie-located *schemes* — and now folds into `Cookie: a=…; b=…` with
+> its own section in the playground; and `sampleAuthFor` matched an auth parameter by substring but
+> deduped by exact name, so a documented `X-Authorization-Token` produced a hard-coded
+> `Authorization` header the spec never declared.
+>
+> **Seventh pass — mostly about telling the reader the truth.** Cookies can't be sent by a browser
+> at all: `Cookie` is a forbidden request header, so `fetch` strips it and a live **Send** quietly
+> goes out without the credential. The code knew this in a comment; the reader didn't. Both the
+> Cookies section and a cookie-located scheme now say so and point at the cURL sample, which does
+> work. Related: a security scheme could **silently overwrite a reader-typed `Authorization` header
+> parameter** — restored credentials clobbering a value the reader had typed, with the field still
+> showing it. Explicit input now wins over ambient stored credentials (`setHeader` skips any header
+> a parameter already set), which is the same dedupe the sample side got.
+>
+> Two more from that pass: the undefined-scheme guard only fired when *every* key failed, so a
+> half-broken AND requirement (`{ApiKeyAuth, BearerAuth}` with one undefined) passed silently and
+> offered a complete-looking alternative missing a credential — it now warns on any shortfall and
+> keeps what resolved. And `paramExample` ran `String()` over whatever it found: since `upgrade()`
+> made `examples` the common path, an object example would prefill a field with `"[object Object]"`
+> **and send it** — scalars only now. Cookie parameters also gained a reference-table group; they
+> were a first-class playground input documented nowhere on the page.
+>
+> Adjacent fix the review flagged as a note: **`btoaSafe` fell back to returning the credential
+> unencoded** when `btoa` choked on a non-Latin1 password (`é`), producing an Authorization header
+> that both fails to authenticate and puts the raw password on the wire. UTF-8-encodes first now,
+> per RFC 7617.
+>
+> Also re-added `key={op.slug}`, on better reasoning than the first time. The remount is *observed*
+> behavior, and if the App Router ever reconciled instead, the failure would be silent — one
+> operation's inputs on the next. The key makes it structural, and it's constant within a page, so
+> closing and reopening the playground still keeps what you typed.
+>
+> **Declined:** clearing the remembered auth *choice* on "Forget". Forget is about credentials; which
+> scheme you're using isn't one, and landing back on the picker you were using is what you want when
+> you re-enter a credential. Pinned by a test so it stays a decision rather than drift.
+>
+> A requirement naming only undefined schemes now **warns** (`console.warn`, matching the config
+> layer's warn-don't-throw posture). Residual, recorded honestly: if it's the operation's *only*
+> requirement, the endpoint still renders with no Authorization section and reads as open. Telling
+> readers would mean plumbing "there was a requirement we couldn't resolve" through to the modal;
+> the warning goes to the author, who is the one who can fix the typo.
+
 ---
 
 ## 8. AI Assistant (M5)

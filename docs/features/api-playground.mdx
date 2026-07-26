@@ -69,10 +69,12 @@ playground that covers **every kind of input an OpenAPI operation can take**, or
 collapsible sections:
 
 - **Authorization** — derived from the spec's security schemes: HTTP Basic shows username +
-  password fields, Bearer (and OAuth2) a token field, and an API key its header or query value.
-  Credential values (password, token, API key) are **masked**, with an eye toggle to reveal them.
-  Whatever you enter is folded into the request the right way (Basic base64, `Bearer …`, or the
-  named header/query) at send time, and **remembered for the tab** — see below.
+  password fields, Bearer (and OAuth2) a token field (annotated with `bearerFormat` when the spec
+  declares one), and an API key its header or query value. Credential values (password, token, API
+  key) are **masked**, with an eye toggle to reveal them. Whatever you enter is folded into the
+  request the right way (Basic base64, `Bearer …`, or the named header/query) at send time, and
+  **remembered for the tab** — see below. When your spec offers a *choice* of schemes, the reader
+  gets a picker — see [Endpoints that accept more than one scheme](#endpoints-that-accept-more-than-one-scheme).
 - **Headers**, **Path**, and **Query** — one input per parameter, pre-filled from the spec's
   examples, with the parameter's type and description inline. An **`Accept`** header is added
   automatically from what the operation produces (preferring `application/json`) — many APIs
@@ -80,9 +82,14 @@ collapsible sections:
   It's editable like any other header, and skipped if the spec already declares its own.
 - **Body** — a JSON editor for write operations, seeded from the request schema.
 
-The top bar carries an **editable URL** (server base + path) and an operation switcher for
-jumping to sibling endpoints. The right half shows a **live** request sample — cURL, JavaScript,
+The top bar carries an **editable URL** (server base + path) and an operation switcher for jumping
+to sibling endpoints — the playground stays open across the jump, so you can work through several
+endpoints without reopening it. The right half shows a **live** request sample — cURL, JavaScript,
 or Python, regenerated as you type — and, once you press **Send**, the response status and JSON.
+
+An open playground is reflected in the URL as `?playground=open`, which makes it **linkable**:
+send someone `…/get-user?playground=open` and the page opens with the playground ready to run.
+Closing it takes the parameter back off, so the link always matches what's on screen.
 
 <Note>
   "Try it" sends straight from the reader's browser, so the API must allow cross-origin (CORS)
@@ -90,6 +97,55 @@ or Python, regenerated as you type — and, once you press **Send**, the respons
   you can copy the request sample instead. The optional [request proxy](#cors-and-the-request-proxy)
   is what removes that constraint.
 </Note>
+
+### Endpoints that accept more than one scheme
+
+OpenAPI's `security` is a **list of alternatives**: each entry is one way to satisfy the endpoint,
+and the keys *within* an entry are all required together. The two shapes mean different things, and
+the playground renders them differently:
+
+<CodeGroup>
+
+```yaml Either one works (OR)
+security:
+  - BasicAuth: []
+  - BearerAuth: []
+```
+
+```yaml Both are sent (AND)
+security:
+  - BasicAuth: []
+    BearerAuth: []
+```
+
+</CodeGroup>
+
+For the first, the Authorization section shows a **picker** — `BasicAuth` / `BearerAuth` — and only
+the selected scheme is sent, because two schemes would otherwise collide in a single
+`Authorization` header. Credentials for each alternative are kept independently, so switching back
+and forth doesn't lose what you typed, and **your pick is remembered** across endpoints along with
+the credentials themselves.
+
+For the second, both schemes render together and both are folded into the request — which works
+when they target different places (an API key header plus a bearer token, say). If both want the
+`Authorization` header, only one value can go there: the playground flags it inline rather than
+silently sending the last one. That combination can't be expressed in a single HTTP request, so
+it's worth a second look at the spec.
+
+An empty entry (`- {}`) is OpenAPI's way to say the endpoint also works unauthenticated; it appears
+in the picker as **No auth** — though the playground starts on the first alternative that actually
+asks for a credential, so a reader with a token doesn't send an anonymous request by default. A
+requirement naming a scheme that `components.securitySchemes` never defines is dropped rather than
+shown as an open endpoint.
+
+Alternatives that differ only by OAuth2 scope collapse into one entry, since scopes change neither
+the input nor the request the playground builds.
+
+<Tip>
+  A scheme declared under `components.securitySchemes` but never referenced by a `security`
+  requirement — at the root or on the operation — renders nothing. If you added a scheme and the
+  playground doesn't show it, that's the first thing to check.
+</Tip>
 
 ### Credentials are entered once, not once per endpoint
 
@@ -103,9 +159,9 @@ The remembered values are scoped two ways:
 - **To the tab.** They live in `sessionStorage`, so they're gone when the tab closes rather than
   sitting in the browser indefinitely the way a `localStorage` entry would. A **Forget** control in
   the Authorization header row clears them immediately.
-- **To the spec.** Credentials for one OpenAPI spec never prefill another's, even when two sites
-  share an origin — so a scheme called `BasicAuth` on one docs site can't leak into another's
-  playground.
+- **To the site and the spec.** Credentials for one OpenAPI spec never prefill another's, and a
+  scheme called `BasicAuth` on one docs site can't prefill a same-named scheme on another — even
+  for two sites served from a shared origin.
 
 <Note>
   This is a convenience for the reader's *own* credentials, which stay in their browser. It is not
@@ -154,7 +210,10 @@ a **Papervine proxy endpoint** rather than going direct. This is opt-in per tena
 ## Code samples
 
 For every endpoint, Papervine auto-generates ready-to-run snippets so readers can leave the
-page with working code:
+page with working code. They carry the endpoint's auth the way the spec declares it — the
+`Authorization` header for Basic and Bearer, or the named header or query parameter for an API key
+— with the credential itself shown as a placeholder, so the snippet beside the playground and the
+request the playground sends agree:
 
 <CodeGroup>
 

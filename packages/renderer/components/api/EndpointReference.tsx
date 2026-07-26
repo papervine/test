@@ -1,5 +1,14 @@
 import clsx from "clsx";
-import { apiOperations, sampleFromSchema, type Operation, type Param, type Schema } from "../../lib/openapi";
+import {
+  apiOperations,
+  sampleAuth,
+  sampleFromSchema,
+  type Operation,
+  type Param,
+  type Schema,
+} from "../../lib/openapi";
+import { defaultAuthChoice } from "../../lib/try-it-credentials";
+import { shellQuote } from "../../lib/shell-quote";
 import { methodColor } from "../../lib/method-colors";
 import { highlightToHtml } from "../../lib/highlight";
 import { ApiField, FieldSection } from "../mdx/ApiField";
@@ -62,11 +71,31 @@ function SchemaFields({ schema }: { schema?: Schema }) {
 
 // ---- Request code samples (cURL / JavaScript / Python) ----
 // Generated from the spec and Shiki-highlighted server-side, then handed to the client
-// playground as HTML. The auth header (if the spec declares one) shows a placeholder token.
+// playground as HTML. Credentials show as placeholders.
 
-function authHeader(op: Operation): string | undefined {
-  const p = op.parameters.find((x) => x.in === "header" && /authorization/i.test(x.name));
-  return p ? "Bearer <token>" : undefined;
+/** Placeholder auth for the samples, from the operation's first `security` alternative — the same
+ *  one the playground preselects. A spec can *also* document auth as an explicit `Authorization`
+ *  header parameter; that's added too (unless a security scheme already claimed the header), since
+ *  dropping a header the spec documents as required leaves a sample that doesn't work. */
+function sampleAuthFor(op: Operation): { headers: [string, string][]; query: [string, string][] } {
+  const resolved = sampleAuth(op.auth[defaultAuthChoice(op.auth)] ?? []);
+  const authParam = op.parameters.find((x) => x.in === "header" && /authorization/i.test(x.name));
+  // Match on the parameter's own name, not the substring that found it: a spec documenting
+  // `X-Authorization-Token` gets that header, not a hard-coded `Authorization` it never declared.
+  const alreadySet = resolved.headers.some(
+    ([name]) => name.toLowerCase() === authParam?.name.toLowerCase(),
+  );
+  if (authParam && !alreadySet) {
+    return { ...resolved, headers: [...resolved.headers, [authParam.name, "Bearer <token>"]] };
+  }
+  return resolved;
+}
+
+/** The sample's URL, carrying any auth that belongs in the query string. */
+function sampleUrl(op: Operation): string {
+  const { query } = sampleAuthFor(op);
+  const qs = query.map(([k, v]) => `${k}=${v}`).join("&");
+  return `${op.baseUrl}${op.path}${qs ? `?${qs}` : ""}`;
 }
 
 // The Accept header the operation expects, from what it `produces` (preferring JSON). Many APIs
@@ -81,47 +110,52 @@ function bodyObject(op: Operation): unknown | undefined {
 }
 
 function curlSample(op: Operation): string {
-  const url = `${op.baseUrl}${op.path}`;
-  const auth = authHeader(op);
+  const url = sampleUrl(op);
   const body = bodyObject(op);
   const accept = acceptHeader(op);
-  const parts = [`curl -X ${op.method} ${url}`];
-  if (auth) parts.push(`  -H "Authorization: ${auth}"`);
-  if (accept) parts.push(`  -H "Accept: ${accept}"`);
+  // Shell-quoted: these samples are meant to be pasted into a terminal, where an unquoted `?`/`&`
+  // (two query parameters) backgrounds the command and a `<key>` placeholder is a redirect.
+  const parts = [`curl -X ${op.method} ${shellQuote(url)}`];
+  for (const [name, value] of sampleAuthFor(op).headers)
+    parts.push(`  -H ${shellQuote(`${name}: ${value}`)}`);
+  if (accept) parts.push(`  -H ${shellQuote(`Accept: ${accept}`)}`);
   if (body !== undefined) {
-    parts.push(`  -H "Content-Type: application/json"`);
-    parts.push(`  -d '${JSON.stringify(body, null, 2)}'`);
+    parts.push(`  -H 'Content-Type: application/json'`);
+    // The body carries spec-authored strings (`example: "O'Brien"`), so it needs quoting too.
+    parts.push(`  -d ${shellQuote(JSON.stringify(body, null, 2))}`);
   }
   return parts.join(" \\\n");
 }
 
 function jsSample(op: Operation): string {
-  const url = `${op.baseUrl}${op.path}`;
-  const auth = authHeader(op);
+  const url = sampleUrl(op);
   const body = bodyObject(op);
   const accept = acceptHeader(op);
-  const headers: string[] = [];
-  if (auth) headers.push(`    "Authorization": "${auth}",`);
-  if (accept) headers.push(`    "Accept": "${accept}",`);
+  // JSON.stringify, not bare quotes: header names come from the spec's `securitySchemes[…].name`
+  // and the URL from its `servers`, either of which can contain a quote or a backslash.
+  const headers: string[] = sampleAuthFor(op).headers.map(
+    ([name, value]) => `    ${JSON.stringify(name)}: ${JSON.stringify(value)},`,
+  );
+  if (accept) headers.push(`    "Accept": ${JSON.stringify(accept)},`);
   if (body !== undefined) headers.push(`    "Content-Type": "application/json",`);
   const opts = [`  method: "${op.method}",`];
   if (headers.length) opts.push(`  headers: {\n${headers.join("\n")}\n  },`);
   if (body !== undefined) opts.push(`  body: JSON.stringify(${JSON.stringify(body, null, 2)}),`);
   return (
-    `const response = await fetch("${url}", {\n${opts.join("\n")}\n});\n` +
+    `const response = await fetch(${JSON.stringify(url)}, {\n${opts.join("\n")}\n});\n` +
     `const data = await response.json();`
   );
 }
 
 function pythonSample(op: Operation): string {
-  const url = `${op.baseUrl}${op.path}`;
-  const auth = authHeader(op);
+  const url = sampleUrl(op);
   const accept = acceptHeader(op);
   const body = bodyObject(op);
-  const args = [`    "${url}",`];
-  const hdrs: string[] = [];
-  if (auth) hdrs.push(`"Authorization": "${auth}"`);
-  if (accept) hdrs.push(`"Accept": "${accept}"`);
+  const args = [`    ${JSON.stringify(url)},`];
+  const hdrs: string[] = sampleAuthFor(op).headers.map(
+    ([name, value]) => `${JSON.stringify(name)}: ${JSON.stringify(value)}`,
+  );
+  if (accept) hdrs.push(`"Accept": ${JSON.stringify(accept)}`);
   if (hdrs.length) args.push(`    headers={${hdrs.join(", ")}},`);
   if (body !== undefined) args.push(`    json=${JSON.stringify(body, null, 2)},`);
   return (
@@ -131,19 +165,39 @@ function pythonSample(op: Operation): string {
   );
 }
 
+/** A playground field holds text, so only a scalar example can prefill one — `String()` on an
+ *  object writes "[object Object]" into the field and then sends it. */
+function scalarExample(value: unknown): string | undefined {
+  const t = typeof value;
+  return t === "string" || t === "number" || t === "boolean" ? String(value) : undefined;
+}
+
 function paramExample(p: Param): string | undefined {
   const s = p.schema;
   if (!s) return undefined;
-  if (s.example !== undefined) return String(s.example);
-  if (Array.isArray(s.enum) && s.enum.length) return String(s.enum[0]);
+  if (s.example !== undefined) return scalarExample(s.example);
+  // 3.0's `example` arrives here as 3.1's `examples: [x]` — see the note in `sampleFromSchema`.
+  if (Array.isArray(s.examples) && s.examples.length > 0) return scalarExample(s.examples[0]);
+  if (Array.isArray(s.enum) && s.enum.length) return scalarExample(s.enum[0]);
   return undefined;
 }
 
-export async function EndpointReference({ op, baseUrl }: { op: Operation; baseUrl: string }) {
+export async function EndpointReference({
+  op,
+  baseUrl,
+  siteBase = "",
+}: {
+  op: Operation;
+  baseUrl: string;
+  // The tenant's URL base (`/sites/{slug}` in apex path mode) — the operation switcher's links
+  // need it like every other internal link. Empty on a tenant's own host.
+  siteBase?: string;
+}) {
   const groups: { title: string; params: typeof op.parameters }[] = [
     { title: "Path parameters", params: op.parameters.filter((p) => p.in === "path") },
     { title: "Query parameters", params: op.parameters.filter((p) => p.in === "query") },
     { title: "Headers", params: op.parameters.filter((p) => p.in === "header") },
+    { title: "Cookie parameters", params: op.parameters.filter((p) => p.in === "cookie") },
   ];
 
   // Request samples (highlighted server-side) + response examples per status.
@@ -175,7 +229,7 @@ export async function EndpointReference({ op, baseUrl }: { op: Operation; baseUr
 
   const tryItParams: TryItParam[] = op.parameters.map((p) => ({
     name: p.name,
-    in: p.in === "cookie" ? "header" : p.in,
+    in: p.in,
     required: p.required,
     example: paramExample(p),
     type: typeLabel(p.schema),
@@ -198,13 +252,18 @@ export async function EndpointReference({ op, baseUrl }: { op: Operation; baseUr
       description: "Response media type to request.",
     });
   }
-  const tryItAuth: TryItAuth[] = op.auth.map((a) => ({
-    key: a.key,
-    type: a.type,
-    in: a.in,
-    name: a.name,
-    description: a.description,
-  }));
+  // One entry per `security` alternative (the reader picks); each holds the schemes that
+  // alternative ANDs together.
+  const tryItAuth: TryItAuth[][] = op.auth.map((option) =>
+    option.map((a) => ({
+      key: a.key,
+      type: a.type,
+      in: a.in,
+      name: a.name,
+      format: a.format,
+      description: a.description,
+    })),
+  );
   const bodySample =
     op.requestBody !== undefined
       ? JSON.stringify(sampleFromSchema(op.requestBody), null, 2)
@@ -226,6 +285,7 @@ export async function EndpointReference({ op, baseUrl }: { op: Operation; baseUr
     bodySample,
     siblings,
     specPath: op.specPath,
+    siteBase,
   };
 
   return (
@@ -243,7 +303,11 @@ export async function EndpointReference({ op, baseUrl }: { op: Operation; baseUr
             {baseUrl}
             {op.path}
           </code>
-          <ApiTryItModal {...tryItProps} />
+          {/* Keyed by operation: the App Router remounts this subtree on navigation today, which
+              is what resets one endpoint's inputs before the next. The key makes that structural
+              rather than observed — it's constant within a page, so closing and reopening the
+              playground still keeps what you typed. */}
+          <ApiTryItModal key={op.slug} {...tryItProps} />
         </div>
 
         {op.description && <p className="text-zinc-600 dark:text-zinc-400">{op.description}</p>}
