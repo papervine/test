@@ -107,9 +107,15 @@ async function buildIndexUncached() {
     .map((s) => (s === "index" ? "" : s));
   const slugs = Array.from(new Set([...(await listPageSlugs()), ...navSlugs]));
 
+  // Fetch every page concurrently — sequential `await loadPage` per slug turned a cold
+  // index build into one S3/R2 round-trip per page, back-to-back (the "first search is
+  // slow" report). Pages are independent reads, so there's nothing to gain from serializing.
+  const pages = await Promise.all(slugs.map((slug) => loadPage(slug)));
+
   const docs: Array<Record<string, string>> = [];
-  for (const slug of slugs) {
-    const page = await loadPage(slug);
+  for (let i = 0; i < slugs.length; i++) {
+    const slug = slugs[i];
+    const page = pages[i];
     if (!page || page.frontmatter.hidden || page.frontmatter.noindex) continue;
 
     const baseHref = "/" + (slug || "index");
