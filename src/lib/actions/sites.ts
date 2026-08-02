@@ -114,6 +114,7 @@ export async function connectRepo(
       isPrivate: repo.private,
       repoTokenEnc: token ? encryptSecret(token) : null,
       githubInstallationId: token ? null : (install?.installationId ?? null),
+      widgetId: `widget_${randomUUID()}`,
     })
     .returning();
 

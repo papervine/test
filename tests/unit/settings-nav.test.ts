@@ -8,7 +8,7 @@ import {
 } from "@/lib/settings-nav";
 
 describe("settings nav config", () => {
-  it("matches the designed IA — 5 sections, 15 surfaces", () => {
+  it("matches the designed IA — 5 sections, 16 surfaces", () => {
     expect(SETTINGS_NAV.map((s) => s.heading)).toEqual([
       "Site settings",
       "Deployment",
@@ -16,7 +16,7 @@ describe("settings nav config", () => {
       "Workspace",
       "Advanced",
     ]);
-    expect(SETTINGS_SLUGS).toHaveLength(15);
+    expect(SETTINGS_SLUGS).toHaveLength(16);
   });
 
   it("has unique slugs", () => {

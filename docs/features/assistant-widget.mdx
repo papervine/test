@@ -1,0 +1,91 @@
+---
+title: Embeddable Widget
+description: Embed the AI assistant on any external site with a script snippet, gated by an origin allowlist rather than a reader session.
+---
+
+The [AI assistant](/features/ai-assistant) isn't confined to a tenant's own docs site. A
+`<script>` snippet mounts the same assistant — as a floating chat bubble — on **any external
+site an owner controls**: a marketing site, a product app, a support portal. It's configured
+from **Settings → Widget**.
+
+<Info>
+  Built: the Settings → Widget page (Availability, Authorized domains, Installation), the
+  `/api/widget/[widgetId]/chat` endpoint, and the `/api/widget/embed.js` loader script. Not
+  yet built: rich markdown/citation rendering in the widget (it renders plain text today)
+  and a widget-specific rate limit beyond the shared AI billing gate.
+</Info>
+
+## Why this needs its own security model
+
+The in-docs assistant trusts a same-origin request and, on a gated site, a reader's session
+cookie. A widget embedded on someone else's domain has neither:
+
+- **The widget id is public, not a secret.** It identifies which site's assistant to talk
+  to and is safe to ship in client-side JavaScript — the same model used by embeddable
+  widgets like Stripe.js or Intercom. It cannot be changed once generated.
+- **The real boundary is the origin allowlist.** Every request to the widget's chat
+  endpoint is checked against the exact origins configured in the dashboard. An origin not
+  on the list gets no response — not even an error message, just a blocked cross-origin
+  request, the same as any unauthorized fetch.
+- **Content access is always anonymous.** A widget visitor never carries the tenant's
+  reader session, even on a site with [reader authentication](/auth/reader-auth)
+  enabled — so gated pages are never reachable through the widget, regardless of what the
+  visitor might otherwise be entitled to see on the docs site itself. This mirrors how an
+  external MCP client sees only the public subset of a gated site.
+- **It's off by default.** Unlike the in-docs assistant, which ships enabled, a site's
+  widget must be turned on explicitly — it's a new, public endpoint, so enabling it is a
+  deliberate choice.
+
+## Setting it up
+
+From **Settings → Widget**:
+
+1. Toggle **Availability** on.
+2. Add every origin that will embed the widget under **Authorized domains** — the exact
+   scheme, host, and port (e.g. `https://docs.example.com`). Paths and wildcards aren't
+   supported; add every subdomain that needs it individually.
+3. Copy the snippet under **Installation** into the `<head>` or `<body>` of the external
+   site:
+
+```html
+<script type="module" src="https://your-domain/api/widget/embed.js"></script>
+
+<script type="module">
+  await window.PapervineAssistant.init({
+    id: "widget_...",
+  });
+</script>
+```
+
+Or, if you'd rather not add a second script block, put the widget id directly on the
+loader tag as a `data-widget-id` attribute — it auto-mounts the default bubble with no
+`init()` call at all:
+
+```html
+<script
+  type="module"
+  src="https://your-domain/api/widget/embed.js"
+  data-widget-id="widget_..."
+></script>
+```
+
+Both methods produce the same widget. Reach for `init()` when you'll later want to trigger
+the widget programmatically (e.g. opening it from your own button); the single tag is the
+smaller footprint when you just want the default floating bubble.
+
+The **Widget ID** shown on the same page is what `init()` takes — it's already filled into
+the copyable snippet, so most owners never need to touch it directly.
+
+## What the widget actually is
+
+The loader script is a small, dependency-free bundle — no framework, no build step — that
+mounts into an isolated [shadow DOM](https://developer.mozilla.org/en-US/docs/Web/API/Web_components/Using_shadow_DOM)
+node, so the host page's CSS can never leak in or the widget's styles leak out. It renders
+a floating launcher button and a chat panel, and streams the assistant's answer token by
+token from `/api/widget/{widgetId}/chat` — the same agentic retrieval loop (`searchDocs` /
+`readPage` / `listPages` / `searchApi`) that powers the in-docs assistant and the
+[MCP server](/features/mcp-servers), just reached over a different, cross-origin transport.
+
+Usage against the widget draws from the same AI credit pool as the in-docs assistant and
+[automations](/control-plane/automate) — there's one billing gate per organization, not a
+separate budget per surface.

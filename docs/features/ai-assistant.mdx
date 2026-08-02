@@ -146,7 +146,8 @@ The assistant is not confined to the docs panel:
 
 - **`/api/assistant`** is an SSE endpoint (AI SDK data stream), with a compatible alias path
   so existing integrations port over.
-- It is **embeddable** in external apps and portals; **Slack and Discord bots** are planned.
+- It is **embeddable** on any external site via a `<script>` snippet — see the
+  [embeddable widget](/features/assistant-widget); **Slack and Discord bots** are planned.
 - **The tool layer *is* the read MCP server.** `search_docs` / `read_page` / `list_pages` /
   `search_api` are exactly the tools a generated read-MCP exposes, so the in-docs assistant
   and the [MCP server](/features/mcp-servers) are one implementation behind two transports.

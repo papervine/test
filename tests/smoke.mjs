@@ -415,6 +415,37 @@ async function run() {
       log(`  ${failures.length === before ? "✓" : "✗"} assistant route (200 w/ key, 503 without)`);
     }
 
+    // Embeddable assistant widget (SPEC §8.7). The chat route resolves its tenant by
+    // widgetId (getSiteByWidgetId), not Host — must no-op gracefully with no DB reachable,
+    // same contract as getSiteByHost, so this DB-free gate 404s/403s instead of 500ing.
+    {
+      const before = failures.length;
+      try {
+        const embedRes = await fetch(`${BASE}/api/widget/embed.js`);
+        if (embedRes.status !== 200) {
+          failures.push(`[widget] embed.js expected 200, got ${embedRes.status}`);
+        }
+        const chatRes = await fetch(`${BASE}/api/widget/widget_doesnotexist/chat`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: "https://example.com" },
+          body: JSON.stringify({ messages: [] }),
+        });
+        if (chatRes.status !== 404) {
+          failures.push(`[widget] unknown widgetId POST expected 404, got ${chatRes.status}`);
+        }
+        const optionsRes = await fetch(`${BASE}/api/widget/widget_doesnotexist/chat`, {
+          method: "OPTIONS",
+          headers: { origin: "https://example.com" },
+        });
+        if (optionsRes.status !== 403) {
+          failures.push(`[widget] unknown widgetId OPTIONS expected 403, got ${optionsRes.status}`);
+        }
+      } catch (e) {
+        failures.push(`[widget] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} widget routes (embed.js 200 no-DB; unknown widgetId 404/403 not 500)`);
+    }
+
     // Generated MCP server (SPEC §8.5). Streamable HTTP at /mcp. We assert the
     // tools are listed and a tools/call returns real docs — body substrings only,
     // so SSE-vs-JSON framing and tool ordering don't make this brittle. Fixtures

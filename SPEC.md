@@ -1354,6 +1354,67 @@ instant effect. Self-host reads it all from `docs.json` + env, no dashboard requ
 > hides the launcher. **CAPTCHA is still not enforced** — `assistant_captcha_enabled` persists but
 > there's no hCaptcha integration on `/api/assistant` yet (separate follow-up).
 
+### 8.7 Embeddable widget (Settings → Widget)
+
+A `<script>` snippet an owner drops into any **external** site they control (their
+marketing site, app, support portal — not just their Papervine docs), mounting a floating
+chat bubble backed by the same assistant. Modeled on hosted docs platforms' own widget
+feature. Unlike §8.6's in-docs assistant (same-origin, can trust a reader session), this is
+a **new public, cross-origin, unauthenticated attack surface** — the design leans on
+precedent already in the codebase rather than inventing a new access model:
+
+- **Identity is a public widget id, not a secret.** `site.widget_id` (`widget_<uuid>`,
+  minted at site creation or lazily on first Settings → Widget visit) is safe to ship in
+  client-side code — the same model Stripe.js/Intercom-style embeds use. The security
+  boundary is the **origin allowlist** (`site.widget_allowed_origins`, exact-match only, no
+  paths/wildcards), enforced by `/api/widget/[widgetId]/chat`'s CORS handling
+  (`src/lib/widget.ts`'s `isOriginAllowed`), not a bearer token that client-side JS can't
+  actually keep secret anyway.
+- **Content access is always anonymous, never the reader's session.** A widget on a
+  third-party page can't reliably carry our reader cookie cross-origin, and even if it
+  could, an anonymous website visitor must never see gated docs. The widget route calls
+  `requestReaderAccess(slug, { anonymous: true })` — the exact mechanism the MCP server
+  already uses for the same reason (SPEC §11.2) — so a gated page is as invisible to the
+  widget as it is to an external agent with no session.
+- **Off by default.** `widget_enabled` defaults `false` (unlike `assistant_enabled`'s
+  default-`true`, which gates an already-trusted same-origin surface) — a brand-new public
+  endpoint should be opt-in.
+- **No bundler.** The embed script (`src/lib/widget-embed-script.ts`) is hand-authored,
+  dependency-free, modern JS served verbatim (`GET /api/widget/embed.js`) — this repo has
+  no bundler anywhere, and introducing one for one small script wasn't worth it. It mounts
+  into a shadow root (host-page CSS can't leak in or out) and renders assistant text as
+  plain text, not HTML — safe by construction against the AI's output containing
+  HTML-like text, and avoids a markdown-parser dependency in a script that intentionally
+  ships with zero.
+- **Shared conversation core.** The actual agentic loop (content scoping, system prompt,
+  `streamText`, billing metering) is `runAssistantConversation` (`src/lib/assistant-run.ts`),
+  extracted out of `/api/assistant` so both routes share it — billing-metering logic is
+  exactly the kind of thing that shouldn't drift between two call sites.
+
+> **Status — landed (2026-07-31).** `site.widget_id`/`widget_enabled`/
+> `widget_allowed_origins` (migration 0020); Settings → Widget page
+> (`settings/widget/{page,WidgetForm,actions}.tsx`) matching hosted docs platforms' own
+> layout (Availability / Authorized domains / Installation); `/api/widget/[widgetId]/chat`
+> (CORS + origin enforcement + anonymous-only content access) and `/api/widget/embed.js`.
+> Covered by `tests/unit/widget-origin.test.ts` (origin validation), the smoke DB-free gate
+> (`embed.js` 200, unknown widgetId 404/403 not 500), and
+> `tests/e2e/widget-settings.spec.ts` / `widget-embed.spec.ts` (the latter drives a real
+> cross-origin round-trip against a genuinely different local origin, console-clean
+> asserted). Verified in a real browser end-to-end: a static HTML fixture on a separate
+> origin loaded the real embed snippet and completed a multi-turn conversation. **Two
+> install methods (2026-08-01):** the explicit two-script `init({id})` call shown by
+> default in the Settings page, and a single-tag alternative — a `data-widget-id`
+> attribute on the loader script itself auto-mounts the widget with no second inline
+> script, for sites that just want the default bubble with minimal markup. The settings
+> page shows both snippets. `document.currentScript` is always null for module scripts
+> (spec, not a bug), so the loader finds its own tag by `src` instead
+> (`document.querySelector('script[src*="/api/widget/embed.js"][data-widget-id]')`) —
+> covered by a second `tests/e2e/widget-embed.spec.ts` case (a bare data-attribute page,
+> no init() call anywhere in its markup, console-clean).
+> **Not yet built:** rich markdown/citation rendering in the widget (plain text only,
+> matching the "no bundler" call above), a widget-specific rate limit beyond the shared
+> AI billing gate, and a "View guide" docs page beyond the evergreen reference (`docs/`).
+
 ---
 
 ## 9. MCP Servers

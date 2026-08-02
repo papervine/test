@@ -23,6 +23,7 @@ export function normalizeHost(host: string): string {
 // revalidateSiteRow, so a bust always targets the exact entry the read registered.
 export const siteSlugTag = (slug: string) => `site-row:slug:${slug}`;
 export const siteDomainTag = (host: string) => `site-row:domain:${normalizeHost(host)}`;
+export const siteWidgetIdTag = (widgetId: string) => `site-row:widget:${widgetId}`;
 
 /**
  * Re-hydrate the `site` table's three `timestamp` columns after a Data Cache round-trip.

@@ -4,6 +4,7 @@ import {
   Puzzle,
   Settings2,
   Search,
+  MessageSquareCode,
   GitBranch,
   KeyRound,
   Users,
@@ -34,6 +35,7 @@ export const SETTINGS_NAV: SettingsNavSection[] = [
       { slug: "add-ons", label: "Add-ons", icon: Puzzle },
       { slug: "general", label: "General", icon: Settings2 },
       { slug: "search", label: "Search", icon: Search },
+      { slug: "widget", label: "Widget", icon: MessageSquareCode },
     ],
   },
   {

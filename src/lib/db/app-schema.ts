@@ -71,6 +71,17 @@ export const site = pgTable(
     assistantCaptchaEnabled: boolean("assistant_captcha_enabled")
       .default(true)
       .notNull(),
+    // Embeddable assistant widget (SPEC §8.7) — a <script> a customer drops into any
+    // EXTERNAL site (not just their Papervine docs), gated by origin rather than a
+    // reader session. `widgetId` is public (safe in client-side code, shown in the
+    // embed snippet) and immutable; `widgetEnabled` is off by default since this is a
+    // new public, unauthenticated surface (unlike assistantEnabled's default-on, which
+    // gates an already-trusted same-origin surface). `widgetAllowedOrigins` is the CORS
+    // allowlist enforced by /api/widget/[widgetId]/chat — exact origin strings only, no
+    // paths or wildcards.
+    widgetId: text("widget_id").unique(),
+    widgetEnabled: boolean("widget_enabled").default(false).notNull(),
+    widgetAllowedOrigins: jsonb("widget_allowed_origins").$type<string[]>().default([]).notNull(),
     // GitHub App installation that grants access to this repo (SPEC §3). The numeric
     // GitHub installation id — minted into a short-lived token at sync time (see
     // src/lib/github-app.ts), the same `token` seam as repoTokenEnc/PAT. Not a FK so an

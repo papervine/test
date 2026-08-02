@@ -37,6 +37,7 @@
           "features/search",
           "features/api-playground",
           "features/ai-assistant",
+          "features/assistant-widget",
           "features/mcp-servers"
         ]
       },

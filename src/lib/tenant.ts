@@ -9,6 +9,7 @@ import {
   normalizeHost,
   siteSlugTag,
   siteDomainTag,
+  siteWidgetIdTag,
   reviveSiteDates,
 } from "./site-cache";
 
@@ -64,20 +65,47 @@ export const getSiteByCustomDomain = cache(async (host: string): Promise<SiteRow
 });
 
 /**
- * Drop a site's cached slug/domain lookups after any mutation to its row (connect, sync,
- * auth/domain/git settings, delete). Pass the slug always, plus every custom domain whose
- * mapping changed — INCLUDING the old domain when it's changed or removed, so a deactivated
- * domain stops resolving immediately rather than lingering for the TTL. A no-op inside `after()`
- * (the push webhook), where the TTL backstop covers it instead (see the note above).
+ * Resolve a site by its public embeddable-widget id (SPEC §8.7) — the only identifier a
+ * third-party page embedding the widget carries, since its Host header is the CUSTOMER's
+ * domain, not ours. Unlike getSiteBySlug/getSiteByCustomDomain (whose connection-error
+ * handling lives in the getSiteByHost wrapper), this has no such wrapper — the widget chat
+ * route calls it directly — so it catches DB errors itself and returns null, the same
+ * no-op-without-a-DB contract the smoke gate requires of every rendered-path lookup.
+ */
+export const getSiteByWidgetId = cache(async (widgetId: string): Promise<SiteRow | null> => {
+  if (process.env.PAPERVINE_CONTENT) return null;
+  try {
+    const read = unstable_cache(
+      async () =>
+        (await db.select().from(site).where(eq(site.widgetId, widgetId)).limit(1))[0] ?? null,
+      ["site-by-widget-id", widgetId],
+      { tags: [siteWidgetIdTag(widgetId)], revalidate: SITE_ROW_TTL },
+    );
+    return reviveSiteDates(await read());
+  } catch {
+    return null;
+  }
+});
+
+/**
+ * Drop a site's cached slug/domain/widget lookups after any mutation to its row (connect,
+ * sync, auth/domain/git/widget settings, delete). Pass the slug always, plus every custom
+ * domain whose mapping changed — INCLUDING the old domain when it's changed or removed, so a
+ * deactivated domain stops resolving immediately rather than lingering for the TTL — and the
+ * widgetId whenever a mutation changes fields the widget chat route reads (enabled flag,
+ * allowed origins). A no-op inside `after()` (the push webhook), where the TTL backstop
+ * covers it instead (see the note above).
  */
 export function revalidateSiteRow(opts: {
   slug: string;
   domains?: (string | null | undefined)[];
+  widgetId?: string | null;
 }): void {
   revalidateTag(siteSlugTag(opts.slug));
   for (const d of opts.domains ?? []) {
     if (d) revalidateTag(siteDomainTag(d));
   }
+  if (opts.widgetId) revalidateTag(siteWidgetIdTag(opts.widgetId));
 }
 
 /**
