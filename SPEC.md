@@ -1382,10 +1382,22 @@ precedent already in the codebase rather than inventing a new access model:
 - **No bundler.** The embed script (`src/lib/widget-embed-script.ts`) is hand-authored,
   dependency-free, modern JS served verbatim (`GET /api/widget/embed.js`) — this repo has
   no bundler anywhere, and introducing one for one small script wasn't worth it. It mounts
-  into a shadow root (host-page CSS can't leak in or out) and renders assistant text as
-  plain text, not HTML — safe by construction against the AI's output containing
-  HTML-like text, and avoids a markdown-parser dependency in a script that intentionally
-  ships with zero.
+  into a shadow root (host-page CSS can't leak in or out) and hand-rolls its own markdown
+  renderer (headings, lists, links, bold/italic, code) rather than pull in a
+  markdown-parser dependency for a script that intentionally ships with zero. It builds
+  real DOM nodes directly (`document.createTextNode`/`createElement`) and never assigns
+  `innerHTML` from model output, so it's injection-safe by construction — no HTML-escaping
+  step to get right or forget, and a crafted `javascript:` link or literal `<script>` in
+  the AI's own answer can't do anything (verified: `tests/e2e/widget-embed.spec.ts`).
+- **Only the model's final answer is shown, not every step's narration.** The agentic
+  loop streams one text segment PER STEP — "let me check the intro page…" is a genuinely
+  separate segment from the real answer that follows it, not part of it. Concatenating
+  every segment (the first implementation's bug) reads as one run-on, half-narrated blob.
+  The widget shows only the CURRENT segment (reset on every `text-start`), with a
+  "Searching the docs…" placeholder while a tool call is in flight and nothing to show
+  yet — so it reads the way the in-docs Assistant UI reads, even though it can't literally
+  share those React/AI-Elements components (shipping React + Tailwind into someone else's
+  page is exactly what avoiding a bundler was for).
 - **Shared conversation core.** The actual agentic loop (content scoping, system prompt,
   `streamText`, billing metering) is `runAssistantConversation` (`src/lib/assistant-run.ts`),
   extracted out of `/api/assistant` so both routes share it — billing-metering logic is
@@ -1411,9 +1423,32 @@ precedent already in the codebase rather than inventing a new access model:
 > (`document.querySelector('script[src*="/api/widget/embed.js"][data-widget-id]')`) —
 > covered by a second `tests/e2e/widget-embed.spec.ts` case (a bare data-attribute page,
 > no init() call anywhere in its markup, console-clean).
-> **Not yet built:** rich markdown/citation rendering in the widget (plain text only,
-> matching the "no bundler" call above), a widget-specific rate limit beyond the shared
-> AI billing gate, and a "View guide" docs page beyond the evergreen reference (`docs/`).
+>
+> **Markdown rendering + step narration (2026-08-02).** Real usage against a live model
+> surfaced two problems the local verification's shorter answers hadn't hit: the widget
+> rendered raw `## heading` / `[text](url)` / `- item` syntax as literal text (no HTML),
+> and it concatenated EVERY agentic step's text into one bubble — including the model's
+> "let me check X" narration between tool calls, not just the final answer. Fixed by
+> hand-rolling a DOM-based markdown renderer (see the bullet above) and showing only the
+> current step's text segment (reset on every `text-start`) instead of a running
+> concatenation. Pinned by two new deterministic `tests/e2e/widget-embed.spec.ts` cases
+> that exercise `window.PapervineAssistant.renderMarkdownHTML()` directly with fixed
+> input — no live model call needed to catch a regression here.
+>
+> **Production CORS bug (2026-08-02).** The Settings page computed the embed snippet's API
+> base by stripping `app.`/`www.` off the current request's Host header (copied from the
+> `settings/domain` page's CNAME-target logic, where that stripping is correct — it wasn't
+> here). In prod this generated `https://papervine.io/api/widget/embed.js` — but the bare
+> apex domain 308-redirects (a canonical apex→`www`-style domain rule at the infra level),
+> and a cross-origin `<script type="module">` load requires CORS on every hop; the redirect
+> response itself carries no `Access-Control-Allow-Origin`, so the browser blocked the load
+> before it ever reached our route — surfacing as a CORS error even with the origin
+> correctly allow-listed. Fixed by using the current request's Host **verbatim**
+> (`app.papervine.io` in prod) instead of guessing at a "bare apex" — it's provably
+> non-redirecting, since it's the very host serving the settings page itself.
+>
+> **Not yet built:** a widget-specific rate limit beyond the shared AI billing gate, and a
+> "View guide" docs page beyond the evergreen reference (`docs/`).
 
 ---
 

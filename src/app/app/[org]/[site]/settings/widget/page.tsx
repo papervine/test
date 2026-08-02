@@ -20,10 +20,17 @@ export default async function WidgetSettingsPage({
   // than backfilling every row in the migration.
   const widgetId = site.widgetId ?? (await ensureWidgetId(siteRef)) ?? "";
 
+  // Use the CURRENT request's own host verbatim — it's proven reachable (it's serving
+  // this very page) with no redirect in front of it. Stripping to a guessed "bare apex"
+  // (the settings/domain page's pattern, copied here originally) is wrong for this case:
+  // if the bare domain 308-redirects elsewhere (e.g. a canonical apex→www redirect,
+  // common Vercel domain config), that redirect response carries no CORS headers, so a
+  // cross-origin `<script type="module">` load of the embed snippet fails outright before
+  // ever reaching our route — a real prod bug, not a hypothetical.
   const h = await headers();
-  const apexBase = (h.get("host") ?? "").replace(/^(app|www)\./, "");
-  const scheme = apexBase.startsWith("localhost") || apexBase.startsWith("127.") ? "http" : "https";
-  const apiBase = `${scheme}://${apexBase}`;
+  const host = h.get("host") ?? "";
+  const scheme = host.startsWith("localhost") || host.startsWith("127.") ? "http" : "https";
+  const apiBase = `${scheme}://${host}`;
 
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-6">
