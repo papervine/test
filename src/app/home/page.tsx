@@ -21,7 +21,7 @@ import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
 export const metadata: Metadata = {
   title: "Papervine — the intelligent documentation platform",
   description:
-    "Open-source, self-hostable documentation built for humans and AI. Create and maintain world-class docs from a Git repo — with an API playground, instant search, and an AI assistant.",
+    "Self-hostable documentation built for humans and AI. Create and maintain world-class docs from a Git repo — with an API playground, instant search, and an AI assistant.",
 };
 
 const GITHUB = "https://github.com/phishy/papervine";
@@ -64,8 +64,8 @@ const FEATURES = [
   },
   {
     icon: GitBranch,
-    title: "Open source & self-hostable",
-    body: "Run the hosted platform or your own instance. Portable interfaces, no lock-in, MIT in spirit.",
+    title: "Self-hostable",
+    body: "Run the hosted platform or your own instance. Portable interfaces, no lock-in.",
   },
 ];
 
@@ -152,8 +152,7 @@ export default async function LandingPage() {
           style={{ animationDelay: "160ms" }}
         >
           Create and maintain world-class docs from a Git repo — built for both
-          your readers and the AI agents they rely on. Open-source and
-          self-hostable.
+          your readers and the AI agents they rely on. Self-hostable.
         </p>
 
         <div
@@ -324,7 +323,6 @@ export default async function LandingPage() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 text-sm text-[var(--muted)] sm:flex-row">
           <span className="flex items-center gap-1.5">
             <Brand size="sm" />
-            <span>— open source</span>
           </span>
           <div className="flex gap-5">
             <Link

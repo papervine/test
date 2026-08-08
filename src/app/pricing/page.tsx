@@ -276,7 +276,6 @@ export default async function PricingPage() {
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 text-sm text-[var(--muted)] sm:flex-row">
           <span className="flex items-center gap-1.5">
             <Brand size="sm" />
-            <span>— open source</span>
           </span>
           <div className="flex gap-5">
             <Link href="/pricing" className="transition-colors hover:text-[var(--fg)]">

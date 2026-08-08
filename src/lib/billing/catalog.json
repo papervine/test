@@ -237,8 +237,8 @@
       "body": "The docs-platform category jumps from free straight to enterprise-lite pricing. Team fills that gap; Pro undercuts the category flagship with 2.5× the AI credits."
     },
     {
-      "title": "Open source — never locked in",
-      "body": "Hosted Papervine is the managed path, but the renderer and control plane are built in the open. Self-host any time; heavy AI users can even bring their own infrastructure."
+      "title": "Self-hostable — never locked in",
+      "body": "Hosted Papervine is the managed path, but you can self-host the renderer and control plane any time; heavy AI users can even bring their own inference infrastructure."
     }
   ],
   "matrix": [

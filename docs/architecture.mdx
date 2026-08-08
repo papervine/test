@@ -147,7 +147,7 @@ forwards the raw host (`x-papervine-host`) and rewrites to a dedicated
   in *our* zone (e.g. `cname.papervine.io → cname.vercel-dns.com`). That indirection means we
   can re-point one record on our side at migration time instead of asking every customer to
   edit their DNS. The target is operator-configurable (`CUSTOM_DOMAIN_CNAME_TARGET`), so the
-  open-source code hardcodes no operator domain — a self-hoster sets their own.
+  code hardcodes no operator domain — a self-hoster sets their own.
 </Tip>
 
 <Warning>

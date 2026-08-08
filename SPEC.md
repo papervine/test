@@ -1,10 +1,10 @@
-# Papervine — Open-Source Docs Platform
+# Papervine — Docs Platform
 
 **Status:** Draft v0.1
 **Date:** 2026-06-07
 **Owner:** jeff@loiselles.com
 
-An open-source, multi-tenant docs platform alternative for Git-backed MDX docs. Users connect
+A multi-tenant docs platform alternative for Git-backed MDX docs. Users connect
 a repo containing MDX files + a `docs.json` config; Papervine renders a fast, searchable
 docs site with an interactive API playground and an AI assistant. The technical target is
 `docs.json` compatibility at the migration boundary, with room to diverge where Papervine
@@ -303,7 +303,7 @@ Two **independent** domain systems — don't conflate them:
    straight at `cname.vercel-dns.com` would bake Vercel into every customer zone and make the
    Phase 2 cutover a per-customer fire drill. The target is **operator-configurable**
    (`CUSTOM_DOMAIN_CNAME_TARGET` — hosted sets `cname.papervine.io`; a self-hoster sets their
-   own host; unset falls back to the raw Vercel edge, then the apex), so the OSS code hardcodes
+   own host; unset falls back to the raw Vercel edge, then the apex), so the code hardcodes
    no operator domain. (Apex `A`-record customers can't CNAME, so they fall outside this seam
    and would re-point at migration.) **Verified (2026-06-10):** Vercel
    cold-issues the per-host Let's Encrypt cert through the chain — a fresh test host
@@ -1831,7 +1831,7 @@ layer.
 > container host in prod; `crossws` makes it portable to Bun/Deno/CF Workers). We considered the
 > Vercel Marketplace one-click partner **Liveblocks** (fully-managed Yjs) and rejected it *as the
 > default* for a decisive reason: **you can't self-host Liveblocks**, so collab-on-Liveblocks would
-> break Papervine's OSS self-host story (§13). A managed Yjs host (Liveblocks / y-sweet) stays a
+> break Papervine's self-host story (§13). A managed Yjs host (Liveblocks / y-sweet) stays a
 > valid *optional hosted-tier* choice behind the same provider seam — never the foundation. This
 > is a different problem from the Activity feed's Pusher/Soketi choice (§10.3): that relays content-
 > free pings; a document needs stateful sync (correct join-state, awareness, and state transfer that
@@ -2046,8 +2046,7 @@ Minimum to operate the SaaS:
   portal self-serve, org-scoped billing, self-host = no meter). *Verified in-browser
   light + dark 2026-07-16, console clean; `node tests/crawl.mjs docs` 30/30, 0×500.*
   §2's pricing-thesis paragraph is superseded by this section for plan shape; the
-  wedge ("all features from day one, security before procurement, open-source exit")
-  is unchanged.
+  wedge ("all features from day one, security before procurement") is unchanged.
   **Plan switching + downgrade landed 2026-07-17** (gap found dogfooding: no way to
   downgrade). `changePlan` routes by billing state — a live Stripe sub gets an
   in-place `subscriptions.update` with proration (a second Checkout would mint a
@@ -3203,10 +3202,10 @@ team members, connect a repo, manage billing. RBAC roles: owner/admin/editor/vie
 
 **Choice: [Better Auth](https://www.better-auth.com/).** Rationale:
 
-- **Open-source & self-hostable, owns its own schema in our Postgres.** A self-hoster
-  runs the exact same code with zero third-party accounts; no OSS-vs-SaaS fork (resolves
-  the spirit of Open Question §16.4). This rules out Clerk/Auth0 as the *core* — they'd
-  bake a vendor dependency into the open-source product.
+- **Self-hostable, owns its own schema in our Postgres.** A self-hoster
+  runs the exact same code with zero third-party accounts; no hosted-vs-self-hosted fork
+  (resolves the spirit of Open Question §16.4). This rules out Clerk/Auth0 as the
+  *core* — they'd bake a vendor dependency into the product itself.
 - **First-class `organization` plugin** = tenants/teams/roles/invites out of the box.
   "Multi-tenant" here means orgs, not just users, so this is the exact shape we need
   instead of hand-rolling it (which is the main reason we pick it over Auth.js v5).
@@ -3218,7 +3217,7 @@ team members, connect a repo, manage billing. RBAC roles: owner/admin/editor/vie
 Other options, and why not now: **WorkOS** — not the core, but the planned path for
 enterprise **SAML/SSO into the platform** (the same enterprise buyers who want Layer 2).
 Add it behind Better Auth's org model when the first enterprise deal lands. **Clerk** —
-fastest DX, only if we decide OSS self-hosting is *not* a real goal (we've decided it is).
+fastest DX, only if we decide self-hosting is *not* a real goal (we've decided it is).
 **Auth.js v5** — viable but minimal; Better Auth ≈ Auth.js + the org layer we'd otherwise
 write by hand.
 
@@ -3769,10 +3768,10 @@ Org/auth/RBAC, custom domains + TLS, analytics views. Beta-ready.
 1. **Compile-on-sync vs. on-request.** Spec assumes compile-on-sync for perf/predictability. Does that block any dynamic features we care about (e.g. live Twoslash)?
 2. ~~**Build on Fumadocs vs. from scratch.**~~ **DECIDED (2026-06-07): from scratch.** Multi-tenancy and full control over the architecture outweigh the head start. M0 is a single Next.js app; refactor into the monorepo packages at M2 when multi-tenancy lands.
 3. **Versioning & i18n.** docs.json supports versions + languages in the nav tree. In v1 scope or fast-follow?
-4. **Self-host story.** How easy must the OSS self-host path be vs. the hosted SaaS? Affects how much we hardwire to R2/Vercel/etc. **Resolved (2026-06-08):** code to portable interfaces, not vendors — Better Auth owns its schema in Postgres (§11.1), and storage is the **S3 API** (hosted default R2, local MinIO, self-host points `S3_ENDPOINT` anywhere; §3.1). Domain/TLS: **resolved (2026-06-09)** — `*.papervine.io` via host-platform wildcard cert; custom domains via the host-platform domains API, escaping the per-project cap with a SaaS-domains proxy (Approximated / Cloudflare-for-SaaS / Caddy) + `X-Forwarded-Host` when it nears (§2 → Custom domains). Self-host swaps the proxy or uses Caddy on-demand-TLS directly.
+4. **Self-host story.** How easy must the self-host path be vs. the hosted SaaS? Affects how much we hardwire to R2/Vercel/etc. **Resolved (2026-06-08):** code to portable interfaces, not vendors — Better Auth owns its schema in Postgres (§11.1), and storage is the **S3 API** (hosted default R2, local MinIO, self-host points `S3_ENDPOINT` anywhere; §3.1). Domain/TLS: **resolved (2026-06-09)** — `*.papervine.io` via host-platform wildcard cert; custom domains via the host-platform domains API, escaping the per-project cap with a SaaS-domains proxy (Approximated / Cloudflare-for-SaaS / Caddy) + `X-Forwarded-Host` when it nears (§2 → Custom domains). Self-host swaps the proxy or uses Caddy on-demand-TLS directly.
 5. **License & governance.** MIT vs. Apache-2.0; CLA; what (if anything) is SaaS-only (open-core) vs. fully open.
 6. **Pricing/limits** for the hosted version (out of scope for build, but shapes tenancy/metering design).
-7. ~~**Web editor** — defer past v1? hosted docs platforms treats it as a differentiator.~~ **DECIDED & BUILT (2026-06-14): build it now, agent-native.** Shipped the full 3-panel editor (editing-agent chat · navigation · multi-modal editor) on a shared authoring backend — see §9.2's build note. We chose to lead with the differentiating axes (open-source + agent-native) rather than defer. Editing is **Source MDX + a Preview rendered by our own renderer** (revised 2026-06-15 — the original MDXEditor WYSIWYG was dropped because a second rendering engine only approximates real-world MDX; see §9.2). Git stays the source of truth and the preview is byte-faithful to publish.
+7. ~~**Web editor** — defer past v1? hosted docs platforms treats it as a differentiator.~~ **DECIDED & BUILT (2026-06-14): build it now, agent-native.** Shipped the full 3-panel editor (editing-agent chat · navigation · multi-modal editor) on a shared authoring backend — see §9.2's build note. We chose to lead with the differentiating axis (agent-native) rather than defer. Editing is **Source MDX + a Preview rendered by our own renderer** (revised 2026-06-15 — the original MDXEditor WYSIWYG was dropped because a second rendering engine only approximates real-world MDX; see §9.2). Git stays the source of truth and the preview is byte-faithful to publish.
 
 ---
 

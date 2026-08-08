@@ -1,7 +1,7 @@
 <h1 align="center">Papervine</h1>
 
 <p align="center">
-  <strong>The open-source docs platform alternative you can self-host.</strong><br />
+  <strong>The docs platform alternative you can self-host.</strong><br />
   Point it at a folder of MDX + a <code>docs.json</code> and get a fast, themeable docs site.
 </p>
 
@@ -16,7 +16,7 @@
 
 ## Why Papervine?
 
-Hosted docs platforms are great — until you hit a paywall for basic customization, or your compliance team asks where the data lives. Papervine is an open-source docs platform alternative with the polish of a hosted docs platform and none of the lock-in:
+Hosted docs platforms are great — until you hit a paywall for basic customization, or your compliance team asks where the data lives. Papervine is a docs platform alternative with the polish of a hosted docs platform and none of the lock-in:
 
 - **Own your docs.** MDX files in your repo, rendered by software you control. Your content is always just files.
 - **Drop-in `docs.json` compatibility.** Papervine reads MDX content and a recursive `docs.json` navigation file, then renders the site without a proprietary build step.
@@ -132,6 +132,6 @@ Check [good first issues](https://github.com/papervine/papervine/labels/good%20f
 
 ## License
 
-Papervine's core is open source — see [LICENSE](LICENSE). Papervine Cloud and enterprise features are commercial offerings built on top of the open-source core.
+Papervine Cloud and enterprise features are commercial offerings built on top of the core platform.
 
 Papervine is an independent project.
