@@ -195,6 +195,69 @@ export const WIDGET_EMBED_SCRIPT = `
     return { node: el(tag, null, lis), next: idx };
   }
 
+  // Real diagram rendering, loaded on demand (SPEC §8.7) — pinned to an EXACT mermaid
+  // version (never a floating tag) so it can't silently change under us; mermaid's own
+  // recommended no-bundler embedding pattern. Its real distribution is dozens of
+  // interlinked chunk files (some hundreds of KB each), not one self-contained script —
+  // that ruled out fetching+verifying a pinned content hash ourselves (the chunks' own
+  // relative imports can't resolve from a blob: URL, and pinning/verifying every chunk
+  // individually isn't maintainable across mermaid version bumps). So this is a real
+  // third-party runtime dependency, narrower than a vendored/hash-verified one — trusted
+  // no further than "this exact, immutable jsdelivr version", same trust model as any
+  // versioned CDN import. securityLevel:"strict" sanitizes the DIAGRAM CONTENT (HTML in
+  // labels/tooltips) since that still originates from the model's output.
+  var MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.esm.min.mjs";
+  var mermaidPromise = null;
+  function loadMermaid() {
+    if (!mermaidPromise) {
+      mermaidPromise = import(MERMAID_URL).then(function (mod) {
+        mod.default.initialize({ startOnLoad: false, securityLevel: "strict" });
+        return mod.default;
+      });
+    }
+    return mermaidPromise;
+  }
+
+  // Replace each mermaid fence's fallback (raw source, shown immediately while this
+  // resolves) with a rendered SVG. Called once per completed turn, never mid-stream — a
+  // diagram fence isn't reliably complete until the whole answer has streamed in. Any
+  // failure (network, CSP block, invalid diagram syntax) leaves the fallback exactly as
+  // it already was — a diagram must never break the rest of the answer.
+  // Returns a promise that settles once every diagram in \`container\` has either
+  // upgraded to a real SVG or fallen back — never rejects itself (each diagram's own
+  // failure is caught individually), so a caller can safely await it either way.
+  function upgradeMermaidDiagrams(container) {
+    var wraps = container.querySelectorAll(".pv-mermaid");
+    var settled = [];
+    for (var w = 0; w < wraps.length; w++) {
+      (function (wrap) {
+        var source = wrap.getAttribute("data-source");
+        settled.push(
+          loadMermaid()
+            .then(function (mermaid) {
+              return mermaid.render("pv-mmd-" + Math.random().toString(36).slice(2), source);
+            })
+            .then(function (result) {
+              while (wrap.firstChild) wrap.removeChild(wrap.firstChild);
+              var svgHost = el("div", { class: "pv-mermaid-svg" });
+              // mermaid's OWN sanitized output (securityLevel: "strict" above), not raw
+              // model text — the one deliberate innerHTML use in this whole script, same
+              // as how any app embedding mermaid renders its result.
+              svgHost.innerHTML = result.svg;
+              wrap.appendChild(svgHost);
+            })
+            .catch(function () {
+              // Leave the fallback as-is (it already shows the raw source) — just clear
+              // the "rendering…" note back to the original, no-JS-needed message.
+              var note = wrap.querySelector(".pv-note");
+              if (note) note.textContent = "Diagram — view the full page in the docs to see it rendered:";
+            }),
+        );
+      })(wraps[w]);
+    }
+    return Promise.all(settled);
+  }
+
   // Block-level markdown (headings, lists, fenced code, tables, blockquotes, rules,
   // paragraphs) — appends real DOM nodes into \`container\` (clearing it first). Same
   // no-innerHTML, no-regex reasoning as renderInlineNodes above.
@@ -216,9 +279,6 @@ export const WIDGET_EMBED_SCRIPT = `
 
       if (line.slice(0, 3) === "\`\`\`") {
         flushPara();
-        // Real diagram rendering (mermaid, etc.) needs an actual layout engine — not
-        // worth the dependency for this script (see the file header). Label it instead
-        // of silently showing an unexplained code block.
         var lang = line.slice(3).trim();
         var code = [];
         i++;
@@ -227,12 +287,20 @@ export const WIDGET_EMBED_SCRIPT = `
           i++;
         }
         i++;
+        var codeText = code.join("\\n");
         if (lang === "mermaid") {
+          // Shown immediately; upgradeMermaidDiagrams (called once per completed turn,
+          // never mid-stream) replaces this with a rendered SVG if the on-demand mermaid
+          // load succeeds, or leaves it exactly as-is if it doesn't.
           container.appendChild(
-            el("p", { class: "pv-note" }, [text("Diagram — view the full page in the docs to see it rendered:")]),
+            el("div", { class: "pv-mermaid", "data-source": codeText }, [
+              el("p", { class: "pv-note" }, [text("Diagram — rendering…")]),
+              el("pre", null, [el("code", null, [text(codeText)])]),
+            ]),
           );
+        } else {
+          container.appendChild(el("pre", null, [el("code", null, [text(codeText)])]));
         }
-        container.appendChild(el("pre", null, [el("code", null, [text(code.join("\\n"))])]));
         continue;
       }
 
@@ -387,6 +455,8 @@ export const WIDGET_EMBED_SCRIPT = `
     ".pv-msg ul ul, .pv-msg ol ol, .pv-msg ul ol, .pv-msg ol ul { margin: 2px 0; }",
     ".pv-msg img { max-width: 100%; border-radius: 6px; margin: 4px 0; display: block; }",
     ".pv-msg .pv-note { font-size: 12px; color: #777; margin: 6px 0 2px; }",
+    ".pv-mermaid-svg { margin: 6px 0; }",
+    ".pv-mermaid-svg svg { max-width: 100%; height: auto; }",
     ".pv-inputrow { display: flex; gap: 8px; padding: 10px; border-top: 1px solid rgba(0,0,0,0.08); }",
     ".pv-input { flex: 1; border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; padding: 8px 10px; font-size: 14px; outline: none; }",
     ".pv-send { border: none; background: #111; color: #fff; border-radius: 8px; padding: 0 14px; font-size: 14px; cursor: pointer; }",
@@ -499,6 +569,7 @@ export const WIDGET_EMBED_SCRIPT = `
           }
         });
         messages.push({ role: "assistant", parts: [{ type: "text", text: segment }] });
+        upgradeMermaidDiagrams(answerBubble);
       } catch (err) {
         answerBubble.classList.remove("assistant");
         answerBubble.classList.add("error");
@@ -532,6 +603,12 @@ export const WIDGET_EMBED_SCRIPT = `
       renderMarkdownInto(container, markdown);
       return container.innerHTML;
     },
+    // Triggers the on-demand mermaid upgrade for any .pv-mermaid fallback already
+    // rendered inside "container" (e.g. via renderMarkdownHTML) — exposed alongside it
+    // for the same reason: deterministic testing without a live model call, and for a
+    // custom UI that wants the same on-demand diagram rendering this widget uses.
+    // Returns a promise that settles once every diagram has upgraded or fallen back.
+    upgradeMermaidDiagrams: upgradeMermaidDiagrams,
   };
 
   // Alternative single-tag install: a data-widget-id attribute on the loader script itself

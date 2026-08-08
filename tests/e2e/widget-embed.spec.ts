@@ -265,9 +265,58 @@ test("renders blockquotes, horizontal rules, and images; labels mermaid fences",
   expect(html).toContain("<blockquote>A quoted note.</blockquote>");
   expect(html).toContain("<hr>");
   expect(html).toContain('<img src="/some-image.png" alt="alt text">');
-  // Not a real diagram (no bundler for this script) — but labeled, not an unexplained code block.
+  // The immediate, synchronous fallback (raw source + a note) — upgradeMermaidDiagrams
+  // (called once a turn completes, exercised separately below since it needs the real
+  // on-demand mermaid load) replaces this with a rendered SVG when it succeeds.
+  expect(html).toContain('class="pv-mermaid"');
   expect(html).toContain("Diagram");
   expect(html).toContain("<pre><code>graph TD</code></pre>");
+});
+
+// @external: hits the real cdn.jsdelivr.net to load mermaid on demand (SPEC §8.7) — no
+// bundler for this script, so there's nothing to fake it with locally. CI skips these
+// with --grep-invert @external; run locally to verify the on-demand load itself.
+test("upgrades a mermaid fence to a real rendered SVG on demand @external", async ({ page }) => {
+  await page.goto(hostOrigin);
+  const html = await page.evaluate(async () => {
+    const md = ["```mermaid", "graph TD", "  A --> B", "```"].join("\n");
+    // @ts-expect-error injected by the widget loader script
+    const fallbackHtml = window.PapervineAssistant.renderMarkdownHTML(md);
+    const container = document.createElement("div");
+    container.innerHTML = fallbackHtml;
+    document.body.appendChild(container);
+    // @ts-expect-error injected by the widget loader script
+    await window.PapervineAssistant.upgradeMermaidDiagrams(container);
+    return container.innerHTML;
+  });
+
+  expect(html).toContain('class="pv-mermaid-svg"');
+  expect(html).toContain("<svg");
+  // The raw-source fallback is gone — replaced, not left alongside the diagram.
+  expect(html).not.toContain("<pre><code>graph TD");
+});
+
+test("falls back gracefully (no crash) when mermaid can't render the given syntax @external", async ({
+  page,
+}) => {
+  await page.goto(hostOrigin);
+  const html = await page.evaluate(async () => {
+    const md = ["```mermaid", "this is not valid mermaid syntax at all !!! ###", "```"].join(
+      "\n",
+    );
+    // @ts-expect-error injected by the widget loader script
+    const fallbackHtml = window.PapervineAssistant.renderMarkdownHTML(md);
+    const container = document.createElement("div");
+    container.innerHTML = fallbackHtml;
+    document.body.appendChild(container);
+    // @ts-expect-error injected by the widget loader script
+    await window.PapervineAssistant.upgradeMermaidDiagrams(container);
+    return container.innerHTML;
+  });
+
+  // Still shows the raw source — never an unhandled rejection or a blank/broken bubble.
+  expect(html).toContain("this is not valid mermaid syntax");
+  expect(html).not.toContain("<svg");
 });
 
 test("neutralizes a malicious link scheme and HTML in the AI's own output", async ({ page }) => {

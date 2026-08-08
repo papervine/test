@@ -10,9 +10,10 @@ from **Settings → Widget**.
 
 <Info>
   Built: the Settings → Widget page (Availability, Authorized domains, Installation), the
-  `/api/widget/[widgetId]/chat` endpoint, and the `/api/widget/embed.js` loader script. Not
-  yet built: rich markdown/citation rendering in the widget (it renders plain text today)
-  and a widget-specific rate limit beyond the shared AI billing gate.
+  `/api/widget/[widgetId]/chat` endpoint, the `/api/widget/embed.js` loader script (real
+  markdown rendering — headings, lists, tables, links, images — and on-demand Mermaid
+  diagrams). Not yet built: a widget-specific rate limit beyond the shared AI billing
+  gate, and inline source citations in the widget UI.
 </Info>
 
 ## Why this needs its own security model
@@ -89,3 +90,17 @@ token from `/api/widget/{widgetId}/chat` — the same agentic retrieval loop (`s
 Usage against the widget draws from the same AI credit pool as the in-docs assistant and
 [automations](/control-plane/automate) — there's one billing gate per organization, not a
 separate budget per surface.
+
+### Rendering — including diagrams
+
+The widget renders the assistant's answer as real markdown — headings, lists (including
+nested ones), tables, links, images, and code — built directly as DOM nodes rather than by
+injecting HTML, so nothing in the model's own output can ever run as script.
+
+A fenced code block labeled `mermaid` renders as an actual diagram: the widget loads the Mermaid library
+on demand, only when an answer actually contains one, from a pinned, exact version — never
+a floating tag, so it can't change without a deliberate update on our side. If that load
+fails for any reason (a restrictive Content-Security-Policy on the host page, a network
+issue, or a diagram the model wrote with invalid syntax), the widget falls back to showing
+the diagram's raw source in a code block — an answer never breaks because a diagram
+couldn't render.

@@ -1475,15 +1475,42 @@ precedent already in the codebase rather than inventing a new access model:
 > images (`![alt](src)`, through the same `safeHref` scheme-allowlist as links — a
 > `javascript:` image src is defused the same as a `javascript:` link href); and a label
 > on ` ```mermaid ` fences ("Diagram — view the full page in the docs…") instead of an
-> unexplained bare code block. **Deliberately not fixed:** real mermaid/diagram
-> rendering — needs the actual mermaid.js layout engine, which is large and would mean
-> either violating this script's no-bundler decision or loading a third-party script
-> onto the customer's own site at runtime; the labeled code fallback is the considered
-> trade-off, not an oversight. Also not fixed: backslash-escaped markdown (`\*not
+> unexplained bare code block. Also not fixed: backslash-escaped markdown (`\*not
 > italic\*` still renders as italic) — rare enough in a Q&A assistant's own prose that
 > it wasn't worth the added parsing complexity. Five new deterministic
 > `tests/e2e/widget-embed.spec.ts` cases, including one that pins the exact "glued ul+ol
 > run, second list silently dropped" bug found while building the nested-list fix itself.
+>
+> **Mermaid rendered on demand (2026-08-08).** The labeled-fallback trade-off above got
+> revisited once it was actually seen in practice — real diagrams were worth it after
+> all. Mirrors the main renderer's own approach (`components/mdx/Mermaid.tsx`, §7):
+> dynamic-import mermaid lazily, only on a page/turn that actually has a diagram, degrade
+> to source-in-a-`<pre>` on any failure, never a break. The difference is *how* it's
+> imported — the main renderer dynamic-imports mermaid as a real npm dependency (Next.js
+> code-splits it); this script has no bundler and no dependencies at all, so it
+> `import()`s mermaid.esm.min.mjs **directly from jsdelivr, pinned to an exact version**
+> (`src/lib/widget-embed-script.ts`'s `MERMAID_URL` — never a floating tag, so it can't
+> silently change under us). The original plan was to fetch the file ourselves, verify a
+> pinned SHA-384 hash, and `import()` it from a Blob URL for real integrity
+> verification — abandoned once it turned out mermaid's real distribution is dozens of
+> interlinked chunk files (some approaching 1MB) using relative imports that can't
+> resolve from a `blob:` origin, and pinning every chunk individually isn't maintainable
+> across version bumps. So this is a genuine third-party runtime dependency, trusted no
+> further than "this exact, immutable jsdelivr version" — narrower than the vendored/
+> hash-verified script this repo's other surfaces get, and worth remembering as the
+> tradeoff if this ever needs tightening (self-hosting the whole mermaid dist tree, or a
+> real build step, are the two ways out). `securityLevel: "strict"` on the diagram
+> content itself (stricter than the main renderer's `"antiscript"` — the widget runs on
+> an arbitrary third party's page, not our own, so it gets the more conservative of the
+> two). Called once per completed turn (never mid-stream — a diagram fence isn't
+> reliably complete until the whole answer has streamed in), replacing the fallback with
+> mermaid's own sanitized SVG output on success or reverting the note text on any
+> failure (network, CSP block, invalid diagram syntax) — verified in a real browser both
+> ways, including the on-demand load actually working cross-origin. Two `@external`
+> `tests/e2e/widget-embed.spec.ts` cases (they hit the real CDN, so CI skips them via
+> `--grep-invert @external` same as the GitHub-connect spec) pin the success and
+> fallback paths; `upgradeMermaidDiagrams` is exposed on `window.PapervineAssistant`
+> alongside `renderMarkdownHTML` for exactly this deterministic testing.
 >
 > **Not yet built:** a widget-specific rate limit beyond the shared AI billing gate, and a
 > "View guide" docs page beyond the evergreen reference (`docs/`).
