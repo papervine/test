@@ -209,12 +209,7 @@ export const WIDGET_EMBED_SCRIPT = `
   var MERMAID_URL = "https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.esm.min.mjs";
   var mermaidPromise = null;
   function loadMermaid() {
-    if (!mermaidPromise) {
-      mermaidPromise = import(MERMAID_URL).then(function (mod) {
-        mod.default.initialize({ startOnLoad: false, securityLevel: "strict" });
-        return mod.default;
-      });
-    }
+    if (!mermaidPromise) mermaidPromise = import(MERMAID_URL).then(function (mod) { return mod.default; });
     return mermaidPromise;
   }
 
@@ -226,7 +221,12 @@ export const WIDGET_EMBED_SCRIPT = `
   // Returns a promise that settles once every diagram in \`container\` has either
   // upgraded to a real SVG or fallen back — never rejects itself (each diagram's own
   // failure is caught individually), so a caller can safely await it either way.
-  function upgradeMermaidDiagrams(container) {
+  // \`theme\` ("dark" by default, matching this script's own default) picks mermaid's own
+  // color scheme — otherwise a diagram renders with mermaid's light default node fills,
+  // clashing with a dark panel around it. initialize() is called fresh each time (cheap,
+  // no re-fetch) since it's the only way to pick the theme per render — mermaid has no
+  // per-call theme override on render() itself.
+  function upgradeMermaidDiagrams(container, theme) {
     var wraps = container.querySelectorAll(".pv-mermaid");
     var settled = [];
     for (var w = 0; w < wraps.length; w++) {
@@ -235,6 +235,11 @@ export const WIDGET_EMBED_SCRIPT = `
         settled.push(
           loadMermaid()
             .then(function (mermaid) {
+              mermaid.initialize({
+                startOnLoad: false,
+                securityLevel: "strict",
+                theme: theme === "light" ? "default" : "dark",
+              });
               return mermaid.render("pv-mmd-" + Math.random().toString(36).slice(2), source);
             })
             .then(function (result) {
@@ -419,48 +424,76 @@ export const WIDGET_EMBED_SCRIPT = `
     flushPara();
   }
 
+  // Themeable via CSS custom properties, toggled by a class on the HOST element (the
+  // outer <div> — :host(.pv-theme-light) targets it from inside its own shadow root).
+  // Dark is the default look (opts.theme in mount() below); "light"/"system" swap this
+  // one block of variables rather than duplicating every rule per theme.
   var STYLE = [
-    ":host { all: initial; }",
+    ":host { all: initial;",
+    "  --pv-bg: #0c0c0d; --pv-fg: rgba(255,255,255,0.92); --pv-muted: rgba(255,255,255,0.5);",
+    "  --pv-border: rgba(255,255,255,0.09); --pv-surface: rgba(255,255,255,0.05);",
+    "  --pv-surface-hover: rgba(255,255,255,0.09); --pv-accent: #fff; --pv-accent-fg: #0c0c0d;",
+    "  --pv-link: #8ab4ff; --pv-code-bg: rgba(255,255,255,0.09); --pv-shadow: rgba(0,0,0,0.5); }",
+    ":host(.pv-theme-light) {",
+    "  --pv-bg: #fff; --pv-fg: rgba(0,0,0,0.88); --pv-muted: rgba(0,0,0,0.5);",
+    "  --pv-border: rgba(0,0,0,0.08); --pv-surface: rgba(0,0,0,0.04);",
+    "  --pv-surface-hover: rgba(0,0,0,0.07); --pv-accent: #111; --pv-accent-fg: #fff;",
+    "  --pv-link: #2563eb; --pv-code-bg: rgba(0,0,0,0.06); --pv-shadow: rgba(0,0,0,0.28); }",
     "* { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }",
+    // Always dark, independent of the panel's theme — it floats on an arbitrary host
+    // page whose background we don't control, so it needs to read clearly against
+    // either a light or a dark page. Only the opened panel follows opts.theme.
     ".pv-launcher { position: fixed; bottom: 20px; right: 20px; width: 56px; height: 56px;",
     "  border-radius: 50%; background: #111; color: #fff; border: none; cursor: pointer;",
-    "  box-shadow: 0 4px 16px rgba(0,0,0,0.25); font-size: 24px; z-index: 2147483000; }",
+    "  box-shadow: 0 4px 16px rgba(0,0,0,0.35); font-size: 24px; z-index: 2147483000; }",
     ".pv-panel { position: fixed; bottom: 88px; right: 20px; width: 360px; max-width: calc(100vw - 40px);",
-    "  height: 480px; max-height: calc(100vh - 120px); background: #fff; border-radius: 16px;",
-    "  box-shadow: 0 8px 32px rgba(0,0,0,0.28); display: none; flex-direction: column; overflow: hidden;",
-    "  z-index: 2147483000; border: 1px solid rgba(0,0,0,0.08); }",
+    "  height: 480px; max-height: calc(100vh - 120px); background: var(--pv-bg); color: var(--pv-fg);",
+    "  border-radius: 16px; box-shadow: 0 8px 32px var(--pv-shadow); display: none; flex-direction: column;",
+    "  overflow: hidden; z-index: 2147483000; border: 1px solid var(--pv-border); }",
     ".pv-panel.open { display: flex; }",
-    ".pv-header { padding: 12px 14px; border-bottom: 1px solid rgba(0,0,0,0.08); font-size: 14px; font-weight: 600; }",
+    ".pv-header { display: flex; align-items: center; justify-content: space-between; gap: 8px;",
+    "  padding: 12px 14px; border-bottom: 1px solid var(--pv-border); font-size: 14px; font-weight: 600; }",
+    ".pv-close { border: none; background: none; color: var(--pv-muted); cursor: pointer; font-size: 16px;",
+    "  line-height: 1; padding: 4px; border-radius: 6px; }",
+    ".pv-close:hover { background: var(--pv-surface-hover); color: var(--pv-fg); }",
+    ".pv-disclaimer { padding: 10px 14px; font-size: 11.5px; line-height: 1.4; color: var(--pv-muted);",
+    "  text-align: center; border-bottom: 1px solid var(--pv-border); }",
     ".pv-messages { flex: 1; overflow-y: auto; padding: 12px 14px; font-size: 14px; line-height: 1.5; }",
+    ".pv-messages::-webkit-scrollbar { width: 8px; }",
+    ".pv-messages::-webkit-scrollbar-thumb { background: var(--pv-surface-hover); border-radius: 4px; }",
     ".pv-msg { margin-bottom: 12px; word-break: break-word; }",
-    ".pv-msg.user { text-align: right; color: #111; white-space: pre-wrap; }",
-    ".pv-msg.assistant { text-align: left; color: #333; }",
-    ".pv-msg.error { color: #b91c1c; white-space: pre-wrap; }",
+    ".pv-msg.user { text-align: right; white-space: pre-wrap; }",
+    ".pv-msg.user > span { display: inline-block; background: var(--pv-surface); border-radius: 12px; padding: 6px 12px; text-align: left; }",
+    ".pv-msg.assistant { text-align: left; color: var(--pv-fg); }",
+    ".pv-msg.error { color: #f87171; white-space: pre-wrap; }",
     ".pv-msg p { margin: 0 0 8px; }",
     ".pv-msg p:last-child { margin-bottom: 0; }",
     ".pv-msg h1, .pv-msg h2, .pv-msg h3, .pv-msg h4, .pv-msg h5, .pv-msg h6 { margin: 12px 0 6px; font-weight: 600; line-height: 1.3; }",
     ".pv-msg h1 { font-size: 17px; } .pv-msg h2 { font-size: 15.5px; } .pv-msg h3, .pv-msg h4, .pv-msg h5, .pv-msg h6 { font-size: 14px; }",
     ".pv-msg ul, .pv-msg ol { margin: 6px 0; padding-left: 20px; }",
     ".pv-msg li { margin: 2px 0; }",
-    ".pv-msg code { background: rgba(0,0,0,0.06); border-radius: 4px; padding: 1px 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }",
-    ".pv-msg pre { background: rgba(0,0,0,0.04); border-radius: 8px; padding: 8px 10px; overflow-x: auto; margin: 6px 0; }",
+    ".pv-msg code { background: var(--pv-code-bg); border-radius: 4px; padding: 1px 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }",
+    ".pv-msg pre { background: var(--pv-surface); border-radius: 8px; padding: 8px 10px; overflow-x: auto; margin: 6px 0; }",
     ".pv-msg pre code { background: none; padding: 0; }",
     ".pv-msg table { border-collapse: collapse; margin: 8px 0; width: 100%; font-size: 12.5px; }",
-    ".pv-msg th, .pv-msg td { border: 1px solid rgba(0,0,0,0.12); padding: 4px 8px; text-align: left; vertical-align: top; }",
-    ".pv-msg th { background: rgba(0,0,0,0.04); font-weight: 600; }",
-    ".pv-msg a { color: #2563eb; text-decoration: underline; }",
+    ".pv-msg th, .pv-msg td { border: 1px solid var(--pv-border); padding: 4px 8px; text-align: left; vertical-align: top; }",
+    ".pv-msg th { background: var(--pv-surface); font-weight: 600; }",
+    ".pv-msg a { color: var(--pv-link); text-decoration: underline; }",
     ".pv-msg em { font-style: italic; }",
-    ".pv-msg blockquote { margin: 6px 0; padding: 2px 10px; border-left: 3px solid rgba(0,0,0,0.15); color: #555; }",
-    ".pv-msg hr { border: none; border-top: 1px solid rgba(0,0,0,0.12); margin: 10px 0; }",
+    ".pv-msg blockquote { margin: 6px 0; padding: 2px 10px; border-left: 3px solid var(--pv-border); color: var(--pv-muted); }",
+    ".pv-msg hr { border: none; border-top: 1px solid var(--pv-border); margin: 10px 0; }",
     ".pv-msg ul ul, .pv-msg ol ol, .pv-msg ul ol, .pv-msg ol ul { margin: 2px 0; }",
     ".pv-msg img { max-width: 100%; border-radius: 6px; margin: 4px 0; display: block; }",
-    ".pv-msg .pv-note { font-size: 12px; color: #777; margin: 6px 0 2px; }",
+    ".pv-msg .pv-note { font-size: 12px; color: var(--pv-muted); margin: 6px 0 2px; }",
     ".pv-mermaid-svg { margin: 6px 0; }",
     ".pv-mermaid-svg svg { max-width: 100%; height: auto; }",
-    ".pv-inputrow { display: flex; gap: 8px; padding: 10px; border-top: 1px solid rgba(0,0,0,0.08); }",
-    ".pv-input { flex: 1; border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; padding: 8px 10px; font-size: 14px; outline: none; }",
-    ".pv-send { border: none; background: #111; color: #fff; border-radius: 8px; padding: 0 14px; font-size: 14px; cursor: pointer; }",
-    ".pv-send:disabled { opacity: 0.5; cursor: default; }",
+    ".pv-inputrow { display: flex; gap: 8px; padding: 10px; border-top: 1px solid var(--pv-border); }",
+    ".pv-input { flex: 1; border: 1px solid var(--pv-border); background: var(--pv-surface); color: var(--pv-fg);",
+    "  border-radius: 20px; padding: 9px 14px; font-size: 14px; outline: none; }",
+    ".pv-input::placeholder { color: var(--pv-muted); }",
+    ".pv-send { border: none; background: var(--pv-accent); color: var(--pv-accent-fg); border-radius: 50%;",
+    "  width: 34px; height: 34px; flex-shrink: 0; font-size: 15px; line-height: 1; cursor: pointer; }",
+    ".pv-send:disabled { opacity: 0.4; cursor: default; }",
   ].join("\\n");
 
   // Yields every parsed SSE event on the wire (not just text-delta) so the caller can tell
@@ -501,31 +534,67 @@ export const WIDGET_EMBED_SCRIPT = `
     }
   }
 
+  // "dark" (this script's default look), "light", or "system" (follows the host page's
+  // prefers-color-scheme at mount time — not re-checked live if it changes afterward).
+  function resolveTheme(theme) {
+    if (theme === "light") return "light";
+    if (theme === "system") {
+      var prefersLight =
+        window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches;
+      return prefersLight ? "light" : "dark";
+    }
+    return "dark";
+  }
+
   function mount(opts) {
     var widgetId = opts.id;
     var messages = [];
 
+    var theme = resolveTheme(opts.theme);
     var host = el("div");
+    if (theme === "light") host.classList.add("pv-theme-light");
     document.body.appendChild(host);
     var root = host.attachShadow({ mode: "open" });
     root.appendChild(el("style", null, [text(STYLE)]));
 
     var messagesEl = el("div", { class: "pv-messages" });
-    var inputEl = el("input", { class: "pv-input", placeholder: "Ask a question…" });
-    var sendEl = el("button", { class: "pv-send" }, [text("Send")]);
-    var panel = el("div", { class: "pv-panel" }, [
-      el("div", { class: "pv-header" }, [text("Ask the docs assistant")]),
-      messagesEl,
-      el("div", { class: "pv-inputrow" }, [inputEl, sendEl]),
+    var inputEl = el("input", {
+      class: "pv-input",
+      placeholder: opts.placeholder || "Ask a question…",
+    });
+    var sendEl = el("button", { class: "pv-send", "aria-label": "Send" }, [text("↑")]);
+    var closeEl = el("button", { class: "pv-close", "aria-label": "Close" }, [text("✕")]);
+    var panelChildren = [el("div", { class: "pv-header" }, [text(opts.title || "Ask the docs assistant"), closeEl])];
+    if (opts.disclaimer !== false) {
+      panelChildren.push(
+        el("div", { class: "pv-disclaimer" }, [
+          text(opts.disclaimer || "Responses are generated using AI and may contain mistakes."),
+        ]),
+      );
+    }
+    panelChildren.push(messagesEl, el("div", { class: "pv-inputrow" }, [inputEl, sendEl]));
+    var panel = el("div", { class: "pv-panel" }, panelChildren);
+    var launcher = el("button", { class: "pv-launcher", "aria-label": "Ask the docs assistant" }, [
+      text("💬"),
     ]);
-    var launcher = el("button", { class: "pv-launcher" }, [text("💬")]);
     root.appendChild(panel);
     root.appendChild(launcher);
 
+    function openPanel() {
+      panel.classList.add("open");
+      inputEl.focus();
+    }
+    function closePanel() {
+      panel.classList.remove("open");
+    }
+
     launcher.addEventListener("click", function () {
-      panel.classList.toggle("open");
-      if (panel.classList.contains("open")) inputEl.focus();
+      if (panel.classList.contains("open")) closePanel();
+      else openPanel();
     });
+    closeEl.addEventListener("click", closePanel);
+
+    if (opts.defaultOpen) openPanel();
 
     function addBubble(cls) {
       var bubble = el("div", { class: "pv-msg " + cls });
@@ -541,7 +610,7 @@ export const WIDGET_EMBED_SCRIPT = `
       sendEl.disabled = true;
 
       messages.push({ role: "user", parts: [{ type: "text", text: value }] });
-      addBubble("user").appendChild(text(value));
+      addBubble("user").appendChild(el("span", null, [text(value)]));
       var answerBubble = addBubble("assistant");
 
       // The model streams one text segment per agentic step, narrating between tool
@@ -569,7 +638,7 @@ export const WIDGET_EMBED_SCRIPT = `
           }
         });
         messages.push({ role: "assistant", parts: [{ type: "text", text: segment }] });
-        upgradeMermaidDiagrams(answerBubble);
+        upgradeMermaidDiagrams(answerBubble, theme);
       } catch (err) {
         answerBubble.classList.remove("assistant");
         answerBubble.classList.add("error");

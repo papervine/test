@@ -1527,11 +1527,42 @@ precedent already in the codebase rather than inventing a new access model:
 >   OPTIONS round-trip before the real POST. Added (86400s, the practical browser cap) —
 >   only the first message of the day now pays for a preflight. New e2e case.
 >
-> **Not yet built:** a widget-specific rate limit beyond the shared AI billing gate (the
-> org-level billing gate still caps total spend, but nothing stops one allowed origin
-> from making many cheap/free-tier requests within a period), and analytics that
-> distinguish widget-originated questions from in-docs ones (both currently log as the
-> same `source: "human"` event).
+> **Dark theme + init() options (2026-08-08).** Restyled to a dark-first look (matching
+> hosted docs platforms' own widget), and added a first slice of the config surface real
+> embeddable widgets expose (`init({ id, theme, title, placeholder, disclaimer,
+> defaultOpen })`), researched from hosted docs platforms' own widget docs rather than
+> guessed. `theme` ("dark" default, or `"light"`/`"system"`) is CSS custom properties on
+> `:host`, toggled by a class on the host element — one variable block per theme instead
+> of duplicating every rule. The floating launcher bubble stays a FIXED dark style
+> regardless of `theme`, deliberately not themed — it sits on an arbitrary host page
+> whose background we don't control, so it needs to read clearly against either a light
+> or dark page; only the opened panel follows the theme setting. Mermaid diagrams now
+> also pick up the matching mermaid `theme` (`"dark"`/`"default"`) so a diagram doesn't
+> clash with a dark panel around it — `mermaid.initialize()` is called fresh on each
+> render since mermaid has no per-call theme override otherwise. Added a close (✕)
+> button in the header (there was previously no way to close the panel except clicking
+> the launcher again) and the disclaimer line already used by the in-docs assistant
+> ("Responses are generated using AI and may contain mistakes.", SPEC §8.2) for
+> consistency — `disclaimer: false` omits the element entirely rather than emptying its
+> text (which would've left a visible empty bar). New e2e case exercises the option
+> surface end-to-end (theme class applied, title/placeholder/disclaimer respected, close
+> button closes the panel) plus real-browser verification of the dark diagram recolor.
+>
+> **Not yet built — from hosted docs platforms' widget, evaluated and deferred:**
+> `starterQuestions` (worth building — reuses the SAME `docs.json` config the in-docs
+> assistant already has for this, SPEC §8.6, so it's mostly wiring, not new config
+> surface); runtime methods (`open`/`close`/`ask`/`reset`/`update`/`destroy`) and event
+> hooks (`event`/`error` callbacks) for a "headless" custom-UI integration; `accent`/
+> `logo`/`side`/`align`/`zIndex` cosmetic options; a `nonce` option for sites with a
+> strict CSP (relevant now that mermaid is a real runtime CDN dependency — worth
+> documenting the exact origins a customer's CSP needs to allow, even before building
+> nonce support itself). Explicitly NOT planned: an `identity` (signed end-user token)
+> option — real auth/identity verification infrastructure, not a small addition, and not
+> clearly needed for a docs-QA assistant. Also still open: a widget-specific rate limit
+> beyond the shared AI billing gate (the org-level gate caps total spend, but nothing
+> stops one allowed origin from making many cheap/free-tier requests within a period),
+> and analytics that distinguish widget-originated questions from in-docs ones (both
+> currently log as the same `source: "human"` event).
 
 ---
 

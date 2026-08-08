@@ -33,27 +33,34 @@ test.beforeAll(async () => {
 
   // Start the "customer site" AFTER we know its own origin, so the allowed-origins column
   // can be set to the exact value the widget chat route will see in the Origin header.
-  // Two install methods, two paths: "/" is the explicit init() call, "/single-tag" is the
-  // data-widget-id auto-init alternative — both must mount the same working widget.
+  // Three routes: "/" is the explicit init() call, "/single-tag" is the data-widget-id
+  // auto-init alternative — both must mount the same working widget. "/bare" loads only
+  // the loader script with no auto-init at all, for tests that need to drive init()
+  // themselves with custom options (theme, title, etc.).
   server = http.createServer((req, res) => {
-    const singleTag = req.url === "/single-tag";
     res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(
-      singleTag
-        ? `<!doctype html>
+    if (req.url === "/single-tag") {
+      res.end(`<!doctype html>
 <html><body>
 <h1>Customer site (single tag)</h1>
 <script type="module" src="${APEX_ORIGIN}/api/widget/embed.js" data-widget-id="${widgetId}"></script>
-</body></html>`
-        : `<!doctype html>
+</body></html>`);
+    } else if (req.url === "/bare") {
+      res.end(`<!doctype html>
+<html><body>
+<h1>Customer site (bare)</h1>
+<script type="module" src="${APEX_ORIGIN}/api/widget/embed.js"></script>
+</body></html>`);
+    } else {
+      res.end(`<!doctype html>
 <html><body>
 <h1>Customer site</h1>
 <script type="module" src="${APEX_ORIGIN}/api/widget/embed.js"></script>
 <script type="module">
   await window.PapervineAssistant.init({ id: "${widgetId}" });
 </script>
-</body></html>`,
-    );
+</body></html>`);
+    }
   });
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const { port } = server.address() as AddressInfo;
@@ -150,6 +157,38 @@ test("init() is idempotent — a page combining both install methods mounts once
   }, widgetId);
 
   await expect(page.locator(".pv-launcher")).toHaveCount(1);
+});
+
+test("themes and other init() options apply, and the close button closes the panel", async ({
+  page,
+}) => {
+  await page.goto(`${hostOrigin}/bare`);
+
+  await page.evaluate((id) => {
+    // @ts-expect-error injected by the widget loader script
+    window.PapervineAssistant.init({
+      id,
+      defaultOpen: true,
+      theme: "light",
+      title: "Ask docs",
+      placeholder: "Ask me anything",
+      disclaimer: false,
+    });
+  }, widgetId);
+
+  const panel = page.locator(".pv-panel");
+  await expect(panel).toHaveClass(/open/);
+  await expect(page.locator(".pv-header")).toContainText("Ask docs");
+  await expect(page.locator(".pv-input")).toHaveAttribute("placeholder", "Ask me anything");
+  // disclaimer: false must omit the element entirely, not just empty its text (which
+  // would leave a visible empty bar).
+  await expect(page.locator(".pv-disclaimer")).toHaveCount(0);
+  // theme: "light" is applied on the HOST element (:host(.pv-theme-light) in the shadow
+  // root's own stylesheet), not inside the shadow tree itself.
+  await expect(page.locator("body > div.pv-theme-light")).toHaveCount(1);
+
+  await page.locator(".pv-close").click();
+  await expect(panel).not.toHaveClass(/open/);
 });
 
 test("renders markdown (headings, lists, links, bold/italic/code) as real DOM, not raw syntax", async ({
