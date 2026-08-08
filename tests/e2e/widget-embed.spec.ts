@@ -203,15 +203,84 @@ test("renders a GFM table as a real <table>, not squashed pipe-delimited text", 
   expect(html).not.toContain("| ---");
 });
 
+test("nests sub-lists instead of squashing indented items into a paragraph", async ({ page }) => {
+  // Regression: an indented list item doesn't start at column 0, so it missed the old
+  // flat list check entirely and fell into the paragraph bucket — squashing multiple
+  // sub-items onto one line ("  - Nested item   - Another nested") and splitting the
+  // parent list into two separate <ul>s around the stray paragraph.
+  await page.goto(hostOrigin);
+  const html = await page.evaluate(() => {
+    const md = ["- Top level", "  - Nested item", "  - Another nested", "- Back to top"].join(
+      "\n",
+    );
+    // @ts-expect-error injected by the widget loader script
+    return window.PapervineAssistant.renderMarkdownHTML(md);
+  });
+
+  // One <ul>, not two split around a stray paragraph.
+  expect((html.match(/<ul>/g) || []).length).toBe(2); // outer + one nested
+  expect(html).toContain("<li>Top level<ul><li>Nested item</li><li>Another nested</li></ul></li>");
+  expect(html).toContain("<li>Back to top</li>");
+  expect(html).not.toContain("<p>");
+});
+
+test("renders adjacent lists of different types without dropping either one", async ({
+  page,
+}) => {
+  // Regression: collecting a list "run" across a blank line didn't check that the next
+  // list was the SAME type, so a ul followed by a blank line and an ol got glued into one
+  // run — and the tree-builder, which stops at the first tag change, silently dropped
+  // everything after that point instead of rendering it as a second, adjacent list.
+  await page.goto(hostOrigin);
+  const html = await page.evaluate(() => {
+    const md = ["- Bullet one", "- Bullet two", "", "1. First", "2. Second"].join("\n");
+    // @ts-expect-error injected by the widget loader script
+    return window.PapervineAssistant.renderMarkdownHTML(md);
+  });
+
+  expect(html).toContain("<ul><li>Bullet one</li><li>Bullet two</li></ul>");
+  expect(html).toContain("<ol><li>First</li><li>Second</li></ol>");
+});
+
+test("renders blockquotes, horizontal rules, and images; labels mermaid fences", async ({
+  page,
+}) => {
+  await page.goto(hostOrigin);
+  const html = await page.evaluate(() => {
+    const md = [
+      "> A quoted note.",
+      "",
+      "---",
+      "",
+      "![alt text](/some-image.png)",
+      "",
+      "```mermaid",
+      "graph TD",
+      "```",
+    ].join("\n");
+    // @ts-expect-error injected by the widget loader script
+    return window.PapervineAssistant.renderMarkdownHTML(md);
+  });
+
+  expect(html).toContain("<blockquote>A quoted note.</blockquote>");
+  expect(html).toContain("<hr>");
+  expect(html).toContain('<img src="/some-image.png" alt="alt text">');
+  // Not a real diagram (no bundler for this script) — but labeled, not an unexplained code block.
+  expect(html).toContain("Diagram");
+  expect(html).toContain("<pre><code>graph TD</code></pre>");
+});
+
 test("neutralizes a malicious link scheme and HTML in the AI's own output", async ({ page }) => {
   await page.goto(hostOrigin);
   const html = await page.evaluate(() => {
-    const md = "Click [here](javascript:alert(1)) or <script>alert(2)</script>.";
+    const md =
+      "Click [here](javascript:alert(1)) or <script>alert(2)</script>. ![x](javascript:alert(3))";
     // @ts-expect-error injected by the widget loader script
     return window.PapervineAssistant.renderMarkdownHTML(md);
   });
 
   expect(html).toContain('href="#"'); // javascript: defused to a safe anchor
+  expect(html).toContain('<img src="#"'); // same defusal for an image src
   expect(html).not.toContain("javascript:");
   expect(html).not.toContain("<script>alert(2)</script>"); // escaped as text, not executed
   expect(html).toContain("&lt;script&gt;");

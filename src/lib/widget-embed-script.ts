@@ -83,6 +83,19 @@ export const WIDGET_EMBED_SCRIPT = `
           continue;
         }
       }
+      if (s.charAt(i) === "!" && s.charAt(i + 1) === "[") {
+        var imgCloseBracket = s.indexOf("]", i + 2);
+        if (imgCloseBracket !== -1 && s.charAt(imgCloseBracket + 1) === "(") {
+          var imgCloseParen = s.indexOf(")", imgCloseBracket + 2);
+          if (imgCloseParen !== -1) {
+            var altText = s.slice(i + 2, imgCloseBracket);
+            var imgSrc = s.slice(imgCloseBracket + 2, imgCloseParen);
+            nodes.push(el("img", { src: safeHref(imgSrc), alt: altText }));
+            i = imgCloseParen + 1;
+            continue;
+          }
+        }
+      }
       if (s.charAt(i) === "[") {
         var closeBracket = s.indexOf("]", i + 1);
         if (closeBracket !== -1 && s.charAt(closeBracket + 1) === "(") {
@@ -107,7 +120,7 @@ export const WIDGET_EMBED_SCRIPT = `
         }
       }
       var start = i;
-      while (i < s.length && s.charAt(i) !== "*" && s.charAt(i) !== "\`" && s.charAt(i) !== "[") i++;
+      while (i < s.length && s.charAt(i) !== "*" && s.charAt(i) !== "\`" && s.charAt(i) !== "[" && s.charAt(i) !== "!") i++;
       if (i === start) i++;
       nodes.push(text(s.slice(start, i)));
     }
@@ -142,29 +155,59 @@ export const WIDGET_EMBED_SCRIPT = `
     return true;
   }
 
-  // Block-level markdown (headings, lists, fenced code, tables, paragraphs) — appends
-  // real DOM nodes into \`container\` (clearing it first). Same no-innerHTML, no-regex
-  // reasoning as renderInlineNodes above.
+  // Parse one line as a list item: leading-space indent + a "- "/"* " (ul) or "1. " (ol)
+  // marker. Returns null for a non-list-item line. Indent is what makes nesting possible —
+  // a deeper-indented run of items immediately under a sibling item becomes that
+  // sibling's nested sub-list (buildListTree below).
+  function listItemInfo(line) {
+    var indent = 0;
+    while (indent < line.length && line.charAt(indent) === " ") indent++;
+    var rest = line.slice(indent);
+    if ((rest.charAt(0) === "-" || rest.charAt(0) === "*") && rest.charAt(1) === " ") {
+      return { indent: indent, tag: "ul", content: rest.slice(2) };
+    }
+    var d = 0;
+    while (d < rest.length && rest.charAt(d) >= "0" && rest.charAt(d) <= "9") d++;
+    if (d > 0 && rest.slice(d, d + 2) === ". ") {
+      return { indent: indent, tag: "ol", content: rest.slice(d + 2) };
+    }
+    return null;
+  }
+
+  // Recursive-descent over a flat run of listItemInfo entries: siblings share the same
+  // indent + tag; an item immediately followed by a MORE-indented item nests a sub-list
+  // inside that item's <li>. Returns where the caller (a shallower level, or the top-level
+  // loop) should resume.
+  function buildListTree(items, start, indent) {
+    var tag = items[start].tag;
+    var lis = [];
+    var idx = start;
+    while (idx < items.length && items[idx].indent === indent && items[idx].tag === tag) {
+      var li = el("li", null, renderInlineNodes(items[idx].content));
+      idx++;
+      if (idx < items.length && items[idx].indent > indent) {
+        var nested = buildListTree(items, idx, items[idx].indent);
+        li.appendChild(nested.node);
+        idx = nested.next;
+      }
+      lis.push(li);
+    }
+    return { node: el(tag, null, lis), next: idx };
+  }
+
+  // Block-level markdown (headings, lists, fenced code, tables, blockquotes, rules,
+  // paragraphs) — appends real DOM nodes into \`container\` (clearing it first). Same
+  // no-innerHTML, no-regex reasoning as renderInlineNodes above.
   function renderMarkdownInto(container, raw) {
     while (container.firstChild) container.removeChild(container.firstChild);
     var lines = raw.split("\\n");
     var i = 0;
     var para = [];
-    var list = null;
 
     function flushPara() {
       if (para.length) {
         container.appendChild(el("p", null, renderInlineNodes(para.join(" "))));
         para = [];
-      }
-    }
-    function flushList() {
-      if (list) {
-        var items = list.items.map(function (it) {
-          return el("li", null, renderInlineNodes(it));
-        });
-        container.appendChild(el(list.tag, null, items));
-        list = null;
       }
     }
 
@@ -173,7 +216,10 @@ export const WIDGET_EMBED_SCRIPT = `
 
       if (line.slice(0, 3) === "\`\`\`") {
         flushPara();
-        flushList();
+        // Real diagram rendering (mermaid, etc.) needs an actual layout engine — not
+        // worth the dependency for this script (see the file header). Label it instead
+        // of silently showing an unexplained code block.
+        var lang = line.slice(3).trim();
         var code = [];
         i++;
         while (i < lines.length && lines[i].slice(0, 3) !== "\`\`\`") {
@@ -181,6 +227,11 @@ export const WIDGET_EMBED_SCRIPT = `
           i++;
         }
         i++;
+        if (lang === "mermaid") {
+          container.appendChild(
+            el("p", { class: "pv-note" }, [text("Diagram — view the full page in the docs to see it rendered:")]),
+          );
+        }
         container.appendChild(el("pre", null, [el("code", null, [text(code.join("\\n"))])]));
         continue;
       }
@@ -190,7 +241,6 @@ export const WIDGET_EMBED_SCRIPT = `
         var sepCells = splitTableRow(lines[i + 1]);
         if (headerCells.length > 0 && isSeparatorRow(sepCells)) {
           flushPara();
-          flushList();
           var thead = el(
             "thead",
             null,
@@ -214,49 +264,91 @@ export const WIDGET_EMBED_SCRIPT = `
       while (level < line.length && line.charAt(level) === "#" && level < 6) level++;
       if (level > 0 && line.charAt(level) === " ") {
         flushPara();
-        flushList();
         container.appendChild(el("h" + level, null, renderInlineNodes(line.slice(level + 1))));
         i++;
         continue;
       }
 
-      if ((line.charAt(0) === "-" || line.charAt(0) === "*") && line.charAt(1) === " ") {
-        flushPara();
-        if (!list || list.tag !== "ul") {
-          flushList();
-          list = { tag: "ul", items: [] };
+      // A line of 3+ repeats of the SAME "-"/"*"/"_" and nothing else is a horizontal
+      // rule — checked before list-item detection since "---" would otherwise almost
+      // (but not quite; list items need a space after the marker) look like one.
+      var ruleTrim = line.trim();
+      var ruleChar = ruleTrim.charAt(0);
+      var isRule =
+        ruleTrim.length >= 3 &&
+        (ruleChar === "-" || ruleChar === "*" || ruleChar === "_");
+      if (isRule) {
+        for (var ri = 1; ri < ruleTrim.length; ri++) {
+          if (ruleTrim.charAt(ri) !== ruleChar) {
+            isRule = false;
+            break;
+          }
         }
-        list.items.push(line.slice(2));
+      }
+      if (isRule) {
+        flushPara();
+        container.appendChild(el("hr", null));
         i++;
         continue;
       }
 
-      var digits = 0;
-      while (digits < line.length && line.charAt(digits) >= "0" && line.charAt(digits) <= "9") digits++;
-      if (digits > 0 && line.slice(digits, digits + 2) === ". ") {
+      if (line.charAt(0) === ">") {
         flushPara();
-        if (!list || list.tag !== "ol") {
-          flushList();
-          list = { tag: "ol", items: [] };
+        var quoteLines = [];
+        while (i < lines.length && lines[i].charAt(0) === ">") {
+          var q = lines[i].slice(1);
+          if (q.charAt(0) === " ") q = q.slice(1);
+          quoteLines.push(q);
+          i++;
         }
-        list.items.push(line.slice(digits + 2));
+        container.appendChild(el("blockquote", null, renderInlineNodes(quoteLines.join(" "))));
+        continue;
+      }
+
+      var firstItem = listItemInfo(line);
+      if (firstItem) {
+        flushPara();
+        // Consume the WHOLE contiguous list run (including nested/indented lines and
+        // blank lines immediately followed by another item) in one pass, then build the
+        // nested tree in one shot — rather than emitting one flat <ul> per line, which is
+        // what silently dropped indentation before.
+        var items = [firstItem];
         i++;
+        for (;;) {
+          var next = i < lines.length ? listItemInfo(lines[i]) : null;
+          if (next) {
+            items.push(next);
+            i++;
+          } else if (i < lines.length && lines[i].trim() === "" && i + 1 < lines.length && listItemInfo(lines[i + 1])) {
+            i++;
+          } else {
+            break;
+          }
+        }
+        // buildListTree stops as soon as it hits an item that isn't a sibling at the
+        // SAME tag+indent it started with (a real list→list tag change, e.g. ul then ol
+        // across a blank line, collected into the same run above) — loop until every
+        // collected item has actually been rendered, or the leftover tail is silently
+        // dropped instead of shown as its own adjacent list.
+        var listIdx = 0;
+        while (listIdx < items.length) {
+          var built = buildListTree(items, listIdx, items[listIdx].indent);
+          container.appendChild(built.node);
+          listIdx = built.next;
+        }
         continue;
       }
 
       if (line.trim() === "") {
         flushPara();
-        flushList();
         i++;
         continue;
       }
 
-      flushList();
       para.push(line);
       i++;
     }
     flushPara();
-    flushList();
   }
 
   var STYLE = [
@@ -290,6 +382,11 @@ export const WIDGET_EMBED_SCRIPT = `
     ".pv-msg th { background: rgba(0,0,0,0.04); font-weight: 600; }",
     ".pv-msg a { color: #2563eb; text-decoration: underline; }",
     ".pv-msg em { font-style: italic; }",
+    ".pv-msg blockquote { margin: 6px 0; padding: 2px 10px; border-left: 3px solid rgba(0,0,0,0.15); color: #555; }",
+    ".pv-msg hr { border: none; border-top: 1px solid rgba(0,0,0,0.12); margin: 10px 0; }",
+    ".pv-msg ul ul, .pv-msg ol ol, .pv-msg ul ol, .pv-msg ol ul { margin: 2px 0; }",
+    ".pv-msg img { max-width: 100%; border-radius: 6px; margin: 4px 0; display: block; }",
+    ".pv-msg .pv-note { font-size: 12px; color: #777; margin: 6px 0 2px; }",
     ".pv-inputrow { display: flex; gap: 8px; padding: 10px; border-top: 1px solid rgba(0,0,0,0.08); }",
     ".pv-input { flex: 1; border: 1px solid rgba(0,0,0,0.15); border-radius: 8px; padding: 8px 10px; font-size: 14px; outline: none; }",
     ".pv-send { border: none; background: #111; color: #fff; border-radius: 8px; padding: 0 14px; font-size: 14px; cursor: pointer; }",

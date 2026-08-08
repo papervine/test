@@ -1456,6 +1456,35 @@ precedent already in the codebase rather than inventing a new access model:
 > `tests/e2e/widget-embed.spec.ts` case (confirmed failing against the pre-fix renderer
 > before the fix, reproducing the exact squashed-text shape reported in prod).
 >
+> **Markdown coverage audit (2026-08-08).** A mermaid-rendering report prompted a broader
+> pass: fed nested lists, blockquotes, horizontal rules, and images through the renderer
+> to see what else degraded. Nested lists were a genuine bug, not just missing polish — an
+> indented sub-item didn't start at column 0, so it missed list detection entirely, fell
+> into the paragraph bucket, and **split the parent list into two separate `<ul>`s around
+> a squashed paragraph of stray dashes**. Fixed with a proper recursive block parser
+> (`listItemInfo`/`buildListTree`): a list "run" (including indented and blank-line-gapped
+> continuation lines) is collected in one pass, then built into a real nested tree — an
+> item immediately followed by a more-indented item nests a sub-list inside that item's
+> `<li>`. A second bug surfaced while testing THIS fix: collecting a run across a blank
+> line didn't check that the next list was the same type, so a `ul` then a blank line
+> then an `ol` got glued into one run, and the tree-builder (which correctly stops at a
+> tag change) silently **dropped everything after that point** instead of rendering it
+> as an adjacent list — fixed by looping the tree-builder over the whole collected run
+> instead of assuming one call consumes it all. Also added: blockquotes (`>`) and
+> horizontal rules (3+ of the same `-`/`*`/`_`), both simple one-block additions; real
+> images (`![alt](src)`, through the same `safeHref` scheme-allowlist as links — a
+> `javascript:` image src is defused the same as a `javascript:` link href); and a label
+> on ` ```mermaid ` fences ("Diagram — view the full page in the docs…") instead of an
+> unexplained bare code block. **Deliberately not fixed:** real mermaid/diagram
+> rendering — needs the actual mermaid.js layout engine, which is large and would mean
+> either violating this script's no-bundler decision or loading a third-party script
+> onto the customer's own site at runtime; the labeled code fallback is the considered
+> trade-off, not an oversight. Also not fixed: backslash-escaped markdown (`\*not
+> italic\*` still renders as italic) — rare enough in a Q&A assistant's own prose that
+> it wasn't worth the added parsing complexity. Five new deterministic
+> `tests/e2e/widget-embed.spec.ts` cases, including one that pins the exact "glued ul+ol
+> run, second list silently dropped" bug found while building the nested-list fix itself.
+>
 > **Not yet built:** a widget-specific rate limit beyond the shared AI billing gate, and a
 > "View guide" docs page beyond the evergreen reference (`docs/`).
 
