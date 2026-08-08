@@ -81,6 +81,31 @@ export function appHostFor(host: string): string {
 }
 
 /**
+ * The control plane's ORIGIN for a configured apex origin: `https://papervine.io` →
+ * `https://app.papervine.io`, `http://localhost:3000` → `http://app.localhost:3000`.
+ *
+ * `BETTER_AUTH_URL` names the apex, but every link we put in an *email* has to land on the
+ * app host: verification and password-reset callbacks set session cookies, and those cookies
+ * are host-only on `app.` (SPEC §10). A link to the apex would hand the browser a cookie on
+ * the wrong host, or bounce through a redirect that drops the token. Emailed links have no
+ * Google-style registration constraint forcing them onto the apex — unlike the OAuth callback
+ * (see `oauthCallbackURI`) — so they go straight to the app host.
+ *
+ * Returns null for an unparseable input rather than throwing: a missing/typo'd
+ * `BETTER_AUTH_URL` should disable email links with a warning, not crash the auth config at
+ * import time.
+ */
+export function appOriginFor(baseUrl: string): string | null {
+  try {
+    const url = new URL(baseUrl.trim());
+    url.host = appHostFor(url.host);
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Can tenants be served as `{slug}.{apexBase}` subdomains on this apex host? True only
  * for hosts the resolver actually recognizes (`papervine.io`, `localhost`) — NOT a bare
  * `*.vercel.app`, where nested-subdomain TLS isn't issued and the resolver wouldn't

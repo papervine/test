@@ -240,6 +240,23 @@ const CONTROL_PLANE_CHECKS = [
     include: ["Create your Papervine account", "db-glow", "db-cta"],
   },
   {
+    // Password reset (SPEC §10.1). Both pages are DB-free client forms, so the no-DB smoke
+    // gate covers them. /forgot-password renders one of two states depending on whether a
+    // transactional email provider is configured — assert only the chrome + the "back to
+    // sign in" escape hatch, which both states share, so the check doesn't depend on whether
+    // the operator running smoke happens to have RESEND_API_KEY in .env.local.
+    path: "/forgot-password",
+    desc: "forgot-password page renders in the platform theme with a way back to sign in",
+    include: ["db-glow", 'href="/login"'],
+  },
+  {
+    // Reached from an emailed link. Must render even with email unconfigured — a link minted
+    // while a provider WAS configured has to keep working.
+    path: "/reset-password",
+    desc: "reset-password page renders (no token → the expired-link state, never a 500)",
+    include: ["db-glow", "expired"],
+  },
+  {
     path: "/home",
     desc: "logged-out marketing apex shows Log in / Sign up + the growing-vine backdrop, not Dashboard (session-aware nav, SPEC §2)",
     // `db-vine` + `pv-sprouts` prove the landing uses the "home" PlatformShell variant (the

@@ -59,6 +59,10 @@ offer **[Google sign-in](/auth/google-sign-in)** by configuring OAuth credential
 appears next to the password form on `/login` and `/signup`, and disappears again when the
 credentials are absent.
 
+Address verification and password reset need a mailbox on our end — see
+**[transactional email](/auth/transactional-email)**. Both degrade cleanly when no provider is
+configured, so neither is a prerequisite for running Papervine.
+
 ## Where platform auth lives: the app host
 
 The control plane runs on its own host, `app.papervine.io`, separate from the marketing apex

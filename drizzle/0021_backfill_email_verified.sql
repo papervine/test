@@ -1,0 +1,19 @@
+-- Backfill: treat every account that exists TODAY as having a verified email address.
+--
+-- Why: Papervine had no email infrastructure until 2026-08-08, so `email_verified` has been
+-- `false` for every account ever created — nobody was ever *given* a way to confirm. That
+-- stale `false` isn't a security signal, it's an artifact, and it has a user-visible cost:
+-- Better Auth refuses to link a Google identity onto an account whose local address isn't
+-- verified, so every existing user hits "That email already has a Papervine account with a
+-- password" the first time they try "Continue with Google" (SPEC §11.1).
+--
+-- What it costs, stated plainly: this asserts ownership that was never actually proven. If
+-- someone registered a password account on an address they don't control, this hands them
+-- that account when the real owner signs in with Google. The exposure is BOUNDED to the
+-- accounts that exist at the moment this runs — it's a one-shot backfill, not a policy
+-- change. Everything created afterwards goes through real verification (`sendOnSignUp`), and
+-- the `requireLocalEmailVerified` guard stays ON, so this cannot silently repeat.
+--
+-- Scoped to rows that are currently false so it's a no-op on an already-verified database and
+-- touches nothing else.
+UPDATE "user" SET "email_verified" = true WHERE "email_verified" = false;

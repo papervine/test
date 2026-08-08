@@ -148,6 +148,13 @@
       "when": 1785531731404,
       "tag": "0020_curved_molten_man",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1786228068223,
+      "tag": "0021_backfill_email_verified",
+      "breakpoints": true
     }
   ]
 }

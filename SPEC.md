@@ -3034,6 +3034,10 @@ pending invite (the action builds `{appHost}/accept-invite?id=…` from the requ
 shares it. The `sendInvitationEmail` callback in `auth.ts` is wired as the **seam** — it records
 the link today and is the single place a provider (Resend) slots in later, no action/UI change.
 
+> **Update (2026-08-08):** the seam paid off exactly as designed — invitations now send for real
+> through Resend with no change to the action or the UI (§11.1). The **Copy-link stays**: it
+> works when email is unconfigured, and it's the fallback when a message lands in spam.
+
 **Accept flow.** A bare `/accept-invite` route on the app host (in the `(auth)` shell, with a
 middleware passthrough so it's reachable signed-out *and* signed-in, and not rewritten onto
 `/app`). It reads the invitation **directly from the DB** (to show the org name even to a
@@ -3268,6 +3272,73 @@ write by hand.
 > `redirect_uri=http://localhost:3100/api/auth/callback/google`, and the apex callback 307s to
 > the app host with `?code`/`?state` intact. **Unverified:** a real Google account completing
 > consent — that needs live credentials from the Google Cloud console.
+
+> **Status (2026-08-08) — transactional email, and the verification gap closed.** Papervine had
+> **no email at all**: invitations were a `console.log` + a Copy-link UI (the 2026-06-29
+> decision below), there was no password reset, and `emailVerified` was `false` for every
+> account ever created — which is what made Google account linking refuse (above). One gap,
+> three symptoms.
+>
+> **Provider: Resend**, behind a one-function seam (`src/lib/email.ts` → `sendEmail(to, body)`),
+> with bodies built by pure functions in `email-templates.ts`. Chosen for the TypeScript/Next
+> fit and because templates live in the repo rather than a vendor dashboard — a self-hoster
+> clones them with the code and swaps one `deliver` call. Same "no vendor baked into the core"
+> rule that picked Better Auth over Clerk. Free tier is 3,000/month at 100/day, one domain;
+> the one-domain limit is the thing to watch if per-tenant sending domains ever matter.
+>
+> **Optional — with an environment-dependent meaning, which is the subtle bit.** The console
+> log is a **transport**, not a failure mode: outside production, no `RESEND_API_KEY` → messages
+> are logged *with their links* and every flow works. In production, unconfigured genuinely
+> disables the inbox-dependent flows, because "check your inbox" for a message that reached a
+> log file lies to a real user. The first cut conflated the two ("no key = feature off") and
+> made `/forgot-password` unreachable on every dev machine **and in e2e** — caught only because
+> the new e2e spec couldn't reach its own form. `sendEmail` **never throws** — every caller is
+> an auth flow Better Auth awaits, so a provider outage would otherwise surface as "sign up
+> failed" on an account that was in fact created.
+>
+> **Sends are capped at 5s.** Better Auth awaits `sendVerificationEmail` *inside* the sign-up
+> request, so a slow provider makes signup slow and a hanging one holds it open until the
+> platform timeout — for an operation whose real work is already committed. Found concretely:
+> a real key in a dev `.env.local` turned e2e signup into a network-bound call and stalled the
+> suite. Which also exposed a **test-isolation** bug — `playwright.config.ts` now blanks
+> `RESEND_API_KEY`/`EMAIL_FROM`/`GOOGLE_CLIENT_*` the way it already blanks `TRIGGER_SECRET_KEY`,
+> so a configured dev machine runs the same suite as CI.
+>
+> **Three decisions worth keeping:**
+> - **`requireEmailVerification` stays OFF.** Turning it on would lock out every pre-existing
+>   account at once (all unverified). Verification's job here is to unlock Google linking and
+>   make reset trustworthy — not to stand between a new signup and their dashboard.
+> - **All emailed links point at the APP host, not the apex.** Better Auth builds its `url` from
+>   `baseURL` (the apex), so we ignore that argument and rebuild from the raw `token` via
+>   `appOriginFor()`. Verification and reset callbacks set session cookies, and those are
+>   host-only on `app.` (§10) — an apex link would set the cookie on the wrong host. Note this
+>   is the *opposite* of the OAuth callback, which is forced onto the apex by Google's
+>   registration rules; emailed links have no such constraint.
+> - **Reset revokes all other sessions** (`revokeSessionsOnPasswordReset`), and the
+>   `/forgot-password` confirmation is identical whether or not the account exists (no
+>   account-enumeration oracle).
+>
+> The password pages are excluded from the app host's signed-in bounce, alongside `/onboarding`:
+> someone clicking a reset link often still holds a live session, and bouncing them to the
+> dashboard makes the link useless to exactly the people who need it.
+>
+> **One-shot backfill (`drizzle/0021_backfill_email_verified.sql`).** Every pre-existing account
+> carried `email_verified = false`, which recorded *"we never shipped verification"* rather than
+> any real doubt — and it blocked all of them from linking Google. The migration flips today's
+> rows to true. Cost, stated rather than buried: it asserts ownership that was never proven, so
+> a password account registered on someone else's address inherits that address's Google login.
+> Accepted deliberately — the exposure is bounded to accounts existing at migration time, the
+> user base is small and known, and `requireLocalEmailVerified` stays ON so new accounts still
+> earn verification. A data migration, not a schema change, so it needed
+> `drizzle-kit generate --custom` (there's no schema diff to detect).
+>
+> Verified end-to-end locally (email in console mode, real Postgres): signup → verification link
+> → `email_verified` flips true + session cookie set on the app host; reset request → token
+> persisted → emailed link 302s to our form with `?token=` → new password signs in (200) while
+> the old one fails (401) → token reuse redirects to `?error=INVALID_TOKEN`. With a deliberately
+> bad API key the send failed, was logged, and the flow still completed — the never-throws
+> contract. **Unverified:** real delivery through Resend, which needs a live key and a verified
+> domain.
 
 ### 11.2 Layer 2 — Reader auth (docs.json-compatible handshake)
 

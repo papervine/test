@@ -12,7 +12,7 @@ import {
   postAuthDest,
 } from "../post-auth-dest";
 
-export function LoginForm({ google }: { google: boolean }) {
+export function LoginForm({ google, email: emailEnabled }: { google: boolean; email: boolean }) {
   const [email, setEmail] = useState("");
   // Prefill from a `?email=` invite param after mount (a useState initializer runs during SSR
   // with no `window`, and the client reuses that empty value). Same for a bounced-back social
@@ -61,6 +61,18 @@ export function LoginForm({ google }: { google: boolean }) {
           required
           onChange={(e) => setPassword(e.target.value)}
         />
+        {/* Only offered when a provider can actually deliver the link — otherwise the flow
+            dead-ends at a "check your inbox" for an email nobody sent. */}
+        {emailEnabled && (
+          <p className="text-right text-sm">
+            <Link
+              href="/forgot-password"
+              className="text-[var(--muted)] hover:text-[var(--fg)] hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </p>
+        )}
         {error && <p className="text-sm text-red-400">{error}</p>}
         <Button type="submit" full disabled={pending}>
           {pending ? "Signing in…" : "Sign in"}

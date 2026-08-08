@@ -79,22 +79,39 @@ A first-time Google sign-in creates a Papervine account and lands on onboarding,
 password sign-up does. Because Google reports the address as verified, the new account's email
 is verified too.
 
-When the Google address matches an account that **already exists with a password**, sign-in
-stops with:
+When the Google address matches an account that already exists with a password, what happens
+depends on whether that account's address has been **verified**:
 
-> That email already has a Papervine account with a password. Sign in with your password
-> instead.
+- **Verified** — the Google identity is linked onto the existing account. From then on either
+  method signs the same person in.
+- **Not verified** — sign-in stops with: *"That email already has a Papervine account with a
+  password. Sign in with your password instead."*
 
-This is deliberate. Papervine has no email-verification flow yet, so there is no way to prove
-that the existing password account belongs to the same person. Linking anyway would make
-account takeover trivial: register a password account on someone else's address, wait for them
-to click "Continue with Google," and inherit their account. The refusal is the safe answer
-until verification exists.
+The refusal is deliberate. Without a verified address there's no proof that the existing
+password account belongs to the same person, and linking anyway would make account takeover
+trivial: register a password account on someone else's address, wait for them to click
+"Continue with Google," and inherit their account.
+
+The way out is [transactional email](/auth/transactional-email). With a provider configured,
+new signups are sent a confirmation link, and confirming it makes linking work.
+
+<Note>
+  Accounts that predate email support were marked verified by a one-time migration — nobody had
+  ever been *offered* a way to confirm, so an unverified flag on those rows recorded a missing
+  feature rather than a real doubt. That backfill was bounded to the accounts existing at the
+  time; everything created since goes through real verification.
+</Note>
 
 <Info>
   Users in this position sign in with their password as usual — nothing is lost, and their
   account is untouched.
 </Info>
+
+<Warning>
+  An administrator can also mark an address verified directly in the database
+  (`UPDATE "user" SET email_verified = true WHERE ...`). Only do this for an address you know
+  the account holder controls — it's exactly the check that's being bypassed.
+</Warning>
 
 ## Adding other providers
 

@@ -71,6 +71,17 @@ export default defineConfig({
       // identically on a configured dev machine and in CI (empty string is falsy for
       // isExecutorConfigured).
       TRIGGER_SECRET_KEY: "",
+      // Same isolation rule for the optional auth integrations (SPEC §11.1). An operator who
+      // has configured Google sign-in or Resend in .env.local would otherwise get a DIFFERENT
+      // suite than CI: an extra "Continue with Google" button (which broke the exact-match
+      // "Sign up" selectors), and — worse — a signup that makes a REAL outbound Resend call,
+      // because Better Auth awaits sendVerificationEmail before returning. That turned signup
+      // into a network-bound operation and hung the password-reset spec. Blank them so email
+      // falls back to console logging, which is what the reset spec reads its token around.
+      RESEND_API_KEY: "",
+      EMAIL_FROM: "",
+      GOOGLE_CLIENT_ID: "",
+      GOOGLE_CLIENT_SECRET: "",
       // Platform superadmin allowlist (SPEC §10.10) for admin.spec.ts. Deliberately NOT
       // TEST_USER's email: the shared storageState user must stay a plain customer so the
       // admin rail link / bypass never leaks into the other specs' assertions. The admin

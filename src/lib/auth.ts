@@ -9,6 +9,13 @@ import * as schema from "./db/schema";
 import { isReservedOrgSlug } from "./slug";
 import { resolvePlatformRole } from "./platform-admin";
 import { googleOAuthFromEnv } from "./social-auth";
+import { appOriginFor } from "./tenant-host";
+import { sendEmail, emailStatusFromEnv } from "./email";
+import {
+  invitationBody,
+  resetPasswordBody,
+  verifyEmailBody,
+} from "./email-templates";
 
 // Better Auth rejects any request whose Origin isn't trusted (CSRF protection →
 // "Invalid origin"). The control plane (signup/login/dashboard) serves on the app host
@@ -44,12 +51,79 @@ if (!google.enabled && google.reason === "missing-base-url") {
   );
 }
 
+// Every link we put in an email lands on the APP host, not the apex `BETTER_AUTH_URL`:
+// verification and reset callbacks set session cookies, and those are host-only on `app.`
+// (SPEC §10). Better Auth builds its own `url` from `baseURL` (the apex), so we ignore that
+// argument and rebuild from the raw `token` — the endpoints are identical on either host.
+const APP_ORIGIN = appOriginFor(process.env.BETTER_AUTH_URL ?? "");
+if (!APP_ORIGIN) {
+  console.warn(
+    "[auth] BETTER_AUTH_URL is missing or unparseable — emailed verification/reset links can't be built.",
+  );
+}
+const RESET_TOKEN_TTL_SECONDS = 60 * 60;
+
+const authLink = (path: string) => `${APP_ORIGIN}${path}`;
+
+// Password reset and email verification are only *offered* when email can actually be sent —
+// a "check your inbox" that goes nowhere is worse than no button at all. The auth pages read
+// the same status to decide whether to show the "Forgot password?" link.
+const emailEnabled = emailStatusFromEnv().enabled;
+if (!emailEnabled) {
+  console.warn(
+    "[auth] no transactional email configured (RESEND_API_KEY/EMAIL_FROM) — verification and password-reset links are logged to this console instead of sent.",
+  );
+}
+
 // Layer 1 — platform auth (SPEC §10.1). Email/password first; the organization
 // plugin gives us tenants/teams/roles. nextCookies() must be last so cookies set
 // during server actions are forwarded correctly.
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
-  emailAndPassword: { enabled: true },
+  emailAndPassword: {
+    enabled: true,
+    resetPasswordTokenExpiresIn: RESET_TOKEN_TTL_SECONDS,
+    // Rebuilt on the app host (see APP_ORIGIN). `?callbackURL=` is where Better Auth sends the
+    // browser once it has validated the token — our own reset form, which then submits the
+    // token with the new password.
+    sendResetPassword: async ({ user, token }) => {
+      if (!APP_ORIGIN) return;
+      await sendEmail(
+        user.email,
+        resetPasswordBody({
+          url: `${authLink(`/api/auth/reset-password/${token}`)}?callbackURL=${encodeURIComponent(
+            authLink("/reset-password"),
+          )}`,
+          name: user.name,
+          expiresInMinutes: RESET_TOKEN_TTL_SECONDS / 60,
+        }),
+      );
+    },
+    // Someone resetting a password is very often someone who thinks they were compromised.
+    // Cutting every other session is the behavior that makes the reset actually mean something.
+    revokeSessionsOnPasswordReset: true,
+  },
+  emailVerification: {
+    // Send on signup, but DON'T gate sign-in on it (`requireEmailVerification` stays off).
+    // Every account created before this shipped has `emailVerified: false`, and flipping the
+    // gate would lock out the entire existing user base at once. Verification's job here is to
+    // unlock Google account linking (§11.1) and to make password reset trustworthy — not to
+    // stand between a new signup and their dashboard.
+    sendOnSignUp: true,
+    autoSignInAfterVerification: true,
+    sendVerificationEmail: async ({ user, token }) => {
+      if (!APP_ORIGIN) return;
+      await sendEmail(
+        user.email,
+        verifyEmailBody({
+          url: `${authLink("/api/auth/verify-email")}?token=${token}&callbackURL=${encodeURIComponent(
+            authLink("/"),
+          )}`,
+          name: user.name,
+        }),
+      );
+    },
+  },
   // The explicit `redirectURI` matters: Better Auth would otherwise derive it from
   // BETTER_AUTH_URL/the request, and the two disagree here — sign-in starts on the app
   // host while the URI registered with Google is the apex one (see oauthCallbackURI for
@@ -117,17 +191,22 @@ export const auth = betterAuth({
           await startTrial(org.id);
         },
       },
-      // Invitation delivery seam (SPEC §10). v1 has NO email infra — the Members settings
-      // action surfaces a shareable accept link directly (Copy-link UI), so a real send isn't
-      // required to invite. This callback just records the link server-side; it's the single
-      // place a real provider (e.g. Resend) slots in later — send `acceptUrl` to `data.email`
-      // with `data.inviter`/`data.organization` for the template. No throw → never blocks the
-      // createInvitation the action awaits.
+      // Invitation delivery (SPEC §10). Now a real send — but the Members settings action
+      // still surfaces the shareable accept link in its Copy-link UI, deliberately: that path
+      // predates email, works when delivery is unconfigured, and is the fallback when a send
+      // silently lands in someone's spam. `sendEmail` never throws, so a provider outage can't
+      // block the `createInvitation` the action awaits — the inviter just falls back to
+      // copying the link.
       sendInvitationEmail: async (data) => {
-        const origin = process.env.BETTER_AUTH_URL ?? "https://app.papervine.io";
-        const acceptUrl = `${origin}/accept-invite?id=${data.id}`;
-        console.log(
-          `[invite] ${data.email} → ${data.organization.name} (${data.role}) — ${acceptUrl}`,
+        const acceptUrl = `${APP_ORIGIN ?? "https://app.papervine.io"}/accept-invite?id=${data.id}`;
+        await sendEmail(
+          data.email,
+          invitationBody({
+            url: acceptUrl,
+            organization: data.organization.name,
+            role: data.role,
+            inviterName: data.inviter.user.name,
+          }),
         );
       },
     }),

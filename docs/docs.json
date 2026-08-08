@@ -63,6 +63,7 @@
           "auth/overview",
           "auth/platform-auth",
           "auth/google-sign-in",
+          "auth/transactional-email",
           "auth/reader-auth"
         ]
       },

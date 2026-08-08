@@ -1,0 +1,121 @@
+---
+title: Transactional email
+description: Configure email so Papervine can verify addresses, reset passwords, and deliver invitations — and what happens on a deployment with no provider at all.
+---
+
+Three account flows need to reach a person's inbox: confirming an email address, resetting a
+forgotten password, and inviting a teammate. All three go through a single seam, with
+[Resend](https://resend.com) behind it by default.
+
+Email is **optional**, and what "unconfigured" means depends on where you're running:
+
+- **Outside production** — messages are written to the server console instead, link included.
+  This is a real transport, not a broken state: every flow works, and the verification link you
+  need is in the terminal you already have open. It's what lets a bare checkout, CI, and the
+  test suite run with no vendor account.
+- **In production** — an unconfigured provider genuinely disables the flows that promise an
+  inbox. Telling a real user to "check your inbox" for a message that only reached a log file
+  is worse than telling them the feature is unavailable.
+
+Configuring Resend switches to real delivery everywhere, including development, so you can
+exercise the real thing when you want to.
+
+## Enabling it
+
+<Steps>
+  <Step title="Verify a sending domain">
+    In Resend, add the domain you'll send from and complete its DNS records. Resend rejects
+    any send whose `from` address isn't on a verified domain, so this comes first.
+  </Step>
+  <Step title="Set the two variables">
+    ```bash
+    RESEND_API_KEY=re_...
+    EMAIL_FROM=Papervine <hello@yourdomain.com>
+    ```
+
+    There's no default sender — a wrong one fails at send time rather than at boot, so
+    Papervine asks you to name it rather than guessing. A key with no `EMAIL_FROM` logs a
+    warning and leaves email switched off.
+  </Step>
+</Steps>
+
+<Note>
+  Deliverability is a property of your **domain**, not your provider. Set up SPF, DKIM, and
+  DMARC as part of verifying the domain. Verification mail landing in spam is worse than no
+  verification at all, because the user believes something is broken.
+</Note>
+
+## What each flow does
+
+### Email verification
+
+New signups are sent a confirmation link. Clicking it marks the address verified and signs the
+person in.
+
+Verification is **not required to sign in**. That's deliberate: every account created before
+email existed is unverified, and gating sign-in on it would lock out an entire existing user
+base at once. What verification unlocks is [Google sign-in on an existing
+account](/auth/google-sign-in) — an account can only gain a second sign-in method once its
+address is proven — and it makes password reset meaningful.
+
+### Password reset
+
+The login page offers **Forgot password?** whenever email is configured, and hides it when it
+isn't rather than dead-ending someone at a "check your inbox" for a message nobody sent.
+
+Reset links last **one hour** and work **once**. Completing a reset **signs out every other
+session** — someone resetting a password is often someone who believes they were compromised,
+and a reset that leaves the attacker's session alive accomplishes nothing.
+
+The confirmation screen says the same thing whether or not an account exists for that address.
+A "no such account" message would turn the form into a way to test which emails have Papervine
+accounts.
+
+### Invitations
+
+Invitations are now delivered by email. The **Copy link** button in Members settings stays,
+deliberately — it works when email isn't configured, and it's the fallback when a message
+lands in someone's spam folder.
+
+## When email isn't configured in production
+
+Nothing breaks; the flows that need an inbox step aside:
+
+<CardGroup cols={2}>
+  <Card title="Password reset">
+    `/forgot-password` explains that reset is unavailable, and the login page hides its
+    "Forgot password?" link rather than dead-ending someone.
+  </Card>
+  <Card title="Verification">
+    No confirmation mail is sent, so accounts stay unverified — which means
+    [Google sign-in can't link onto an existing password account](/auth/google-sign-in).
+  </Card>
+  <Card title="Invitations">
+    Still fully usable through the Copy-link UI in Members settings.
+  </Card>
+  <Card title="Sign-in">
+    Entirely unaffected — email and password, and Google if configured, work as normal.
+  </Card>
+</CardGroup>
+
+## Timeouts and failures
+
+Better Auth **awaits** the send inside the request that triggered it — a verification mail goes
+out during sign-up. So a slow provider would make sign-up slow, and a hanging one would hold it
+open until the platform's request timeout, for an operation whose real work is already done.
+
+Papervine caps that wait at **five seconds** and treats `sendEmail` as never-throwing. Past the
+cap, or on any provider error, the failure is logged and the flow completes: the account is
+created, the invitation is recorded, the user is not shown an error for something that
+succeeded.
+
+## Using a different provider
+
+Nothing outside `src/lib/email.ts` knows Resend exists. The rest of the codebase calls
+`sendEmail(to, body)`, where `body` is a `{ subject, html, text }` built by a pure function in
+`src/lib/email-templates.ts`. Swapping to another provider — or an SMTP relay on a self-hosted
+box — means replacing one call.
+
+`sendEmail` **never throws**. Every caller is an auth flow, and a provider outage must not turn
+into a failed signup or a 500; delivery problems are logged and the flow continues. Keep that
+property if you replace it.

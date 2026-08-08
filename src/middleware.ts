@@ -16,7 +16,22 @@ function isAuthPath(pathname: string): boolean {
   return (
     pathname === "/login" ||
     pathname === "/signup" ||
-    pathname === "/onboarding"
+    pathname === "/onboarding" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password"
+  );
+}
+
+// Auth paths that must NOT bounce a signed-in visitor to the dashboard. `/onboarding` is where
+// the resolver *sends* org-less users (bouncing looped every fresh signup). The password pages
+// are reached from an emailed link, and the person clicking it very often still has a live
+// session — bouncing them to the dashboard would make a reset link unusable for exactly the
+// people who need it (a shared machine, a suspected compromise).
+function isAuthPathReachableWhenSignedIn(pathname: string): boolean {
+  return (
+    pathname === "/onboarding" ||
+    pathname === "/forgot-password" ||
+    pathname === "/reset-password"
   );
 }
 
@@ -134,11 +149,10 @@ export function middleware(req: NextRequest) {
       }
       // Already logged in? Skip the auth form and go to the dashboard — the way
       // the app-host signup flow bounces a signed-in user straight to their workspace.
-      // EXCEPT /onboarding, which exists FOR the just-signed-in: the dashboard resolver
-      // (app/page.tsx) redirects org-less users here, so bouncing authed users back to
-      // "/" made every fresh signup loop (ERR_TOO_MANY_REDIRECTS) — the bug that broke
-      // the e2e auth.setup flow and real first-run onboarding alike.
-      if (authed && pathname !== "/onboarding") {
+      // EXCEPT the paths that exist FOR the signed-in: /onboarding (the dashboard resolver
+      // redirects org-less users here, so bouncing authed users back to "/" made every fresh
+      // signup loop with ERR_TOO_MANY_REDIRECTS) and the password-reset pages.
+      if (authed && !isAuthPathReachableWhenSignedIn(pathname)) {
         const url = req.nextUrl.clone();
         url.pathname = "/";
         return syncFlag(NextResponse.redirect(url));

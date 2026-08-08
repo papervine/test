@@ -88,4 +88,25 @@ describe("app-host auth-path bounce (signed in)", () => {
       expect(new URL(loc).pathname).toBe("/");
     }
   });
+
+  it("does NOT bounce the password-reset pages — they're reached from an emailed link", () => {
+    // Someone clicking a reset link very often still holds a live session (shared machine, a
+    // suspected compromise). Bouncing them to the dashboard makes the link useless to exactly
+    // the people who need it.
+    for (const path of ["/forgot-password", "/reset-password?token=abc"]) {
+      expect(middleware(authedReq(path)).headers.get("location")).toBeNull();
+    }
+  });
+});
+
+describe("apex bounce for the password pages", () => {
+  it("sends apex /forgot-password and /reset-password to the app host", () => {
+    // They're control-plane auth pages like /login: the session they'd create belongs on the
+    // app host, so the apex must hand them over rather than render them.
+    for (const path of ["/forgot-password", "/reset-password"]) {
+      const loc = middleware(req("localhost:3000", path)).headers.get("location") ?? "";
+      expect(loc).toContain("app.localhost:3000");
+      expect(new URL(loc).pathname).toBe(path);
+    }
+  });
 });
