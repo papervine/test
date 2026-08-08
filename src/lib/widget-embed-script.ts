@@ -114,9 +114,37 @@ export const WIDGET_EMBED_SCRIPT = `
     return nodes;
   }
 
-  // Block-level markdown (headings, lists, fenced code, paragraphs) — appends real DOM
-  // nodes into \`container\` (clearing it first). Same no-innerHTML, no-regex reasoning
-  // as renderInlineNodes above.
+  // GFM table row: split on "|", trimming one leading/trailing empty cell from a row
+  // that starts/ends with "|" (both optional in GFM). Doesn't handle an escaped "\\|"
+  // inside a cell — an acceptable gap at this renderer's level of sophistication.
+  function splitTableRow(line) {
+    var t = line.trim();
+    if (t.charAt(0) === "|") t = t.slice(1);
+    if (t.charAt(t.length - 1) === "|") t = t.slice(0, -1);
+    return t.split("|").map(function (c) { return c.trim(); });
+  }
+
+  // A table's separator row (the line between the header and body, e.g. "| --- | :-: |")
+  // — every cell is made of only "-" and ":", with at least one "-".
+  function isSeparatorRow(cells) {
+    if (!cells.length) return false;
+    for (var c = 0; c < cells.length; c++) {
+      var cell = cells[c];
+      if (!cell) return false;
+      var hasDash = false;
+      for (var j = 0; j < cell.length; j++) {
+        var ch = cell.charAt(j);
+        if (ch === "-") hasDash = true;
+        else if (ch !== ":") return false;
+      }
+      if (!hasDash) return false;
+    }
+    return true;
+  }
+
+  // Block-level markdown (headings, lists, fenced code, tables, paragraphs) — appends
+  // real DOM nodes into \`container\` (clearing it first). Same no-innerHTML, no-regex
+  // reasoning as renderInlineNodes above.
   function renderMarkdownInto(container, raw) {
     while (container.firstChild) container.removeChild(container.firstChild);
     var lines = raw.split("\\n");
@@ -155,6 +183,31 @@ export const WIDGET_EMBED_SCRIPT = `
         i++;
         container.appendChild(el("pre", null, [el("code", null, [text(code.join("\\n"))])]));
         continue;
+      }
+
+      if (line.indexOf("|") !== -1 && i + 1 < lines.length) {
+        var headerCells = splitTableRow(line);
+        var sepCells = splitTableRow(lines[i + 1]);
+        if (headerCells.length > 0 && isSeparatorRow(sepCells)) {
+          flushPara();
+          flushList();
+          var thead = el(
+            "thead",
+            null,
+            [el("tr", null, headerCells.map(function (c) { return el("th", null, renderInlineNodes(c)); }))],
+          );
+          var bodyRows = [];
+          i += 2;
+          while (i < lines.length && lines[i].indexOf("|") !== -1 && lines[i].trim() !== "") {
+            var rowCells = splitTableRow(lines[i]);
+            bodyRows.push(
+              el("tr", null, rowCells.map(function (c) { return el("td", null, renderInlineNodes(c)); })),
+            );
+            i++;
+          }
+          container.appendChild(el("table", null, [thead, el("tbody", null, bodyRows)]));
+          continue;
+        }
       }
 
       var level = 0;
@@ -232,6 +285,9 @@ export const WIDGET_EMBED_SCRIPT = `
     ".pv-msg code { background: rgba(0,0,0,0.06); border-radius: 4px; padding: 1px 4px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }",
     ".pv-msg pre { background: rgba(0,0,0,0.04); border-radius: 8px; padding: 8px 10px; overflow-x: auto; margin: 6px 0; }",
     ".pv-msg pre code { background: none; padding: 0; }",
+    ".pv-msg table { border-collapse: collapse; margin: 8px 0; width: 100%; font-size: 12.5px; }",
+    ".pv-msg th, .pv-msg td { border: 1px solid rgba(0,0,0,0.12); padding: 4px 8px; text-align: left; vertical-align: top; }",
+    ".pv-msg th { background: rgba(0,0,0,0.04); font-weight: 600; }",
     ".pv-msg a { color: #2563eb; text-decoration: underline; }",
     ".pv-msg em { font-style: italic; }",
     ".pv-inputrow { display: flex; gap: 8px; padding: 10px; border-top: 1px solid rgba(0,0,0,0.08); }",

@@ -1447,6 +1447,15 @@ precedent already in the codebase rather than inventing a new access model:
 > (`app.papervine.io` in prod) instead of guessing at a "bare apex" — it's provably
 > non-redirecting, since it's the very host serving the settings page itself.
 >
+> **GFM tables (2026-08-08).** Real usage against `4x.pixwel.com` surfaced a table's rows
+> squashed onto one line of literal `| Header | ... | --- | ... |` text — the renderer had
+> no table detection at all, so a table's lines fell into the generic paragraph bucket,
+> and paragraph lines are joined with a space. Fixed: a header line followed by a
+> separator line (cells made only of `-`/`:`, GFM's table marker) now renders as a real
+> `<table><thead>…</thead><tbody>…</tbody></table>`. Pinned by a third deterministic
+> `tests/e2e/widget-embed.spec.ts` case (confirmed failing against the pre-fix renderer
+> before the fix, reproducing the exact squashed-text shape reported in prod).
+>
 > **Not yet built:** a widget-specific rate limit beyond the shared AI billing gate, and a
 > "View guide" docs page beyond the evergreen reference (`docs/`).
 

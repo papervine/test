@@ -172,6 +172,37 @@ test("renders markdown (headings, lists, links, bold/italic/code) as real DOM, n
   expect(html).not.toMatch(/^- /m);
 });
 
+test("renders a GFM table as a real <table>, not squashed pipe-delimited text", async ({
+  page,
+}) => {
+  // Regression: a table's rows fell into the generic paragraph bucket (no table
+  // detection at all), and paragraph lines are joined with a space — so a multi-line
+  // table collapsed onto one line of literal "| Header | ... | --- | ... |" text.
+  await page.goto(hostOrigin);
+  const html = await page.evaluate(() => {
+    const md = [
+      "Relationships:",
+      "",
+      "| Relationship | Cardinality |",
+      "| --- | --- |",
+      "| Studio -> Project | one to many |",
+      "| Project -> Asset | one to many |",
+    ].join("\n");
+    // @ts-expect-error injected by the widget loader script
+    return window.PapervineAssistant.renderMarkdownHTML(md);
+  });
+
+  expect(html).toContain("<table>");
+  expect(html).toContain("<thead>");
+  expect(html).toContain("<th>Relationship</th>");
+  expect(html).toContain("<th>Cardinality</th>");
+  expect(html).toContain("<td>Studio -&gt; Project</td>");
+  expect(html).toContain("<td>one to many</td>");
+  // The separator row must never render as a body row.
+  expect(html).not.toContain("<td>---</td>");
+  expect(html).not.toContain("| ---");
+});
+
 test("neutralizes a malicious link scheme and HTML in the AI's own output", async ({ page }) => {
   await page.goto(hostOrigin);
   const html = await page.evaluate(() => {
