@@ -38,6 +38,29 @@ describe("middleware host routing", () => {
     expect(loc).toContain("app.localhost:3000");
     expect(loc).toContain("/login");
   });
+
+  it("forwards an apex OAuth callback to the app host with its query intact", () => {
+    // Google's redirect URI is registered on the apex (it rejects one on a subdomain of
+    // localhost), but the PKCE/state cookies are host-only on `app.` — so the callback must
+    // be REDIRECTED there, carrying ?code/?state, or the code exchange always fails.
+    const res = middleware(
+      req("localhost:3000", "/api/auth/callback/google?code=abc&state=xyz"),
+    );
+    const loc = new URL(res.headers.get("location") ?? "http://none/");
+    expect(loc.host).toBe("app.localhost:3000");
+    expect(loc.pathname).toBe("/api/auth/callback/google");
+    expect(loc.searchParams.get("code")).toBe("abc");
+    expect(loc.searchParams.get("state")).toBe("xyz");
+  });
+
+  it("does not hijack a tenant subdomain's /api/auth path", () => {
+    // Tenant hosts serve reader auth, not the control plane — their /api/* must pass
+    // through untouched (the same guard that keeps /login from being bounced).
+    const res = middleware(
+      req("starter.localhost:3000", "/api/auth/callback/google?code=abc"),
+    );
+    expect(res.headers.get("location")).toBeNull();
+  });
 });
 
 // A signed-in request (session cookie present) on the app host. Better Auth's

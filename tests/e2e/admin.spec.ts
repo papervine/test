@@ -42,7 +42,7 @@ async function signInAsAdmin(page: Page) {
   await page.getByLabel("Name").fill(ADMIN.name);
   await page.getByLabel("Email").fill(ADMIN.email);
   await page.getByLabel("Password").fill(ADMIN.password);
-  await page.getByRole("button", { name: "Sign up" }).click();
+  await page.getByRole("button", { name: "Sign up", exact: true }).click();
   const outcome = await Promise.race([
     page.waitForURL("**/onboarding").then(() => "signed-up"),
     page
@@ -54,7 +54,7 @@ async function signInAsAdmin(page: Page) {
     await page.goto("/login");
     await page.getByLabel("Email").fill(ADMIN.email);
     await page.getByLabel("Password").fill(ADMIN.password);
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
     await page.waitForURL("**/onboarding");
   }
 }

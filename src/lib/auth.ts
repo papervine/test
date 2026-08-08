@@ -8,6 +8,7 @@ import { db } from "./db";
 import * as schema from "./db/schema";
 import { isReservedOrgSlug } from "./slug";
 import { resolvePlatformRole } from "./platform-admin";
+import { googleOAuthFromEnv } from "./social-auth";
 
 // Better Auth rejects any request whose Origin isn't trusted (CSRF protection →
 // "Invalid origin"). The control plane (signup/login/dashboard) serves on the app host
@@ -32,12 +33,32 @@ const trustedOrigins = [
     : []),
 ];
 
+// Google sign-in is optional: unset credentials → the provider is absent and the button
+// never renders (src/lib/social-auth.ts). Credentials WITH no BETTER_AUTH_URL is a
+// misconfiguration, not an off switch — there'd be no origin to build the redirect URI
+// from — so say so loudly instead of silently disabling sign-in the operator asked for.
+const google = googleOAuthFromEnv();
+if (!google.enabled && google.reason === "missing-base-url") {
+  console.warn(
+    "[auth] GOOGLE_CLIENT_ID/SECRET are set but BETTER_AUTH_URL is not — Google sign-in stays off (no origin for the OAuth redirect URI).",
+  );
+}
+
 // Layer 1 — platform auth (SPEC §10.1). Email/password first; the organization
 // plugin gives us tenants/teams/roles. nextCookies() must be last so cookies set
 // during server actions are forwarded correctly.
 export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
   emailAndPassword: { enabled: true },
+  // The explicit `redirectURI` matters: Better Auth would otherwise derive it from
+  // BETTER_AUTH_URL/the request, and the two disagree here — sign-in starts on the app
+  // host while the URI registered with Google is the apex one (see oauthCallbackURI for
+  // why). Account LINKING keeps Better Auth's secure default: a Google identity only folds
+  // into an existing account whose local email is already verified. We have no verification
+  // flow yet, so same-email collisions surface as a "sign in with your password" message
+  // rather than silently merging — which would make pre-registering someone else's address
+  // a working account-takeover.
+  ...(google.enabled ? { socialProviders: { google: google.config } } : {}),
   trustedOrigins,
   databaseHooks: {
     session: {

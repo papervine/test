@@ -8,6 +8,7 @@ import {
   parentDomain,
 } from "./lib/tenant-host";
 import { SIGNED_IN_FLAG } from "./lib/signed-in-flag";
+import { isOAuthCallbackPath } from "./lib/social-auth";
 
 // Bare control-plane paths that keep their own URL on the app host (real routes, not
 // rewritten onto /app): the auth pages.
@@ -168,11 +169,22 @@ export function middleware(req: NextRequest) {
   // a tenant host `/login` is the *reader* login (→ sites/{slug}/login below), NOT a control-
   // plane path. Without this guard the bounce hijacks it to `app.{slug}.localhost/login` (the
   // Papervine account login), so reader auth never reaches its own login card in subdomain mode.
+  //
+  // Social sign-in callbacks ride the same bounce (SPEC §10.1). The OAuth redirect URI is
+  // registered on the APEX because Google refuses one on a subdomain of localhost, so dev
+  // could otherwise never exercise the flow — see oauthCallbackURI. The provider sends the
+  // browser to `papervine.io/api/auth/callback/google?code=…&state=…`; forwarding it (query
+  // intact) to the app host is what puts the request back where the PKCE/state cookie was
+  // set — those cookies are host-only on `app.`, so exchanging the code on the apex would
+  // always fail. A redirect, not a rewrite: the browser has to re-send its cookies.
   if (
     isPlatformHost(reqHost) &&
     !resolveTenantSlug(reqHost) &&
     !process.env.PAPERVINE_CONTENT &&
-    (isAuthPath(pathname) || pathname === "/app" || pathname.startsWith("/app/"))
+    (isAuthPath(pathname) ||
+      isOAuthCallbackPath(pathname) ||
+      pathname === "/app" ||
+      pathname.startsWith("/app/"))
   ) {
     const url = req.nextUrl.clone();
     url.host = appHostFor(reqHost!);

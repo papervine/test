@@ -3233,6 +3233,43 @@ write by hand.
 > Verified in-browser: sign-in 200 on a `:3001` dev server with `BETTER_AUTH_URL` still
 > pointing at `:3000` (the previously failing combination).
 
+> **Status (2026-08-08) — Google sign-in landed, optional and off by default.** Better Auth's
+> `socialProviders.google`, gated on `GOOGLE_CLIENT_ID` + `GOOGLE_CLIENT_SECRET`: with either
+> half missing the provider isn't registered and the auth pages render no button, so a bare
+> checkout, CI, and the zero-dep smoke gate need no OAuth setup. The enable/disable decision is
+> a pure function (`src/lib/social-auth.ts`, unit-tested) read by the server components behind
+> `/login` and `/signup` — the pages became server shells around client forms so the answer
+> never has to be mirrored into a `NEXT_PUBLIC_` variable.
+>
+> **The design problem was the redirect URI, and it's a host problem, not an auth problem.**
+> Sign-in happens on the app host (§10), so the obvious URI is
+> `app.papervine.io/api/auth/callback/google` — but **Google refuses to register any `http://`
+> redirect URI on a subdomain of `localhost`** ("Invalid Redirect: must end with a public
+> top-level domain"), so `http://app.localhost:3000/…` is unregisterable and local dev could
+> never exercise the flow. Options were (a) app host in prod + a dev-only detour, or (b) the
+> apex everywhere. We chose **(b)**: the provider's `redirectURI` is pinned to
+> `${BETTER_AUTH_URL}/api/auth/callback/google` (the apex), and `middleware.ts` forwards
+> `/api/auth/callback/*` from the apex to the app host — extending the bounce that already
+> moves apex `/login`/`/signup` there. One URI to register, and the dev path is the prod path
+> rather than a code path that only ever runs on a laptop. It must be a **redirect, not a
+> rewrite**: the PKCE/state cookies are host-only on `app.`, so the browser has to re-issue the
+> request there or the code exchange always fails.
+>
+> **Account linking keeps Better Auth's secure default.** A Google identity only folds into an
+> existing account whose local email is already verified; we have no verification flow, so a
+> collision with a password account surfaces as "sign in with your password instead" rather
+> than merging. Loosening it (`requireLocalEmailVerified: false`) would make pre-registering a
+> victim's address a working account takeover — the classic pre-hijack. Revisit when email
+> verification exists, or by adding an explicit "link Google" action for a signed-in user.
+>
+> Verified: unit tests for the enable/redirect-URI/error-mapping helpers and for the middleware
+> forward (`social-auth.test.ts`, `middleware-routing.test.ts`); typecheck + `npm test` green;
+> in-browser on a dev server with dummy credentials — button renders in both platform themes,
+> console clean, the outbound authorize URL carries
+> `redirect_uri=http://localhost:3100/api/auth/callback/google`, and the apex callback 307s to
+> the app host with `?code`/`?state` intact. **Unverified:** a real Google account completing
+> consent — that needs live credentials from the Google Cloud console.
+
 ### 11.2 Layer 2 — Reader auth (docs.json-compatible handshake)
 
 We never run an IdP for readers and never store reader credentials. We **verify a signed
@@ -3585,7 +3622,8 @@ then **⑤ (optional) PPR**.
 ### 11.3 Sequencing (v1 → enterprise)
 
 1. **v1 (now):** Layer 1 only — Better Auth + `organization` plugin, **email/password**
-   first (GitHub OAuth a fast-follow), **Neon** Postgres (provisioned via Stripe Projects),
+   first (**Google OAuth landed 2026-08-08, optional**; GitHub the same shape when wanted —
+   §11.1), **Neon** Postgres (provisioned via Stripe Projects),
    middleware session check, RBAC, repo connect. Nothing multi-tenant works without it.
    Deploy sequencing: ship the public renderer first (single-tenant, already live on
    Vercel + git-connected), then layer auth on — auth does not block going online.

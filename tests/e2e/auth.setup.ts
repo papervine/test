@@ -17,7 +17,7 @@ setup("authenticate", async ({ page }) => {
   await page.getByLabel("Name").fill(TEST_USER.name);
   await page.getByLabel("Email").fill(TEST_USER.email);
   await page.getByLabel("Password").fill(TEST_USER.password);
-  await page.getByRole("button", { name: "Sign up" }).click();
+  await page.getByRole("button", { name: "Sign up", exact: true }).click();
 
   // No org yet → the resolver sends us to onboarding.
   await page.waitForURL("**/onboarding");

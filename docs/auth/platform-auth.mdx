@@ -51,6 +51,13 @@ can perform destructive operations like `organization:delete`.
   for the core.
 </Note>
 
+## Sign-in methods
+
+Email and password is the built-in method and always available. A deployment can additionally
+offer **[Google sign-in](/auth/google-sign-in)** by configuring OAuth credentials; the button
+appears next to the password form on `/login` and `/signup`, and disappears again when the
+credentials are absent.
+
 ## Where platform auth lives: the app host
 
 The control plane runs on its own host, `app.papervine.io`, separate from the marketing apex

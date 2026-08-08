@@ -1,0 +1,104 @@
+---
+title: Google sign-in
+description: Turn on "Continue with Google" for the Papervine dashboard — the credentials to set, the redirect URI to register, and how Google identities relate to password accounts.
+---
+
+Papervine accounts sign in with an email and password by default. Adding Google gives your
+users a one-click alternative on both `/login` and `/signup`, alongside — never instead of —
+the password form. It is part of [platform auth](/auth/platform-auth), the account system for
+dashboard users; it has nothing to do with [reader auth](/auth/reader-auth), which gates a
+customer's published docs.
+
+Google sign-in is **entirely optional**. With no credentials configured, the provider is
+absent from the auth server and the button never renders, so a bare checkout, CI, and the
+test suite all work with no OAuth setup at all.
+
+## Enabling it
+
+<Steps>
+  <Step title="Create an OAuth client">
+    In the Google Cloud console, create an **OAuth 2.0 Client ID** of type *Web application*
+    for your project, under **APIs & Services → Credentials**.
+  </Step>
+  <Step title="Register the redirect URI">
+    Add one **Authorized redirect URI**, built from your `BETTER_AUTH_URL`:
+
+    ```
+    {BETTER_AUTH_URL}/api/auth/callback/google
+    ```
+
+    For a production deployment on `https://papervine.io`, that is
+    `https://papervine.io/api/auth/callback/google`. For local development on
+    `http://localhost:3000`, it is `http://localhost:3000/api/auth/callback/google`.
+
+    Note this is the **apex** origin, not the `app.` host the dashboard is served from — see
+    [Why the callback lands on the apex](#why-the-callback-lands-on-the-apex).
+  </Step>
+  <Step title="Set the credentials">
+    Copy the client ID and secret into your environment:
+
+    ```bash
+    GOOGLE_CLIENT_ID=...apps.googleusercontent.com
+    GOOGLE_CLIENT_SECRET=...
+    ```
+
+    Restart the server. "Continue with Google" now appears on the sign-in and sign-up pages.
+  </Step>
+</Steps>
+
+<Note>
+  Both halves of the credential are required. A client ID without its secret reads as a
+  half-finished setup, so the provider stays off rather than failing at the first sign-in
+  attempt. `BETTER_AUTH_URL` is required too — without an origin there is no redirect URI to
+  build, and the server logs a warning explaining that Google stayed off.
+</Note>
+
+## Why the callback lands on the apex
+
+The Papervine dashboard lives on its own host — `app.papervine.io`, or `app.localhost:3000`
+in development (see the [control-plane overview](/control-plane/overview)). The natural
+redirect URI would therefore be on that host. Google will not accept it.
+
+Google refuses to register any `http://` redirect URI whose host is a subdomain of
+`localhost`, rejecting `http://app.localhost:3000/…` with *"Invalid Redirect: must end with a
+public top-level domain."* Registering the app host would mean local development could never
+exercise the flow.
+
+So the callback is registered on the apex in **every** environment, and Papervine's middleware
+forwards `/api/auth/callback/*` from the apex to the app host — the same bounce that already
+sends apex `/login` and `/signup` there. One URI to register, and the same code path in
+development and production rather than a dev-only detour that never runs in production.
+
+The forward has to be a redirect rather than an internal rewrite: the PKCE and state cookies
+minted when sign-in began are host-only on the app host, so the browser must re-issue the
+request there for the authorization code exchange to see them.
+
+## Google identities and existing accounts
+
+A first-time Google sign-in creates a Papervine account and lands on onboarding, exactly as a
+password sign-up does. Because Google reports the address as verified, the new account's email
+is verified too.
+
+When the Google address matches an account that **already exists with a password**, sign-in
+stops with:
+
+> That email already has a Papervine account with a password. Sign in with your password
+> instead.
+
+This is deliberate. Papervine has no email-verification flow yet, so there is no way to prove
+that the existing password account belongs to the same person. Linking anyway would make
+account takeover trivial: register a password account on someone else's address, wait for them
+to click "Continue with Google," and inherit their account. The refusal is the safe answer
+until verification exists.
+
+<Info>
+  Users in this position sign in with their password as usual — nothing is lost, and their
+  account is untouched.
+</Info>
+
+## Adding other providers
+
+The wiring is provider-agnostic: `src/lib/social-auth.ts` resolves a provider from the
+environment and the middleware already forwards every `/api/auth/callback/*` path. Another
+OAuth provider needs its credentials resolved there, the provider added to the Better Auth
+config, and a button on the auth pages — no routing changes.
