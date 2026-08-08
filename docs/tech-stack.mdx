@@ -31,7 +31,7 @@ but owns the parts that make it a multi-tenant platform.
 | Object storage | **S3 API** (hosted: **Cloudflare R2**, local: **MinIO**) | Compiled bundles and assets, behind a pluggable `S3_ENDPOINT` |
 | Queue / workers | **BullMQ** / serverless functions | Git sync jobs |
 | AI | **Vercel AI SDK** + `@ai-sdk/anthropic` (Claude) | The agentic [AI assistant](/features/ai-assistant) |
-| Platform auth | **Better Auth** (+ `organization`) | OSS, self-hostable; orgs + RBAC |
+| Platform auth | **Better Auth** (+ `organization`) | Owns its own schema; orgs + RBAC |
 | Hosting | Vercel (render) + workers elsewhere | Mirrors a standard Vercel deployment |
 | Monorepo | pnpm + Turborepo | Shared packages |
 
@@ -47,15 +47,15 @@ A few choices are worth calling out:
   <Card title="Code to the S3 API, not to one vendor">
     Object storage is reached through the S3 API behind a pluggable `S3_ENDPOINT` — Cloudflare
     R2 in production (zero egress for read-heavy docs serving, plus a built-in CDN), MinIO
-    locally, and any S3-compatible store for self-hosters.
+    locally, and any S3-compatible store elsewhere.
   </Card>
   <Card title="Postgres + pgvector, not a separate vector DB">
     One database holds tenants, config, and the embeddings the AI assistant retrieves over —
     no second datastore to operate. Hosted on Neon for serverless scaling on Vercel.
   </Card>
   <Card title="Better Auth for the platform">
-    Open-source and self-hostable, with first-class organizations and RBAC for the control
-    plane. This is distinct from how docs readers authenticate — see
+    Owns its own schema in our Postgres, with first-class organizations and RBAC for the
+    control plane. This is distinct from how docs readers authenticate — see
     [reader auth](/auth/reader-auth).
   </Card>
 </CardGroup>

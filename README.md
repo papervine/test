@@ -1,7 +1,7 @@
 <h1 align="center">Papervine</h1>
 
 <p align="center">
-  <strong>The docs platform alternative you can self-host.</strong><br />
+  <strong>The docs platform alternative built for humans and AI.</strong><br />
   Point it at a folder of MDX + a <code>docs.json</code> and get a fast, themeable docs site.
 </p>
 
@@ -20,7 +20,7 @@ Hosted docs platforms are great — until you hit a paywall for basic customizat
 
 - **Own your docs.** MDX files in your repo, rendered by software you control. Your content is always just files.
 - **Drop-in `docs.json` compatibility.** Papervine reads MDX content and a recursive `docs.json` navigation file, then renders the site without a proprietary build step.
-- **Self-host anywhere.** Run it on your own infrastructure, in your VPC, or behind your firewall.
+- **Built for AI too.** llms.txt and MCP out of the box, plus an agentic docs assistant — your docs work as well for AI agents as for people.
 
 ## Features
 
@@ -88,7 +88,7 @@ content/
 
 Docs live fully separate from the app and are read at request time — nothing tenant-specific is baked into the build. A page's sidebar label comes from its frontmatter `title` (falling back to a title-cased slug); register pages in a group's `pages` array in `docs.json`.
 
-## Self-hosting & tenant domains
+## Tenant domains
 
 Each connected site is served at its own host — `{slug}.papervine.io` in production, `{slug}.localhost:3100` in dev — or a custom domain. Subdomain serving requires a wildcard domain + wildcard TLS; deploys that can't provide that (e.g. a bare `*.vercel.app`) automatically fall back to path-based serving at `/sites/{slug}` with links and assets correctly prefixed. See [`SPEC.md`](./SPEC.md) §2 for switching a deploy from paths to subdomains.
 

@@ -86,7 +86,7 @@ The apex, `www`, and reserved labels resolve to the platform landing and control
   Path mode is **additive**, not a downgrade: in subdomain (host) mode the base is empty, so
   the rendered output is byte-identical. The path form is the fallback when there is no
   wildcard domain — for example a bare `*.vercel.app` deploy can't get nested TLS — and it
-  doubles as the self-host / no-custom-domain story. When a real domain is added, subdomain
+  doubles as the no-custom-domain story. When a real domain is added, subdomain
   serving lights up through the unchanged resolver.
 </Info>
 
@@ -147,7 +147,7 @@ forwards the raw host (`x-papervine-host`) and rewrites to a dedicated
   in *our* zone (e.g. `cname.papervine.io → cname.vercel-dns.com`). That indirection means we
   can re-point one record on our side at migration time instead of asking every customer to
   edit their DNS. The target is operator-configurable (`CUSTOM_DOMAIN_CNAME_TARGET`), so the
-  code hardcodes no operator domain — a self-hoster sets their own.
+  code hardcodes no operator domain — each deployment sets its own.
 </Tip>
 
 <Warning>

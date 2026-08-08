@@ -168,10 +168,10 @@ mechanisms simply prompt the client to *re-read* it.
 
 Updates arrive over a WebSocket using the **Pusher protocol**. Because serverless functions
 can't hold a socket open, Papervine doesn't *run* a socket server on its deploy target —
-instead it speaks a protocol that has both a self-hostable server and a managed equivalent,
-swapped by environment (the same pattern as Postgres and object storage):
+instead it speaks a protocol that has both a server you can run yourself and a managed
+equivalent, swapped by environment (the same pattern as Postgres and object storage):
 
-- **Local** uses a self-hosted, Pusher-compatible server (**Soketi**) in `docker-compose`.
+- **Local** uses a Pusher-compatible server you run yourself (**Soketi**) in `docker-compose`.
 - **Production** uses hosted **Pusher Channels** — the same client and server SDKs; only env
   changes.
 

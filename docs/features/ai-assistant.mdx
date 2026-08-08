@@ -66,9 +66,9 @@ use. Papervine isn't tied to any single provider:
 - **`AI_ROUTING=direct`** — bypass the gateway and call a provider's SDK **directly** with
   that provider's own key (`ANTHROPIC_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`,
   `OPENAI_API_KEY`). Use this to bring your own keys or avoid the gateway entirely.
-- **A self-hosted endpoint** — an `ollama/`, `lmstudio/`, or `local/` model id runs
+- **A local endpoint** — an `ollama/`, `lmstudio/`, or `local/` model id runs
   against your own hardware and pays nobody. See
-  [Self-hosted AI](/self-hosting/local-ai).
+  [Local AI models](/local-ai).
 
 Individual surfaces can override the model: **`PAPERVINE_AI_MODEL_AUTOMATIONS`** applies
 only to [automation runs](/control-plane/automate), which write documentation that lands
@@ -174,7 +174,8 @@ Settings are grouped:
 - **Starter questions** — up to **3** suggested questions shown in the chat empty state
   (rendered via AI Elements `Suggestions`).
 - **Plan / credits** — trial banner, per-tenant credit metering, and rate limits. Some
-  controls are plan-gated by config (not hardcoded), so self-hosters get everything.
+  controls are plan-gated by config (not hardcoded), so an operator running their own
+  deployment gets everything.
 
 ### Where each setting lives
 
@@ -183,5 +184,6 @@ Settings are grouped:
   — is version-controlled in `docs.json`'s `assistant` block; the dashboard edits it through
   the [authoring layer](/features/mcp-servers) so it stays in Git. **Operational state** —
   the enable toggle, CAPTCHA, credits, plan — lives in the database for instant effect.
-  Self-hosters read it all from `docs.json` + environment variables, no dashboard required.
+  An operator running their own deployment reads it all from `docs.json` + environment
+  variables, no dashboard required.
 </Note>

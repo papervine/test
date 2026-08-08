@@ -17,8 +17,8 @@ export default async function DomainSettingsPage({
   const apexBase = ((await headers()).get("host") ?? "").replace(/^(app|www)\./, "");
 
   // What the customer CNAMEs to — operator's branded host (CUSTOM_DOMAIN_CNAME_TARGET) if
-  // set, else the raw Vercel edge when Vercel-managed, else the apex (self-host). See
-  // customDomainCnameTarget / SPEC §2 for the precedence and the Phase 2 indirection seam.
+  // set, else the raw Vercel edge when Vercel-managed, else the apex (no target configured).
+  // See customDomainCnameTarget / SPEC §2 for the precedence and the Phase 2 indirection seam.
   const cnameTarget = customDomainCnameTarget(apexBase);
 
   // While a connected domain is still pending, surface Vercel's exact ownership records

@@ -237,8 +237,8 @@
       "body": "The docs-platform category jumps from free straight to enterprise-lite pricing. Team fills that gap; Pro undercuts the category flagship with 2.5× the AI credits."
     },
     {
-      "title": "Self-hostable — never locked in",
-      "body": "Hosted Papervine is the managed path, but you can self-host the renderer and control plane any time; heavy AI users can even bring their own inference infrastructure."
+      "title": "Your docs, never locked in",
+      "body": "docs.json is the format you already know — point Papervine at an existing repo and it renders unchanged, so migrating in (or out) is a DNS switch, not a rewrite."
     }
   ],
   "matrix": [

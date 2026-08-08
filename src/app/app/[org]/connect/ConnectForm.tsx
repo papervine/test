@@ -12,7 +12,7 @@ const initial: ConnectState = {};
 
 // GitHub App install state, resolved by the server component (page.tsx) and passed in so
 // this stays a thin client form. `installHref` is the github.com/apps install URL (null
-// when the App isn't configured — self-host without an App → PAT-only).
+// when no App is configured for this deployment — falls back to PAT-only).
 export type ConnectFormProps = {
   appConfigured: boolean;
   hasInstallation: boolean;
@@ -108,7 +108,7 @@ export default function ConnectForm({
 
         {/* Private-repo access. Preferred path is the GitHub App (auto-rotating, no
             secret to store); the PAT field stays as a fallback (and the only option on a
-            self-host with no App registered). */}
+            deployment with no App registered). */}
         {appConfigured &&
           (hasInstallation ? (
             <p className="rounded-lg border border-[var(--border)] bg-[var(--bg-subtle)] px-3 py-2.5 text-xs text-[var(--muted)]">

@@ -124,10 +124,10 @@ neither (a code comment suffices).
 
 **A new env var is a feature, not a footnote.** `.env.example` is where operators
 *discover* a knob, not where they *learn* it — every configuration variable that changes
-product behavior (a model/route, an executor, a self-hosted endpoint) also needs the
+product behavior (a model/route, an executor, a local inference endpoint) also needs the
 `docs/` page that explains when to reach for it and what happens when it's absent. If a
-knob has no natural page, that's the signal a page is missing: the "Self-hosting" group
-exists because self-hosted inference had nowhere to live. Same test as everything else —
+knob has no natural page, that's the signal a page is missing: the "Local AI" group
+exists because local inference had nowhere to live. Same test as everything else —
 a reader who never opens the repo should be able to operate the feature.
 
 ## Always write tests

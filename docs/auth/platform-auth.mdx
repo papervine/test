@@ -19,11 +19,11 @@ Platform auth is built on [Better Auth](https://www.better-auth.com/). The choic
 from a few requirements that rule out the hosted-only alternatives:
 
 <CardGroup cols={2}>
-  <Card title="Open-source and self-hostable">
-    Better Auth owns its own schema in our Postgres, so a self-hoster runs the exact same
-    code with no third-party accounts and no hosted-vs-self-hosted fork. Baking a vendor
-    like Clerk or Auth0 into the *core* would put a hosted dependency inside the product
-    itself.
+  <Card title="No hosted-auth dependency">
+    Better Auth owns its own schema in our Postgres, so every deployment runs the exact
+    same code with no third-party accounts to provision and no separate configuration
+    fork. Baking a vendor like Clerk or Auth0 into the *core* would put a hosted
+    dependency inside the product itself.
   </Card>
   <Card title="First-class organizations">
     The `organization` plugin gives us tenants, teams, roles, and invites out of the box.

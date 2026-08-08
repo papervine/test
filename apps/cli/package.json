@@ -1,7 +1,7 @@
 {
   "name": "papervine",
   "version": "0.1.0",
-  "description": "Papervine — open-source, self-hostable docs renderer. Preview a repo of MDX + docs.json locally.",
+  "description": "Papervine — a docs renderer. Preview a repo of MDX + docs.json locally.",
   "type": "module",
   "license": "MIT",
   "homepage": "https://github.com/phishy/papervine#readme",

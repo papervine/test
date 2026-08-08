@@ -90,10 +90,10 @@ since been decided — captured here as the rationale.
 </Note>
 
 <Note>
-  **Decided — self-host codes to portable interfaces, not vendors.** Better Auth owns its
+  **Decided — code to portable interfaces, not vendors.** Better Auth owns its
   schema in Postgres, and storage is the **S3 API** (hosted default R2, local MinIO,
-  self-host points `S3_ENDPOINT` anywhere). Domains/TLS use a host-platform wildcard cert
-  plus a SaaS-domains proxy for custom domains; self-host swaps the proxy or uses Caddy
+  and `S3_ENDPOINT` can point anywhere). Domains/TLS use a host-platform wildcard cert
+  plus a SaaS-domains proxy for custom domains; that proxy can be swapped for Caddy
   on-demand TLS directly.
 </Note>
 

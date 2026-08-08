@@ -1,12 +1,12 @@
 ---
-title: Self-hosted AI
+title: Local AI models
 description: Run Papervine's AI features against your own hardware — Ollama, LM Studio, or any OpenAI-compatible server — paying nobody.
 ---
 
 Papervine's AI surfaces (the [assistant](/features/ai-assistant), the editor agent, and
 [automation runs](/control-plane/automate)) resolve their model in one place, from
-environment variables. That resolution accepts a **self-hosted endpoint** as readily as a
-hosted provider, so a cost-sensitive deployment can run everything on its own hardware.
+environment variables. That resolution accepts a **local endpoint** as readily as a
+hosted provider, so a cost-sensitive setup can run everything on its own hardware.
 
 ## Point Papervine at your server
 
@@ -30,7 +30,7 @@ for the generic `local/` one. No API key is needed; set `AI_LOCAL_API_KEY` only 
 server demands one.
 
 <Note>
-  Self-hosted models always take the direct path, whatever `AI_ROUTING` says — a hosted
+  Locally-run models always take the direct path, whatever `AI_ROUTING` says — a hosted
   gateway can't reach an endpoint on your own network.
 </Note>
 
@@ -73,7 +73,7 @@ priced accordingly.
 
 ## Choose a model that can use tools
 
-This is the part that decides whether self-hosting works for you. Papervine's AI is
+This is the part that decides whether running models locally works for you. Papervine's AI is
 **agentic**, not single-shot: the assistant calls `searchDocs` and `readPage` before
 answering, and an automation run may take a couple dozen tool-calling steps to read pages,
 edit them, and report what it changed.
@@ -114,7 +114,7 @@ nothing to keep both configured and flip as the task demands.
 
 ## Credits and metering
 
-Usage of a self-hosted model is **rated at zero credits**. Papervine still records a usage
+Usage of a locally-run model is **rated at zero credits**. Papervine still records a usage
 event per run so you can see token volumes, but nothing is debited and the credit gate
 never refuses work — you're not paying anyone, so the meter has nothing to meter.
 
@@ -135,7 +135,7 @@ worker talks to your model.
 - **Local development** — the worker runs on your own machine, so it reaches
   `localhost:11434` normally. Scheduled automations firing from a hosted scheduler still
   execute locally against your local model.
-- **Self-hosted deployment** — run the worker on the same network as your inference
+- **A worker you run yourself** — put it on the same network as your inference
   server, and everything stays inside your infrastructure.
 - **A hosted worker** — a worker running in someone else's cloud cannot reach a model on
   your private network. That deployment shape needs a hosted model (or an inference

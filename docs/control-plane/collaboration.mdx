@@ -1,6 +1,6 @@
 ---
 title: Real-time collaboration
-description: Edit a page together, live — presence, shared cursors of change, and a self-hostable collaboration service that keeps Git byte-exact.
+description: Edit a page together, live — presence, shared cursors of change, and a lightweight collaboration service that keeps Git byte-exact.
 ---
 
 The editor is **collaborative**: two people (or two of your own tabs) can open the same page and
@@ -46,7 +46,7 @@ Either way, your edits still autosave to the page's **draft** on your branch, an
 until you publish** — the same draft-and-publish flow as solo editing. The shared document is just
 live coordination; the draft (and Git) remains the record.
 
-## The collaboration service (self-hosting)
+## The collaboration service
 
 Cross-machine editing uses a standalone **Hocuspocus** (Yjs) WebSocket service — `apps/collab` in
 the repo. It's the one always-on piece a serverless host can't run, so it lives on its own. It is
@@ -82,6 +82,6 @@ a connection only if the token is valid and matches the page being opened — so
 join another site's document.
 
 <Note>
-  Because the service self-hosts as a single container, multiplayer works the same on a self-hosted
-  Papervine as on the hosted one — no third-party collaboration SaaS required.
+  Because the service runs as a single container you deploy yourself, multiplayer works the
+  same everywhere Papervine runs — no third-party collaboration SaaS required.
 </Note>

@@ -23,7 +23,7 @@ can be simpler, cheaper, or more open. One deployment serves many tenants.
   baked in. Content is fetched + rendered on demand (with aggressive caching). New deploys
   don't require rebuilding every tenant.
 - **Fast by default.** React Server Components, edge caching, minimal client JS.
-- **Open source.** Permissive license (MIT/Apache-2.0). Self-hostable; the hosted SaaS is a convenience, not a lock-in.
+- **Portable by design.** Code to portable interfaces (S3 API, Postgres), not vendor lock-in.
 
 ---
 
@@ -206,7 +206,7 @@ prefixed (`withBase`, `src/lib/url-base.ts`) instead of escaping to the apex. Ba
 in host mode → output is byte-identical. This is **additive**: when a real domain is added,
 subdomain serving lights up through the unchanged resolver; the only follow-up is an optional
 canonical redirect from the path form. The path form also stays useful as the no-custom-domain
-/ self-host story (§13 portability). Search/assistant remain host-resolved (analytics only)
+story (§13 portability). Search/assistant remain host-resolved (analytics only)
 and are unchanged by this.
 
 **Per-request content source — resolve it before the root layout reads, not just in the
@@ -302,7 +302,7 @@ Two **independent** domain systems — don't conflate them:
    record on our side at migration instead of asking 50+ customers to edit their DNS. Pointing
    straight at `cname.vercel-dns.com` would bake Vercel into every customer zone and make the
    Phase 2 cutover a per-customer fire drill. The target is **operator-configurable**
-   (`CUSTOM_DOMAIN_CNAME_TARGET` — hosted sets `cname.papervine.io`; a self-hoster sets their
+   (`CUSTOM_DOMAIN_CNAME_TARGET` — hosted sets `cname.papervine.io`; another deployment sets its
    own host; unset falls back to the raw Vercel edge, then the apex), so the code hardcodes
    no operator domain. (Apex `A`-record customers can't CNAME, so they fall outside this seam
    and would re-point at migration.) **Verified (2026-06-10):** Vercel
@@ -332,16 +332,17 @@ the platform never needs to know individual customer domains:
   the right slug); Vercel's `verification` records surface in the form only when the host's apex
   is already in use elsewhere and an ownership challenge is required. Customer CNAMEs to
   the operator's branded target (`CUSTOM_DOMAIN_CNAME_TARGET`, `cname.papervine.io` on hosted)
-  when set, the raw Vercel edge if unset-but-Vercel-managed, the apex otherwise (the self-host
-  path form). Pure `parseDomainStatus`, env-gating, and CNAME-target precedence unit-tested
+  when set, the raw Vercel edge if unset-but-Vercel-managed, the apex otherwise (the
+  no-custom-domain path form). Pure `parseDomainStatus`, env-gating, and CNAME-target
+  precedence unit-tested
   (`tests/unit/vercel-domains.test.ts`).
 - **Phase 2 (trigger: ~40–50 custom domains):** front custom-domain traffic with a
   purpose-built SaaS-domains proxy that issues a cert per hostname and forwards to **one**
   origin we already serve (e.g. `origin.papervine.io`, under our wildcard), passing the real
   host in **`X-Forwarded-Host`**. Vercel then sees a single domain → cap is moot. Candidates:
   **Approximated** (drop-in, purpose-built, API), **Cloudflare for SaaS / Custom Hostnames**
-  (cheapest at scale, more config), or self-hosted **Caddy on-demand-TLS** (cheapest, we
-  operate it). Because customers CNAME at the **branded `cname.papervine.io`** (Phase 1
+  (cheapest at scale, more config), or **Caddy on-demand-TLS** running on infrastructure
+  we operate (cheapest). Because customers CNAME at the **branded `cname.papervine.io`** (Phase 1
   above), the cutover is **zero customer DNS change** for the CNAME majority: we re-point that
   one record in our zone at the proxy. Migration is then front-door-only on *our* side —
   re-point + read `X-Forwarded-Host` (trusted-proxy gated) in `resolveTenantSlug`; the renderer
@@ -618,7 +619,7 @@ callback) mints a short-lived **installation token** (`src/lib/github-app.ts`, R
 `node:crypto` — no new deps) that flows through the same `ghHeaders(token?)` seam as the PAT,
 so neither `sync.ts` nor the render path changed. All four env vars are optional: with no App
 configured the webhook 401s every (unsignable) delivery and the connect form falls back to the
-PAT field — public repos and self-host stay zero-config. See `.env.example` for registration.
+PAT field — public repos stay zero-config on any deployment. See `.env.example` for registration.
 
 > **Cache invalidation is version-keyed, not tag-based (fixed 2026-06-12).** The render path
 > reads config/pages/keys through the Next Data Cache (`unstable_cache`, `src/lib/s3-source.ts`,
@@ -1319,13 +1320,14 @@ Settings, grouped as hosted docs platforms groups them:
 - **Plan / credits** — trial banner (free-credit % remaining, expiry date, *Upgrade plan*);
   per-tenant **credit metering + rate limits** (§8.1). Some controls are **plan-gated**
   (hosted docs platforms shows "available for enterprise plans / Contact Sales"); gating is config, not
-  hardcoded, so self-hosters get everything.
+  hardcoded, so an operator running their own deployment gets everything.
 
 **Where each setting lives.** Published-behavior config (starter questions, deflection
 email + help button, search domains) is **version-controlled in `docs.json`'s `assistant`
 block** — the dashboard edits it through the authoring layer (§9.2) so it stays in Git.
 Operational/metering state (enable toggle, CAPTCHA, credits, plan) lives in our **DB** for
-instant effect. Self-host reads it all from `docs.json` + env, no dashboard required.
+instant effect. An operator running their own deployment reads it all from `docs.json` +
+env, no dashboard required.
 
 > **Operational toggles wired (2026-06-30).** The two DB-state toggles — *Assistant Status*
 > (the enable/disable kill switch, with the Active/Inactive badge) and *Invisible CAPTCHA* —
@@ -1498,7 +1500,7 @@ precedent already in the codebase rather than inventing a new access model:
 > across version bumps. So this is a genuine third-party runtime dependency, trusted no
 > further than "this exact, immutable jsdelivr version" — narrower than the vendored/
 > hash-verified script this repo's other surfaces get, and worth remembering as the
-> tradeoff if this ever needs tightening (self-hosting the whole mermaid dist tree, or a
+> tradeoff if this ever needs tightening (vendoring the whole mermaid dist tree, or a
 > real build step, are the two ways out). `securityLevel: "strict"` on the diagram
 > content itself (stricter than the main renderer's `"antiscript"` — the widget runs on
 > an arbitrary third party's page, not our own, so it gets the more conservative of the
@@ -1826,17 +1828,18 @@ layer.
 > both ways + Visual reprojection + presence, over the socket. Guards: `textDiff` (19),
 > `collab-ytext-sync` (4), `collab-token` (5 — forgery/expiry/room-replay).
 >
-> **Hosting decision (2026-07-07): self-host Hocuspocus, not a managed Yjs SaaS.** The service is
+> **Hosting decision (2026-07-07): run Hocuspocus ourselves, not a managed Yjs SaaS.** The service is
 > one MIT container (`docker-compose` `collab` locally; a `$5` Fly/Railway/Render machine or any
 > container host in prod; `crossws` makes it portable to Bun/Deno/CF Workers). We considered the
 > Vercel Marketplace one-click partner **Liveblocks** (fully-managed Yjs) and rejected it *as the
-> default* for a decisive reason: **you can't self-host Liveblocks**, so collab-on-Liveblocks would
-> break Papervine's self-host story (§13). A managed Yjs host (Liveblocks / y-sweet) stays a
-> valid *optional hosted-tier* choice behind the same provider seam — never the foundation. This
-> is a different problem from the Activity feed's Pusher/Soketi choice (§10.3): that relays content-
-> free pings; a document needs stateful sync (correct join-state, awareness, and state transfer that
-> would blow past Pusher's ~10KB message cap — which *diverges* between hosted Pusher and self-host
-> Soketi), so a purpose-built Yjs server is the right tool here. **Deferred:** binary CRDT
+> default* for a decisive reason: **Liveblocks has no option to run it yourself**, so collab-on-
+> Liveblocks would break running Papervine's collab feature outside a hosted SaaS (§13). A managed
+> Yjs host (Liveblocks / y-sweet) stays a valid *optional hosted-tier* choice behind the same
+> provider seam — never the foundation. This is a different problem from the Activity feed's
+> Pusher/Soketi choice (§10.3): that relays content-free pings; a document needs stateful sync
+> (correct join-state, awareness, and state transfer that would blow past Pusher's ~10KB message
+> cap — which *diverges* between hosted Pusher and a Soketi instance we run ourselves), so a
+> purpose-built Yjs server is the right tool here. **Deferred:** binary CRDT
 > persistence; real display names in presence.
 >
 > **Source mode is CodeMirror now — remote cursors + no caret jump (2026-07-08).** Took the
@@ -2043,7 +2046,7 @@ Minimum to operate the SaaS:
   both prices show inline. Smoke's `/pricing` check now pins the new anchors and
   *excludes* the dead promo copy. `docs/control-plane/billing.mdx` is the evergreen
   reference (plans, trial, credit buckets + consumption order, hard caps/overage,
-  portal self-serve, org-scoped billing, self-host = no meter). *Verified in-browser
+  portal self-serve, org-scoped billing, outside hosted billing = no meter). *Verified in-browser
   light + dark 2026-07-16, console clean; `node tests/crawl.mjs docs` 30/30, 0×500.*
   §2's pricing-thesis paragraph is superseded by this section for plan shape; the
   wedge ("all features from day one, security before procurement") is unchanged.
@@ -2272,7 +2275,7 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   this is the second background-job use case, and multi-minute sandboxed agent runs
 >   with git checkouts can't live in Vercel functions. Intent stays in Postgres
 >   (`automation` config + `automation_run` history); Trigger.dev is the projection that
->   executes it, so the executor remains swappable (Inngest/Temporal/self-host) per §18.
+>   executes it, so the executor remains swappable (Inngest/Temporal/run it yourself) per §18.
 >   Toolchain landed 2026-07-19: `trigger.config.ts` + `src/trigger/` (project
 >   `proj_rjriwuagrstnzwseaytk`), verified end-to-end (local worker registered;
 >   `hello-world` run triggered and completed).
@@ -2610,11 +2613,11 @@ domains/§2, workflows/§10.2), not new capability. Layout, top to bottom:
 
 > **Status (2026-06-13) — realtime feed over the Pusher protocol.** Took the "when to upgrade"
 > step above: the feed now updates the *instant* a sync starts/finishes, not up to 2.5s later.
-> **Why this shape:** Vercel functions can't hold a WebSocket open, so a self-hosted socket server
-> isn't deployable on our target — the working pattern is a *protocol* that's identical in both
-> environments with a managed equivalent in prod, the same swap we already do for Postgres
-> (docker→Neon) and object storage (MinIO→R2). We chose the **Pusher protocol**: self-hosted
-> **Soketi** in `docker-compose` locally, hosted **Pusher Channels** in prod — same `pusher` /
+> **Why this shape:** Vercel functions can't hold a WebSocket open, so a socket server we run
+> ourselves isn't deployable on our target — the working pattern is a *protocol* that's identical
+> in both environments with a managed equivalent in prod, the same swap we already do for Postgres
+> (docker→Neon) and object storage (MinIO→R2). We chose the **Pusher protocol**: **Soketi**
+> (run ourselves) in `docker-compose` locally, hosted **Pusher Channels** in prod — same `pusher` /
 > `pusher-js` SDKs, only env (`PUSHER_*` / `NEXT_PUBLIC_PUSHER_*`) changes. Publishing is an HTTP
 > trigger (a plain POST), which works fine inside a serverless function; the browser connects to the
 > realtime host directly. Supabase Realtime was the alternative (presence + Postgres-CDC built in)
@@ -2893,8 +2896,8 @@ never *is* the control plane; at most it's a thin HTTPS client to it. Papervine 
 local dev commands now, an optional thin authenticated client (`papervine analytics`, a
 hypothetical `papervine deploy`) later — never by embedding the server. hosted docs platforms' one gap is
 that it has **no offline `build`/static export** (prod rendering is server-side on their
-infra); because Papervine is self-hostable, `papervine build` (static export of a docs repo)
-is a genuine differentiator and a natural fit for the renderer-only package.
+infra); because Papervine's renderer works standalone, `papervine build` (static export of a
+docs repo) is a genuine differentiator and a natural fit for the renderer-only package.
 
 **v0.1.0 command surface** (each maps to renderer machinery we already have; ship in this
 order, smallest lift first):
@@ -3206,9 +3209,9 @@ team members, connect a repo, manage billing. RBAC roles: owner/admin/editor/vie
 
 **Choice: [Better Auth](https://www.better-auth.com/).** Rationale:
 
-- **Self-hostable, owns its own schema in our Postgres.** A self-hoster
-  runs the exact same code with zero third-party accounts; no hosted-vs-self-hosted fork
-  (resolves the spirit of Open Question §16.4). This rules out Clerk/Auth0 as the
+- **Owns its own schema in our Postgres.** Every deployment runs the exact same code
+  with zero third-party accounts to provision; no separate configuration fork (resolves
+  the spirit of Open Question §16.4). This rules out Clerk/Auth0 as the
   *core* — they'd bake a vendor dependency into the product itself.
 - **First-class `organization` plugin** = tenants/teams/roles/invites out of the box.
   "Multi-tenant" here means orgs, not just users, so this is the exact shape we need
@@ -3221,7 +3224,7 @@ team members, connect a repo, manage billing. RBAC roles: owner/admin/editor/vie
 Other options, and why not now: **WorkOS** — not the core, but the planned path for
 enterprise **SAML/SSO into the platform** (the same enterprise buyers who want Layer 2).
 Add it behind Better Auth's org model when the first enterprise deal lands. **Clerk** —
-fastest DX, only if we decide self-hosting is *not* a real goal (we've decided it is).
+fastest DX, only if we decide a vendor-free core is *not* a real goal (we've decided it is).
 **Auth.js v5** — viable but minimal; Better Auth ≈ Auth.js + the org layer we'd otherwise
 write by hand.
 
@@ -3721,10 +3724,10 @@ then **⑤ (optional) PPR**.
 | Search | **Orama** (Algolia optional) | embeddable, multi-tenant |
 | DB | **Postgres** (+ `pgvector`) — hosted: **Neon** | tenants, config, embeddings; Neon serverless for the Vercel deploy, provisioned via the Stripe Projects CLI (`stripe projects add neon/postgres`) |
 | Cache | **Redis** | domain→tenant map, page cache |
-| Object storage | **S3 API** — hosted: **Cloudflare R2**, local: **MinIO** | compiled bundles, assets. Code to the S3 API (pluggable `S3_ENDPOINT`); R2 chosen for **zero egress** (docs serving is read-heavy) + built-in CDN; self-hosters point at any S3-compatible store |
+| Object storage | **S3 API** — hosted: **Cloudflare R2**, local: **MinIO** | compiled bundles, assets. Code to the S3 API (pluggable `S3_ENDPOINT`); R2 chosen for **zero egress** (docs serving is read-heavy) + built-in CDN; `S3_ENDPOINT` can point at any S3-compatible store |
 | Queue/workers | **BullMQ** / serverless functions | git sync jobs |
 | AI | **Vercel AI SDK** (`ai`) via config-driven `ai-model.ts` — Vercel AI Gateway or direct provider (`@ai-sdk/anthropic\|google\|openai`); **AI Elements** for chat UI | agentic assistant (§8) |
-| Auth (platform) | **Better Auth** (+ `organization`) | OSS, self-hostable, orgs + RBAC; WorkOS for enterprise SSO later (§11) |
+| Auth (platform) | **Better Auth** (+ `organization`) | owns its own schema, orgs + RBAC; WorkOS for enterprise SSO later (§11) |
 | Hosting | Vercel (render) + workers elsewhere | mirrors hosted docs platforms' Vercel approach |
 | Monorepo | pnpm + Turborepo | shared packages |
 
@@ -3839,7 +3842,7 @@ Org/auth/RBAC, custom domains + TLS, analytics views. Beta-ready.
 1. **Compile-on-sync vs. on-request.** Spec assumes compile-on-sync for perf/predictability. Does that block any dynamic features we care about (e.g. live Twoslash)?
 2. ~~**Build on Fumadocs vs. from scratch.**~~ **DECIDED (2026-06-07): from scratch.** Multi-tenancy and full control over the architecture outweigh the head start. M0 is a single Next.js app; refactor into the monorepo packages at M2 when multi-tenancy lands.
 3. **Versioning & i18n.** docs.json supports versions + languages in the nav tree. In v1 scope or fast-follow?
-4. **Self-host story.** How easy must the self-host path be vs. the hosted SaaS? Affects how much we hardwire to R2/Vercel/etc. **Resolved (2026-06-08):** code to portable interfaces, not vendors — Better Auth owns its schema in Postgres (§11.1), and storage is the **S3 API** (hosted default R2, local MinIO, self-host points `S3_ENDPOINT` anywhere; §3.1). Domain/TLS: **resolved (2026-06-09)** — `*.papervine.io` via host-platform wildcard cert; custom domains via the host-platform domains API, escaping the per-project cap with a SaaS-domains proxy (Approximated / Cloudflare-for-SaaS / Caddy) + `X-Forwarded-Host` when it nears (§2 → Custom domains). Self-host swaps the proxy or uses Caddy on-demand-TLS directly.
+4. **Portability story.** How portable must the deployment be vs. the hosted SaaS? Affects how much we hardwire to R2/Vercel/etc. **Resolved (2026-06-08):** code to portable interfaces, not vendors — Better Auth owns its schema in Postgres (§11.1), and storage is the **S3 API** (hosted default R2, local MinIO, `S3_ENDPOINT` can point anywhere; §3.1). Domain/TLS: **resolved (2026-06-09)** — `*.papervine.io` via host-platform wildcard cert; custom domains via the host-platform domains API, escaping the per-project cap with a SaaS-domains proxy (Approximated / Cloudflare-for-SaaS / Caddy) + `X-Forwarded-Host` when it nears (§2 → Custom domains). That proxy can be swapped for Caddy on-demand-TLS directly.
 5. **License & governance.** MIT vs. Apache-2.0; CLA; what (if anything) is SaaS-only (open-core) vs. fully open.
 6. **Pricing/limits** for the hosted version (out of scope for build, but shapes tenancy/metering design).
 7. ~~**Web editor** — defer past v1? hosted docs platforms treats it as a differentiator.~~ **DECIDED & BUILT (2026-06-14): build it now, agent-native.** Shipped the full 3-panel editor (editing-agent chat · navigation · multi-modal editor) on a shared authoring backend — see §9.2's build note. We chose to lead with the differentiating axis (agent-native) rather than defer. Editing is **Source MDX + a Preview rendered by our own renderer** (revised 2026-06-15 — the original MDXEditor WYSIWYG was dropped because a second rendering engine only approximates real-world MDX; see §9.2). Git stays the source of truth and the preview is byte-faithful to publish.
@@ -3864,8 +3867,8 @@ section as the durable home for decisions of this kind.)
 
 1. **Performance is paramount.** Slow is a product bug, not a cost optimization.
 2. **Vendor lock-in is unacceptable.** A managed service is adopted only with a named,
-   **tested** escape hatch (self-host or drop-in alternative) — verified before paying
-   customers depend on the feature, not after.
+   **tested** escape hatch (run it ourselves or a drop-in alternative) — verified before
+   paying customers depend on the feature, not after.
 3. **Cost is managed with escape hatches and metering, not bans.** No absolute technology
    bans; frame posture as defaults with measured escalation triggers.
 
@@ -3894,7 +3897,7 @@ Derived rules:
   *Bundling gotcha:* `@vercel/oidc` dynamic-imports siblings by relative path and dies
   inside an esbuild bundle — the Trigger.dev build marks it `external`
   (trigger.config.ts).
-  **Self-hosted inference (2026-07-20).** `ollama/`, `lmstudio/`, and `local/` model ids
+  **Local inference (2026-07-20).** `ollama/`, `lmstudio/`, and `local/` model ids
   route to any OpenAI-compatible server (`AI_BASE_URL` overrides the prefix's default
   endpoint; required for `local/`), always via the direct path — the hosted gateway
   can't reach a private network. Built with `createOpenAI({ baseURL })` rather than
@@ -3904,8 +3907,8 @@ Derived rules:
   now matches the full provider-scoped id before the bare model, so a whole route can be
   priced). Ollama ships as an **opt-in** compose profile (`--profile local-ai`); never a
   default service (multi-GB weights; no GPU passthrough on macOS). This is a
-  self-hosting affordance, not the SaaS path — the honest caveat, documented at
-  `/self-hosting/local-ai`, is that our AI is agentic and small models are unreliable at
+  local-inference affordance, not the SaaS path — the honest caveat, documented at
+  `/local-ai`, is that our AI is agentic and small models are unreliable at
   multi-step tool use.
   *Endpoint gotcha:* the local model must be built with the provider's **`.chat()`**
   factory, not its default — `@ai-sdk/openai` now defaults to OpenAI's *Responses* API,
@@ -3932,5 +3935,5 @@ Decisions under this posture:
   post-and-edit fallback), which strengthens the call.
 - **Background/agent-run executor: Trigger.dev Cloud** (2026-07-19) — resolves the §2
   executor-choice note's "not yet"; architecture + isolation rules in the §10.2 decision
-  note. Escape hatch: Trigger.dev is Apache-2.0 and self-hostable; one verified self-host
-  dry run is owed before GA of automations.
+  note. Escape hatch: Trigger.dev is Apache-2.0, so it can run on our own infrastructure
+  if needed; one verified dry run of that path is owed before GA of automations.

@@ -102,7 +102,8 @@ The executor is **deployed separately from the web app**. `TRIGGER_SECRET_KEY` o
 (`npx trigger.dev deploy`) — a release distinct from deploying the site. A run that is enqueued
 but has no published version to pick it up stays pending. In this project's hosting, a push to
 the main branch deploys both halves together (the site build, and a CI job that deploys the
-tasks), so the two never drift apart; self-hosters run the deploy as part of their own release.
+tasks), so the two never drift apart; running your own deployment means running that
+release step yourself.
 
 Because the executor runs in its own environment, it also needs its **own copy of the server
 configuration** — it does not inherit the web app's. A run reaches the database, the draft
@@ -110,7 +111,7 @@ storage, the model provider, and the connected repositories, so the executor's e
 carry the same database URL, object-storage credentials, AI configuration, and GitHub-App keys
 the app uses. A missing value surfaces as a run that fails immediately on its first step rather
 than as a degraded feature. This project keeps the two environments in sync automatically at
-deploy time; a self-hosted executor is configured wherever its tasks are deployed.
+deploy time; an executor you run yourself is configured wherever its tasks are deployed.
 
 Each run is metered: its
 model usage is recorded and debited against the plan's [AI credits](/control-plane/billing),
@@ -239,5 +240,5 @@ The Assistant page mixes two kinds of setting, and they're stored differently on
   database column. These controls are still scaffold on this page until that write path is
   surfaced here.
 
-Self-hosters get the same split from configuration alone: the operational state from
-environment, the published behavior from `docs.json` — no dashboard required.
+Running your own deployment gets the same split from configuration alone: the operational
+state from environment, the published behavior from `docs.json` — no dashboard required.

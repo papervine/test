@@ -109,8 +109,8 @@ revalidation needed; old versions age out via the TTL.
 </CardGroup>
 
 The GitHub App is optional. With no App configured, the webhook rejects every (unsignable)
-delivery and the connect form falls back to a pasted fine-grained PAT. Public repos and
-self-hosters stay zero-config; private repos add the App (or a PAT), whose token flows
+delivery and the connect form falls back to a pasted fine-grained PAT. Public repos stay
+zero-config on any deployment; private repos add the App (or a PAT), whose token flows
 through one seam (`ghHeaders(token?)` in `src/lib/github.ts`) and is encrypted at rest.
 
 <Warning>

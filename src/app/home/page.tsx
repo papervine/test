@@ -5,7 +5,7 @@ import {
   FileJson2,
   Search,
   Boxes,
-  GitBranch,
+  MessageSquareCode,
   Plug,
   Bot,
   MessagesSquare,
@@ -21,7 +21,7 @@ import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
 export const metadata: Metadata = {
   title: "Papervine — the intelligent documentation platform",
   description:
-    "Self-hostable documentation built for humans and AI. Create and maintain world-class docs from a Git repo — with an API playground, instant search, and an AI assistant.",
+    "Documentation built for humans and AI. Create and maintain world-class docs from a Git repo — with an API playground, instant search, and an AI assistant.",
 };
 
 const GITHUB = "https://github.com/phishy/papervine";
@@ -63,9 +63,9 @@ const FEATURES = [
     body: "⌘K search across every page, heading, and code block — re-indexed on each sync, no extra service to run.",
   },
   {
-    icon: GitBranch,
-    title: "Self-hostable",
-    body: "Run the hosted platform or your own instance. Portable interfaces, no lock-in.",
+    icon: MessageSquareCode,
+    title: "Embeddable widget",
+    body: "Drop the assistant into any external site with a script snippet — gated by an allowlist, not a login.",
   },
 ];
 
@@ -152,7 +152,7 @@ export default async function LandingPage() {
           style={{ animationDelay: "160ms" }}
         >
           Create and maintain world-class docs from a Git repo — built for both
-          your readers and the AI agents they rely on. Self-hostable.
+          your readers and the AI agents they rely on.
         </p>
 
         <div
