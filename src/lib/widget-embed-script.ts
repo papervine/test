@@ -52,10 +52,16 @@ export const WIDGET_EMBED_SCRIPT = `
   }
 
   // Reject anything that isn't clearly a safe link target (http(s)/relative/hash) — a
-  // crafted "javascript:" markdown link must never become a real href.
-  function safeHref(url) {
+  // crafted "javascript:" markdown link must never become a real href. A "/"-rooted
+  // relative URL is made absolute against \`base\` (the tenant's real docs origin, from
+  // the X-Papervine-Docs-Base response header — see streamEvents below) — the model's
+  // citation links are written as if they were on the docs site itself (e.g.
+  // "[Quickstart](/quickstart)"), but the widget renders inside an arbitrary CUSTOMER
+  // page, where a bare "/quickstart" would otherwise resolve against THEIR origin.
+  function safeHref(url, base) {
     if (url.indexOf("http://") === 0 || url.indexOf("https://") === 0) return url;
-    if (url.charAt(0) === "/" || url.charAt(0) === "#") return url;
+    if (url.charAt(0) === "/") return base ? base + url : url;
+    if (url.charAt(0) === "#") return url;
     return "#";
   }
 
@@ -63,14 +69,14 @@ export const WIDGET_EMBED_SCRIPT = `
   // never a raw HTML string. No regex: character-by-character scanning avoids the
   // escaping pitfalls of embedding backslash/backtick-heavy regex literals inside this
   // already-templated script, and is easy to reason about directly.
-  function renderInlineNodes(s) {
+  function renderInlineNodes(s, base) {
     var nodes = [];
     var i = 0;
     while (i < s.length) {
       if (s.slice(i, i + 2) === "**") {
         var boldEnd = s.indexOf("**", i + 2);
         if (boldEnd !== -1) {
-          nodes.push(el("strong", null, renderInlineNodes(s.slice(i + 2, boldEnd))));
+          nodes.push(el("strong", null, renderInlineNodes(s.slice(i + 2, boldEnd), base)));
           i = boldEnd + 2;
           continue;
         }
@@ -90,7 +96,7 @@ export const WIDGET_EMBED_SCRIPT = `
           if (imgCloseParen !== -1) {
             var altText = s.slice(i + 2, imgCloseBracket);
             var imgSrc = s.slice(imgCloseBracket + 2, imgCloseParen);
-            nodes.push(el("img", { src: safeHref(imgSrc), alt: altText }));
+            nodes.push(el("img", { src: safeHref(imgSrc, base), alt: altText }));
             i = imgCloseParen + 1;
             continue;
           }
@@ -104,7 +110,7 @@ export const WIDGET_EMBED_SCRIPT = `
             var label = s.slice(i + 1, closeBracket);
             var url = s.slice(closeBracket + 2, closeParen);
             nodes.push(
-              el("a", { href: safeHref(url), target: "_blank", rel: "noreferrer" }, [text(label)]),
+              el("a", { href: safeHref(url, base), target: "_blank", rel: "noreferrer" }, [text(label)]),
             );
             i = closeParen + 1;
             continue;
@@ -114,7 +120,7 @@ export const WIDGET_EMBED_SCRIPT = `
       if (s.charAt(i) === "*" && s.charAt(i + 1) !== "*") {
         var italicEnd = s.indexOf("*", i + 1);
         if (italicEnd !== -1) {
-          nodes.push(el("em", null, renderInlineNodes(s.slice(i + 1, italicEnd))));
+          nodes.push(el("em", null, renderInlineNodes(s.slice(i + 1, italicEnd), base)));
           i = italicEnd + 1;
           continue;
         }
@@ -178,15 +184,15 @@ export const WIDGET_EMBED_SCRIPT = `
   // indent + tag; an item immediately followed by a MORE-indented item nests a sub-list
   // inside that item's <li>. Returns where the caller (a shallower level, or the top-level
   // loop) should resume.
-  function buildListTree(items, start, indent) {
+  function buildListTree(items, start, indent, base) {
     var tag = items[start].tag;
     var lis = [];
     var idx = start;
     while (idx < items.length && items[idx].indent === indent && items[idx].tag === tag) {
-      var li = el("li", null, renderInlineNodes(items[idx].content));
+      var li = el("li", null, renderInlineNodes(items[idx].content, base));
       idx++;
       if (idx < items.length && items[idx].indent > indent) {
-        var nested = buildListTree(items, idx, items[idx].indent);
+        var nested = buildListTree(items, idx, items[idx].indent, base);
         li.appendChild(nested.node);
         idx = nested.next;
       }
@@ -266,7 +272,7 @@ export const WIDGET_EMBED_SCRIPT = `
   // Block-level markdown (headings, lists, fenced code, tables, blockquotes, rules,
   // paragraphs) — appends real DOM nodes into \`container\` (clearing it first). Same
   // no-innerHTML, no-regex reasoning as renderInlineNodes above.
-  function renderMarkdownInto(container, raw) {
+  function renderMarkdownInto(container, raw, base) {
     while (container.firstChild) container.removeChild(container.firstChild);
     var lines = raw.split("\\n");
     var i = 0;
@@ -274,7 +280,7 @@ export const WIDGET_EMBED_SCRIPT = `
 
     function flushPara() {
       if (para.length) {
-        container.appendChild(el("p", null, renderInlineNodes(para.join(" "))));
+        container.appendChild(el("p", null, renderInlineNodes(para.join(" "), base)));
         para = [];
       }
     }
@@ -317,14 +323,14 @@ export const WIDGET_EMBED_SCRIPT = `
           var thead = el(
             "thead",
             null,
-            [el("tr", null, headerCells.map(function (c) { return el("th", null, renderInlineNodes(c)); }))],
+            [el("tr", null, headerCells.map(function (c) { return el("th", null, renderInlineNodes(c, base)); }))],
           );
           var bodyRows = [];
           i += 2;
           while (i < lines.length && lines[i].indexOf("|") !== -1 && lines[i].trim() !== "") {
             var rowCells = splitTableRow(lines[i]);
             bodyRows.push(
-              el("tr", null, rowCells.map(function (c) { return el("td", null, renderInlineNodes(c)); })),
+              el("tr", null, rowCells.map(function (c) { return el("td", null, renderInlineNodes(c, base)); })),
             );
             i++;
           }
@@ -337,7 +343,7 @@ export const WIDGET_EMBED_SCRIPT = `
       while (level < line.length && line.charAt(level) === "#" && level < 6) level++;
       if (level > 0 && line.charAt(level) === " ") {
         flushPara();
-        container.appendChild(el("h" + level, null, renderInlineNodes(line.slice(level + 1))));
+        container.appendChild(el("h" + level, null, renderInlineNodes(line.slice(level + 1), base)));
         i++;
         continue;
       }
@@ -374,7 +380,7 @@ export const WIDGET_EMBED_SCRIPT = `
           quoteLines.push(q);
           i++;
         }
-        container.appendChild(el("blockquote", null, renderInlineNodes(quoteLines.join(" "))));
+        container.appendChild(el("blockquote", null, renderInlineNodes(quoteLines.join(" "), base)));
         continue;
       }
 
@@ -405,7 +411,7 @@ export const WIDGET_EMBED_SCRIPT = `
         // dropped instead of shown as its own adjacent list.
         var listIdx = 0;
         while (listIdx < items.length) {
-          var built = buildListTree(items, listIdx, items[listIdx].indent);
+          var built = buildListTree(items, listIdx, items[listIdx].indent, base);
           container.appendChild(built.node);
           listIdx = built.next;
         }
@@ -433,34 +439,65 @@ export const WIDGET_EMBED_SCRIPT = `
     "  --pv-bg: #0c0c0d; --pv-fg: rgba(255,255,255,0.92); --pv-muted: rgba(255,255,255,0.5);",
     "  --pv-border: rgba(255,255,255,0.09); --pv-surface: rgba(255,255,255,0.05);",
     "  --pv-surface-hover: rgba(255,255,255,0.09); --pv-accent: #fff; --pv-accent-fg: #0c0c0d;",
-    "  --pv-link: #8ab4ff; --pv-code-bg: rgba(255,255,255,0.09); --pv-shadow: rgba(0,0,0,0.5); }",
+    "  --pv-link: #8ab4ff; --pv-code-bg: rgba(255,255,255,0.09); --pv-shadow: rgba(0,0,0,0.5);",
+    // Not theme-dependent, so declared once here rather than repeated in the light
+    // override below — opts.accent/radius/font/zIndex set these as inline styles on the
+    // host element itself (per-instance dynamic values, not baked into this shared
+    // stylesheet), which still cascade into the shadow tree's var() lookups.
+    "  --pv-radius: 16px; --pv-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;",
+    "  --pv-zindex: 2147483000; }",
     ":host(.pv-theme-light) {",
     "  --pv-bg: #fff; --pv-fg: rgba(0,0,0,0.88); --pv-muted: rgba(0,0,0,0.5);",
     "  --pv-border: rgba(0,0,0,0.08); --pv-surface: rgba(0,0,0,0.04);",
     "  --pv-surface-hover: rgba(0,0,0,0.07); --pv-accent: #111; --pv-accent-fg: #fff;",
     "  --pv-link: #2563eb; --pv-code-bg: rgba(0,0,0,0.06); --pv-shadow: rgba(0,0,0,0.28); }",
-    "* { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }",
-    // Always dark, independent of the panel's theme — it floats on an arbitrary host
-    // page whose background we don't control, so it needs to read clearly against
-    // either a light or a dark page. Only the opened panel follows opts.theme.
-    ".pv-launcher { position: fixed; bottom: 20px; right: 20px; width: 56px; height: 56px;",
-    "  border-radius: 50%; background: #111; color: #fff; border: none; cursor: pointer;",
-    "  box-shadow: 0 4px 16px rgba(0,0,0,0.35); font-size: 24px; z-index: 2147483000; }",
-    ".pv-panel { position: fixed; bottom: 88px; right: 20px; width: 360px; max-width: calc(100vw - 40px);",
-    "  height: 480px; max-height: calc(100vh - 120px); background: var(--pv-bg); color: var(--pv-fg);",
-    "  border-radius: 16px; box-shadow: 0 8px 32px var(--pv-shadow); display: none; flex-direction: column;",
-    "  overflow: hidden; z-index: 2147483000; border: 1px solid var(--pv-border); }",
+    "* { box-sizing: border-box; font-family: var(--pv-font); }",
+    // Always dark, independent of the panel's theme and NOT affected by opts.accent —
+    // it floats on an arbitrary host page whose background we don't control, so it
+    // needs to read clearly against either a light or a dark page. Only the opened
+    // panel follows opts.theme/accent. .pv-launcher-text is a pill shape (opts.trigger
+    // text instead of the bare emoji) rather than the default circle.
+    ".pv-launcher { position: fixed; width: 56px; height: 56px; border-radius: 50%;",
+    "  background: #111; color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.35);",
+    "  font-size: 24px; z-index: var(--pv-zindex); display: flex; align-items: center; justify-content: center; }",
+    ".pv-launcher img { width: 28px; height: 28px; border-radius: 50%; }",
+    ".pv-launcher.pv-launcher-text { width: auto; height: 48px; padding: 0 20px; border-radius: 24px;",
+    "  font-size: 14px; font-weight: 600; gap: 8px; }",
+    ".pv-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: var(--pv-zindex);",
+    "  display: none; }",
+    ".pv-backdrop.open { display: block; }",
+    ".pv-panel { position: fixed; width: 360px; max-width: calc(100vw - 40px); height: 480px;",
+    "  max-height: calc(100vh - 120px); background: var(--pv-bg); color: var(--pv-fg);",
+    "  border-radius: var(--pv-radius); box-shadow: 0 8px 32px var(--pv-shadow); display: none;",
+    "  flex-direction: column; overflow: hidden; z-index: var(--pv-zindex); border: 1px solid var(--pv-border); }",
     ".pv-panel.open { display: flex; }",
+    // "modal": centered overlay, independent of side/align (those position the launcher
+    // and the default "widget" variant's anchored panel only).
+    ".pv-panel.pv-variant-modal { top: 50%; left: 50%; transform: translate(-50%, -50%);",
+    "  bottom: auto; right: auto; width: 420px; height: 600px; max-height: calc(100vh - 80px); }",
+    // "panel": full-height, docked to the right edge, square corners on the screen edge.
+    ".pv-panel.pv-variant-panel { top: 0; right: 0; bottom: 0; left: auto; height: 100vh;",
+    "  max-height: 100vh; width: 380px; max-width: 100vw; border-radius: 0; border-width: 0 0 0 1px; }",
     ".pv-header { display: flex; align-items: center; justify-content: space-between; gap: 8px;",
     "  padding: 12px 14px; border-bottom: 1px solid var(--pv-border); font-size: 14px; font-weight: 600; }",
+    ".pv-header-title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }",
+    ".pv-support { font-size: 12px; font-weight: 400; color: var(--pv-muted); text-decoration: none;",
+    "  white-space: nowrap; }",
+    ".pv-support:hover { color: var(--pv-fg); }",
     ".pv-close { border: none; background: none; color: var(--pv-muted); cursor: pointer; font-size: 16px;",
-    "  line-height: 1; padding: 4px; border-radius: 6px; }",
+    "  line-height: 1; padding: 4px; border-radius: 6px; flex-shrink: 0; }",
     ".pv-close:hover { background: var(--pv-surface-hover); color: var(--pv-fg); }",
     ".pv-disclaimer { padding: 10px 14px; font-size: 11.5px; line-height: 1.4; color: var(--pv-muted);",
     "  text-align: center; border-bottom: 1px solid var(--pv-border); }",
     ".pv-messages { flex: 1; overflow-y: auto; padding: 12px 14px; font-size: 14px; line-height: 1.5; }",
     ".pv-messages::-webkit-scrollbar { width: 8px; }",
     ".pv-messages::-webkit-scrollbar-thumb { background: var(--pv-surface-hover); border-radius: 4px; }",
+    ".pv-suggestions-heading { display: flex; align-items: center; gap: 6px; font-size: 12px;",
+    "  color: var(--pv-muted); margin-bottom: 8px; }",
+    ".pv-suggestion { display: block; width: 100%; text-align: left; background: var(--pv-surface);",
+    "  border: 1px solid var(--pv-border); color: var(--pv-fg); border-radius: 10px; padding: 8px 12px;",
+    "  font-size: 13px; margin-bottom: 6px; cursor: pointer; }",
+    ".pv-suggestion:hover { background: var(--pv-surface-hover); }",
     ".pv-msg { margin-bottom: 12px; word-break: break-word; }",
     ".pv-msg.user { text-align: right; white-space: pre-wrap; }",
     ".pv-msg.user > span { display: inline-block; background: var(--pv-surface); border-radius: 12px; padding: 6px 12px; text-align: left; }",
@@ -498,8 +535,12 @@ export const WIDGET_EMBED_SCRIPT = `
 
   // Yields every parsed SSE event on the wire (not just text-delta) so the caller can tell
   // segment boundaries (text-start/text-end) and tool-call activity (start-step,
-  // tool-input-start) apart from the running answer text.
-  async function streamEvents(widgetId, messages, onEvent) {
+  // tool-input-start) apart from the running answer text. \`meta\`, if supplied, gets its
+  // \`docsBase\` field set from the X-Papervine-Docs-Base response header (the server's
+  // Access-Control-Expose-Headers allowlist is what makes it readable here at all — a
+  // custom header on a cross-origin response is invisible to JS otherwise) before any
+  // event is emitted, so a caller reading meta.docsBase inside onEvent always sees it.
+  async function streamEvents(widgetId, messages, onEvent, meta) {
     var res = await fetch(API_BASE + "/api/widget/" + widgetId + "/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -509,6 +550,7 @@ export const WIDGET_EMBED_SCRIPT = `
       var body = await res.json().catch(function () { return {}; });
       throw new Error(body.error || ("Request failed (" + res.status + ")"));
     }
+    if (meta) meta.docsBase = res.headers.get("X-Papervine-Docs-Base") || "";
     var reader = res.body.getReader();
     var decoder = new TextDecoder();
     var buffer = "";
@@ -546,25 +588,92 @@ export const WIDGET_EMBED_SCRIPT = `
     return "dark";
   }
 
+  // opts.side picks which screen edge an element anchors to; opts.align positions it
+  // along that edge (perpendicular axis). "inline-start"/"inline-end" are treated as
+  // left/right (no RTL-aware direction detection — a deliberate simplification). The
+  // inset param shifts the anchor further from the edge (used for the panel, so it
+  // clears the launcher's own footprint rather than overlapping it).
+  function edgePositionCss(side, align, inset) {
+    var s = side === "inline-start" ? "left" : side === "inline-end" ? "right" : side || "bottom";
+    var a = align || "end";
+    var horizontal = s === "top" || s === "bottom";
+    var css = "position: fixed; " + s + ": " + inset + "px; ";
+    if (a === "start") css += (horizontal ? "left" : "top") + ": 20px;";
+    else if (a === "center") {
+      var prop = horizontal ? "left" : "top";
+      var axis = horizontal ? "X" : "Y";
+      css += prop + ": 50%; transform: translate" + axis + "(-50%);";
+    } else css += (horizontal ? "right" : "bottom") + ": 20px;";
+    return css;
+  }
+
+  // Fire opts.event({type, ...extra}) / opts.error({code, retryable, status}) if the
+  // caller supplied one — wrapped in try/catch so a customer's own buggy hook can never
+  // break the widget itself.
+  function fireEvent(opts, type, extra) {
+    if (typeof opts.event !== "function") return;
+    try {
+      var payload = { type: type, actor: "system" };
+      for (var k in extra) payload[k] = extra[k];
+      opts.event(payload);
+    } catch (e) {
+      /* a customer's own hook throwing is their bug, not ours to propagate */
+    }
+  }
+  function fireError(opts, err) {
+    if (typeof opts.error !== "function") return;
+    try {
+      opts.error({
+        code: (err && err.code) || "request_failed",
+        retryable: !!(err && err.retryable),
+        status: err && err.status,
+      });
+    } catch (e) {
+      /* same as fireEvent */
+    }
+  }
+
+  // Returns a controller { open, close, ask, update, reset, destroy } — the runtime
+  // methods exposed on window.PapervineAssistant delegate to whichever instance is
+  // currently mounted (see the bottom of this file).
   function mount(opts) {
     var widgetId = opts.id;
     var messages = [];
-
     var theme = resolveTheme(opts.theme);
+
     var host = el("div");
     if (theme === "light") host.classList.add("pv-theme-light");
+    // opts.accent/radius/font/zIndex are per-instance dynamic values, not baked into
+    // the shared stylesheet — set as inline custom properties on the host element,
+    // which still cascade into the shadow tree's var() lookups across the boundary.
+    var hostCss = "";
+    if (opts.accent) hostCss += "--pv-accent:" + opts.accent + ";--pv-link:" + opts.accent + ";";
+    if (opts.radius) hostCss += "--pv-radius:" + opts.radius + ";";
+    if (opts.font) hostCss += "--pv-font:" + opts.font + ";";
+    if (opts.zIndex) hostCss += "--pv-zindex:" + opts.zIndex + ";";
+    if (hostCss) host.style.cssText = hostCss;
     document.body.appendChild(host);
     var root = host.attachShadow({ mode: "open" });
-    root.appendChild(el("style", null, [text(STYLE)]));
+    // opts.nonce: copied onto the one <style> tag this script creates, for a host page
+    // with a strict style-src CSP that requires nonces on injected stylesheets.
+    root.appendChild(el("style", opts.nonce ? { nonce: opts.nonce } : null, [text(STYLE)]));
+
+    var variant = opts.variant === "modal" || opts.variant === "panel" ? opts.variant : "widget";
 
     var messagesEl = el("div", { class: "pv-messages" });
-    var inputEl = el("input", {
-      class: "pv-input",
-      placeholder: opts.placeholder || "Ask a question…",
-    });
+    var inputEl = el("input", { class: "pv-input", placeholder: opts.placeholder || "Ask a question…" });
     var sendEl = el("button", { class: "pv-send", "aria-label": "Send" }, [text("↑")]);
     var closeEl = el("button", { class: "pv-close", "aria-label": "Close" }, [text("✕")]);
-    var panelChildren = [el("div", { class: "pv-header" }, [text(opts.title || "Ask the docs assistant"), closeEl])];
+    var titleEl = el("span", { class: "pv-header-title" }, [text(opts.title || "Ask the docs assistant")]);
+    var headerChildren = [titleEl];
+    if (opts.supportEmail) {
+      headerChildren.push(
+        el("a", { class: "pv-support", href: "mailto:" + opts.supportEmail }, [text("Contact support")]),
+      );
+    }
+    headerChildren.push(closeEl);
+
+    var panelChildren = [el("div", { class: "pv-header" }, headerChildren)];
     if (opts.disclaimer !== false) {
       panelChildren.push(
         el("div", { class: "pv-disclaimer" }, [
@@ -572,29 +681,109 @@ export const WIDGET_EMBED_SCRIPT = `
         ]),
       );
     }
+
+    // Up to 3 empty-state prompts, shown until the first message is sent (send()
+    // removes suggestionsEl below) — reuses ask() so clicking one behaves exactly like
+    // a customer calling PapervineAssistant.ask(question) themselves.
+    var suggestionsEl = null;
+    if (opts.starterQuestions && opts.starterQuestions.length) {
+      var pills = opts.starterQuestions.slice(0, 3).map(function (q) {
+        var pill = el("button", { class: "pv-suggestion", type: "button" }, [text(q)]);
+        pill.addEventListener("click", function () {
+          askFn(q);
+        });
+        return pill;
+      });
+      suggestionsEl = el(
+        "div",
+        { class: "pv-suggestions" },
+        [el("div", { class: "pv-suggestions-heading" }, [text(opts.suggestions || "Suggestions")])].concat(
+          pills,
+        ),
+      );
+      messagesEl.appendChild(suggestionsEl);
+    }
+
     panelChildren.push(messagesEl, el("div", { class: "pv-inputrow" }, [inputEl, sendEl]));
-    var panel = el("div", { class: "pv-panel" }, panelChildren);
-    var launcher = el("button", { class: "pv-launcher", "aria-label": "Ask the docs assistant" }, [
-      text("💬"),
-    ]);
+
+    var panelClass = "pv-panel";
+    if (variant === "modal") panelClass += " pv-variant-modal";
+    else if (variant === "panel") panelClass += " pv-variant-panel";
+    var panel = el("div", { class: panelClass }, panelChildren);
+    // side/align only apply to the default "widget" variant — modal/panel use their own
+    // fixed positioning (centered / docked full-height) regardless of side/align.
+    if (variant === "widget") {
+      panel.style.cssText = edgePositionCss(opts.side, opts.align, 88);
+    } else if (variant === "panel" && (opts.side === "left" || opts.side === "inline-start")) {
+      // The base .pv-variant-panel rule docks right by default; only the left/right
+      // axis of opts.side is honored here — a full-height panel docked to the TOP or
+      // BOTTOM edge isn't a pattern worth building out for.
+      panel.style.cssText = "left: 0; right: auto; border-width: 0 1px 0 0;";
+    }
+
+    var backdrop = variant === "modal" ? el("div", { class: "pv-backdrop" }) : null;
+
+    var launcherChildren = [];
+    if (opts.logo) {
+      var logoSrc =
+        typeof opts.logo === "string" ? opts.logo : opts.logo[theme] || opts.logo.dark || opts.logo.light;
+      launcherChildren.push(el("img", { src: safeHref(logoSrc), alt: "" }));
+    } else {
+      launcherChildren.push(text("💬"));
+    }
+    // opts.trigger, if given, makes the launcher a pill with a text label instead of
+    // the bare icon circle.
+    var launcherClass = "pv-launcher";
+    if (opts.trigger) {
+      launcherClass += " pv-launcher-text";
+      launcherChildren.push(text(opts.trigger));
+    }
+    var launcher = el(
+      "button",
+      { class: launcherClass, "aria-label": opts.trigger || "Ask the docs assistant" },
+      launcherChildren,
+    );
+    launcher.style.cssText = edgePositionCss(opts.side, opts.align, 20);
+
+    if (backdrop) root.appendChild(backdrop);
     root.appendChild(panel);
     root.appendChild(launcher);
 
-    function openPanel() {
+    function openPanel(options) {
+      options = options || {};
       panel.classList.add("open");
-      inputEl.focus();
+      if (backdrop) backdrop.classList.add("open");
+      if (options.focus !== false) inputEl.focus();
+      fireEvent(opts, "open", { source: options.source });
     }
     function closePanel() {
       panel.classList.remove("open");
+      if (backdrop) backdrop.classList.remove("open");
+      fireEvent(opts, "close", {});
     }
 
     launcher.addEventListener("click", function () {
       if (panel.classList.contains("open")) closePanel();
-      else openPanel();
+      else openPanel({ source: "launcher" });
     });
     closeEl.addEventListener("click", closePanel);
+    if (backdrop) backdrop.addEventListener("click", closePanel);
 
-    if (opts.defaultOpen) openPanel();
+    // opts.dismissOnInteractOutside: close on a click outside the widget's own host.
+    // Attached on the real document, not this shadow root, since the host page is what
+    // the visitor actually clicks around in. Events crossing the shadow boundary are
+    // retargeted for outside listeners, so e.target here is just the host element
+    // itself when the click originated anywhere inside our own UI — host.contains(e.target)
+    // still correctly recognizes that case (a node contains itself).
+    function outsideClickHandler(e) {
+      if (!opts.dismissOnInteractOutside) return;
+      if (!panel.classList.contains("open")) return;
+      if (host.contains(e.target)) return;
+      closePanel();
+    }
+    document.addEventListener("click", outsideClickHandler, true);
+
+    if (opts.defaultOpen) openPanel({ source: "init", focus: false });
 
     function addBubble(cls) {
       var bubble = el("div", { class: "pv-msg " + cls });
@@ -603,15 +792,20 @@ export const WIDGET_EMBED_SCRIPT = `
       return bubble;
     }
 
-    async function send() {
-      var value = inputEl.value.trim();
+    async function send(value) {
+      value = (value != null ? value : inputEl.value).trim();
       if (!value) return;
       inputEl.value = "";
       sendEl.disabled = true;
+      if (suggestionsEl) {
+        suggestionsEl.remove();
+        suggestionsEl = null;
+      }
 
       messages.push({ role: "user", parts: [{ type: "text", text: value }] });
       addBubble("user").appendChild(el("span", null, [text(value)]));
       var answerBubble = addBubble("assistant");
+      fireEvent(opts, "ask", {});
 
       // The model streams one text segment per agentic step, narrating between tool
       // calls as well as giving the real final answer ("let me check the intro page…"
@@ -620,6 +814,7 @@ export const WIDGET_EMBED_SCRIPT = `
       // showing just the final synthesized answer, not a run-on of every step's prose.
       var segment = "";
       var segmentHasText = false;
+      var meta = {};
 
       try {
         await streamEvents(widgetId, messages, function (event) {
@@ -633,10 +828,10 @@ export const WIDGET_EMBED_SCRIPT = `
           } else if (event.type === "text-delta" && event.delta) {
             segment += event.delta;
             segmentHasText = true;
-            renderMarkdownInto(answerBubble, segment);
+            renderMarkdownInto(answerBubble, segment, meta.docsBase);
             messagesEl.scrollTop = messagesEl.scrollHeight;
           }
-        });
+        }, meta);
         messages.push({ role: "assistant", parts: [{ type: "text", text: segment }] });
         upgradeMermaidDiagrams(answerBubble, theme);
       } catch (err) {
@@ -644,40 +839,127 @@ export const WIDGET_EMBED_SCRIPT = `
         answerBubble.classList.add("error");
         while (answerBubble.firstChild) answerBubble.removeChild(answerBubble.firstChild);
         answerBubble.appendChild(text(err && err.message ? err.message : "Something went wrong."));
+        fireError(opts, { code: "request_failed", retryable: true, message: err && err.message });
       } finally {
         sendEl.disabled = false;
       }
     }
 
-    sendEl.addEventListener("click", send);
+    function askFn(question, options) {
+      options = options || {};
+      if (options.open !== false) openPanel({ source: "ask", focus: options.focus });
+      send(question);
+    }
+
+    sendEl.addEventListener("click", function () {
+      send();
+    });
     inputEl.addEventListener("keydown", function (e) {
       if (e.key === "Enter") send();
     });
+
+    fireEvent(opts, "init", {});
+
+    return {
+      open: openPanel,
+      close: closePanel,
+      ask: askFn,
+      reset: function () {
+        messages = [];
+        while (messagesEl.firstChild) messagesEl.removeChild(messagesEl.firstChild);
+        suggestionsEl = null;
+        fireEvent(opts, "reset", {});
+      },
+      // Updates settings live without clearing the conversation — covers the options
+      // that can sensibly change on an already-mounted instance (theme, text labels,
+      // the accent/radius/font/zIndex CSS vars). Structural options (variant, side/
+      // align, logo, trigger) are simplest to change via destroy() + a fresh init().
+      update: function (config) {
+        for (var k in config) opts[k] = config[k];
+        if (config.theme !== undefined) {
+          theme = resolveTheme(opts.theme);
+          host.classList.toggle("pv-theme-light", theme === "light");
+        }
+        if (config.title !== undefined) titleEl.textContent = opts.title || "Ask the docs assistant";
+        if (config.placeholder !== undefined) {
+          inputEl.setAttribute("placeholder", opts.placeholder || "Ask a question…");
+        }
+        if (config.accent !== undefined) {
+          host.style.setProperty("--pv-accent", opts.accent);
+          host.style.setProperty("--pv-link", opts.accent);
+        }
+        if (config.radius !== undefined) host.style.setProperty("--pv-radius", opts.radius);
+        if (config.font !== undefined) host.style.setProperty("--pv-font", opts.font);
+        if (config.zIndex !== undefined) host.style.setProperty("--pv-zindex", opts.zIndex);
+        fireEvent(opts, "update", {});
+      },
+      destroy: function () {
+        document.removeEventListener("click", outsideClickHandler, true);
+        host.remove();
+        fireEvent(opts, "destroy", {});
+      },
+    };
   }
+
+  // The single mounted widget's controller (mount()'s return value) — null until init()
+  // resolves. The bare window.PapervineAssistant.open/close/ask/... convenience methods
+  // below delegate to it, matching hosted docs platforms' own flat-namespace API rather
+  // than requiring every caller to hold onto init()'s resolved value.
+  var instance = null;
 
   // A page that combines the single-tag data-widget-id install with a second manual
   // init() call (a plausible copy-paste mistake — the docs show both as alternatives,
   // not as something to combine) would otherwise mount two separate bubbles. init() is
-  // idempotent instead: the first call wins, every later call is a no-op.
-  var mounted = false;
-
+  // idempotent instead: the first call wins, every later call resolves to the SAME
+  // instance rather than mounting a second one. destroy() clears \`instance\`, so a
+  // subsequent init() call is free to mount again.
   window.PapervineAssistant = {
     init: function (opts) {
       if (!opts || !opts.id) throw new Error("PapervineAssistant.init requires { id }");
-      if (mounted) return;
-      mounted = true;
-      if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", function () { mount(opts); });
-      } else {
-        mount(opts);
+      if (instance) return Promise.resolve(instance);
+      return new Promise(function (resolve) {
+        function doMount() {
+          instance = mount(opts);
+          resolve(instance);
+        }
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", doMount);
+        } else {
+          doMount();
+        }
+      });
+    },
+    // Runtime methods (SPEC §8.7) — operate on whatever instance is currently mounted;
+    // a no-op before init() resolves or after destroy(), rather than throwing, since a
+    // customer's own code calling these opportunistically (e.g. from a page-wide
+    // keyboard shortcut) shouldn't need to guard every call itself.
+    open: function (options) {
+      if (instance) instance.open(options);
+    },
+    close: function () {
+      if (instance) instance.close();
+    },
+    ask: function (question, options) {
+      if (instance) instance.ask(question, options);
+    },
+    update: function (config) {
+      if (instance) instance.update(config);
+    },
+    reset: function () {
+      if (instance) instance.reset();
+    },
+    destroy: function () {
+      if (instance) {
+        instance.destroy();
+        instance = null;
       }
     },
     // A small, safe (DOM-based, no innerHTML) markdown-to-HTML utility, exposed for
     // deterministic testing and for anyone building a custom UI against the widget's
     // rendering rules. Renders into a detached element and returns its HTML.
-    renderMarkdownHTML: function (markdown) {
+    renderMarkdownHTML: function (markdown, base) {
       var container = document.createElement("div");
-      renderMarkdownInto(container, markdown);
+      renderMarkdownInto(container, markdown, base);
       return container.innerHTML;
     },
     // Triggers the on-demand mermaid upgrade for any .pv-mermaid fallback already

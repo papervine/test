@@ -1,8 +1,12 @@
+import { supportsSubdomainTenants } from "@/lib/tenant-host";
+
 /**
- * Pure helpers for the embeddable assistant widget's origin allowlist (SPEC §8.7). Kept
- * DB-free so they're unit-testable: `normalizeOrigin` validates/canonicalizes what an owner
- * types into the settings form, and `isOriginAllowed` is the exact check the widget chat
- * route runs against every cross-origin request's `Origin` header.
+ * Pure helpers for the embeddable assistant widget (SPEC §8.7). Kept DB-free so they're
+ * unit-testable: `normalizeOrigin` validates/canonicalizes what an owner types into the
+ * settings form, `isOriginAllowed` is the exact check the widget chat route runs against
+ * every cross-origin request's `Origin` header, and `resolveDocsBaseUrl` computes the
+ * tenant's real public docs URL so the widget can rewrite relative citation links against
+ * it instead of the customer page's own origin.
  */
 
 /**
@@ -29,4 +33,24 @@ export function normalizeOrigin(input: string): string | null {
 export function isOriginAllowed(origin: string | null, allowedOrigins: string[]): boolean {
   if (!origin) return false;
   return allowedOrigins.includes(origin);
+}
+
+/**
+ * The tenant's real public docs URL — same {slug}.{apex} / custom-domain / apex-path-mode
+ * decision the dashboard's "Open site" link uses (src/app/app/[org]/[site]/page.tsx). The
+ * assistant's system prompt cites pages as relative Markdown links (e.g.
+ * "[Quickstart](/quickstart)") — correct on the docs site itself, but the widget renders
+ * inside an arbitrary CUSTOMER page, where a bare "/quickstart" resolves against THEIR
+ * host, not ours. `host` is the request's own Host header value (no scheme).
+ */
+export function resolveDocsBaseUrl(
+  host: string,
+  site: { customDomain: string | null; slug: string },
+): string {
+  if (site.customDomain) return `https://${site.customDomain}`;
+  const proto = host.includes("localhost") ? "http" : "https";
+  const apexBase = host.replace(/^(app|www)\./, "");
+  return supportsSubdomainTenants(apexBase)
+    ? `${proto}://${site.slug}.${apexBase}`
+    : `${proto}://${apexBase}/sites/${site.slug}`;
 }

@@ -4,7 +4,7 @@ import { runAssistantConversation } from "@/lib/assistant-run";
 import { requestContentSource, requestReaderAccess, requestSearchIndexKey } from "@/lib/request-source";
 import { aiRefusalResponse, authorizeAi } from "@/lib/billing/store";
 import { getSiteByWidgetId } from "@/lib/tenant";
-import { isOriginAllowed } from "@/lib/widget";
+import { isOriginAllowed, resolveDocsBaseUrl } from "@/lib/widget";
 
 /**
  * The embeddable assistant widget's chat endpoint (SPEC §8.7) — the cross-origin
@@ -29,6 +29,10 @@ function corsHeaders(origin: string): HeadersInit {
     // message of the day pays for a preflight. Harmless on non-preflight responses too
     // (this helper backs both) — browsers simply ignore it there.
     "Access-Control-Max-Age": "86400",
+    // A custom response header is invisible to client JS on a cross-origin fetch unless
+    // explicitly exposed — without this, res.headers.get("X-Papervine-Docs-Base") reads
+    // null in the browser even though the header is present on the wire.
+    "Access-Control-Expose-Headers": "X-Papervine-Docs-Base",
     Vary: "Origin",
   };
 }
@@ -110,5 +114,10 @@ export async function POST(
     readerAccess,
     searchIndexKey,
   });
-  return withCors(res, origin!);
+  const withCorsRes = withCors(res, origin!);
+  withCorsRes.headers.set(
+    "X-Papervine-Docs-Base",
+    resolveDocsBaseUrl(req.headers.get("host") ?? "", site),
+  );
+  return withCorsRes;
 }

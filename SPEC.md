@@ -1548,21 +1548,70 @@ precedent already in the codebase rather than inventing a new access model:
 > surface end-to-end (theme class applied, title/placeholder/disclaimer respected, close
 > button closes the panel) plus real-browser verification of the dark diagram recolor.
 >
-> **Not yet built — from hosted docs platforms' widget, evaluated and deferred:**
-> `starterQuestions` (worth building — reuses the SAME `docs.json` config the in-docs
-> assistant already has for this, SPEC §8.6, so it's mostly wiring, not new config
-> surface); runtime methods (`open`/`close`/`ask`/`reset`/`update`/`destroy`) and event
-> hooks (`event`/`error` callbacks) for a "headless" custom-UI integration; `accent`/
-> `logo`/`side`/`align`/`zIndex` cosmetic options; a `nonce` option for sites with a
-> strict CSP (relevant now that mermaid is a real runtime CDN dependency — worth
-> documenting the exact origins a customer's CSP needs to allow, even before building
-> nonce support itself). Explicitly NOT planned: an `identity` (signed end-user token)
-> option — real auth/identity verification infrastructure, not a small addition, and not
-> clearly needed for a docs-QA assistant. Also still open: a widget-specific rate limit
-> beyond the shared AI billing gate (the org-level gate caps total spend, but nothing
-> stops one allowed origin from making many cheap/free-tier requests within a period),
-> and analytics that distinguish widget-originated questions from in-docs ones (both
-> currently log as the same `source: "human"` event).
+> **Full config/API parity with hosted docs platforms' widget (2026-08-08).** Built out
+> the rest of the option surface researched from hosted docs platforms' own widget docs,
+> superseding the "not yet built" list above:
+> - **Layout/placement:** `variant` (`"widget"` default floating bubble, `"modal"` a
+>   centered overlay with a backdrop, `"panel"` a full-height docked panel independent of
+>   `side`/`align`); `side` (`top`/`bottom`/`left`/`right`, plus `inline-start`/
+>   `inline-end` treated as left/right — no RTL-aware direction detection, a deliberate
+>   simplification) and `align` (`start`/`center`/`end`) position both the launcher and
+>   the panel via one `edgePositionCss()` helper; `zIndex` overrides the default (a very
+>   high value, so the widget sits above ordinary host-page content by default).
+> - **Branding:** `accent` (recolors both the accent surfaces and links), `radius`,
+>   `font`, `logo` (a URL, or `{ light, dark }` to swap per theme) replacing the emoji
+>   launcher, `trigger` (a text label that turns the launcher into a pill instead of a
+>   bare circle).
+> - **Content:** `starterQuestions` (up to 3 pills shown until the first message is
+>   sent — wired to the same shape as the in-docs assistant's config, SPEC §8.6) and
+>   `suggestions` (the heading text above them, default "Suggestions"); `supportEmail`
+>   renders a `mailto:` link in the header for a human-fallback path.
+> - **Behavior:** `dismissOnInteractOutside` closes the panel on an outside click;
+>   `nonce` is copied onto the widget's one `<style>` tag for sites with a strict
+>   style-src CSP.
+> - **Programmatic API:** `window.PapervineAssistant.open/close/ask/update/reset/destroy`
+>   — a no-op before `init()` resolves or after `destroy()`, rather than throwing, so a
+>   customer's own code can call these opportunistically (e.g. from a page-wide keyboard
+>   shortcut) without guarding every call itself. `update(config)` changes theme/text/
+>   accent/radius/font/zIndex live without clearing the conversation; structural options
+>   (variant, side/align, logo, trigger) are simplest to change via `destroy()` + a fresh
+>   `init()` instead. Event hooks — `opts.event({type, actor, ...})` for
+>   `init`/`ask`/`update`/`reset`/`destroy` and `opts.error({code, retryable, status})`
+>   for a failed request — let a "headless" integration drive its own UI off the same
+>   widget internals; both are wrapped in `try/catch` so a customer's own buggy hook can
+>   never break the widget itself.
+> - Explicitly NOT built: an `identity` (signed end-user token) option — real auth/
+>   identity verification infrastructure, not a small addition, and it would contradict
+>   the anonymous-only content-access model this widget was deliberately built around
+>   (above); and an `endpoint` override — doesn't map to this codebase's single-backend
+>   architecture the way it might for a platform with multiple regional endpoints.
+> - Verified extensively live via a real browser: modal/panel variants, accent/radius/
+>   font, side/align positioning, `dismissOnInteractOutside`, logo, trigger text,
+>   supportEmail, starterQuestions, nonce, all event-hook types (including the error
+>   hook), and all 6 runtime methods (including `destroy()` + a clean re-`init()`).
+>
+> Still open: a widget-specific rate limit beyond the shared AI billing gate (the
+> org-level gate caps total spend, but nothing stops one allowed origin from making many
+> cheap/free-tier requests within a period), and analytics that distinguish
+> widget-originated questions from in-docs ones (both currently log as the same
+> `source: "human"` event).
+>
+> **Citation links resolved against the wrong origin (2026-08-08).** The assistant's
+> system prompt writes citation links as relative paths (e.g. `[Quickstart](/quickstart)`)
+> — correct for the in-docs assistant, which renders same-origin, but wrong for the
+> widget: a bare `/quickstart` resolved against whatever CUSTOMER page the widget was
+> embedded on, not the tenant's actual docs. Fixed by having `/api/widget/[widgetId]/chat`
+> compute the tenant's real public docs URL (`resolveDocsBaseUrl`, `src/lib/widget.ts` —
+> same custom-domain / subdomain / apex-path-mode decision as the dashboard's "Open site"
+> link) and send it as an `X-Papervine-Docs-Base` response header; the client reads it
+> (via `Access-Control-Expose-Headers`, since a custom header on a cross-origin response
+> is otherwise invisible to JS) and threads it through the markdown renderer so every
+> `/`-rooted link and image `src` is made absolute against it — an already-absolute or
+> hash-only URL is left untouched. Pinned by a `tests/unit/widget-origin.test.ts` suite
+> for `resolveDocsBaseUrl` and two deterministic `tests/e2e/widget-embed.spec.ts` cases
+> (with and without a known base) via `renderMarkdownHTML`'s new optional second
+> argument. Verified live: a widget embedded on a separate local origin now renders a
+> citation link pointing at the tenant's own docs host, not the embedding page's origin.
 
 ---
 

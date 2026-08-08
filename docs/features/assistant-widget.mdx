@@ -10,12 +10,12 @@ from **Settings → Widget**.
 
 <Info>
   Built: the Settings → Widget page (Availability, Authorized domains, Installation), the
-  `/api/widget/[widgetId]/chat` endpoint, the `/api/widget/embed.js` loader script (real
-  markdown rendering — headings, lists, tables, links, images — and on-demand Mermaid
-  diagrams, dark/light theming, and a first slice of `init()` options). Not yet built: a
-  widget-specific rate limit beyond the shared AI billing gate, inline source citations
-  in the widget UI, starter questions, and a programmatic API
-  (`open`/`close`/`ask`/`reset`).
+  `/api/widget/[widgetId]/chat` endpoint, and the `/api/widget/embed.js` loader script —
+  real markdown rendering (headings, lists, tables, links, images), on-demand Mermaid
+  diagrams, dark/light/system theming, the full `init()` option surface below, a
+  programmatic API (`open`/`close`/`ask`/`update`/`reset`/`destroy`), and event hooks.
+  Not yet built: a widget-specific rate limit beyond the shared AI billing gate, and
+  analytics that distinguish widget-originated questions from in-docs ones.
 </Info>
 
 ## Why this needs its own security model
@@ -90,6 +90,20 @@ the copyable snippet, so most owners never need to touch it directly.
 | `placeholder` | string | `"Ask a question…"` | The input field's placeholder. |
 | `disclaimer` | string \| `false` | `"Responses are generated using AI and may contain mistakes."` | The line shown under the header. `false` omits it entirely. |
 | `defaultOpen` | boolean | `false` | Opens the panel immediately on mount instead of waiting for a launcher click. |
+| `variant` | `"widget"` \| `"modal"` \| `"panel"` | `"widget"` | `"widget"` is the default floating bubble + panel; `"modal"` is a centered overlay with a backdrop; `"panel"` docks a full-height panel to a screen edge. |
+| `side` | `"top"` \| `"bottom"` \| `"left"` \| `"right"` \| `"inline-start"` \| `"inline-end"` | `"bottom"` | Which screen edge the launcher (and, in `"panel"` mode, the panel itself) anchors to. |
+| `align` | `"start"` \| `"center"` \| `"end"` | `"end"` | Position along that edge. |
+| `zIndex` | number | a very high value | Override if the widget needs to sit above (or below) other high-`z-index` elements on your page. |
+| `accent` | CSS color | — | Recolors the send button, links, and other accent surfaces. |
+| `radius` | CSS length | `"16px"` | The panel's corner radius. |
+| `font` | CSS `font-family` value | system font stack | The panel's font. |
+| `logo` | string \| `{ light, dark }` | — | Replaces the emoji launcher with an image. A `{ light, dark }` object swaps per resolved theme. |
+| `trigger` | string | — | Turns the launcher into a text pill with this label instead of a bare circle. |
+| `starterQuestions` | string[] | — | Up to 3 pills shown above the input until the first message is sent — the same config shape as the [in-docs assistant's](/features/ai-assistant) starter questions. |
+| `suggestions` | string | `"Suggestions"` | The heading shown above `starterQuestions`. |
+| `supportEmail` | string | — | Adds a "Contact support" `mailto:` link in the header, for a human fallback. |
+| `dismissOnInteractOutside` | boolean | `false` | Closes the panel when the visitor clicks anywhere outside the widget. |
+| `nonce` | string | — | Copied onto the widget's `<style>` tag, for sites with a strict `style-src` CSP. |
 
 ```html
 <script type="module">
@@ -97,14 +111,53 @@ the copyable snippet, so most owners never need to touch it directly.
     id: "widget_...",
     theme: "light",
     title: "Ask us anything",
+    accent: "#7c3aed",
+    starterQuestions: ["How do I get started?", "Where are the API docs?"],
   });
 </script>
 ```
 
 The floating launcher bubble itself always stays a fixed dark style regardless of
-`theme` — it sits on your page's own background, which the widget doesn't control, so it
-needs to read clearly against either a light or dark page. Only the opened panel (and any
-Mermaid diagrams inside it) follow your `theme` choice.
+`theme` (unless replaced by `logo`/`trigger`) — it sits on your page's own background,
+which the widget doesn't control, so it needs to read clearly against either a light or
+dark page. Only the opened panel (and any Mermaid diagrams inside it) follow your `theme`
+choice.
+
+### Programmatic API
+
+Beyond `init()`, `window.PapervineAssistant` exposes runtime methods that operate on
+whatever instance is currently mounted — each is a no-op before `init()` resolves or
+after `destroy()`, rather than throwing, so your own code can call these opportunistically
+(e.g. from a page-wide keyboard shortcut) without guarding every call:
+
+```js
+window.PapervineAssistant.open();               // open the panel
+window.PapervineAssistant.close();               // close the panel
+window.PapervineAssistant.ask("How do I…?");     // open + send a question
+window.PapervineAssistant.update({ theme: "light" }); // apply new options live
+window.PapervineAssistant.reset();               // clear the conversation
+window.PapervineAssistant.destroy();             // unmount entirely
+```
+
+`update()` covers what can sensibly change on an already-mounted instance — `theme`,
+`title`, `placeholder`, `disclaimer`, `accent`, `radius`, `font`, `zIndex` — without
+clearing the conversation. Structural options (`variant`, `side`/`align`, `logo`,
+`trigger`) are simplest to change with `destroy()` followed by a fresh `init()`.
+
+### Event hooks
+
+`init()` also accepts `event` and `error` callbacks for building a "headless" integration
+that drives its own UI off the widget's activity:
+
+```js
+await window.PapervineAssistant.init({
+  id: "widget_...",
+  event: (e) => console.log(e.type), // "init" | "ask" | "update" | "reset" | "destroy"
+  error: (e) => console.log(e.code, e.retryable, e.status),
+});
+```
+
+Both are wrapped so a mistake in your own callback can never break the widget itself.
 
 ## What the widget actually is
 

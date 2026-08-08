@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { normalizeOrigin, isOriginAllowed } from "@/lib/widget";
+import { normalizeOrigin, isOriginAllowed, resolveDocsBaseUrl } from "@/lib/widget";
 
 describe("normalizeOrigin", () => {
   it("accepts a plain https origin unchanged", () => {
@@ -72,5 +72,40 @@ describe("isOriginAllowed", () => {
 
   it("rejects everything when the list is empty", () => {
     expect(isOriginAllowed("https://docs.example.com", [])).toBe(false);
+  });
+});
+
+describe("resolveDocsBaseUrl", () => {
+  // Regression: the widget's citation links were built as if the assistant's own
+  // relative "/page" markdown links resolved on the docs site — but the widget renders
+  // on an arbitrary customer page, so the client needs this base to rewrite them.
+  it("prefers a custom domain over the host-derived URL", () => {
+    expect(
+      resolveDocsBaseUrl("app.papervine.io", { customDomain: "docs.acme.com", slug: "acme" }),
+    ).toBe("https://docs.acme.com");
+  });
+
+  it("uses subdomain mode when the apex supports wildcard tenants", () => {
+    expect(resolveDocsBaseUrl("app.papervine.io", { customDomain: null, slug: "acme" })).toBe(
+      "https://acme.papervine.io",
+    );
+  });
+
+  it("falls back to apex-path mode on a host without wildcard-subdomain support", () => {
+    expect(resolveDocsBaseUrl("app.example.vercel.app", { customDomain: null, slug: "acme" })).toBe(
+      "https://example.vercel.app/sites/acme",
+    );
+  });
+
+  it("strips the app./www. prefix before deriving the apex", () => {
+    expect(resolveDocsBaseUrl("www.papervine.io", { customDomain: null, slug: "acme" })).toBe(
+      "https://acme.papervine.io",
+    );
+  });
+
+  it("uses http for a localhost host", () => {
+    expect(resolveDocsBaseUrl("app.localhost:3000", { customDomain: null, slug: "acme" })).toBe(
+      "http://acme.localhost:3000",
+    );
   });
 });

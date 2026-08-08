@@ -230,6 +230,42 @@ test("renders markdown (headings, lists, links, bold/italic/code) as real DOM, n
   expect(html).not.toMatch(/^- /m);
 });
 
+test("rewrites relative citation links against the tenant's docs base, not the host page's own origin", async ({
+  page,
+}) => {
+  // Regression: the assistant writes citation links as if they were on the docs site
+  // itself (e.g. "[Quickstart](/quickstart)"), but the widget renders on an arbitrary
+  // CUSTOMER page — a bare "/quickstart" href resolved against THEIR origin, not the
+  // tenant's real docs. The base comes from the X-Papervine-Docs-Base response header in
+  // real use (see the chat route); renderMarkdownHTML's second arg exercises the same
+  // rewrite logic deterministically, with no live AI call needed.
+  await page.goto(hostOrigin);
+  const html = await page.evaluate(() => {
+    const md = [
+      "[Quickstart](/quickstart) and [an anchor](/guide#setup) and ![diagram](/img.png).",
+      "",
+      "An [absolute link](https://other.example/x) and a [hash-only link](#top) stay put.",
+    ].join("\n");
+    // @ts-expect-error injected by the widget loader script
+    return window.PapervineAssistant.renderMarkdownHTML(md, "https://tenant.example");
+  });
+
+  expect(html).toContain('<a href="https://tenant.example/quickstart"');
+  expect(html).toContain('<a href="https://tenant.example/guide#setup"');
+  expect(html).toContain('<img src="https://tenant.example/img.png"');
+  expect(html).toContain('<a href="https://other.example/x"');
+  expect(html).toContain('<a href="#top"');
+});
+
+test("leaves relative citation links alone when no docs base is known", async ({ page }) => {
+  await page.goto(hostOrigin);
+  const html = await page.evaluate(() => {
+    // @ts-expect-error injected by the widget loader script
+    return window.PapervineAssistant.renderMarkdownHTML("[Quickstart](/quickstart)");
+  });
+  expect(html).toContain('<a href="/quickstart"');
+});
+
 test("renders a GFM table as a real <table>, not squashed pipe-delimited text", async ({
   page,
 }) => {
