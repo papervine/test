@@ -25,6 +25,14 @@ Do not commit `_private/` or copy its contents into public docs, `SPEC.md`, test
 issues, or commits. If a private decision affects public product behavior, write a
 sanitized public summary here instead.
 
+**Never name a real customer/client — anywhere.** `SPEC.md`, `docs/`, code comments,
+commit messages, and PR descriptions are all effectively public (this is an open-source
+repo). A bug report, a debugging war story, a perf measurement, an example — all of it
+gets written up generically ("a customer's monorepo", "a real customer API", "an embedded
+customer site") instead of by name or domain, no matter how illustrative the specific case
+was. This applies even when the name is also this project's own operator/company — the
+rule is about customer-identifying info, not about any one name specifically.
+
 ## The engineering loop (how every task runs)
 
 Every feature, bugfix, or behavior change runs the same loop — full doctrine in

@@ -466,8 +466,8 @@ once C lands. We build C next. C ships in two steps so it's incremental, not a b
 1. **Per-file** (tree-walk + one blob/raw request per file) — N round-trips put a big private
    repo at the function time limit; syncs *intermittently* timed out.
 2. **One tarball** (`GET …/tarball/{ref}`) — fixed the round-trip count but downloads and
-   gunzips the **entire repo** in memory to harvest a `docs/` subdir. A real private monorepo
-   (`Pixwel/platform`, docs in `docs/`) took **744 s** to sync 80 MB of docs — fine in dev (no
+   gunzips the **entire repo** in memory to harvest a `docs/` subdir. A real private customer
+   monorepo (docs in `docs/`) took **744 s** to sync 80 MB of docs — fine in dev (no
    `maxDuration`), but in prod that blows the 300 s connect limit and leaves a stuck `building`
    deployment with no error (the timeout kill is uncatchable). Measured, not theoretical.
 3. **Scoped tree + incremental diff + parallel content (now).** Enumerate **only the docs
@@ -496,7 +496,7 @@ once C lands. We build C next. C ships in two steps so it's incremental, not a b
    repeated local testing without a `GITHUB_TOKEN`.
 
 **Sync reliability fixes (2026-06-26) — three bugs surfaced by a 231-file docs-PR merge that
-rendered stale on a tenant (`Pixwel/platform`, monorepo, docs under `docs/`).**
+rendered stale on a customer tenant (a private monorepo, docs under `docs/`).**
 1. **Manifest could drift ahead of storage with no self-heal.** The diff trusted
    `.manifest.json` as the record of what's in object storage and only refetched when a blob's
    SHA differed — never verifying the object exists. An interrupted/lost upload that still wrote
@@ -869,11 +869,11 @@ Ship a styled component set resolved at compile time. Parity targets with hosted
 > **`Accept` header (2026-06-29).** "Try it" (and the static cURL/JS/Python samples) now send an
 > `Accept` header derived from what the operation **produces** — the union of media types under
 > its responses' `content`, deduped, preferring `application/json` (new `op.produces` in the
-> parser). Many real APIs (e.g. Pixwel's) return 406 / HTML without it, yet specs almost never
+> parser). Many real APIs return 406 / HTML without it, yet specs almost never
 > declare `Accept` as an explicit parameter, so the playground sent no `Accept` and the request
 > failed. It's injected as a normal, pre-filled + editable header field (so it shows in the
 > Headers section and the samples), and skipped when the spec already declares its own `Accept`.
-> Unit-tested (`openapi-produces`); verified in-browser against the real Pixwel spec
+> Unit-tested (`openapi-produces`); verified in-browser against a real customer spec
 > (`GET /assets` → `Accept: application/json` in the modal + cURL).
 
 > **Status — endpoint pages render for synced tenants (2026-06-28).** The OpenAPI page
@@ -1447,7 +1447,7 @@ precedent already in the codebase rather than inventing a new access model:
 > (`app.papervine.io` in prod) instead of guessing at a "bare apex" — it's provably
 > non-redirecting, since it's the very host serving the settings page itself.
 >
-> **GFM tables (2026-08-08).** Real usage against `4x.pixwel.com` surfaced a table's rows
+> **GFM tables (2026-08-08).** Real usage on an embedded customer site surfaced a table's rows
 > squashed onto one line of literal `| Header | ... | --- | ... |` text — the renderer had
 > no table detection at all, so a table's lines fell into the generic paragraph bucket,
 > and paragraph lines are joined with a space. Fixed: a header line followed by a
@@ -1624,9 +1624,9 @@ layer.
 > forked a **sibling** commit off the deploy base — so `updateRef` correctly rejected it with
 > `422 "Update is not a fast forward"`. Fix: after `createBranch`, when it reports `alreadyExists`,
 > read the **working branch's current tip** (`getRef(branch)`) and base the commit on that, so each
-> publish stacks on top and re-publishing is idempotent. (Surfaced on Pixwel/platform; the earlier
-> `createTree 403` / `createBranch 422` they hit were the App's missing Contents-write + repo
-> rulesets, not this.) Guard: `tests/unit/authoring-publish.test.ts` asserts an existing-branch
+> publish stacks on top and re-publishing is idempotent. (Surfaced on a customer's monorepo; the
+> earlier `createTree 403` / `createBranch 422` they hit were the App's missing Contents-write +
+> repo rulesets, not this.) Guard: `tests/unit/authoring-publish.test.ts` asserts an existing-branch
 > re-publish commits on the branch tip, a fresh one on the deploy base.
 >
 > **WYSIWYG "Visual" editor — reversed the MDXEditor decision & shipped (2026-07-02).** We now
@@ -2001,7 +2001,7 @@ Minimum to operate the SaaS:
   Settings→Billing. Free/trial are rejected (Free is a downgrade, trial is the signup
   lifecycle); the picker offers only Team/Pro/Enterprise. *Verified in a real browser
   2026-07-18 against the dev DB: Acme→Pro indefinite (`cancel_at_period_end=false`,
-  no period end, 25,000 monthly credits, reason on the ledger) and Pixwel→Team 2-month
+  no period end, 25,000 monthly credits, reason on the ledger) and Beta Co→Team 2-month
   (`cancel_at_period_end=true` + period end set, 5,000 credits). Regression:
   `tests/e2e/admin.spec.ts` grants Team through the UI and asserts the non-Stripe sub +
   monthly grant + actor/reason in the DB.*
