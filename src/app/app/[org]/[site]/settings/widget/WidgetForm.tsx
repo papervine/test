@@ -218,7 +218,7 @@ export function WidgetForm({
                 </p>
               </div>
               <a
-                href="https://docs.papervine.io/features/assistant-widget"
+                href="https://papervine.io/features/assistant-widget"
                 target="_blank"
                 rel="noreferrer"
                 className="shrink-0 text-sm text-[var(--muted)] underline-offset-2 hover:text-[var(--fg)] hover:underline"

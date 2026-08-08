@@ -23,6 +23,12 @@ function corsHeaders(origin: string): HeadersInit {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
+    // Without this, browsers cache a preflight for only a few seconds (Chromium) or not
+    // at all — meaning every message in a conversation re-triggers an OPTIONS round-trip
+    // before the real POST. 86400s (24h, the practical browser cap) means only the first
+    // message of the day pays for a preflight. Harmless on non-preflight responses too
+    // (this helper backs both) — browsers simply ignore it there.
+    "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
 }

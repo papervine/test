@@ -1512,8 +1512,26 @@ precedent already in the codebase rather than inventing a new access model:
 > fallback paths; `upgradeMermaidDiagrams` is exposed on `window.PapervineAssistant`
 > alongside `renderMarkdownHTML` for exactly this deterministic testing.
 >
-> **Not yet built:** a widget-specific rate limit beyond the shared AI billing gate, and a
-> "View guide" docs page beyond the evergreen reference (`docs/`).
+> **Pre-close audit (2026-08-08).** A few loose ends surfaced on a final pass, none of
+> them blocking but worth fixing before calling this settled:
+> - **The "View guide" link pointed at a domain that doesn't exist.** `docs.papervine.io`
+>   was a guess — this repo's own architecture note (AGENTS.md) is explicit that the
+>   *apex* (`papervine.io`) serves marketing **and** the dogfooded `docs/` content
+>   directly; there is no separate `docs.` subdomain. Fixed to link to the bare apex.
+> - **`init()` wasn't idempotent.** A page combining the single-tag `data-widget-id`
+>   install with a second manual `init()` call — plausible, since the docs show both as
+>   *alternatives*, not as something to combine — mounted two separate bubbles instead of
+>   one. Fixed: the first call wins, every later call is a no-op. New e2e case.
+> - **No preflight caching.** The chat route's CORS headers had no
+>   `Access-Control-Max-Age`, so every single message in a conversation re-triggered an
+>   OPTIONS round-trip before the real POST. Added (86400s, the practical browser cap) —
+>   only the first message of the day now pays for a preflight. New e2e case.
+>
+> **Not yet built:** a widget-specific rate limit beyond the shared AI billing gate (the
+> org-level billing gate still caps total spend, but nothing stops one allowed origin
+> from making many cheap/free-tier requests within a period), and analytics that
+> distinguish widget-originated questions from in-docs ones (both currently log as the
+> same `source: "human"` event).
 
 ---
 

@@ -133,6 +133,25 @@ test("the single-tag data-widget-id variant auto-mounts with no console errors",
   expect(realErrors, `unexpected console errors:\n${realErrors.join("\n")}`).toEqual([]);
 });
 
+test("init() is idempotent — a page combining both install methods mounts once, not twice", async ({
+  page,
+}) => {
+  // A page that copies the single-tag data-widget-id snippet AND leaves in (or adds) a
+  // manual init() call — a plausible copy-paste mistake, since the docs show both as
+  // alternatives, not as something to combine — used to mount two separate bubbles.
+  await page.goto(`${hostOrigin}/single-tag`);
+  await expect(page.locator(".pv-launcher")).toBeVisible();
+
+  await page.evaluate((id) => {
+    // @ts-expect-error injected by the widget loader script
+    window.PapervineAssistant.init({ id });
+    // @ts-expect-error injected by the widget loader script
+    window.PapervineAssistant.init({ id });
+  }, widgetId);
+
+  await expect(page.locator(".pv-launcher")).toHaveCount(1);
+});
+
 test("renders markdown (headings, lists, links, bold/italic/code) as real DOM, not raw syntax", async ({
   page,
 }) => {
@@ -342,4 +361,15 @@ test("rejects a request from an origin outside the allowlist", async ({ request 
   });
   expect(res.status()).toBe(403);
   expect(res.headers()["access-control-allow-origin"]).toBeUndefined();
+});
+
+test("caches the preflight for a day, so every chat message doesn't re-trigger OPTIONS", async ({
+  request,
+}) => {
+  const res = await request.fetch(`${APEX_ORIGIN}/api/widget/${widgetId}/chat`, {
+    method: "OPTIONS",
+    headers: { origin: hostOrigin },
+  });
+  expect(res.status()).toBe(204);
+  expect(res.headers()["access-control-max-age"]).toBe("86400");
 });

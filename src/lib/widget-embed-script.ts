@@ -586,9 +586,17 @@ export const WIDGET_EMBED_SCRIPT = `
     });
   }
 
+  // A page that combines the single-tag data-widget-id install with a second manual
+  // init() call (a plausible copy-paste mistake — the docs show both as alternatives,
+  // not as something to combine) would otherwise mount two separate bubbles. init() is
+  // idempotent instead: the first call wins, every later call is a no-op.
+  var mounted = false;
+
   window.PapervineAssistant = {
     init: function (opts) {
       if (!opts || !opts.id) throw new Error("PapervineAssistant.init requires { id }");
+      if (mounted) return;
+      mounted = true;
       if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", function () { mount(opts); });
       } else {
