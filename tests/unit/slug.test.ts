@@ -9,7 +9,7 @@ describe("slugify", () => {
     expect(slugify("Hello,   World!! 2")).toBe("hello-world-2");
   });
   it("trims leading/trailing separators", () => {
-    expect(slugify("  --Pixwel--  ")).toBe("pixwel");
+    expect(slugify("  --Beta--  ")).toBe("beta");
   });
   it("handles empty/garbage input", () => {
     expect(slugify("")).toBe("");

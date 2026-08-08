@@ -20,17 +20,17 @@ describe("isReasonValid", () => {
 
 describe("confirmationMatches", () => {
   it("matches the exact name after trimming", () => {
-    expect(confirmationMatches("pixwel", "pixwel")).toBe(true);
-    expect(confirmationMatches("  pixwel  ", "pixwel")).toBe(true);
+    expect(confirmationMatches("acme", "acme")).toBe(true);
+    expect(confirmationMatches("  acme  ", "acme")).toBe(true);
   });
 
   it("is case-sensitive (GitHub-style)", () => {
-    expect(confirmationMatches("Pixwel", "pixwel")).toBe(false);
+    expect(confirmationMatches("Acme", "acme")).toBe(false);
   });
 
   it("rejects a near-miss", () => {
-    expect(confirmationMatches("pixwe", "pixwel")).toBe(false);
-    expect(confirmationMatches("", "pixwel")).toBe(false);
+    expect(confirmationMatches("acm", "acme")).toBe(false);
+    expect(confirmationMatches("", "acme")).toBe(false);
   });
 });
 

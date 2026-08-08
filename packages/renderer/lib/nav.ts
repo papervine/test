@@ -216,7 +216,7 @@ function collectHrefs(nodes: (NavLeaf | NavNode)[]): string[] {
 
 /**
  * The label of the deepest group containing `href` — hosted docs platforms shows this as an
- * "eyebrow" above the page title (e.g. "Introduction" over "Pixwel Platform").
+ * "eyebrow" above the page title (e.g. "Introduction" over "Get Started").
  */
 export function findGroupLabel(sections: NavSection[], href: string): string | undefined {
   let found: string | undefined;

@@ -12,8 +12,8 @@ describe("parseInviteEmails", () => {
   });
 
   it("trims, lowercases, and de-duplicates", () => {
-    const r = parseInviteEmails("  Jeff@Pixwel.com ,  jeff@pixwel.com , JEFF@PIXWEL.COM ");
-    expect(r.emails).toEqual(["jeff@pixwel.com"]);
+    const r = parseInviteEmails("  Jane@Acme.com ,  jane@acme.com , JANE@ACME.COM ");
+    expect(r.emails).toEqual(["jane@acme.com"]);
   });
 
   it("separates invalid tokens from valid ones (reports both)", () => {

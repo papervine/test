@@ -123,7 +123,7 @@ function buildEvents(siteId) {
           type: "page_view",
           source: "human",
           path,
-          referrer: Math.random() < 0.85 ? "$direct" : "docs.pixwel.com",
+          referrer: Math.random() < 0.85 ? "$direct" : "docs.example.com",
           sessionId: v.id,
           createdAt: timeOnDay(v.day),
         }),

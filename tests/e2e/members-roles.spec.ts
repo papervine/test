@@ -67,7 +67,7 @@ test("an owner can promote a member to admin from the table", async ({ page }) =
 test("inviting with the owner role records it on the invitation", async ({ page }) => {
   await page.goto(sitePath(SITE.slug, "settings/members"));
 
-  await page.getByPlaceholder("name@pixwel.com").fill(INVITEE);
+  await page.getByPlaceholder("name@example.com").fill(INVITEE);
   await page.getByLabel("Invite role").selectOption("owner");
   await page.getByRole("button", { name: "Send Invite" }).click();
 

@@ -134,7 +134,7 @@ export function MembersForm({
           <textarea
             value={emails}
             onChange={(e) => setEmails(e.target.value)}
-            placeholder="name@pixwel.com"
+            placeholder="name@example.com"
             rows={3}
             className="mt-3 w-full resize-y rounded-lg border border-[rgba(var(--ink-rgb),0.08)] bg-transparent px-3 py-2 text-sm outline-none placeholder:text-[var(--muted)]/60 focus:border-[rgba(var(--ink-rgb),0.2)]"
           />

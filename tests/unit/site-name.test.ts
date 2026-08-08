@@ -3,7 +3,7 @@ import { normalizeSiteName, SITE_NAME_MAX } from "@/lib/site-name";
 
 describe("normalizeSiteName", () => {
   it("trims surrounding whitespace", () => {
-    expect(normalizeSiteName("  Pixwel Docs  ")).toEqual({ name: "Pixwel Docs" });
+    expect(normalizeSiteName("  Acme Docs  ")).toEqual({ name: "Acme Docs" });
   });
 
   it("rejects empty / whitespace-only names", () => {

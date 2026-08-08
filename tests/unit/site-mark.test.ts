@@ -13,7 +13,7 @@ describe("siteMarkGradient", () => {
 
   it("gives different keys different hues (the whole point — no more identical chips)", () => {
     const hue = (g: string) => g.match(/hsl\((\d+)/)![1];
-    const hues = ["starter", "pixwel-platform", "redux", "docs"].map((k) =>
+    const hues = ["starter", "acme-platform", "redux", "docs"].map((k) =>
       hue(siteMarkGradient(k)),
     );
     expect(new Set(hues).size).toBe(hues.length);

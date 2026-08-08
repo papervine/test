@@ -3,7 +3,7 @@ import { gitSettingsDirty, type GitConfig } from "../../src/lib/git-settings";
 
 const base: GitConfig = {
   installationId: 42,
-  owner: "pixwel",
+  owner: "acme",
   name: "platform",
   branch: "docs",
   docsPath: "docs",
@@ -27,7 +27,7 @@ describe("gitSettingsDirty", () => {
   it("detects org / repo / branch changes", () => {
     expect(gitSettingsDirty(base, { ...base, installationId: 7 })).toBe(true);
     expect(gitSettingsDirty(base, { ...base, installationId: null })).toBe(true);
-    expect(gitSettingsDirty(base, { ...base, owner: "acme" })).toBe(true);
+    expect(gitSettingsDirty(base, { ...base, owner: "other-org" })).toBe(true);
     expect(gitSettingsDirty(base, { ...base, name: "other" })).toBe(true);
     expect(gitSettingsDirty(base, { ...base, branch: "main" })).toBe(true);
   });
