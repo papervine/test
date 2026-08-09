@@ -42,6 +42,35 @@ overview).
   </Step>
 </Steps>
 
+## Links keep you inside the editor
+
+Visual mode renders your real components, so the links in a page are real links — a markdown
+link, or the `href` on a `<Card>`. Clicking one **moves the editor to that page**, the same as
+clicking it in the navigation tree: your unsaved edit is written to the draft first, and you stay
+in the editor.
+
+Links are resolved against **your site**, not the dashboard, so `/quickstart`,
+`../guides/components`, and `/quickstart#install` all land on the page a reader would get:
+
+<CardGroup cols={2}>
+  <Card title="A page in your site">
+    Loads in the editor. Root-absolute and relative paths both work, and a `#fragment`, a query
+    string, or a trailing `.mdx` is ignored when matching the page.
+  </Card>
+  <Card title="Anything external">
+    An `https://`, `mailto:`, or protocol-relative link opens in a **new tab**, so your editing
+    session is never replaced.
+  </Card>
+  <Card title="A page that doesn't exist">
+    Nothing is followed — you get a “No page /… in this site” message. That's a broken link in
+    your docs, surfaced while you're writing rather than after you publish.
+  </Card>
+  <Card title="A card you want to edit, not follow">
+    A `<Card href=…>` wraps its body text in the link. Clicking that **text** puts the cursor in
+    it so you can edit; clicking anywhere else on the card follows the link.
+  </Card>
+</CardGroup>
+
 ## Preview is your real site, not an approximation
 
 The **Preview** tab renders the page through the *same renderer that ships your docs* — the same

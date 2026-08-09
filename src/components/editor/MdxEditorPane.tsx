@@ -29,6 +29,10 @@ type MdxEditorPaneProps = {
   site: string;
   branch: string;
   slug: string;
+  // Every page slug in the site + the page loader — how the Visual editor follows a docs link
+  // in place instead of navigating the app host away from the editor (see resolveEditorLink).
+  slugs: string[];
+  onNavigate: (slug: string) => void;
   onSave: (markdown: string) => void | Promise<void>;
   // Visual ⇄ Source is owned by the parent (EditorShell) so it persists across page switches
   // (this pane is `key`ed by page and would otherwise reset each nav click).
@@ -40,7 +44,7 @@ type MdxEditorPaneProps = {
 };
 
 export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(function MdxEditorPane(
-  { initialMarkdown, path, org, site, branch, slug, onSave, mode, onModeChange, autoDiff },
+  { initialMarkdown, path, org, site, branch, slug, slugs, onNavigate, onSave, mode, onModeChange, autoDiff },
   ref,
 ) {
   const [value, setValue] = useState(initialMarkdown);
@@ -218,6 +222,9 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
             onChange={change}
             assetBase={`/api/tenant-asset/${site}`}
             awareness={awareness}
+            slug={slug}
+            slugs={slugs}
+            onNavigate={onNavigate}
           />
         )}
       </div>

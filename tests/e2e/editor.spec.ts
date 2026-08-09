@@ -42,11 +42,18 @@ test.describe("web editor @external", () => {
     const prefix = `sites/${SITE_ID}/`;
     await put(
       `${prefix}docs.json`,
-      JSON.stringify({ name: "Editor E2E", navigation: { pages: ["index", "second"] } }),
+      JSON.stringify({ name: "Editor E2E", navigation: { pages: ["index", "second", "linky"] } }),
       "application/json",
     );
     await put(`${prefix}index.mdx`, "---\ntitle: Home\n---\n\nOriginal body text.\n");
     await put(`${prefix}second.mdx`, "---\ntitle: Second Page\n---\n\nThe second page body.\n");
+    // A page of links, for the "links stay inside the editor" test below.
+    await put(
+      `${prefix}linky.mdx`,
+      "---\ntitle: Linky\n---\n\n" +
+        "An [inline link](/second) and a [dead one](/nope).\n\n" +
+        '<CardGroup cols={1}>\n  <Card title="Second" href="/second">\n    Card body text.\n  </Card>\n</CardGroup>\n',
+    );
   });
 
   test.afterAll(async () => {
@@ -129,6 +136,61 @@ test.describe("web editor @external", () => {
     await expect(page.locator(".cm-content")).toContainText("Flushed on switch.", {
       timeout: 10_000,
     });
+  });
+
+  // Links in the Visual editor must resolve against the *site*, never the app host the editor is
+  // served from. Before this, a docs link like `/second` — a plain markdown link, or the `href` of
+  // a Card, which the node view renders as a real next/link — soft-navigated the app host to
+  // app.papervine.io/second: a 404 that threw away the editing session. Now they load the page in
+  // the editor, and a link to a page that doesn't exist says so instead of navigating anywhere.
+  test("follows a docs link inside the editor instead of navigating the app host", async ({ page }) => {
+    await page.goto(sitePath(SLUG, "editor"));
+    await page.getByRole("button", { name: "Linky", exact: true }).click();
+    const prose = page.locator(".pv-visual .ProseMirror");
+    await expect(prose).toContainText("An inline link", { timeout: 10_000 });
+
+    const editorUrl = page.url();
+    const title = page.locator(".pv-doc-title-input");
+
+    // A plain markdown link loads that page in the editor — same URL, new document.
+    await prose.getByRole("link", { name: "inline link" }).click();
+    await expect(title).toHaveValue("Second Page");
+    expect(page.url()).toBe(editorUrl);
+
+    // A Card's href is a live next/link wrapping the card; clicking the card (not its editable
+    // body) does the same thing rather than routing the app host to a 404.
+    await page.getByRole("button", { name: "Linky", exact: true }).click();
+    await expect(prose).toContainText("An inline link", { timeout: 10_000 });
+    await prose.locator("a").filter({ hasText: "Card body text" }).getByRole("heading").click();
+    await expect(title).toHaveValue("Second Page");
+    expect(page.url()).toBe(editorUrl);
+
+    // A link to a page that isn't in the site is reported, not followed.
+    await page.getByRole("button", { name: "Linky", exact: true }).click();
+    await expect(prose).toContainText("An inline link", { timeout: 10_000 });
+    await prose.getByRole("link", { name: "dead one" }).click();
+    await expect(page.getByText("No page /nope in this site")).toBeVisible();
+    await expect(title).toHaveValue("Linky");
+    expect(page.url()).toBe(editorUrl);
+  });
+
+  // The card's body is editable content living *inside* its <a>, so clicking there has to place
+  // the caret rather than follow the link — otherwise that text is unreachable with the mouse.
+  test("still lets you click into a card's body text to edit it", async ({ page }) => {
+    await page.goto(sitePath(SLUG, "editor"));
+    await page.getByRole("button", { name: "Linky", exact: true }).click();
+    const prose = page.locator(".pv-visual .ProseMirror");
+    await expect(prose).toContainText("Card body text", { timeout: 10_000 });
+
+    await prose.locator("a p").filter({ hasText: "Card body text" }).click();
+    await expect(page.locator(".pv-doc-title-input")).toHaveValue("Linky"); // did not navigate
+    // The caret landed in the card's text, which is what makes it typeable.
+    const caretInCard = await page.evaluate(() => {
+      const node = window.getSelection()?.anchorNode ?? null;
+      const el = node instanceof Element ? node : node?.parentElement;
+      return !!el?.closest("a[href]") && (node?.textContent ?? "").includes("Card body text");
+    });
+    expect(caretInCard).toBe(true);
   });
 
   // The editing-agent column is hidden by default and summoned on demand (Ask agent / ⌘I), so the

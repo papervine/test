@@ -8,7 +8,9 @@ import { useEffect, useRef, useState } from "react";
 import { Bold, Italic, Strikethrough, Code, Link as LinkIcon, GripVertical, Plus } from "lucide-react";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { Awareness } from "y-protocols/awareness";
+import { toast } from "sonner";
 import { mdxToProseMirror, proseMirrorToMdx, splitFrontmatter } from "@papervine/mdx-prosemirror";
+import { resolveEditorLink } from "@/lib/editor-link";
 import { buildMdxExtensions } from "./visual/nodes";
 import { makeNodeViewOpts } from "./visual/NodeViews";
 import { CollabCarets, collabCaretsKey } from "./visual/CollabCarets";
@@ -50,6 +52,9 @@ export function VisualEditor({
   onChange,
   assetBase,
   awareness,
+  slug,
+  slugs,
+  onNavigate,
 }: {
   value: string;
   onChange: (markdown: string) => void;
@@ -57,6 +62,11 @@ export function VisualEditor({
   // Remote-collaborator carets are rendered from this awareness. Null when collaboration is off or
   // the shared doc hasn't connected yet; the editor rebuilds (see the useEditor deps) once it arrives.
   awareness?: Awareness | null;
+  // The page being edited + every page in the site — what a clicked link is resolved against.
+  slug: string;
+  slugs: string[];
+  // Follow an in-site link by loading that page in the editor (same path as a nav click).
+  onNavigate: (slug: string) => void;
 }) {
   const frontmatter = useRef(splitFrontmatter(value).frontmatter);
   const lastEmitted = useRef<string | null>(null);
@@ -177,6 +187,43 @@ export function VisualEditor({
     setBlockMenu({ x: e.clientX + 8, y: e.clientY, pos: hovered.current.pos, node: hovered.current.node });
   };
 
+  /**
+   * Follow a link the way the *editor* should, never the way the browser would.
+   *
+   * The editor renders the real MDX components, so a `<Card href="/quickstart">` is a live
+   * `next/link` and a markdown link is a live `<a>` — both pointing at a docs path that only
+   * exists on the tenant's docs host. Left alone, next/link *soft*-navigates the app host to
+   * `/quickstart` (a 404), which is worse than a plain anchor: contenteditable normally
+   * suppresses link following, so the router is what actually loses you the editor.
+   *
+   * So: intercept in the capture phase (before the component's own `<Link>` sees the click) and
+   * always `preventDefault()` — next/link bails on a default-prevented click, and the browser
+   * won't follow a plain anchor either. Then route it: an in-site page loads in this editor, an
+   * external URL opens in a new tab, a dead path says so.
+   */
+  const followLink = (e: React.MouseEvent, { editable }: { editable: boolean }) => {
+    const target = e.target as HTMLElement | null;
+    const anchor = target?.closest?.("a[href]");
+    if (!anchor) return;
+    e.preventDefault();
+
+    // A component node view can wrap editable content in its link — a Card's body text lives
+    // inside its <a> — and that text still has to be reachable with the mouse. So a click that
+    // lands *in* the content hole places the caret instead of following the link; the rest of
+    // the card (padding, title, icon) navigates. ⌘/Ctrl overrides, for the caret's own line.
+    const hole = target?.closest?.("[data-node-view-content]");
+    if (editable && !e.metaKey && !e.ctrlKey && hole && anchor.contains(hole)) return;
+    // Don't hijack the click that ends a drag-selection over a link — the user is selecting text.
+    if (!window.getSelection()?.isCollapsed) return;
+    e.stopPropagation();
+
+    const dest = resolveEditorLink(anchor.getAttribute("href") ?? "", slug, slugs);
+    if (dest.kind === "page") onNavigate(dest.slug);
+    else if (dest.kind === "external") window.open(dest.href, "_blank", "noopener,noreferrer");
+    else if (dest.kind === "missing") toast.error(`No page ${dest.path} in this site`);
+    // "anchor" — a bare #hash on the page you're already editing; nothing to navigate to.
+  };
+
   // "Turn into" → replace the block with a picked type.
   const turnInto = () => {
     if (!blockMenu) return;
@@ -187,7 +234,14 @@ export function VisualEditor({
 
   // Extra left padding = gutter for the drag handle + "+" that float left of each block.
   return (
-    <div className="pv-visual h-full overflow-auto py-6 pl-16 pr-8">
+    <div
+      className="pv-visual h-full overflow-auto py-6 pl-16 pr-8"
+      // Capture phase: this must beat the `<Link>` a component node view renders. Middle-click
+      // (auxclick) would open the wrong host in a new tab, so it follows the same route — and
+      // unlike a left click it's never an editing gesture, so it never places a caret.
+      onClickCapture={(e) => followLink(e, { editable: true })}
+      onAuxClickCapture={(e) => e.button === 1 && followLink(e, { editable: false })}
+    >
       <header className="pv-doc-header">
         <input
           className="pv-doc-title-input"

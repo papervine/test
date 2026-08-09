@@ -12,7 +12,6 @@ import { EditorAgentPanel } from "./EditorAgentPanel";
 import { MdxEditorPane, type Mode, type MdxEditorHandle } from "./MdxEditorPane";
 import { PageSettings } from "./settings/PageSettings";
 import { GroupSettings } from "./settings/GroupSettings";
-import { Toaster } from "@/components/ui/sonner";
 import { readDraftPageAction, saveDraftAction } from "@/lib/actions/authoring";
 
 // The 3-panel editor (SPEC §9.2/§10): editing-agent chat | navigation | multi-modal editor.
@@ -280,6 +279,10 @@ export function EditorShell({
             site={site}
             branch={branch}
             slug={slug}
+            slugs={slugs}
+            // A link clicked in the WYSIWYG loads that page here — the same path as a nav click,
+            // so the pending edit is flushed and the tree/breadcrumb follow along.
+            onNavigate={(next) => loadPage(next)}
             onSave={save}
             mode={mode}
             onModeChange={setMode}
@@ -309,7 +312,6 @@ export function EditorShell({
           />
         )}
       </main>
-      <Toaster />
     </div>
   );
 }

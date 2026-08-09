@@ -1876,6 +1876,28 @@ layer.
 > cosmetic. Verified across two browser profiles: bidirectional colour+name carets that track the
 > other side's selection as it moves through the doc.
 >
+> **Links in the Visual editor follow *inside* the editor (2026-08-09).** Bug: clicking any link
+> in Visual mode left the editor for a 404. The editor is a control-plane surface on the **app
+> host**, so a docs link (`/quickstart`, or a `<Card href>` — the node views render the real
+> components, and `Card` is a real `next/link`) resolved against `app.papervine.io/quickstart`.
+> next/link made it *worse* than a plain anchor: contenteditable normally suppresses link
+> following, so the router's soft-navigation was the thing actually destroying the editing
+> session. Fix: a **capture-phase click handler on the editor root** (beats the component's own
+> `<Link>`; `preventDefault` alone is enough for next/link, which bails on a default-prevented
+> click) routing every link through the pure **`resolveEditorLink`** (`src/lib/editor-link.ts`):
+> a page in this site → `loadPage` (the nav-click path, so the pending edit flushes first);
+> external/`mailto:`/protocol-relative → a new tab; a bare `#hash` → nothing; an in-site path
+> with no page → a toast naming the broken link. Slug resolution mirrors the renderer's —
+> root-absolute *and* relative to the current page's folder, `?`/`#`/`.mdx` stripped, root page
+> is slug `""` — so the editor agrees with what a reader gets, and a link that 404s live reads as
+> broken here too. **The one exception is load-bearing:** a `<Card href>` wraps its *editable body*
+> in the `<a>`, so a click landing inside the node view's content hole places the caret instead
+> (⌘/Ctrl overrides); everything else on the card navigates. Middle-click is routed the same way
+> rather than opening the wrong host in a new tab. Also removed a **duplicate `<Toaster/>`** in
+> `EditorShell` (the `app/[org]` layout already mounts one) — every editor toast was rendering
+> twice. Guards: `editor-link.test.ts` (9) + two `editor.spec.ts` e2e (follow a link / still click
+> into a card's body). Verified in a real browser against the seeded `starter` site.
+>
 > Token-scoped *external* auth for the authoring MCP (a platform-auth PAT, §11) is the
 > follow-up; today it authenticates via the app-host session + `x-papervine-org/site` headers.
 >

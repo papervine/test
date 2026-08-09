@@ -59,8 +59,8 @@ export default async function OrgLayout({
           )}
         />
         <div className="min-w-0 flex-1 overflow-auto">{children}</div>
-        {/* Dashboard-wide action feedback (sonner). The editor mounts its own inside
-            EditorShell; this covers every AppRail surface (automations, settings, …). */}
+        {/* Dashboard-wide action feedback (sonner) — the single mount for every app-host surface,
+            the editor included. A second <Toaster/> inside a page renders every toast twice. */}
         <Toaster />
       </div>
     </PlatformShell>
