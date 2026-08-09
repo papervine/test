@@ -1,0 +1,2 @@
+DROP INDEX "editorSession_site_branch_idx";--> statement-breakpoint
+CREATE UNIQUE INDEX "editorSession_site_branch_idx" ON "editor_session" USING btree ("site_id","branch") WHERE "editor_session"."status" = 'open';

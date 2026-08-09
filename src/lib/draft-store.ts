@@ -47,11 +47,37 @@ export async function createSession(input: {
   baseCommitSha: string | null;
   createdBy?: string | null;
 }): Promise<EditorSessionRow> {
-  const [row] = await db
-    .insert(editorSession)
-    .values({ id: randomUUID(), ...input })
-    .returning();
-  return row;
+  try {
+    const [row] = await db
+      .insert(editorSession)
+      .values({ id: randomUUID(), ...input })
+      .returning();
+    return row;
+  } catch (err) {
+    // Two concurrent checkouts can both see "no open session yet" and both try to create one —
+    // the partial unique index (one open row per site+branch) lets exactly one insert win and
+    // rejects the other with a duplicate-key error. Rather than 500 the loser, hand it the
+    // winner's row: to the caller this looks identical to findOpenSession finding it first.
+    if (isUniqueViolation(err, "editorSession_site_branch_idx")) {
+      const existing = await findOpenSession(input.siteId, input.branch);
+      if (existing) return existing;
+    }
+    throw err;
+  }
+}
+
+function isUniqueViolation(err: unknown, constraint: string): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "cause" in err &&
+    typeof err.cause === "object" &&
+    err.cause !== null &&
+    "code" in err.cause &&
+    err.cause.code === "23505" &&
+    "constraint_name" in err.cause &&
+    err.cause.constraint_name === constraint
+  );
 }
 
 /** Flip a session to 'published' or 'discarded'. Discard relies on FK cascade to drop drafts. */

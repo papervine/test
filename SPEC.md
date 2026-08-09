@@ -2000,6 +2000,25 @@ layer.
 >    (`collab-broadcast.test.ts`) constructs two providers, destroys one, and asserts the other's
 >    roster drops to empty — confirmed it fails against the old ordering (peer never removed)
 >    before the fix and passes after.
+>
+> **A separate, unrelated bug surfaced while verifying the above: any edit could 500 forever
+> after the branch's first publish or discard (2026-08-09).** `editor_session` had a *full-table*
+> unique index on `(site_id, branch)`, but `closeSession` never deletes a row — publish/discard
+> are soft status flips (see the earlier fixed-comment note above). So the very first time a
+> branch's session was published or discarded, its row stayed forever, and every later
+> `checkoutBranch` on that same branch (every deploy-branch direct-commit reuses the same branch
+> name every time) hit a duplicate-key 500 trying to insert a new one — permanently, not a
+> transient race. The index's own comment already documented the intent ("one **open** session
+> per branch") that the implementation didn't match. **Fix:** made the index partial
+> (`WHERE status = 'open'`, migration `0022_closed_hemingway.sql`) — closed rows no longer block
+> a fresh checkout, while two concurrently-open sessions for the same branch are still prevented.
+> That partial index reintroduces a narrower, expected race (two truly simultaneous checkouts of
+> a never-before-opened branch), so `createSession` now catches that specific constraint
+> violation and hands back the winner's row via `findOpenSession` instead of throwing. Guards:
+> `draft-store-session-race.test.ts` (mocked DB — the no-conflict path, the race fallback, and
+> that an unrelated unique-violation or non-DB error still propagates) plus a manual run against
+> real local Postgres reproducing the exact sequence (create → publish → create again for the
+> same branch) to confirm the live fix, not just the mock.
 
 ---
 

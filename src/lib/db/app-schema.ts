@@ -194,8 +194,15 @@ export const editorSession = pgTable(
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },
   (table) => [
-    // One open session per (site, branch) — the editor + agent attach to the same one.
-    uniqueIndex("editorSession_site_branch_idx").on(table.siteId, table.branch),
+    // One OPEN session per (site, branch) — the editor + agent attach to the same one. Partial
+    // (status='open' only): closeSession never deletes a row (discard/publish are soft status
+    // flips), so a full-table unique index here would permanently block ever checking out that
+    // branch again after its first publish or discard — every later save 500s on a duplicate
+    // key forever. Scoping to 'open' lets closed rows pile up (each is a real historical
+    // session) while still preventing two concurrently-open sessions for the same branch.
+    uniqueIndex("editorSession_site_branch_idx")
+      .on(table.siteId, table.branch)
+      .where(sql`${table.status} = 'open'`),
   ],
 );
 
