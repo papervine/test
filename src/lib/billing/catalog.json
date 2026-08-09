@@ -256,7 +256,7 @@
         { "label": "AI credits", "free": "Trial only", "team": "5,000 / month", "pro": "25,000 / month", "enterprise": "Committed volume" },
         { "label": "Assistant", "free": false, "team": true, "pro": true, "enterprise": true },
         { "label": "Writing agent", "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "Workflows", "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "Routines", "free": false, "team": true, "pro": true, "enterprise": true },
         { "label": "Credit packs", "free": false, "team": true, "pro": true, "enterprise": true },
         { "label": "Overage (opt-in, hard caps by default)", "free": false, "team": "$0.008 / credit", "pro": "$0.006 / credit", "enterprise": "Best rate" }
       ]

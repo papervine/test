@@ -2639,9 +2639,10 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   `AI_GATEWAY_API_KEY` for the deployed executor (OIDC expires); cron scheduling (Trigger.dev
 >   schedules API — `executorScheduleId` is ready for it) and code-change webhooks are
 >   slice 2; the pre-existing AppRail "Switch site" radix-id hydration warning fires on
->   every dashboard page (excluded from the e2e console gate; fix separately); the
->   pricing matrix label still says "Workflows" (billing catalog copy — rename with the
->   next catalog version).
+>   every dashboard page (excluded from the e2e console gate; fix separately). ~~pricing
+>   matrix label still says "Workflows"~~ — renamed to "Routines" (2026-08-09), matching the
+>   nav; pure display copy in `catalog.json`, so no new plan version (`sync-billing.mjs`
+>   ignores this field, per §10 Billing above).
 >
 > **The run list (`?tab=runs`) and run-detail pages update live as a run progresses
 > (2026-08-09).** Both were pure Server Components — a snapshot at load time, unchanged until a

@@ -55,7 +55,7 @@ describe("plan content vs. enforced catalog (drift guard)", () => {
     const ROW_TO_FEATURE: Record<string, PlanFeatureKey> = {
       Assistant: "assistant",
       "Writing agent": "writerAgent",
-      Workflows: "workflows",
+      Routines: "workflows",
       "Admin APIs": "adminApis",
       "Advanced insights": "advancedInsights",
       "Multi-repo": "multiRepo",
