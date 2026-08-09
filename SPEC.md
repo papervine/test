@@ -2642,6 +2642,27 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   every dashboard page (excluded from the e2e console gate; fix separately); the
 >   pricing matrix label still says "Workflows" (billing catalog copy — rename with the
 >   next catalog version).
+>
+> **The run list (`?tab=runs`) and run-detail pages update live as a run progresses
+> (2026-08-09).** Both were pure Server Components — a snapshot at load time, unchanged until a
+> manual reload or an in-page mutation's own `router.refresh()` (Accept/Reject). A run started
+> elsewhere (a scheduled trigger, a push webhook, another tab) never appeared without reloading.
+> Reused the existing Activity-feed realtime plumbing (§10.3) rather than building anything new:
+> `automation-run.ts`'s task now calls the same `triggerActivity(siteId)` the sync runner already
+> publishes on every status write (running/succeeded/failed/canceled/review_needed) — one
+> generic per-site "something changed, go re-read it" signal, empty payload, DB row stays the
+> record. A new `RunsLiveRefresh` (mounted on both pages, renders nothing) wires that into
+> `router.refresh()` via the existing `useRealtimeRefresh` hook — same realtime-first +
+> poll-fallback shape as `BuildingPreview`. No new infra: same Pusher/Soketi channel, same client
+> hook, same strict-enhancement contract (unconfigured → falls back to a plain 5s poll, never
+> blocks or errors). Verified live: seeded a run row, flipped its status via direct DB write +
+> a manual `triggerActivity` call while both pages sat open in a real browser — the list row and
+> the detail view updated within ~3s with no reload, confirming the realtime path fires (not
+> just the poll fallback). No new automated test: the executor task has no existing unit-test
+> harness (its status writes are exercised only end-to-end, never mocked — the enqueue *decision*
+> logic in `lib/automations/runs.ts` is what's unit-tested), so adding one for a same-shape
+> side-effect call would be new test infrastructure disproportionate to the change; `realtime.ts`'s
+> own unit tests already cover `triggerActivity`'s no-op-when-unconfigured contract.
 
 - **Workflows** — a catalog of scheduled/triggered jobs that open content changes as
   PRs. Two built-in families plus custom:

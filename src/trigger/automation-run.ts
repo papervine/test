@@ -27,6 +27,7 @@ import { aiModel, aiModelId, aiProviderOptions, aiProviderStatus } from "../lib/
 import { getInstallationToken } from "../lib/github-app";
 import { repoReadTools } from "../lib/automations/repo-tools";
 import { contentContext } from "@papervine/renderer/lib/content";
+import { triggerActivity } from "../lib/realtime";
 
 export const automationRunTask = task({
   id: "automation-run",
@@ -60,6 +61,7 @@ export const automationRunTask = task({
         .update(automationRunTable)
         .set({ status: "failed", error, finishedAt: new Date() })
         .where(eq(automationRunTable.id, runId));
+      await triggerActivity(run.siteId);
       logger.error("automation run failed", { runId, error });
       return { ok: false as const, error };
     };
@@ -71,6 +73,7 @@ export const automationRunTask = task({
         .update(automationRunTable)
         .set({ status: "canceled", error: "automation disabled", finishedAt: new Date() })
         .where(eq(automationRunTable.id, runId));
+      await triggerActivity(run.siteId);
       return { ok: false as const, canceled: true };
     }
     if (!siteRow.repoOwner || !siteRow.repoName) return fail("site has no connected repo");
@@ -129,6 +132,7 @@ export const automationRunTask = task({
       // rewrite history (the run-detail view shows this).
       .set({ status: "running", startedAt: new Date(), prompt })
       .where(eq(automationRunTable.id, runId));
+    await triggerActivity(run.siteId);
 
     const title =
       auto.catalogKey === CUSTOM_KEY
@@ -225,6 +229,7 @@ export const automationRunTask = task({
             finishedAt: new Date(),
           })
           .where(eq(automationRunTable.id, runId));
+        await triggerActivity(run.siteId);
         logger.log("automation run needs review", { runId, branch, credits, drafts: drafts.length });
         return { ok: true as const, reviewNeeded: true, credits };
       }
@@ -263,6 +268,7 @@ export const automationRunTask = task({
           finishedAt: new Date(),
         })
         .where(eq(automationRunTable.id, runId));
+      await triggerActivity(run.siteId);
       logger.log("automation run succeeded", { runId, resultRef, credits, drafts: drafts.length });
       return { ok: true as const, resultRef, credits };
     } catch (err) {

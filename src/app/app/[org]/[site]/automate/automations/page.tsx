@@ -3,6 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
 import { AutomationCard, CreateCustomAutomation } from "@/components/app/automate/AutomationCard";
 import { RunReviewActions } from "@/components/app/automate/RunReviewActions";
+import { RunsLiveRefresh } from "@/components/app/automate/RunsLiveRefresh";
 import type { AutomationView } from "@/components/app/automate/AutomationConfigDialog";
 import type { SiteRef } from "@/app/app/[org]/[site]/automate/automations/actions";
 import { requireSite } from "@/lib/dashboard-context";
@@ -207,14 +208,18 @@ async function RunHistory({
 
   if (runs.length === 0) {
     return (
-      <div className="mt-10 rounded-xl border border-dashed border-[rgba(var(--ink-rgb),0.12)] px-6 py-12 text-center text-sm text-[var(--muted)]">
-        No runs yet. Turn on an automation — every run lands here with its outcome.
-      </div>
+      <>
+        <RunsLiveRefresh siteId={siteId} />
+        <div className="mt-10 rounded-xl border border-dashed border-[rgba(var(--ink-rgb),0.12)] px-6 py-12 text-center text-sm text-[var(--muted)]">
+          No runs yet. Turn on an automation — every run lands here with its outcome.
+        </div>
+      </>
     );
   }
 
   return (
     <div className="mt-6 overflow-hidden rounded-xl border border-[rgba(var(--ink-rgb),0.06)]">
+      <RunsLiveRefresh siteId={siteId} />
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)] text-left text-xs text-[var(--muted)]">

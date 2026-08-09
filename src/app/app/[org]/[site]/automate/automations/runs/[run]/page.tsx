@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { ArrowLeft, FileText } from "lucide-react";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
 import { RunReviewActions } from "@/components/app/automate/RunReviewActions";
+import { RunsLiveRefresh } from "@/components/app/automate/RunsLiveRefresh";
 import { requireSite } from "@/lib/dashboard-context";
 import { siteHref } from "@/lib/dashboard-nav";
 import { db } from "@/lib/db";
@@ -60,6 +61,7 @@ export default async function AutomationRunPage({
 
   return (
     <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 py-10">
+      <RunsLiveRefresh siteId={activeSite.id} />
       <AutomateHeader page="Routines" />
 
       <Link

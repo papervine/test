@@ -44,13 +44,16 @@ function serverClient(): Pusher | null {
 }
 
 /**
- * Tell any browser watching this site's Activity feed that something changed (a sync just
- * started or resolved) so it refetches now instead of waiting for its next poll. The payload
- * is intentionally empty — no row data transits the realtime host; the authorized
- * `/:org/:site/activity` endpoint stays the single source of truth.
+ * Tell any browser watching this site that something changed — a sync started/resolved, an
+ * automation run advanced — so it refetches now instead of waiting for its next poll. The
+ * payload is intentionally empty — no row data transits the realtime host; whatever
+ * authorized page is listening (Activity feed, the Automations run list/detail) re-fetches
+ * from its own DB query, which stays the single source of truth. One generic per-site signal
+ * rather than a per-feature event name, since every caller's reaction is the same shape:
+ * "something on this site changed, go re-read it."
  *
  * Best-effort by contract: unconfigured → no-op; a transport error is logged and swallowed.
- * Sync correctness never depends on this firing (the durable `deployment` row is the record).
+ * Correctness never depends on this firing (the durable DB row is always the record).
  */
 export async function triggerActivity(siteId: string): Promise<void> {
   const client = serverClient();

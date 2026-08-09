@@ -42,6 +42,10 @@ its detail view: the exact instructions the agent received (the run keeps its ow
 config edits don't rewrite history), the files it changed, the full agent summary, model and
 token usage, and the resulting commit — or, for a pending run, the review actions.
 
+Both the run list and a run's detail view update live as it progresses — queued, running,
+succeeded/failed/review needed — with no manual reload, whether you triggered it yourself or a
+scheduled/webhook trigger fired it while you were watching.
+
 ### The catalog
 
 Two built-in families, plus custom:
