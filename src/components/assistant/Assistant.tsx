@@ -49,10 +49,12 @@ export function Assistant({ site }: { site?: string }) {
   );
 
   // Markdown renderers for answers. The one that matters: a citation to a docs page must
-  // **soft-navigate** within the docs SPA (like clicking the sidebar), not open a new tab.
-  // Streamdown defaults every link to `target="_blank"`, so we strip its `target`/`rel`
-  // (don't let them ride `…props`) and decide by origin: an internal page link routes via
-  // `router.push` and closes the panel; only a genuinely external URL opens a new tab.
+  // **soft-navigate** within the docs SPA (like clicking the sidebar), not open a new tab —
+  // and the panel stays open across it, so the conversation survives following a citation
+  // (closing on every internal click would make the assistant useless for "show me, then
+  // let me ask a follow-up"). Streamdown defaults every link to `target="_blank"`, so we
+  // strip its `target`/`rel` (don't let them ride `…props`) and decide by origin: an
+  // internal page link routes via `router.push`; only a genuinely external URL opens a new tab.
   const mdComponents = useMemo(() => {
     // Path mode serves the tenant under `/sites/{slug}` (vs. empty base on a subdomain), so a
     // root-absolute citation (`/quickstart`) needs that prefix to resolve to the right page.
@@ -80,7 +82,6 @@ export function Assistant({ site }: { site?: string }) {
                 // Honor modifier/middle clicks (open-in-new-tab) — only hijack a plain click.
                 if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
                 e.preventDefault();
-                setOpen(false);
                 router.push(to);
               }}
               className={className}
