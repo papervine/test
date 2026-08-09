@@ -33,7 +33,10 @@ export function siteContentTag(siteId: string): string {
  * that path relies entirely on the version key below.
  */
 export function revalidateSite(siteId: string): void {
-  revalidateTag(siteContentTag(siteId));
+  // Next 16 requires a cacheLife profile as the second argument; "max" preserves the
+  // pre-16 single-argument behavior (immediate, unconditional invalidation) exactly —
+  // Next's own deprecation warning for the old call shape names "max" as the replacement.
+  revalidateTag(siteContentTag(siteId), "max");
 }
 
 const CACHE = { revalidate: 3600 } as const; // version-keyed on sync; TTL ages out old versions.

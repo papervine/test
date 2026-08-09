@@ -101,11 +101,14 @@ export function revalidateSiteRow(opts: {
   domains?: (string | null | undefined)[];
   widgetId?: string | null;
 }): void {
-  revalidateTag(siteSlugTag(opts.slug));
+  // Next 16 requires a cacheLife profile as the second argument; "max" preserves the
+  // pre-16 single-argument behavior (immediate, unconditional invalidation) exactly —
+  // Next's own deprecation warning for the old call shape names "max" as the replacement.
+  revalidateTag(siteSlugTag(opts.slug), "max");
   for (const d of opts.domains ?? []) {
-    if (d) revalidateTag(siteDomainTag(d));
+    if (d) revalidateTag(siteDomainTag(d), "max");
   }
-  if (opts.widgetId) revalidateTag(siteWidgetIdTag(opts.widgetId));
+  if (opts.widgetId) revalidateTag(siteWidgetIdTag(opts.widgetId), "max");
 }
 
 /**

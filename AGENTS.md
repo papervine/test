@@ -1,6 +1,6 @@
 # Working on Papervine
 
-Papervine is an open-source, multi-tenant **docs.json-compatible docs platform**: it renders a docs site
+Papervine is a multi-tenant **docs.json-compatible docs platform**: it renders a docs site
 from a Git repo of MDX + a `docs.json`. Read [`SPEC.md`](./SPEC.md) for the
 architecture and roadmap, [`GAP-REPORT.md`](./GAP-REPORT.md) for what does and
 doesn't render yet vs. representative docs repos, and [`docs/`](./docs/) for the evergreen
@@ -26,8 +26,8 @@ issues, or commits. If a private decision affects public product behavior, write
 sanitized public summary here instead.
 
 **Never name a real customer/client — anywhere.** `SPEC.md`, `docs/`, code comments,
-commit messages, and PR descriptions are all effectively public (this is an open-source
-repo). A bug report, a debugging war story, a perf measurement, an example — all of it
+commit messages, and PR descriptions are all effectively public. A bug report, a
+debugging war story, a perf measurement, an example — all of it
 gets written up generically ("a customer's monorepo", "a real customer API", "an embedded
 customer site") instead of by name or domain, no matter how illustrative the specific case
 was. This applies even when the name is also this project's own operator/company — the
@@ -407,3 +407,13 @@ prefer expand-then-contract.
   the evergreen "how it works" in `docs/`. See "Document every change" above.
 - Don't commit unless asked. When you do, end commit messages with the Co-Authored-By
   trailer already used in this repo's history.
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+# This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
