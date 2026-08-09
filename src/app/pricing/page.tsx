@@ -49,19 +49,15 @@ export default async function PricingPage() {
           <Link href="/" className="flex items-center">
             <Brand size="md" priority />
           </Link>
-          <nav className="flex items-center gap-1 text-sm">
+          <nav className="flex items-center gap-1 whitespace-nowrap text-sm">
+            {/* Secondary links crowd the logo + primary CTA off a narrow phone screen —
+                keep just the one thing that matters there; they return at sm:. */}
             <Link
               href="/pricing"
-              className="rounded-lg px-3 py-1.5 text-[var(--fg)] transition-colors"
+              className="hidden rounded-lg px-3 py-1.5 text-[var(--fg)] transition-colors sm:inline-block"
             >
               Pricing
             </Link>
-            <a
-              href={GITHUB}
-              className="rounded-lg px-3 py-1.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
-            >
-              GitHub
-            </a>
             {signedIn ? (
               <a
                 href={`${appBase}/`}
@@ -73,7 +69,7 @@ export default async function PricingPage() {
               <>
                 <Link
                   href="/login"
-                  className="rounded-lg px-3 py-1.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
+                  className="hidden rounded-lg px-3 py-1.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:inline-block"
                 >
                   Log in
                 </Link>
