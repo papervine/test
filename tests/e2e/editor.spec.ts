@@ -193,6 +193,124 @@ test.describe("web editor @external", () => {
     expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
   });
 
+  // Publish panel: the file-changes list + per-file revert (SPEC §9.2). Edit one page, open the
+  // Publish dropdown, and confirm it lists exactly that file with the right title (from
+  // frontmatter) and "Modified" status — then revert it via the hover-revealed icon and confirm
+  // both the draft row and the pane's content disappear, with no React console errors along the
+  // way (this exact interaction path had a real setState-during-render bug during development).
+  test("the Publish panel lists a changed file and reverts it back to the published content", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    await page.goto(sitePath(SLUG, "editor"));
+    await page.getByRole("button", { name: "Source mode" }).click();
+    const cm = page.locator(".cm-content");
+    await expect(cm).toContainText("Original body text", { timeout: 10_000 });
+    await cm.click();
+    await page.keyboard.type(" A change to revert.");
+
+    await expect
+      .poll(
+        async () => {
+          const rows = await sql`
+            select content from draft_file d
+            join editor_session s on s.id = d.session_id
+            where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'index.mdx'`;
+          return rows[0]?.content ?? "";
+        },
+        { timeout: 10_000 },
+      )
+      .toContain("A change to revert.");
+
+    await page.getByRole("button", { name: "Publish options" }).click();
+    const panel = page.getByRole("button", { name: "Revert Home" }).locator("..");
+    await expect(page.getByText("1 file change", { exact: true })).toBeVisible();
+    await expect(panel.getByText("Home", { exact: true })).toBeVisible();
+    await expect(panel.getByText("Modified", { exact: true })).toBeVisible();
+
+    await page.getByRole("button", { name: "Revert Home" }).click();
+    await expect(page.getByText("No changes yet")).toBeVisible();
+    await expect(cm).toContainText("Original body text", { timeout: 10_000 });
+    await expect(cm).not.toContainText("A change to revert.");
+
+    await expect
+      .poll(async () => {
+        const rows = await sql`
+          select 1 from draft_file d
+          join editor_session s on s.id = d.session_id
+          where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'index.mdx'`;
+        return rows.length;
+      })
+      .toBe(0);
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat/i.test(e),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+  });
+
+  // Discard all changes (the coarse-grained sibling of per-file revert): edit two separate pages,
+  // then wipe every draft in the session at once, gated by a confirm prompt.
+  test("discard all changes clears every draft after confirming", async ({ page }) => {
+    await page.goto(sitePath(SLUG, "editor"));
+    await page.getByRole("button", { name: "Source mode" }).click();
+
+    const cm = page.locator(".cm-content");
+    await expect(cm).toContainText("Original body text", { timeout: 10_000 });
+    await cm.click();
+    await page.keyboard.type(" First edit.");
+
+    // Switching pages flushes the pending edit (see the dedicated flush test above) before
+    // this second edit lands its own draft.
+    await page.getByRole("button", { name: "Second Page" }).click();
+    await expect(cm).toContainText("The second page body", { timeout: 10_000 });
+    await cm.click();
+    await page.keyboard.type(" Second edit.");
+
+    // Discard leaves a session's draftFile rows in place — it's a soft close (status →
+    // 'discarded'), not a delete — so every count here is scoped to the OPEN session, matching
+    // exactly what the app itself queries (findOpenSession). An unscoped count would also see
+    // rows orphaned by an earlier discarded session and never reach 0.
+    await expect
+      .poll(async () => {
+        const rows = await sql`
+          select count(*)::int as n from draft_file d
+          join editor_session s on s.id = d.session_id
+          where s.site_id = ${SITE_ID} and s.status = 'open'`;
+        return rows[0]?.n ?? 0;
+      })
+      .toBe(2);
+
+    await page.getByRole("button", { name: "Publish options" }).click();
+    await expect(page.getByText("2 file changes", { exact: true })).toBeVisible();
+
+    page.once("dialog", (dialog) => dialog.accept());
+    // Discard-all closes the panel itself on success (unlike a per-file revert, which keeps
+    // it open) — reopen it to see the resulting empty state.
+    await page.getByRole("button", { name: "Discard all changes" }).click();
+    await page.getByRole("button", { name: "Publish options" }).click();
+    await expect(page.getByText("No changes yet")).toBeVisible();
+
+    await expect
+      .poll(async () => {
+        const rows = await sql`
+          select count(*)::int as n from draft_file d
+          join editor_session s on s.id = d.session_id
+          where s.site_id = ${SITE_ID} and s.status = 'open'`;
+        return rows[0]?.n ?? 0;
+      })
+      .toBe(0);
+    await expect(cm).toContainText("The second page body", { timeout: 10_000 });
+    await expect(cm).not.toContainText("Second edit.");
+  });
+
   // Cross-machine remote carets in Visual mode (SPEC §9.2). Two independent browser contexts open
   // the same page; one's cursor must appear as a coloured, name-labelled caret in the other. This
   // needs the real collab service — same-browser BroadcastChannel doesn't sync cursor awareness,

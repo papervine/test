@@ -20,7 +20,7 @@ export type Mode = "visual" | "source";
  * Visual renders the MDX through @papervine/mdx-prosemirror; components it can't model are
  * preserved verbatim. All views read/write the same `value`; edits debounce-save via `onSave`.
  */
-export type MdxEditorHandle = { flush: () => Promise<void> };
+export type MdxEditorHandle = { flush: () => Promise<void>; cancel: () => void };
 
 type MdxEditorPaneProps = {
   initialMarkdown: string;
@@ -81,7 +81,16 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
       setSavedAt("saved");
     }
   };
-  useImperativeHandle(ref, () => ({ flush }));
+  // Drop a pending debounced save without persisting it — used before a revert/discard of
+  // THIS file, so a stale timer can't resurrect what's about to be reverted (a real race:
+  // the timer is independent of any revert action taken elsewhere in the editor).
+  const cancel = () => {
+    if (timer.current) {
+      clearTimeout(timer.current);
+      timer.current = null;
+    }
+  };
+  useImperativeHandle(ref, () => ({ flush, cancel }));
 
   // A local edit from either pane: splice into the shared doc, mirror locally, schedule a save.
   const change = (md: string) => {

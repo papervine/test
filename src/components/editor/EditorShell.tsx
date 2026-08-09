@@ -242,7 +242,18 @@ export function EditorShell({
               <span className="truncate">{slug || "index"}</span>
             </span>
           </div>
-          <PublishButton org={org} site={site} branch={branch} deployBranch={deployBranch} />
+          <PublishButton
+            org={org}
+            site={site}
+            branch={branch}
+            deployBranch={deployBranch}
+            activePath={path}
+            onBeforeRevert={(revertedPath) => {
+              if (revertedPath === path) paneRef.current?.cancel();
+            }}
+            onBeforeDiscardAll={() => paneRef.current?.cancel()}
+            onChanged={refreshActive}
+          />
         </header>
         {review && (
           <div className="flex items-center justify-between gap-3 border-b border-amber-500/30 bg-amber-500/10 px-4 py-2 text-sm">

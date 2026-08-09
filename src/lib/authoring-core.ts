@@ -12,6 +12,7 @@ import {
   closeSession,
   upsertDraftFile,
   listDraftFiles,
+  deleteDraftFile,
   type EditorSessionRow,
 } from "./draft-store";
 import { getObjectText } from "./storage";
@@ -140,11 +141,54 @@ export async function listSessions(site: SiteRow): Promise<EditorSessionRow[]> {
   return listOpenSessions(site.id);
 }
 
-/** Discard a session and its drafts (FK cascade drops the draftFiles). */
+/**
+ * Discard a session — a soft close (status → 'discarded'), not a delete: its draftFile rows
+ * stay in Postgres, just unreachable via findOpenSession (which only matches 'open'). They're
+ * only physically removed if the site itself is deleted later (a real FK cascade, on that
+ * table only). Cheap to leave around; if that ever needs cleaning up, do it here explicitly —
+ * don't assume a status flip already did it.
+ */
 export async function discardSession(site: SiteRow, branch: string): Promise<{ ok: boolean }> {
   const session = await findOpenSession(site.id, branch);
   if (!session) return { ok: false };
   await closeSession(session.id, "discarded");
+  return { ok: true };
+}
+
+export type SessionChange = {
+  path: string;
+  content: string | null;
+  status: "added" | "modified" | "deleted";
+};
+
+/**
+ * Every draft file in the session, classified against the published (S3) content — for the
+ * Publish panel's "N file changes" list (SPEC §9.2). Classification is parallelized: each
+ * check is an S3 round trip, and a session can have many files.
+ */
+export async function listSessionChanges(site: SiteRow, branch: string): Promise<SessionChange[]> {
+  const session = await findOpenSession(site.id, branch);
+  if (!session) return [];
+  const drafts = await listDraftFiles(session.id);
+  return Promise.all(
+    drafts.map(async (d): Promise<SessionChange> => {
+      if (d.deleted) return { path: d.path, content: null, status: "deleted" };
+      const base = await getObjectText(`sites/${site.id}/${d.path}`);
+      return { path: d.path, content: d.content, status: base === null ? "added" : "modified" };
+    }),
+  );
+}
+
+/** Discard one file's draft — its base content (or absence, for an added file) shows
+ *  through again. Correctly reverts an added, modified, OR deleted draft alike. */
+export async function revertDraftFile(
+  site: SiteRow,
+  branch: string,
+  path: string,
+): Promise<{ ok: boolean }> {
+  const session = await findOpenSession(site.id, branch);
+  if (!session) return { ok: false };
+  await deleteDraftFile(session.id, path);
   return { ok: true };
 }
 

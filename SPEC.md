@@ -1878,6 +1878,39 @@ layer.
 >
 > Token-scoped *external* auth for the authoring MCP (a platform-auth PAT, §11) is the
 > follow-up; today it authenticates via the app-host session + `x-papervine-org/site` headers.
+>
+> **Publish panel: a file-changes list + revert, all or one (2026-08-09).** the incumbent's own
+> Publish dropdown lists every changed file with a per-file revert icon; ours only offered
+> "Open a pull request" / "Commit to the deploy branch," with no way to see or undo individual
+> changes short of publishing them. `discardSessionAction` (whole-session discard) already
+> existed in `src/lib/actions/authoring.ts` but had no UI caller — this gave it one, alongside
+> the missing per-file primitive. New: `listSessionChanges`/`revertDraftFile`
+> (`authoring-core.ts`) classify each draft file against the published S3 content
+> (added/modified/deleted, parallelized — each check is an S3 round trip) and delete a single
+> draft row (letting the base content, or its absence, show through again); `deleteDraftFile`
+> (`draft-store.ts`) is the new per-file primitive discard never needed. `PublishButton`'s
+> dropdown is now a real panel: "N file changes" (or "No changes yet," publish buttons
+> disabled), one row per file with a hover-revealed `RotateCcw` revert icon (mirrors
+> `NavTree.tsx`'s existing hover-icon convention), and a "Discard all changes" row below —
+> gated by `window.confirm(...)`, matching this editor's own existing destructive-action
+> pattern (`PageSettings`/`GroupSettings`'s page/group delete), not the heavier shadcn
+> `AlertDialog`. A real setState-during-render bug surfaced during development (`setOpen`'s
+> updater callback also called `setLoadingChanges` — React's own "Cannot update a component
+> while rendering a different component" warning caught it) — fixed by reading `open` directly
+> instead of through the updater. `MdxEditorHandle` gained `cancel()` (drop a pending debounced
+> autosave without persisting it) alongside `flush()`, called before a revert of the
+> currently-open file (path-guarded — canceling unconditionally would drop an unrelated
+> in-progress edit) or unconditionally before discard-all. **Discard is a soft close, not a
+> delete** — `discardSession` only flips `editorSession.status` to `'discarded'`; its
+> `draftFile` rows stay in Postgres, just unreachable via `findOpenSession` (a stale comment
+> claimed "FK cascade drops the draftFiles" — that cascade is real but only fires when the
+> *site* itself is deleted, never on a status flip; fixed the comment). This tripped up the
+> new e2e spec before the fix: an unscoped `count(*)` across all of a test site's sessions
+> never reached zero after a discard, since the *previous* test's now-discarded session's rows
+> were still physically present — scoping every count to `status = 'open'` (matching what the
+> app itself queries) fixed it. Covered by two new `tests/e2e/editor.spec.ts` cases (list +
+> revert one file; edit two pages, discard all, confirm both the DB and the open pane's content
+> reflect it) plus the file's existing console-clean assertion pattern.
 
 ---
 

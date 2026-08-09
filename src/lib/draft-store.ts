@@ -99,3 +99,14 @@ export async function upsertDraftFile(input: {
     .set({ updatedAt: new Date() })
     .where(eq(editorSession.id, sessionId));
 }
+
+/** Revert one file: drop its draft row so the base (synced) content shows through again. */
+export async function deleteDraftFile(sessionId: string, path: string): Promise<void> {
+  await db
+    .delete(draftFile)
+    .where(and(eq(draftFile.sessionId, sessionId), eq(draftFile.path, path)));
+  await db
+    .update(editorSession)
+    .set({ updatedAt: new Date() })
+    .where(eq(editorSession.id, sessionId));
+}

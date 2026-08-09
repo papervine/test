@@ -27,12 +27,12 @@ function slugCandidates(slug: string): string[] {
 }
 
 /** File path → slug ("index.mdx" → "", "guides/intro.mdx" → "guides/intro"). */
-function pathToSlug(path: string): string {
+export function pathToSlug(path: string): string {
   const s = path.replace(/\.mdx?$/, "");
   return s === "index" ? "" : s;
 }
 
-function isPagePath(path: string): boolean {
+export function isPagePath(path: string): boolean {
   return PAGE_EXTS.some((ext) => path.endsWith(ext));
 }
 

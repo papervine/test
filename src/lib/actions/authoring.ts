@@ -15,8 +15,12 @@ import {
   resolvePagePath,
   resolveBasePage,
   resolveDraftFile,
+  listSessionChanges,
+  revertDraftFile,
   type PublishResult,
+  type SessionChange,
 } from "@/lib/authoring-core";
+import { isPagePath, pathToSlug } from "@/lib/draft-source";
 
 // Frontmatter keys the Page settings panel manages (docs.json-compatible). Booleans are only
 // written when true; strings/arrays only when non-empty — keeping frontmatter clean.
@@ -302,6 +306,52 @@ export async function discardSessionAction(
   const gate = await gateEditor(orgSlug, siteSlug);
   if ("error" in gate) return gate;
   const result = await discardSession(gate.site, branch);
+  revalidatePath(siteRoute(orgSlug, siteSlug, "editor"));
+  return result;
+}
+
+// Mirrors packages/renderer/lib/nav.ts's private titleFromSlug — not exported there (a
+// renderer internal), so duplicated here for this one display-only fallback rather than
+// widening that package's public surface for a single caller.
+function titleFromSlug(slug: string): string {
+  const last = slug.split("/").pop() ?? slug;
+  return last
+    .split(/[-_]/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+export type SessionChangeRow = { path: string; status: SessionChange["status"]; title: string };
+
+/** The Publish panel's "N file changes" list — every draft in the session, with a
+ *  display title (frontmatter title/sidebarTitle, falling back to the slug) and its
+ *  added/modified/deleted status against the published content. */
+export async function listSessionChangesAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+): Promise<SessionChangeRow[] | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const changes = await listSessionChanges(gate.site, branch);
+  return changes.map((c) => {
+    if (!isPagePath(c.path)) return { path: c.path, status: c.status, title: c.path };
+    const fm = c.content ? (matter(c.content).data as PageMeta) : {};
+    const title = (fm.sidebarTitle as string) || (fm.title as string) || titleFromSlug(pathToSlug(c.path));
+    return { path: c.path, status: c.status, title };
+  });
+}
+
+/** Revert one file's draft (Publish panel's per-file revert icon). */
+export async function revertFileAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  path: string,
+): Promise<{ ok: boolean } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const result = await revertDraftFile(gate.site, branch, path);
   revalidatePath(siteRoute(orgSlug, siteSlug, "editor"));
   return result;
 }
