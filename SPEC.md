@@ -1911,6 +1911,43 @@ layer.
 > app itself queries) fixed it. Covered by two new `tests/e2e/editor.spec.ts` cases (list +
 > revert one file; edit two pages, discard all, confirm both the DB and the open pane's content
 > reflect it) plus the file's existing console-clean assertion pattern.
+>
+> **Fixed a real double-seed race — two clients joining an empty room at once could double
+> page content (2026-08-09).** User-reported: two editor sessions open on the same page,
+> pressing Revert in one "doubled the content... as if two saves got appended to each other."
+> Root cause, confirmed by reading both transports and `@hocuspocus/provider`'s own source, not
+> guessed: the "first client seeds the room from the page's saved text" decision
+> (`useCollabDoc.ts`'s `onSynced`: `if (ytext.length === 0 && initialRef.current) { ...insert...
+> }`) was made independently by each client with no coordination. Two clients racing to join a
+> genuinely empty room (a first-ever open, or — what the Publish panel's revert above made much
+> easier to trigger — a `docKey`-forced remount rejoining fresh) could each conclude "nobody's
+> here" and each insert a full copy of the text; Yjs merges two independent inserts as two
+> concatenated copies, not a dedup. Not `BroadcastProvider`-specific: `apps/collab/src/server.ts`
+> has the identical pattern server-side, and `HocuspocusProvider`'s `synced` fires purely off the
+> client↔server handshake with zero peer-count signal at that moment — the real cross-machine
+> service has the same exposure, just not what surfaced this (no `COLLAB_JWT_SECRET` configured
+> where it was hit). **Fix: a deterministic tiebreak — lowest `clientID` seeds, everyone else
+> defers** (a standard leader-election pattern, generalizes past two racers). Each transport
+> gained `canSeed(): Promise<boolean>` using whichever peer-discovery signal it already has:
+> `BroadcastProvider` tracks the lowest peer id seen via the existing hello/state handshake
+> (**a real protocol gap found writing the regression test**: the original `"state"` reply
+> carried no `from` field, so a client that only learns of a pre-existing peer through receiving
+> *their* state reply — never a fresh "hello" from them, since they were already there — never
+> saw that peer's id at all; added `from` to the `"state"` message and update the same tracker
+> from both message types now); `HocuspocusTransport` compares `awareness.clientID` against
+> every other key in `awareness.getStates()` (reliably populated by the time a short window
+> elapses, since `useCollabDoc`'s `wire()` already calls `setPresence` immediately on
+> construction, before `onSynced` ever fires). `canSeed()` only adds latency to the genuinely
+> ambiguous case — for an already-settled room, a peer's real content is applied *before*
+> `markSynced()` fires, so `ytext.length === 0` is already false and `canSeed()` is never even
+> called. Pure comparison core (`isLowestClientId`) lives in `peer-roster.ts` so both
+> transports share one tested implementation. Guards: `collab-seed-race.test.ts` — two and
+> three simultaneous joiners (only the lowest id seeds, never both/none), a lone joiner
+> (unaffected), and the pure comparison function directly (no real `@hocuspocus/provider`/server
+> needed for that part). **Scope note:** this fixes the race in an *empty* room only — a peer
+> who already has a page open when someone else reverts still doesn't learn about the revert
+> (their live, already-settled Y.Text is untouched by a revert, which only deletes the Postgres
+> draft row); that's a separate, still-open gap, not addressed here.
 
 ---
 

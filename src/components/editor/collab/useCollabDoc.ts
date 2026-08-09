@@ -25,6 +25,10 @@ interface CollabTransport {
   onPeers(fn: (peers: PeerInfo[]) => void): () => void;
   setPresence(info: Omit<PeerInfo, "clientId">): void;
   destroy(): void;
+  // Resolves whether THIS client should seed an empty room — see either transport's own
+  // canSeed() doc comment for the race it closes (two clients freshly joining at once could
+  // otherwise both conclude "nobody's here" and both insert the page text, doubling it).
+  canSeed(): Promise<boolean>;
 }
 
 /** What a pane needs to bind itself to the shared document. */
@@ -129,12 +133,16 @@ export function useCollabDoc(room: CollabRoom): CollabDoc {
       t.setPresence(identity);
       setAwareness(t.awareness);
       t.onPeers(setPeers);
-      t.onSynced(() => {
+      t.onSynced(async () => {
         // First client in the room finds it empty → seed from the server-provided content. A
-        // later client already received server/peer state, so this is a no-op.
-        if (ytext.length === 0 && initialRef.current) {
-          doc.transact(() => ytext.insert(0, initialRef.current), LOCAL);
-        }
+        // later client already received server/peer state (applied before onSynced fires, so
+        // ytext is already non-empty here) — a no-op, and canSeed() is never even called for
+        // that common case. Only the genuinely ambiguous "room still empty" case pays the
+        // canSeed() tiebreak, which closes a real race: two clients freshly joining at once
+        // could otherwise both conclude "nobody's here" and both insert the page text.
+        const shouldSeed = ytext.length === 0 && initialRef.current && (await t.canSeed());
+        if (disposed) return; // unmounted while canSeed() was pending — doc may be destroyed
+        if (shouldSeed) doc.transact(() => ytext.insert(0, initialRef.current), LOCAL);
         setReady(true);
       });
     };

@@ -2,13 +2,17 @@ import type { Doc } from "yjs";
 import type { Awareness } from "y-protocols/awareness";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import type { PeerInfo } from "./broadcast-provider";
-import { peersFromStates, rosterKey } from "./peer-roster";
+import { peersFromStates, rosterKey, isLowestClientId } from "./peer-roster";
 
 // Cross-machine transport: binds the shared Y.Doc to the standalone Hocuspocus socket service
 // (apps/collab). Same surface as BroadcastProvider (onSynced / onPeers / setPresence / destroy)
 // so useCollabDoc can pick either — BroadcastChannel for same-browser tabs, this for real
 // multiplayer across machines. Presence rides Hocuspocus's built-in awareness (unlike the
 // hand-rolled peer map the BroadcastChannel path needs).
+
+// How long canSeed() waits before deciding — a little more slack than BroadcastProvider's
+// window, since this goes over a real network hop rather than same-process BroadcastChannel.
+const SEED_DECISION_WINDOW_MS = 150;
 
 /** Adapter around HocuspocusProvider matching the BroadcastProvider transport shape. */
 export class HocuspocusTransport {
@@ -83,6 +87,29 @@ export class HocuspocusTransport {
     }
     this.syncListeners.add(fn);
     return () => this.syncListeners.delete(fn);
+  }
+
+  /**
+   * Should THIS client be the one to seed an empty room? See BroadcastProvider's `canSeed`
+   * for the full rationale — same race, different peer-discovery signal: `synced` fires purely
+   * off the client↔server Yjs handshake (confirmed in `@hocuspocus/provider`'s source), with no
+   * peer-count info at that moment, so two clients racing to join a genuinely empty document
+   * could otherwise both seed independently and double the content. `useCollabDoc`'s `wire()`
+   * already calls `setPresence` immediately on construction (before `onSynced` ever fires, for
+   * both transports), so a racing peer's clientID is reliably in `awareness.getStates()` — keyed
+   * by clientID by y-protocols' own design — by the time this window elapses.
+   */
+  canSeed(): Promise<boolean> {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const awareness = this.provider.awareness;
+        if (!awareness) {
+          resolve(true); // no awareness at all — nothing to race against
+          return;
+        }
+        resolve(isLowestClientId(awareness.clientID, awareness.getStates().keys()));
+      }, SEED_DECISION_WINDOW_MS);
+    });
   }
 
   destroy() {

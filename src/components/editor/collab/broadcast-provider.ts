@@ -1,5 +1,6 @@
 import * as Y from "yjs";
 import { Awareness } from "y-protocols/awareness";
+import { isLowestClientId } from "./peer-roster";
 
 // Service-less Yjs transport over BroadcastChannel — syncs a Y.Doc across tabs of the SAME
 // browser/origin with zero infrastructure. This is the Phase-3 (in-memory) stand-in for the
@@ -20,8 +21,11 @@ export interface PeerInfo {
 type Msg =
   // A new tab joined and is asking existing peers for the doc state + their presence.
   | { t: "hello"; from: number; self: PeerInfo | null }
-  // Reply to a hello: the full doc state as a Yjs update.
-  | { t: "state"; to: number; u: Uint8Array }
+  // Reply to a hello: the full doc state as a Yjs update. Carries `from` too (not just the
+  // addressee) — a client that only learns of a peer through receiving ITS state reply, never
+  // a fresh "hello" from them (the peer existed before this client did), still needs their
+  // clientID to break a seed-race tie correctly. See canSeed().
+  | { t: "state"; from: number; to: number; u: Uint8Array }
   // An incremental doc update to merge.
   | { t: "update"; u: Uint8Array }
   // A presence upsert (self changed) or, with peer:null, a leave.
@@ -33,6 +37,10 @@ type Msg =
  * {@link onSynced} to learn when initial state has settled (so the caller can seed an empty doc
  * exactly once — the first tab seeds, later tabs adopt the received state).
  */
+// How long canSeed() waits before deciding — comfortably past the 80ms syncTimer below, so
+// any peer who is ALSO fresh (and thus also sent a "hello") has had time to be seen.
+const SEED_DECISION_WINDOW_MS = 120;
+
 export class BroadcastProvider {
   readonly doc: Y.Doc;
   // A local-only Awareness so the Source (CodeMirror) editor has one to bind to. Same-browser
@@ -47,6 +55,13 @@ export class BroadcastProvider {
   private syncListeners = new Set<() => void>();
   private syncTimer: ReturnType<typeof setTimeout>;
   private destroyed = false;
+  // The lowest clientID seen from a peer, via EITHER a "hello" (a newcomer announcing itself)
+  // or a "state" reply (an existing peer answering OUR hello — the only way we'd otherwise
+  // learn about a peer who existed before us and so never sent us their own "hello"). Not the
+  // `peers` roster, which only fills in once a peer has also called setPresence, later than
+  // either message. Used to break ties when two fresh clients race to seed an empty room —
+  // see `canSeed()`.
+  private lowestPeerId: number | null = null;
 
   constructor(roomId: string, doc: Y.Doc) {
     this.doc = doc;
@@ -74,14 +89,16 @@ export class BroadcastProvider {
     if (this.destroyed) return;
     switch (msg.t) {
       case "hello": {
+        this.noteLowestPeerId(msg.from);
         // Hand the newcomer our full state and presence.
-        this.post({ t: "state", to: msg.from, u: Y.encodeStateAsUpdate(this.doc) });
+        this.post({ t: "state", from: this.doc.clientID, to: msg.from, u: Y.encodeStateAsUpdate(this.doc) });
         if (this.self) this.post({ t: "presence", id: this.self.clientId, peer: this.self });
         if (msg.self) this.upsertPeer(msg.self);
         break;
       }
       case "state": {
         if (msg.to !== this.doc.clientID) return; // addressed to a specific joiner
+        this.noteLowestPeerId(msg.from);
         Y.applyUpdate(this.doc, msg.u, this);
         this.markSynced(); // state received — settle immediately, don't wait out the timer
         break;
@@ -94,6 +111,11 @@ export class BroadcastProvider {
         else this.removePeer(msg.id);
         break;
     }
+  }
+
+  private noteLowestPeerId(id: number) {
+    if (id === this.doc.clientID) return; // a message can't reveal our own id as a "peer"
+    if (this.lowestPeerId === null || id < this.lowestPeerId) this.lowestPeerId = id;
   }
 
   private post(msg: Msg) {
@@ -146,6 +168,26 @@ export class BroadcastProvider {
     }
     this.syncListeners.add(fn);
     return () => this.syncListeners.delete(fn);
+  }
+
+  /**
+   * Should THIS client be the one to seed an empty room? Only called when `ytext.length ===
+   * 0` at sync time, i.e. no peer has replied with real content yet — which is exactly the
+   * ambiguous case where two clients freshly joining at once could otherwise both conclude
+   * "nobody's here" and both insert a full copy of the page text (Yjs merges two independent
+   * inserts as two concatenated copies, not a dedup). Waits past the sync window so a
+   * racing peer's "hello" has time to arrive, then only the LOWEST clientID among everyone
+   * seen proceeds — every other client defers and adopts the winner's insert as a normal
+   * update once it propagates. Generalizes to 3+ simultaneous joiners (compares against
+   * every ID seen, not just one).
+   */
+  canSeed(): Promise<boolean> {
+    return new Promise((resolve) => {
+      setTimeout(() => {
+        const others = this.lowestPeerId === null ? [] : [this.lowestPeerId];
+        resolve(isLowestClientId(this.doc.clientID, others));
+      }, SEED_DECISION_WINDOW_MS);
+    });
   }
 
   destroy() {

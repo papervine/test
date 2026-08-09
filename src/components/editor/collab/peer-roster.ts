@@ -37,3 +37,18 @@ export function rosterKey(peers: PeerInfo[]): string {
     .sort()
     .join("|");
 }
+
+/**
+ * Pure comparison core of `HocuspocusTransport.canSeed()` (extracted so it's unit-testable
+ * without a real `@hocuspocus/provider`/server): should THIS clientID be the one to seed an
+ * empty room, given every other clientID visible in the current awareness snapshot? Lowest ID
+ * wins — see `canSeed()`'s doc comment (both transports) for the race this closes: two clients
+ * joining a genuinely empty room at once could otherwise both conclude "nobody's here" and
+ * both insert the page text, doubling it.
+ */
+export function isLowestClientId(myId: number, otherIds: Iterable<number>): boolean {
+  for (const id of otherIds) {
+    if (id !== myId && id < myId) return false;
+  }
+  return true;
+}
