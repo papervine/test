@@ -20,7 +20,11 @@ export type Mode = "visual" | "source";
  * Visual renders the MDX through @papervine/mdx-prosemirror; components it can't model are
  * preserved verbatim. All views read/write the same `value`; edits debounce-save via `onSave`.
  */
-export type MdxEditorHandle = { flush: () => Promise<void>; cancel: () => void };
+export type MdxEditorHandle = {
+  flush: () => Promise<void>;
+  cancel: () => void;
+  revertTo: (next: string) => void;
+};
 
 type MdxEditorPaneProps = {
   initialMarkdown: string;
@@ -94,7 +98,21 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
       timer.current = null;
     }
   };
-  useImperativeHandle(ref, () => ({ flush, cancel }));
+  // Push a revert/discard's fresh content into the live shared doc — the server already
+  // dropped the draft override, so this must NOT go through onSave (that would just recreate
+  // it). Goes through binding.setText, the SAME path a normal keystroke takes, so it broadcasts
+  // to any peer with this room open as a plain incremental update. This is deliberately NOT a
+  // room rejoin: forcing this page's collab room to tear down and reconnect (as a docKey remount
+  // would) races the "first client seeds an empty room" check in useCollabDoc against any peer
+  // who still has the room open — their stale content wins that race, so the revert never lands.
+  const revertTo = (next: string) => {
+    cancel();
+    binding.setText(next);
+    setValue(next);
+    savedValue.current = next;
+    setSavedAt("saved");
+  };
+  useImperativeHandle(ref, () => ({ flush, cancel, revertTo }));
 
   // A local edit from either pane: splice into the shared doc, mirror locally, schedule a save.
   const change = (md: string) => {

@@ -43,9 +43,9 @@ export function PublishButton({
   activePath: string;
   onBeforeRevert: (path: string) => void;
   onBeforeDiscardAll: () => void;
-  // Called after a revert or a discard-all so the open page's content (which may have just
-  // been reverted out from under it) gets refetched.
-  onChanged: () => void;
+  // Called after a revert or a discard-all with the path(s) that changed, so the shell can
+  // push fresh content into the open pane if (and only if) it's showing one of them.
+  onChanged: (paths: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [pending, start] = useTransition();
@@ -89,13 +89,14 @@ export function PublishButton({
         return;
       }
       setChanges((cur) => cur?.filter((c) => c.path !== path) ?? null);
-      onChanged();
+      onChanged([path]);
     });
 
   const discardAll = () =>
     start(async () => {
       if (!window.confirm("Discard all uncommitted changes? This can't be undone.")) return;
       onBeforeDiscardAll();
+      const affected = changes?.map((c) => c.path) ?? [];
       const res = await discardSessionAction(org, site, branch);
       if ("error" in res || !res.ok) {
         toast.error("error" in res ? res.error : "Couldn't discard changes.");
@@ -103,7 +104,7 @@ export function PublishButton({
       }
       setChanges([]);
       setOpen(false);
-      onChanged();
+      onChanged(affected);
     });
 
   const hasChanges = (changes?.length ?? 0) > 0;

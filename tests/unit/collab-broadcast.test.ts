@@ -125,4 +125,25 @@ describe("BroadcastProvider (same-browser sync)", () => {
       expect(seen!.map((p) => p.name)).toEqual(["Ada"]);
     }, { timeout: 1000 });
   });
+
+  it("removes a peer from the roster when it's destroyed, not just when it explicitly leaves", async () => {
+    // Regression: destroy() used to set `destroyed = true` BEFORE posting the presence-leave
+    // message, but post() refuses to send once destroyed is true — so the leave message was
+    // silently swallowed and every peer's roster only ever grew, never shrank. This is what a
+    // docKey remount (page switch, revert, tab close) does on every teardown, so a user who
+    // just clicked around a few times would see phantom collaborators pile up forever.
+    const r = room();
+    const { p: pa } = provider(r);
+    const { p: pb } = provider(r);
+
+    let bRoster: PeerInfo[] = [];
+    pb.onPeers((list) => (bRoster = list));
+    pa.setPresence({ name: "Ada", color: "#6366f1" });
+    await vi.waitFor(() => expect(bRoster.map((p) => p.name)).toEqual(["Ada"]), { timeout: 1000 });
+
+    pa.destroy();
+    live.splice(live.indexOf(pa), 1); // already destroyed — don't double-destroy in afterEach
+
+    await vi.waitFor(() => expect(bRoster).toEqual([]), { timeout: 1000 });
+  });
 });

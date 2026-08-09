@@ -192,9 +192,12 @@ export class BroadcastProvider {
 
   destroy() {
     if (this.destroyed) return;
+    // Announce departure BEFORE flipping the flag post() guards on — otherwise this leave
+    // message is silently swallowed and every peer's roster only ever grows, never shrinks
+    // (every teardown — tab close, page nav, revert, branch switch — creates a fresh Y.Doc).
+    if (this.self) this.post({ t: "presence", id: this.self.clientId, peer: null });
     this.destroyed = true;
     clearTimeout(this.syncTimer);
-    if (this.self) this.post({ t: "presence", id: this.self.clientId, peer: null });
     this.doc.off("update", this.onDocUpdate);
     window.removeEventListener("beforeunload", this.onUnload);
     this.awareness.destroy();

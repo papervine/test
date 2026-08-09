@@ -102,6 +102,26 @@ export function EditorShell({
   // write is the newer content; flushing the human's buffer here would clobber it.
   const refreshActive = useCallback(() => loadPage(slug, branch, { flush: false }), [loadPage, slug, branch]);
 
+  // A revert/discard-all changed one or more paths — push the fresh content straight into the
+  // live pane if (and only if) it's showing one of them. Deliberately NOT a docKey remount
+  // (loadPage/refreshActive): that tears down and rejoins this page's collab room, which races
+  // the "first client seeds an empty room" check in useCollabDoc against any peer who still has
+  // the room open — their stale content would win, so the revert would never visibly land. Going
+  // through the pane's live binding instead broadcasts as a normal incremental update, same as
+  // any keystroke, so an already-open peer picks it up too.
+  const applyExternalChange = useCallback(
+    (paths: string[]) => {
+      if (!paths.includes(path)) return;
+      void (async () => {
+        const res = await readDraftPageAction(org, site, branch, slug);
+        if ("error" in res) return;
+        setMarkdown(res.markdown);
+        paneRef.current?.revertTo(res.markdown);
+      })();
+    },
+    [org, site, branch, slug, path],
+  );
+
   // Awaitable so the pane can flush a pending save before loading the preview iframe.
   const save = async (md: string): Promise<void> => {
     await saveDraftAction(org, site, branch, path, md);
@@ -251,7 +271,7 @@ export function EditorShell({
               if (revertedPath === path) paneRef.current?.cancel();
             }}
             onBeforeDiscardAll={() => paneRef.current?.cancel()}
-            onChanged={refreshActive}
+            onChanged={applyExternalChange}
           />
         </header>
         {review && (

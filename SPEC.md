@@ -1970,6 +1970,36 @@ layer.
 > who already has a page open when someone else reverts still doesn't learn about the revert
 > (their live, already-settled Y.Text is untouched by a revert, which only deletes the Postgres
 > draft row); that's a separate, still-open gap, not addressed here.
+>
+> **That "still-open gap" turned out to make Revert itself broken, plus a separate presence
+> leak (2026-08-09).** User-reported immediately after the fix above shipped: with two sessions
+> open on the same page, Revert stopped reverting at all, and the collaborator count only ever
+> grew. Two distinct, real bugs, confirmed by reading the code (not guessed):
+>
+> 1. **Revert relied on the exact race it just closed.** The Publish panel's revert/discard
+>    (built above) drives a page refresh through `docKey` — a full remount that tears down and
+>    rejoins the page's collab room from scratch. If a peer still has that room open, the fresh
+>    rejoin finds it *non-empty* (the peer's stale, pre-revert content answers the join
+>    handshake), so `ytext.length === 0` is false and the reverted text is never seeded — the
+>    room keeps the peer's stale content forever, visible even to the tab that clicked Revert.
+>    Worse, `onChanged` fired unconditionally on **every** revert regardless of which file it
+>    targeted, so *any* revert click forced this teardown/rejoin cycle on whatever page happened
+>    to be open. **Fix: stop remounting for this.** Revert/discard now call a new
+>    `MdxEditorHandle.revertTo(next)` that pushes the fresh content straight into the *live*
+>    `Y.Text` via the same `binding.setText()` path a normal keystroke uses — an ordinary
+>    incremental CRDT update, not a reseed, so it has no room-emptiness ambiguity and broadcasts
+>    to any peer with the room open (closing the "still-open gap" noted above as a side effect).
+>    `PublishButton`'s `onChanged` now passes the affected path(s); `EditorShell` only touches
+>    the live pane when one of them is the page currently open, refetching that page's post-
+>    revert content and calling `revertTo` — never a docKey bump.
+> 2. **`BroadcastProvider.destroy()` never actually announced a peer leaving.** It set
+>    `destroyed = true` *before* posting the presence-leave message, but `post()` refuses to
+>    send once `destroyed` is true — so the leave was silently swallowed on every teardown (tab
+>    close, page nav, branch switch, and, until fix #1 above, every revert). Every peer's roster
+>    could only grow. Fix: send the leave post first, flip the flag after. Regression test
+>    (`collab-broadcast.test.ts`) constructs two providers, destroys one, and asserts the other's
+>    roster drops to empty — confirmed it fails against the old ordering (peer never removed)
+>    before the fix and passes after.
 
 ---
 
