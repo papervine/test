@@ -38,6 +38,9 @@ type RailItem = {
   // When set, the item only renders for roles that can see this feature
   // (src/lib/features.ts). Absent → visible to everyone.
   feature?: FeatureKey;
+  // TEMPORARY: hide from everyone but the platform operator (PLATFORM_ADMIN_EMAILS).
+  // Teammate has nothing wired up yet — pull this flag once it's real.
+  operatorOnly?: boolean;
   // Heavy routes (expensive per-request RSC render) opt OUT of the full prefetch below, so we
   // don't fire that work for every rail item on every dashboard page. They keep Next's default
   // (lighter) prefetch and fetch on navigation. Analytics runs time-series aggregation queries.
@@ -77,6 +80,7 @@ const NAV_SECTIONS: { heading?: string; items: RailItem[] }[] = [
         icon: MessagesSquare,
         feature: "automate.agent",
         trialBadge: true,
+        operatorOnly: true,
       },
       {
         sub: "automate/assistant",
@@ -137,7 +141,9 @@ export function AppRail({
   const sections = NAV_SECTIONS.map((section) => ({
     ...section,
     items: section.items.filter(
-      (item) => !item.feature || canSeeFeature(item.feature, role),
+      (item) =>
+        (!item.feature || canSeeFeature(item.feature, role)) &&
+        (!item.operatorOnly || platformAdmin),
     ),
   })).filter((section) => section.items.length > 0);
 

@@ -19,7 +19,14 @@ import {
 } from "lucide-react";
 import { siteHref } from "@/lib/dashboard-nav";
 
-export type SettingsNavItem = { slug: string; label: string; icon: LucideIcon };
+export type SettingsNavItem = {
+  slug: string;
+  label: string;
+  icon: LucideIcon;
+  // TEMPORARY: hide from everyone but the platform operator (PLATFORM_ADMIN_EMAILS).
+  // These are scaffolded/unwired — pull the flag once each one is real.
+  operatorOnly?: boolean;
+};
 export type SettingsNavSection = { heading: string; items: SettingsNavItem[] };
 
 // Canonical IA for the Settings subnav (mirrors hosted docs platforms' settings surfaces). This is
@@ -32,9 +39,9 @@ export const SETTINGS_NAV: SettingsNavSection[] = [
     items: [
       { slug: "domain", label: "Domain setup", icon: Globe },
       { slug: "authentication", label: "Authentication", icon: Lock },
-      { slug: "add-ons", label: "Add-ons", icon: Puzzle },
+      { slug: "add-ons", label: "Add-ons", icon: Puzzle, operatorOnly: true },
       { slug: "general", label: "General", icon: Settings2 },
-      { slug: "search", label: "Search", icon: Search },
+      { slug: "search", label: "Search", icon: Search, operatorOnly: true },
       { slug: "widget", label: "Widget", icon: MessageSquareCode },
     ],
   },
@@ -44,7 +51,7 @@ export const SETTINGS_NAV: SettingsNavSection[] = [
   },
   {
     heading: "Security & access",
-    items: [{ slug: "api-keys", label: "API keys", icon: KeyRound }],
+    items: [{ slug: "api-keys", label: "API keys", icon: KeyRound, operatorOnly: true }],
   },
   {
     heading: "Workspace",
@@ -52,9 +59,9 @@ export const SETTINGS_NAV: SettingsNavSection[] = [
       { slug: "members", label: "Members", icon: Users },
       { slug: "billing", label: "Billing", icon: Receipt },
       { slug: "usage", label: "Usage", icon: LineChart },
-      { slug: "notifications", label: "Notifications", icon: Mail },
-      { slug: "agent-integrations", label: "Agent integrations", icon: Blocks },
-      { slug: "profile", label: "My profile", icon: UserCog },
+      { slug: "notifications", label: "Notifications", icon: Mail, operatorOnly: true },
+      { slug: "agent-integrations", label: "Agent integrations", icon: Blocks, operatorOnly: true },
+      { slug: "profile", label: "My profile", icon: UserCog, operatorOnly: true },
     ],
   },
   {

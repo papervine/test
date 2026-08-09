@@ -12,18 +12,25 @@ import { SETTINGS_NAV, settingsHref } from "@/lib/settings-nav";
 // Responsive: a vertical grouped sidebar on desktop (lg+), and a horizontally-scrollable
 // strip of pills on mobile (the grouping headings are dropped — a single swipeable row is
 // the legible shape on a phone, where a 16-item vertical list would push content offscreen).
-export function SettingsNav() {
+export function SettingsNav({ platformAdmin = false }: { platformAdmin?: boolean }) {
   const pathname = usePathname();
   // The settings routes are URL-scoped (/:org/:site/settings/…), so the org +
   // site come straight off the path — the subnav is the same for every site.
   // Always set here — the subnav only renders under a settings route (/:org/:site/settings).
   const { orgSlug = "", siteSlug = "" } = parseSitePath(pathname);
 
+  // Drop operator-only items (TEMPORARY — see settings-nav.ts), then drop any section left
+  // empty (e.g. "Security & access" is operator-only-api-keys today, so it vanishes too).
+  const sections = SETTINGS_NAV.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => !item.operatorOnly || platformAdmin),
+  })).filter((section) => section.items.length > 0);
+
   return (
     <>
       {/* Mobile: horizontal scroll strip of pills (flattened, no headings). */}
       <nav className="db-glass sticky top-14 z-20 flex gap-2 overflow-x-auto border-b border-[rgba(var(--ink-rgb),0.06)] px-4 py-2.5 lg:hidden">
-        {SETTINGS_NAV.flatMap((section) => section.items).map(
+        {sections.flatMap((section) => section.items).map(
           ({ slug, label, icon: Icon }) => {
             const href = settingsHref(orgSlug, siteSlug, slug);
             const active = pathname === href;
@@ -54,7 +61,7 @@ export function SettingsNav() {
 
       {/* Desktop: vertical grouped sidebar. */}
       <nav className="db-glass hidden w-56 shrink-0 flex-col gap-5 overflow-y-auto border-r border-[rgba(var(--ink-rgb),0.06)] px-3 py-6 lg:flex">
-        {SETTINGS_NAV.map((section) => (
+        {sections.map((section) => (
           <div key={section.heading} className="flex flex-col gap-0.5">
             <h3 className="px-2 pb-1 text-[11px] font-medium uppercase tracking-wide text-[var(--muted)]/60">
               {section.heading}
