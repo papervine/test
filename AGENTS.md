@@ -204,10 +204,13 @@ Keep both green.
 When a change needs hands-on verification (DoD #4, or the user says "go test this"), don't
 hand-walk signup → onboarding. Seed a known account and drive a real browser:
 
-- `npm run db:seed` (`scripts/seed-dev.mjs`) creates a known login **`dev@papervine.local` /
-  `dev-password-123`**, an org, and connected sites with activity + analytics data. It's a
-  **full reset**: it first truncates every dev/tenant table and clears the content bucket's
-  `sites/` prefix (keeping only the `billing:sync` catalog), so leftover experiments — extra
+- `npm run db:seed` (`scripts/seed-dev.mjs`) creates **two known logins**, both password
+  **`password`** — **`dev@papervine.local`** (owner) and **`dev2@papervine.local`** (admin) —
+  as members of the same org, so you can log in as both (two browser profiles) to exercise
+  real-time collab (SPEC §9.2; same-browser tabs share a BroadcastChannel and can't show
+  cross-machine remote carets). Plus an org and connected sites with activity + analytics
+  data. It's a **full reset**: it first truncates every dev/tenant table and clears the
+  content bucket's `sites/` prefix (keeping only the `billing:sync` catalog), so leftover experiments — extra
   orgs, hand-connected sites — are gone and the DB holds *only* the seed. **Prod-guarded**
   (refuses any non-localhost `DATABASE_URL`). Needs `docker compose up` (Postgres + MinIO). Seeded sites (all from **`papervine/starter`** except
   the scale test — one repo to rule them all: the forkable user example AND the renderer/

@@ -94,7 +94,7 @@ Each connected site is served at its own host — `{slug}.papervine.io` in produ
 
 ## Development
 
-**Seed a dev account:** `npm run db:seed` (with the Docker Postgres running) creates a known login — `dev@papervine.local` / `dev-password-123` — with an org, a connected site, an activity feed, and analytics data, so you can sign in at `/login` and see a populated dashboard without walking signup → onboarding → connect. The seed is idempotent and refuses any non-local `DATABASE_URL`. Run dev on the port `BETTER_AUTH_URL` points at (`:3000`) so sign-in's origin check passes.
+**Seed dev accounts:** `npm run db:seed` (with the Docker Postgres running) creates two known logins — `dev@papervine.local` (owner) and `dev2@papervine.local` (admin), both password `password` — as members of the same org, with a connected site, an activity feed, and analytics data, so you can sign in at `/login` and see a populated dashboard without walking signup → onboarding → connect. The second account is there so you can log in as both (two browser profiles) and exercise real-time collab. The seed is idempotent and refuses any non-local `DATABASE_URL`. Run dev on the port `BETTER_AUTH_URL` points at (`:3000`) so sign-in's origin check passes.
 
 **AI assistant:** set `ANTHROPIC_API_KEY` in `.env.local`. Without it the panel still opens and the API returns a graceful 503. Optional: `PAPERVINE_AI_MODEL` (default `claude-sonnet-4-6`).
 

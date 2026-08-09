@@ -1,8 +1,9 @@
-// Seed a known account + a connected site for local dev / agent testing. One command
+// Seed two known accounts + a connected site for local dev / agent testing. One command
 // gets you a loggable dashboard with data, instead of hand-walking signup → onboarding
-// → connect every time. Pure DB ops (mirrors scripts/seed-analytics.mjs and
-// tests/e2e/global-setup.ts) — the password is hashed with Better Auth's own hasher so
-// the credential account logs in through the real flow. Run:
+// → connect every time — and two members of the same org so you can log in as both (two
+// browser profiles) to exercise real-time collab (SPEC §9.2). Pure DB ops (mirrors
+// scripts/seed-analytics.mjs and tests/e2e/global-setup.ts) — passwords are hashed with
+// Better Auth's own hasher so the credential accounts log in through the real flow. Run:
 //   npm run db:seed
 //
 // Idempotent: upserts by email / org slug / site slug, and rebuilds the activity feed.
@@ -45,7 +46,14 @@ import {
 import { imageSize } from "image-size";
 
 const DEV = {
-  user: { name: "Dev User", email: "dev@papervine.local", password: "dev-password-123" },
+  // Two members so you can log in as both (e.g. two browser profiles/private windows) and
+  // exercise real-time collab (SPEC §9.2) — same-browser tabs share a BroadcastChannel and
+  // can't show cross-machine remote carets. Both need `admin` or `owner` (the org roles
+  // Better Auth's plugin issues) to pass the editor's "admin" feature gate.
+  users: [
+    { name: "Dev User", email: "dev@papervine.local", password: "password", role: "owner" },
+    { name: "Dev User 2", email: "dev2@papervine.local", password: "password", role: "admin" },
+  ],
   org: { name: "Dev Org", slug: "dev-org" },
   // All repos are synced into our object storage on seed (just like a real connect), so the
   // render path reads only from us — config, pages, AND assets. The canonical example/test
@@ -219,23 +227,28 @@ try {
   console.warn(`• storage wipe skipped (${e.message})`);
 }
 
-// 1. User + credential account (Better Auth's `account` row holds the password hash).
-let userId = await findId("user", "email", DEV.user.email);
-const passwordHash = await hashPassword(DEV.user.password);
-if (userId) {
-  await sql`update account set password = ${passwordHash}, updated_at = ${now}
-            where user_id = ${userId} and provider_id = 'credential'`;
-  console.log(`• user ${DEV.user.email} exists — refreshed password`);
-} else {
-  userId = randomUUID();
-  await sql`insert into "user" (id, name, email, email_verified, created_at, updated_at)
-            values (${userId}, ${DEV.user.name}, ${DEV.user.email}, true, ${now}, ${now})`;
-  await sql`insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at)
-            values (${randomUUID()}, ${userId}, 'credential', ${userId}, ${passwordHash}, ${now}, ${now})`;
-  console.log(`• created user ${DEV.user.email}`);
+// 1. Users + credential accounts (Better Auth's `account` row holds the password hash).
+const userIds = [];
+for (const u of DEV.users) {
+  let id = await findId("user", "email", u.email);
+  const passwordHash = await hashPassword(u.password);
+  if (id) {
+    await sql`update account set password = ${passwordHash}, updated_at = ${now}
+              where user_id = ${id} and provider_id = 'credential'`;
+    console.log(`• user ${u.email} exists — refreshed password`);
+  } else {
+    id = randomUUID();
+    await sql`insert into "user" (id, name, email, email_verified, created_at, updated_at)
+              values (${id}, ${u.name}, ${u.email}, true, ${now}, ${now})`;
+    await sql`insert into account (id, account_id, provider_id, user_id, password, created_at, updated_at)
+              values (${randomUUID()}, ${id}, 'credential', ${id}, ${passwordHash}, ${now}, ${now})`;
+    console.log(`• created user ${u.email}`);
+  }
+  userIds.push(id);
 }
+const userId = userIds[0]; // the primary — attributed as the actor on seeded activity/analytics.
 
-// 2. Organization + owner membership (the dashboard lists orgs by membership).
+// 2. Organization + membership for every seeded user (the dashboard lists orgs by membership).
 let orgId = await findId("organization", "slug", DEV.org.slug);
 if (!orgId) {
   orgId = randomUUID();
@@ -243,11 +256,16 @@ if (!orgId) {
             values (${orgId}, ${DEV.org.name}, ${DEV.org.slug}, ${now})`;
   console.log(`• created org ${DEV.org.slug}`);
 }
-const member = await sql`select id from member where organization_id = ${orgId} and user_id = ${userId} limit 1`;
-if (!member[0]) {
-  await sql`insert into member (id, organization_id, user_id, role, created_at)
-            values (${randomUUID()}, ${orgId}, ${userId}, 'owner', ${now})`;
-  console.log(`• added owner membership`);
+for (const [i, u] of DEV.users.entries()) {
+  const id = userIds[i];
+  const member = await sql`select id from member where organization_id = ${orgId} and user_id = ${id} limit 1`;
+  if (!member[0]) {
+    await sql`insert into member (id, organization_id, user_id, role, created_at)
+              values (${randomUUID()}, ${orgId}, ${id}, ${u.role}, ${now})`;
+    console.log(`• added ${u.role} membership for ${u.email}`);
+  } else {
+    await sql`update member set role = ${u.role} where id = ${member[0].id}`;
+  }
 }
 
 // 3 + 4. Connected sites + their activity feeds. Each repo is synced into object storage
@@ -380,9 +398,9 @@ try {
 }
 
 console.log(
-  `\n✓ Seed complete. Log in at /login:\n` +
-    `    email:    ${DEV.user.email}\n` +
-    `    password: ${DEV.user.password}\n` +
-    `  Live docs (path form on a no-domain host):\n` +
+  `\n✓ Seed complete. Log in at /login (two members — try both, in separate browser` +
+    ` profiles, to exercise real-time collab):\n` +
+    DEV.users.map((u) => `    ${u.email}  /  ${u.password}  (${u.role})`).join("\n") +
+    `\n  Live docs (path form on a no-domain host):\n` +
     DEV.sites.map((s) => `    /sites/${s.slug}  (${s.repoOwner}/${s.repoName})`).join("\n"),
 );

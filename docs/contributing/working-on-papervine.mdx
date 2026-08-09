@@ -85,14 +85,16 @@ don't hand-walk signup → onboarding. Seed a known account and drive a real bro
     docker compose up -d        # Postgres (+pgvector) + MinIO (S3)
     ```
   </Step>
-  <Step title="Seed a known account">
+  <Step title="Seed known accounts">
     ```bash
     npm run db:seed
     ```
-    `scripts/seed-dev.mjs` creates the login **`dev@papervine.local`** /
-    **`dev-password-123`**, an org, and a connected site `starter` (→ a real-world docs repo)
-    with activity + analytics data. It is idempotent (re-run to refresh the password) and
-    **prod-guarded** — it refuses any non-localhost `DATABASE_URL`.
+    `scripts/seed-dev.mjs` creates two logins, both password **`password`** —
+    **`dev@papervine.local`** (owner) and **`dev2@papervine.local`** (admin) — as members of
+    the same org, plus a connected site `starter` (→ a real-world docs repo) with activity +
+    analytics data. The second account is there so you can log in as both (two browser
+    profiles) and exercise real-time collab. It is idempotent (re-run to refresh the
+    passwords) and **prod-guarded** — it refuses any non-localhost `DATABASE_URL`.
   </Step>
   <Step title="Log in on the app host">
     The control plane lives on the **`app.` host**. Log in at
