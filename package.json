@@ -28,6 +28,7 @@
     "db:generate": "node node_modules/drizzle-kit/bin.cjs generate",
     "db:migrate": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs migrate",
     "db:seed": "node --env-file=.env.local scripts/seed-dev.mjs",
+    "widget:playground": "node --env-file=.env.local scripts/widget-playground.mjs",
     "billing:sync": "node --env-file=.env.local scripts/sync-billing.mjs",
     "billing:publish": "node --env-file=.env.local scripts/publish-stripe.mjs"
   },

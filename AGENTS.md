@@ -232,6 +232,17 @@ hand-walk signup → onboarding. Seed a known account and drive a real browser:
   / `fill` / `screenshot`; it navigates `app.localhost` / `{slug}.localhost` fine) or
   Playwright. This is the same loop that found the per-request content-source bug (SPEC §2):
   connect a repo, open its docs, confirm the sidebar/pages are the tenant's, not the platform's.
+- **Embeddable widget (SPEC §8.7):** `npm run widget:playground` (`scripts/widget-playground.mjs`)
+  serves a real "customer site" on a genuinely different local origin (`localhost:8080` by
+  default) with the actual embed snippet — same-origin testing inside the app would hide the
+  cross-origin-only bugs this surface has actually hit (a CORS bug, a citation-link-resolves-
+  to-the-wrong-host bug). Auto-detects the running dev server's port, lazily mints a
+  `widget_id` and allowlists its own origin on the target site (`starter` by default, prod-
+  guarded the same way as `db:seed`) so it works against a freshly-seeded DB with zero manual
+  dashboard clicks. Serves `/` (default `init()`), `/single-tag` (`data-widget-id` auto-init),
+  `/bare` (loader only, drive `init()` yourself from devtools), and `/custom?opts={...}` (any
+  `init()` options as a JSON query param, e.g. `?opts={"theme":"light","variant":"modal"}`) —
+  covers every install method and the full option surface without editing a file.
 
 ## How the renderer works (don't break this)
 
@@ -336,6 +347,7 @@ npm run db:generate         # generate a versioned SQL migration from schema cha
 npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
 node bin/papervine.mjs dev <dir>     # preview any docs repo (docs dev analogue)
 node tests/crawl.mjs <dir>        # crawl a real repo, report rendered/degraded/500
+npm run widget:playground         # serve the embeddable widget on a real cross-origin test page
 npm run worktree:setup            # a fresh worktree: symlink .env.local to main (share one env), then npm ci
 ```
 
