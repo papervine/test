@@ -9,6 +9,10 @@ import {
   Plug,
   Bot,
   MessagesSquare,
+  Lock,
+  PenLine,
+  Globe,
+  BarChart3,
 } from "lucide-react";
 import { cookies, headers } from "next/headers";
 import { PlatformShell } from "@/components/platform/PlatformShell";
@@ -21,10 +25,18 @@ import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
 export const metadata: Metadata = {
   title: "Papervine — the intelligent documentation platform",
   description:
-    "Documentation built for humans and AI. Create and maintain world-class docs from a Git repo — with an API playground, instant search, and an AI assistant.",
+    "Documentation built for humans and AI. Write, publish, and maintain world-class docs — with an API playground, instant search, and an AI assistant.",
 };
 
-const GITHUB = "https://github.com/phishy/papervine";
+// Our own docs, dogfooded as an ordinary tenant site (SPEC §2) — hence the doubled
+// label: `docs` is in the host resolver's RESERVED set (src/lib/tenant-host.ts), so
+// `docs.papervine.io` can't be a tenant slug and falls through to this marketing apex.
+// An absolute <a>, not <Link>: a different host is a hard navigation, never a soft
+// RSC nav (the tenant-host rewrite gotcha in CLAUDE.md).
+const DOCS = "https://papervine-docs.papervine.io/";
+
+// The hero announcement pill links at the page explaining what it announces.
+const DOCS_READER_AUTH = `${DOCS}auth/reader-auth`;
 
 // The "intelligence" story (top section).
 const PILLARS = [
@@ -67,6 +79,26 @@ const FEATURES = [
     title: "Embeddable widget",
     body: "Drop the assistant into any external site with a script snippet — gated by an allowlist, not a login.",
   },
+  {
+    icon: Lock,
+    title: "Public and private, one site",
+    body: "Gate any page to a reader group with one line of frontmatter. Readers sign in through your own IdP — we never hold their credentials.",
+  },
+  {
+    icon: PenLine,
+    title: "Visual editor",
+    body: "A three-panel workspace with an editing agent, live collaboration, and MDX round-tripping. Publish as a commit or a pull request.",
+  },
+  {
+    icon: Globe,
+    title: "Custom domains",
+    body: "Serve docs on your own domain with automatic TLS — or take the subdomain we give you and skip DNS entirely.",
+  },
+  {
+    icon: BarChart3,
+    title: "Humans vs. agents",
+    body: "See what people read and search for — then flip one toggle to see the same site through the eyes of the agents crawling it.",
+  },
 ];
 
 export default async function LandingPage() {
@@ -90,6 +122,12 @@ export default async function LandingPage() {
           <nav className="flex items-center gap-1 whitespace-nowrap text-sm">
             {/* Secondary links crowd the logo + primary CTA off a narrow phone screen —
                 keep just the one thing that matters there; they return at sm:. */}
+            <a
+              href={DOCS}
+              className="hidden rounded-lg px-3 py-1.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:inline-block"
+            >
+              Docs
+            </a>
             <Link
               href="/pricing"
               className="hidden rounded-lg px-3 py-1.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:inline-block"
@@ -126,29 +164,29 @@ export default async function LandingPage() {
       {/* Hero */}
       <section className="mx-auto max-w-3xl px-6 pb-20 pt-24 text-center sm:pt-32">
         <a
-          href={GITHUB}
+          href={DOCS_READER_AUTH}
           className="db-rise db-ring mono inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs text-[var(--muted)]"
           style={{ animationDelay: "0ms" }}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--blue)] shadow-[0_0_8px_2px_rgba(91,140,255,0.7)]" />
-          New · MCP &amp; llms.txt support
+          New · public docs and internal docs, one site
         </a>
 
         <h1
           className="db-rise mt-7 text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
           style={{ animationDelay: "80ms" }}
         >
-          The <span className="db-grad">intelligent</span>
+          Documentation
           <br />
-          documentation platform.
+          that <span className="db-grad">grows</span> itself.
         </h1>
 
         <p
           className="db-rise mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[var(--muted)]"
           style={{ animationDelay: "160ms" }}
         >
-          Create and maintain world-class docs from a Git repo — built for both
-          your readers and the AI agents they rely on.
+          Write, publish, and maintain world-class docs — built for both your
+          readers and the AI agents they rely on.
         </p>
 
         <div
@@ -162,12 +200,6 @@ export default async function LandingPage() {
             Start free
             <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
           </Link>
-          <a
-            href={GITHUB}
-            className="db-ring inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-[var(--fg)]"
-          >
-            View on GitHub
-          </a>
         </div>
 
         <div
@@ -321,18 +353,15 @@ export default async function LandingPage() {
             <Brand size="sm" />
           </span>
           <div className="flex gap-5">
+            <a href={DOCS} className="transition-colors hover:text-[var(--fg)]">
+              Docs
+            </a>
             <Link
               href="/pricing"
               className="transition-colors hover:text-[var(--fg)]"
             >
               Pricing
             </Link>
-            <a
-              href={GITHUB}
-              className="transition-colors hover:text-[var(--fg)]"
-            >
-              GitHub
-            </a>
             {signedIn ? (
               <a
                 href={`${appBase}/`}
