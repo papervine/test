@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { ChevronRight, X, ListTree, FolderOpen, type LucideIcon } from "lucide-react";
 import type { NavSection } from "@papervine/renderer/lib/nav";
 import { NavTree } from "./NavTree";
@@ -70,9 +70,29 @@ export function EditorShell({
   const [treeOpen, setTreeOpen] = useState(true);
   const [, start] = useTransition();
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   // The pane remounts per page, so a keystroke still inside its 700ms autosave debounce would be
   // lost on a fast nav click. We flush it through this handle BEFORE a user-initiated switch.
   const paneRef = useRef<MdxEditorHandle>(null);
+
+  // Keep the URL's ?slug=/&branch= in sync with whatever's actually open, so the current
+  // page is linkable/bookmarkable and survives a refresh or browser back — EditorPage
+  // already reads both on initial load, but nothing wrote them back on in-app navigation
+  // (nav click, file tree, a followed link), so the URL stayed frozen at whatever page you
+  // first opened. `replace` (not `push`): this mirrors state already updated client-side,
+  // not a real navigation — every click adding a history entry would make back painful.
+  // branch is omitted when it's just the deploy branch, matching the page's own default.
+  const syncUrl = useCallback(
+    (nextSlug: string, nextBranch: string) => {
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("slug", nextSlug);
+      if (nextBranch === deployBranch) params.delete("branch");
+      else params.set("branch", nextBranch);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams, deployBranch],
+  );
 
   const loadPage = useCallback(
     (nextSlug: string, nextBranch = branch, opts: { flush?: boolean } = {}) => {
@@ -88,9 +108,10 @@ export function EditorShell({
         setDocKey((k) => k + 1);
         // Changing pages closes any open settings panel (it targeted the old page/group).
         setSettings(null);
+        syncUrl(nextSlug, nextBranch);
       });
     },
-    [org, site, branch],
+    [org, site, branch, syncUrl],
   );
 
   const switchBranch = (next: string) => {
