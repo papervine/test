@@ -33,8 +33,7 @@ export default function LegalLayout({ children }: { children: React.ReactNode })
         <main className="legal-prose flex-1 py-8">{children}</main>
 
         <footer className="border-t border-white/[0.06] py-8 text-sm text-[var(--muted)]">
-          © {new Date().getFullYear()} NewNewMedia, LLC. Papervine is a product of
-          NewNewMedia, LLC.
+          © {new Date().getFullYear()} Papervine, LLC.
         </footer>
       </div>
     </PlatformShell>

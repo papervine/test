@@ -10,8 +10,8 @@ export default function PrivacyPolicy() {
       <p className="lede">Last updated: June 9, 2026</p>
 
       <p>
-        This Privacy Policy explains how <strong>NewNewMedia, LLC</strong> (&ldquo;NewNewMedia,&rdquo;
-        &ldquo;we,&rdquo; &ldquo;us&rdquo;), the company behind <strong>Papervine</strong> (the
+        This Privacy Policy explains how <strong>Papervine, LLC</strong> (&ldquo;we,&rdquo;
+        &ldquo;us&rdquo;), the company behind <strong>Papervine</strong> (the
         &ldquo;Service&rdquo;), collects, uses, and shares information about you when you use
         papervine.io, our dashboard, and the documentation sites we host on your behalf.
       </p>
@@ -119,7 +119,7 @@ export default function PrivacyPolicy() {
 
       <h2>11. Contact</h2>
       <p>
-        NewNewMedia, LLC — [MAILING ADDRESS]
+        Papervine, LLC — [MAILING ADDRESS]
         <br />
         <a href="mailto:privacy@papervine.io">privacy@papervine.io</a>
       </p>

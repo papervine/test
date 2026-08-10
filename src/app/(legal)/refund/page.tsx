@@ -11,7 +11,7 @@ export default function RefundPolicy() {
 
       <p>
         This policy explains how billing, cancellations, and refunds work for paid{" "}
-        <strong>Papervine</strong> subscriptions, operated by <strong>NewNewMedia, LLC</strong>.
+        <strong>Papervine</strong> subscriptions, operated by <strong>Papervine, LLC</strong>.
       </p>
 
       <h2>1. Subscriptions &amp; renewals</h2>

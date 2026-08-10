@@ -12,7 +12,7 @@ export default function TermsOfService() {
       <p>
         These Terms of Service (&ldquo;Terms&rdquo;) govern your access to and use of{" "}
         <strong>Papervine</strong> (the &ldquo;Service&rdquo;), operated by{" "}
-        <strong>NewNewMedia, LLC</strong> (&ldquo;NewNewMedia,&rdquo; &ldquo;we,&rdquo;
+        <strong>Papervine, LLC</strong> (&ldquo;we,&rdquo;
         &ldquo;us&rdquo;). By creating an account or using the Service, you agree to these Terms.
       </p>
 
@@ -66,7 +66,7 @@ export default function TermsOfService() {
       <h2>7. Intellectual property</h2>
       <p>
         The Service, including its software, design, and trademarks (including
-        &ldquo;Papervine&rdquo;), is owned by NewNewMedia, LLC and protected by law. These Terms
+        &ldquo;Papervine&rdquo;), is owned by Papervine, LLC and protected by law. These Terms
         grant you no rights to our IP except the limited right to use the Service.
       </p>
 
@@ -85,7 +85,7 @@ export default function TermsOfService() {
 
       <h2>10. Limitation of liability</h2>
       <p>
-        TO THE MAXIMUM EXTENT PERMITTED BY LAW, NEWNEWMEDIA WILL NOT BE LIABLE FOR ANY INDIRECT,
+        TO THE MAXIMUM EXTENT PERMITTED BY LAW, PAPERVINE, LLC WILL NOT BE LIABLE FOR ANY INDIRECT,
         INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES, OR FOR LOST PROFITS OR DATA. OUR
         TOTAL LIABILITY FOR ANY CLAIM WILL NOT EXCEED THE AMOUNTS YOU PAID US IN THE 12 MONTHS BEFORE
         THE CLAIM.
@@ -93,7 +93,7 @@ export default function TermsOfService() {
 
       <h2>11. Indemnification</h2>
       <p>
-        You will indemnify and hold NewNewMedia harmless from claims arising out of your Customer
+        You will indemnify and hold Papervine, LLC harmless from claims arising out of your Customer
         Content or your breach of these Terms.
       </p>
 
@@ -118,7 +118,7 @@ export default function TermsOfService() {
 
       <h2>15. Contact</h2>
       <p>
-        NewNewMedia, LLC — [MAILING ADDRESS]
+        Papervine, LLC — [MAILING ADDRESS]
         <br />
         <a href="mailto:legal@papervine.io">legal@papervine.io</a>
       </p>
