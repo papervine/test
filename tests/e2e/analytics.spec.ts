@@ -65,7 +65,8 @@ test.afterAll(async () => {
 test("analytics renders human metrics and the Top pages table", async ({ page }) => {
   await page.goto(sitePath(SITE_SLUG, "analytics"));
 
-  const heading = page.getByRole("heading", { name: "Analytics" });
+  // The page is titled "Insights" (its route is still /analytics).
+  const heading = page.getByRole("heading", { name: "Insights" });
   await expect(heading).toBeVisible();
   // The active-site label sits next to the heading (the switcher also shows the name now,
   // so scope to the header to avoid a strict-mode double match).

@@ -43,8 +43,9 @@ test("the site overview greets the user and renders the rail", async ({ page }) 
       name: new RegExp(`Good (morning|afternoon|evening), ${TEST_USER.name.split(" ")[0]}`),
     }),
   ).toBeVisible();
-  // The control-plane rail + the active site's name.
-  await expect(page.getByRole("link", { name: "Analytics" })).toBeVisible();
+  // The control-plane rail + the active site's name. The rail item is labelled "Insights"
+  // (AppRail.tsx) even though its route is /analytics — assert the label users see.
+  await expect(page.getByRole("link", { name: "Insights" })).toBeVisible();
   await expect(page.getByRole("heading", { name: SITE.name })).toBeVisible();
 });
 

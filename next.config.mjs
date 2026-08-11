@@ -10,6 +10,14 @@ const nextConfig = {
   // The MDX compiler stack (unified/@mdx-js + next-mdx-remote-client) breaks when
   // webpack bundles it for RSC — keep it external so it's required at runtime.
   serverExternalPackages: ["@mintlify/mdx", "next-mdx-remote-client"],
+  // `next dev` refuses cross-origin requests for /_next/* dev resources unless the origin is
+  // listed here. Our e2e suite must address the app as 127.0.0.1 (some runners resolve
+  // `localhost` to IPv6 ::1 while Next listens on IPv4 — the fetch-127.0.0.1 rule in
+  // CLAUDE.md), and `*.localhost` subdomain hosts are a different origin again. Without this
+  // the HTML renders but every client chunk 403s, so pages run with NO JavaScript: nothing
+  // hydrates, and any spec touching interactivity fails in a way that looks like a product
+  // bug (a button that "does nothing") rather than a blocked asset. Dev-only setting.
+  allowedDevOrigins: ["127.0.0.1", "localhost", "*.localhost"],
   // The renderer core ships as TS/TSX source (workspace package), so Next must
   // compile it rather than treat it as a pre-built dependency.
   transpilePackages: ["@papervine/renderer"],

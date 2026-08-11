@@ -60,7 +60,7 @@ test.describe("dashboard site switcher", () => {
     await switcher.click();
     await page.getByRole("menu").getByRole("menuitem", { name: new RegExp(BETA.name) }).click();
     await page.waitForURL(`**/${ORG_SLUG}/${BETA.slug}/analytics`);
-    const heading = page.getByRole("heading", { name: "Analytics" });
+    const heading = page.getByRole("heading", { name: "Insights" });
     await expect(heading.locator("xpath=following-sibling::*[1]")).toHaveText(BETA.name);
   });
 

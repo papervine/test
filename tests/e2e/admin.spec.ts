@@ -68,7 +68,7 @@ test.describe("platform admin", () => {
   }) => {
     await page.goto("/admin");
     await expect(
-      page.getByRole("heading", { name: "Platform admin" }),
+      page.getByRole("heading", { name: "Operator" }),
     ).toBeVisible();
     // The setup project's org + user appear even though the admin isn't a member.
     await expect(
@@ -109,7 +109,7 @@ test.describe("platform admin", () => {
       await page.waitForURL(/\/admin$/, { timeout: 5_000 });
     }).toPass({ timeout: 30_000 });
     await expect(
-      page.getByRole("heading", { name: "Platform admin" }),
+      page.getByRole("heading", { name: "Operator" }),
     ).toBeVisible();
   });
 });

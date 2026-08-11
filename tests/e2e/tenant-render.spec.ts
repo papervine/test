@@ -122,7 +122,11 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     await expect(logo).toHaveCount(1);
     await expect(logo).toHaveAttribute("src", `/api/tenant-asset/${SLUG}/logo.svg`);
 
-    const res = await page.request.get(`/api/tenant-asset/${SLUG}/logo.svg`);
+    // docsUrl(), not a relative path: `page.request` is Node-side, and a relative URL
+    // resolves against baseURL — the app host — which Node's DNS can't resolve
+    // (`ENOTFOUND app.localhost`; only the browser maps *.localhost). The apex origin is
+    // 127.0.0.1, per the repo's fetch-127.0.0.1-not-localhost rule.
+    const res = await page.request.get(docsUrl(`/api/tenant-asset/${SLUG}/logo.svg`));
     expect(res.status()).toBe(200);
     expect(res.headers()["content-type"]).toContain("image/svg+xml");
   });
@@ -156,13 +160,15 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     // `site` param + contentContext, runSearch fell back to the platform content/ repo and
     // the tenant's Cmd-K (and the assistant's searchDocs) returned OUR pages. The client
     // passes ?site={slug}; assert the index is the tenant's by matching its unique token.
-    const res = await page.request.get(`/api/search?q=zorptenant&site=${SLUG}`);
+    // Absolute (see the logo test): a relative `page.request` URL resolves against the app
+    // host, which Node's DNS can't resolve.
+    const res = await page.request.get(docsUrl(`/api/search?q=zorptenant&site=${SLUG}`));
     expect(res.status()).toBe(200);
     const hrefs = ((await res.json()).results ?? []).map((r: { href: string }) => r.href);
     expect(hrefs).toContain("/index");
 
     // And a platform-only term must NOT leak in (the tenant has no such page).
-    const leak = await page.request.get(`/api/search?q=Papervine&site=${SLUG}`);
+    const leak = await page.request.get(docsUrl(`/api/search?q=Papervine&site=${SLUG}`));
     expect(((await leak.json()).results ?? []).length).toBe(0);
   });
 

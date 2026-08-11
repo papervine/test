@@ -20,6 +20,7 @@ _private/
 
 # Transient agent browser-automation artifacts
 .playwright-cli/
+.playwright-mcp/
 .env.r2.local
 
 .projects/cache
