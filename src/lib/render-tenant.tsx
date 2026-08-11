@@ -5,6 +5,7 @@ import { getSiteBySlug, resolveTenantSlug } from "@/lib/tenant";
 import { READER_COOKIE, readerSessionValid } from "@/lib/reader-session";
 import { accessForRecord, entitlementKey } from "@/lib/reader-access";
 import { requestContentSource } from "@/lib/request-source";
+import { ARTICLE_ROW } from "@/lib/docs-layout";
 import { siteContentTag } from "@/lib/s3-source";
 import type { PageAccess } from "@papervine/renderer/lib/nav";
 import {
@@ -211,7 +212,7 @@ export async function TenantDocsArticle({
       const op = (await loadApiCatalog(config)).get(slugStr);
       if (op) {
         return (
-          <div className="flex items-start gap-10 px-8 py-10">
+          <div className={ARTICLE_ROW}>
             <EndpointReference op={op} baseUrl={op.baseUrl} siteBase={base} />
           </div>
         );
@@ -228,7 +229,7 @@ export async function TenantDocsArticle({
     const assetDimensions = await loadAssetDimensions();
 
     return (
-      <div className="flex items-start gap-10 px-8 py-10">
+      <div className={ARTICLE_ROW}>
         <article className="prose min-w-0 flex-1">
           {eyebrow && <div className="mb-2 text-sm font-semibold text-primary">{eyebrow}</div>}
           {page.frontmatter.title && <h1>{page.frontmatter.title}</h1>}

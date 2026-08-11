@@ -57,8 +57,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   };--color-primary-dark:${colors.dark ?? colors.primary};${themeCssVars(theme.tokens)};}`;
   const themeScript = appearanceInitScript(config.appearance);
 
+  // `data-scroll-behavior="smooth"` acknowledges the `scroll-behavior: smooth` we set in
+  // globals.css for #anchor links. Without it Next ANIMATES scroll restoration on every
+  // route change instead of jumping instantly — so navigating the docs sidebar slid the
+  // page around visibly. The attribute keeps smooth scrolling for in-page anchors while
+  // letting route transitions land immediately.
   return (
-    <html lang="en" data-theme={theme.name} suppressHydrationWarning>
+    <html
+      lang="en"
+      data-theme={theme.name}
+      data-scroll-behavior="smooth"
+      suppressHydrationWarning
+    >
       <head>
         <Favicon favicon={config.favicon} assetBase={assetBase} />
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />

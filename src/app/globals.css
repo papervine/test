@@ -18,6 +18,14 @@
 html {
   scroll-behavior: smooth;
   scroll-padding-top: 7rem; /* clear the sticky navbar + tab bar for #anchor links */
+
+  /* Always reserve the scrollbar gutter. Without this the UA drops the vertical
+     scrollbar the moment a document stops overflowing — during the article
+     skeleton (loading.tsx), or on any genuinely short page — which widens the
+     viewport by the scrollbar width and slides the centered `mx-auto max-w-7xl`
+     shell sideways, then back. That horizontal twitch on every sidebar click is
+     what this prevents; see ArticleSkeleton for the vertical half of the same bug. */
+  scrollbar-gutter: stable;
 }
 
 /* `color-scheme: dark` tells the UA to paint native chrome (scrollbars, form controls) dark,

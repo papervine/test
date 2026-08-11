@@ -1,9 +1,15 @@
+import { ARTICLE_ROW } from "@/lib/docs-layout";
+
 // Article-column skeleton shown (via loading.tsx) while a docs page's article segment
 // renders. The persistent shell stays put, so navigation feels immediate instead of
 // blocking on the server render. Shared by the /sites and custom-domain loading states.
+//
+// It carries ARTICLE_ROW — the same row class the real article uses — because a skeleton
+// shorter than the sidebar collapses the flex row and makes the sticky sidebar jump. See
+// docs-layout.ts for the full mechanism.
 export function ArticleSkeleton() {
   return (
-    <div className="flex items-start gap-10 px-8 py-10" aria-busy="true" aria-label="Loading page">
+    <div className={ARTICLE_ROW} aria-busy="true" aria-label="Loading page">
       <div className="min-w-0 flex-1 animate-pulse space-y-4">
         <div className="h-3 w-24 rounded bg-zinc-100 dark:bg-white/10" />
         <div className="h-8 w-2/3 rounded bg-zinc-200 dark:bg-white/10" />

@@ -587,6 +587,38 @@ runtime) so the render is pure and ISR-cacheable, while middleware — which Ver
 request, *including cache hits* — still enforces fine-grained per-page/per-group access. Full
 design (and why fast + gated coexist) in **§11.2 → Planned**. Its own change, not yet done.
 
+**The persistent shell had to be made geometrically stable too (landed 2026-08-10).** The split
+above kept the shell *mounted* across navigations but not *still*: clicking any sidebar link made
+the whole page twitch — measured on the dogfooded docs site at 1280×900, the shell slid ~15px
+right and the sidebar jumped ~47px up, then both snapped back. One root cause, three
+contributors, all from the article column being shorter than the viewport while `loading.tsx` was
+on screen:
+> **① The sticky sidebar lost its offset.** The sidebar is `sticky top-28` with
+> `h-[calc(100vh-7rem)]`, and a sticky element is clamped by its containing block — the flex row
+> pairing it with the article. A short article collapsed that row, so the sidebar couldn't be
+> pushed to its 7rem offset and fell to its natural flow position. Fixed with a shared
+> `ARTICLE_ROW` constant (`src/lib/docs-layout.ts`) carrying a `min-h-screen`, used by all three
+> renderers of that row (article, OpenAPI endpoint page, skeleton) — they had three independent
+> copies of the class string, which is *how* they drifted. Note the min-height is deliberately
+> **not** the sidebar's own `calc(100vh-7rem)`: reaching the offset needs the row to cover the
+> offset *plus* the sidebar's height, measured from a row top that moves with whether `NavTabs`
+> rendered. Matching the sidebar exactly leaves it ~47px short on a site with no tab bar.
+>
+> **② The scrollbar gutter wasn't reserved.** A non-overflowing document loses its vertical
+> scrollbar, widening the viewport and sliding the centered `mx-auto max-w-7xl` shell. Fixed with
+> `scrollbar-gutter: stable` on `<html>`.
+>
+> **③ Route transitions animated their scroll.** `scroll-behavior: smooth` (set for #anchor
+> links) also makes Next animate scroll restoration on every navigation. Fixed with
+> `data-scroll-behavior="smooth"` on `<html>`, which scopes the smoothness back to anchors.
+>
+> ① and ② also affected *genuinely short pages*, not just the loading state — the original
+> diagnosis under-scoped it to the skeleton. Regression test in `tenant-render.spec.ts` asserts a
+> one-line page and a tall page put the sidebar box and `documentElement.clientWidth` in identical
+> positions; confirmed failing before the fix (`Expected: 112, Received: 65`) and passing after.
+> Reproduce by hand with `node bin/papervine.mjs dev docs` — dev renders slower, so the skeleton
+> is easier to catch locally than in prod.
+
 **Connect returns immediately; first sync runs in the background (landed 2026-06-15).** Even
 scoped+parallel, a big first sync is ~60s, and `connectRepo` used to `await runSync` inline —
 so the connect form sat on "Connecting…" for the whole sync. Now `connectRepo` pre-creates the

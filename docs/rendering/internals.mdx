@@ -93,6 +93,37 @@ storage; see the [content pipeline](/rendering/content-pipeline). (Precompiling 
 time is the remaining piece; the architecture and the catch-everything pipeline above are
 built for it.)
 
+## A stable shell across navigations
+
+Navigating the sidebar re-renders only the article segment — the navbar and sidebar persist.
+For that to *look* seamless, the shell has to stay geometrically still while the article
+underneath it changes size. Three rules keep it there, and dropping any one of them makes the
+page visibly twitch on every click.
+
+**The article row is at least a viewport tall.** The sidebar is `sticky` at a `7rem` offset
+with its own scroll. A sticky element is clamped by its containing block — here the flex row
+pairing the sidebar with the article — so if a short article lets that row collapse, the
+sidebar can't reach its offset and rides up. It would then snap back down as soon as taller
+content arrived. Every renderer of that row (the article, auto-generated OpenAPI endpoint
+pages, and the loading skeleton) shares one class constant carrying the minimum height, so
+they can't drift apart.
+
+**The scrollbar gutter is always reserved.** `scrollbar-gutter: stable` on `<html>` means the
+vertical scrollbar appearing or disappearing never changes the viewport width. Without it, any
+page that stops overflowing — a short one, or the brief loading skeleton — widens the viewport
+by the scrollbar's width and slides the centered shell sideways.
+
+**Route transitions scroll instantly.** The site sets `scroll-behavior: smooth` so in-page
+anchor links glide. Left alone, that also makes the framework *animate* scroll restoration on
+every navigation. A `data-scroll-behavior="smooth"` attribute on `<html>` keeps the smooth
+glide for anchors while letting route changes land immediately.
+
+<Tip>
+  Checking this by hand: run `papervine dev` against any docs folder and click through the
+  sidebar. A local dev server renders slower than production, so the loading skeleton is on
+  screen longer and layout instability is *easier* to spot than on a deployed site.
+</Tip>
+
 ## Related
 
 - [Content pipeline](/rendering/content-pipeline) — where compiled content comes from.

@@ -75,6 +75,15 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     await put(`${prefix}index.mdx`, `---\ntitle: Tenant Home\n---\nTENANT_HOME_MARKER zorptenant\n`);
     await put(`${prefix}tenant-page.mdx`, `---\ntitle: Tenant Page\n---\nTENANT_PAGE_MARKER\n`);
     await put(`${prefix}logo.svg`, LOGO_SVG, "image/svg+xml");
+    // A pair for the layout-stability test below: one page far taller than the viewport
+    // and one only a line long. Neither is in docs.json's nav (both are reached by URL),
+    // so they don't disturb the sidebar assertions above.
+    const longBody = Array.from(
+      { length: 60 },
+      (_, i) => `## Section ${i}\n\nParagraph ${i} — filler to push this page past the viewport.\n`,
+    ).join("\n");
+    await put(`${prefix}long.mdx`, `---\ntitle: Long\n---\nLONG_MARKER\n\n${longBody}`);
+    await put(`${prefix}stub.mdx`, `---\ntitle: Stub\n---\nSTUB_MARKER\n`);
 
     // The assistant-disabled twin: same content, assistant_enabled=false.
     await sql`delete from site where id = ${NOASSIST_SITE_ID}`;
@@ -155,6 +164,53 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     // And a platform-only term must NOT leak in (the tenant has no such page).
     const leak = await page.request.get(`/api/search?q=Papervine&site=${SLUG}`);
     expect(((await leak.json()).results ?? []).length).toBe(0);
+  });
+
+  test("a short page lays out identically to a long one (no jump on nav)", async ({ page }) => {
+    // Regression: clicking through the sidebar made the whole page twitch. One root cause,
+    // two symptoms, both from the article column being shorter than the viewport:
+    //
+    //  • Horizontal — the document stopped overflowing, so the UA dropped the vertical
+    //    scrollbar, widening the viewport by its width and sliding the centered
+    //    `mx-auto max-w-7xl` shell sideways (then back). Fixed by `scrollbar-gutter:
+    //    stable` on html (globals.css).
+    //  • Vertical — the sidebar is `sticky top-28`, and a sticky element is clamped by its
+    //    containing block. A short article collapsed the flex row, so the sidebar couldn't
+    //    be pushed to its 7rem offset and rode ~47px higher. Fixed by ARTICLE_ROW's
+    //    min-height (src/lib/docs-layout.ts), now shared by the article, the OpenAPI
+    //    endpoint page, and the loading skeleton.
+    //
+    // Asserting on a genuinely short page rather than racing the loading skeleton keeps
+    // this deterministic — it's the same collapsed row, just one that stays on screen.
+    await page.setViewportSize({ width: 1280, height: 900 });
+
+    // The SIDEBAR specifically — the element that rode up. `nav` alone would match the
+    // top navbar, which is sticky to the viewport and never moved even when the bug was live.
+    const sidebar = page
+      .locator("nav")
+      .filter({ has: page.getByRole("link", { name: "Tenant Page" }) });
+    const measure = async () => {
+      const box = await sidebar.boundingBox();
+      return {
+        x: Math.round(box!.x),
+        y: Math.round(box!.y),
+        clientWidth: await page.evaluate(() => document.documentElement.clientWidth),
+      };
+    };
+
+    await page.goto(docsUrl(`/sites/${SLUG}/long`));
+    await expect(page.getByText("LONG_MARKER")).toBeVisible();
+    const long = await measure();
+
+    await page.goto(docsUrl(`/sites/${SLUG}/stub`));
+    await expect(page.getByText("STUB_MARKER")).toBeVisible();
+    const short = await measure();
+
+    // The sidebar must sit at the same offset on a one-line page as on a tall one.
+    expect(short.y).toBe(long.y);
+    // …and not slide sideways, which is the scrollbar-gutter half.
+    expect(short.x).toBe(long.x);
+    expect(short.clientWidth).toBe(long.clientWidth);
   });
 
   test("tenant pages resolve; platform-only pages 404 (no phantom links)", async ({ page }) => {
