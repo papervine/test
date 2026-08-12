@@ -7,6 +7,7 @@ import {
   appHostFor,
   parentDomain,
   legacyTenantRedirectHost,
+  isReservedPlatformHost,
 } from "./lib/tenant-host";
 import { SIGNED_IN_FLAG } from "./lib/signed-in-flag";
 import { isOAuthCallbackPath } from "./lib/social-auth";
@@ -264,13 +265,19 @@ export function middleware(req: NextRequest) {
   const pathSite = pathname.match(/^\/sites\/([^/]+)(?:\/|$)/)?.[1];
   if (pathSite) return NextResponse.next(withSite(req, pathSite));
 
-  // Custom (vanity) domains (SPEC §2): any host that isn't one of ours is a candidate
-  // domain a tenant pointed at us. We can't DB-resolve the slug at the edge, so forward
+  // Custom (vanity) domains (SPEC §2): any host that isn't STRUCTURALLY ours is a candidate
+  // domain someone pointed at us. We can't DB-resolve the slug at the edge, so forward
   // the Host and route by it on the node side — docs → /custom-domain, assets → the
   // by-host asset handler, and the agent/API surfaces resolve the site from the Host
   // themselves. An unknown host (no matching site) simply 404s in those node handlers.
+  //
+  // `isReservedPlatformHost`, not `isPlatformHost`: the latter is true for every host under
+  // our own domain, which would mean a legitimately-claimed `docs.{platform}` saved fine in
+  // settings and then never routed — it would fall through to the marketing apex. Function
+  // hosts (apex, `app.`, `www.`, `api.`) and tenant subdomains are still excluded, and the
+  // tenant-subdomain branch above has already returned for those.
   const host = req.headers.get("host");
-  if (host && !isPlatformHost(host) && !process.env.PAPERVINE_CONTENT) {
+  if (host && !isReservedPlatformHost(host) && !process.env.PAPERVINE_CONTENT) {
     if (pathname.startsWith("/api/")) return NextResponse.next(withHost(req, host));
     if (
       pathname === "/mcp" ||

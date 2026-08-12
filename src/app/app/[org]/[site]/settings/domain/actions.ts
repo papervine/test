@@ -8,6 +8,8 @@ import { findSite } from "@/lib/dashboard-context";
 import { revalidateSiteRow } from "@/lib/tenant";
 import { siteRoute } from "@/lib/dashboard-nav";
 import { parseCustomDomain } from "@/lib/custom-domain";
+import { getSession } from "@/lib/session";
+import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { addProjectDomain } from "@/lib/vercel-domains";
 import { releaseDomain } from "@/lib/domain-reconcile";
 
@@ -65,6 +67,18 @@ export async function setCustomDomain(
 
   const parsed = parseCustomDomain(input.domain);
   if (!parsed.ok) return { error: parsed.error };
+
+  // A host on Papervine's OWN domain (e.g. docs.{platform}) is claimable — but only by the
+  // operator, who actually controls that DNS. Without this check any customer could park
+  // their content on a papervine.io subdomain, which is both a brand hijack and puts
+  // third-party content back on the domain our cookies are scoped to. Platform-admin is the
+  // existing operator identity (SPEC §10.10); no new auth surface.
+  if (parsed.requiresOperator) {
+    const session = await getSession();
+    if (!isPlatformAdminEmail(session?.user?.email, process.env.PLATFORM_ADMIN_EMAILS)) {
+      return { error: "That domain belongs to Papervine — enter a domain you control." };
+    }
+  }
 
   // Attach to the Vercel project FIRST — this is what makes the platform issue the
   // per-host TLS cert and route the host to us; DNS alone never completes the handshake

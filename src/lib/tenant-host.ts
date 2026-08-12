@@ -25,12 +25,22 @@ const PLATFORM_DOMAIN = (
 // List, which is a per-domain submission and is not implied by the TLD.)
 const TENANT_DOMAIN = (process.env.NEXT_PUBLIC_TENANT_DOMAIN || "papervine.page").toLowerCase();
 
-// Labels that address the platform itself rather than a tenant. These only matter on hosts
-// where the platform and tenants SHARE a suffix — `*.localhost` in dev (where `app.localhost`
-// is the control plane), and the legacy `*.{platform}` tenant hosts we still answer on for
-// old links. On the tenant domain proper there is nothing to collide with, so no label is
-// reserved there.
-const RESERVED = new Set(["www", "app", "api", "docs"]);
+// Labels the platform actually SERVES from. Nobody may ever claim these as a custom domain,
+// because something of ours already answers there.
+const PLATFORM_FUNCTION_LABELS = new Set(["www", "app", "api"]);
+
+// Labels that must never resolve to a TENANT SLUG on a shared-suffix host — `*.localhost` in
+// dev (where `app.localhost` is the control plane) and the legacy `*.{platform}` hosts we
+// still answer on for old links. On the tenant domain proper nothing collides, so no label
+// is reserved there.
+//
+// `docs` is here but NOT in PLATFORM_FUNCTION_LABELS, and the difference is load-bearing:
+// nothing of ours serves `docs.{platform}`, so it must not be read as a tenant subdomain
+// (that would drag it into the legacy 308 and bounce it to the tenant domain) — yet the org
+// that owns the platform domain can still legitimately claim it as a CUSTOM DOMAIN for one
+// of its own sites. Conflating "reserved from slug resolution" with "unclaimable" is exactly
+// what made connecting `docs.{platform}` impossible.
+const RESERVED = new Set([...PLATFORM_FUNCTION_LABELS, "docs"]);
 
 /**
  * Map a request Host to a tenant slug, or null for the apex/platform host.
@@ -213,3 +223,39 @@ export function tenantHostFor(slug: string, requestHost: string | null): string 
 
 /** The configured domains, for callers that need to name them (docs copy, DNS guidance). */
 export const domains = { platform: PLATFORM_DOMAIN, tenant: TENANT_DOMAIN } as const;
+
+/**
+ * Hosts that are STRUCTURALLY ours and can therefore never be a site's custom domain:
+ * the platform apex and its function labels (`www`/`app`/`api`), anything on the tenant
+ * domain (those are tenant subdomains — serving one as somebody's "custom domain" would be
+ * a hijack), and the local/preview hosts.
+ *
+ * Deliberately narrower than `isPlatformHost`. That one answers "is this host ours?" and is
+ * right for routing. Using it to decide *claimability* conflated two different questions and
+ * banned every host under the platform domain — including `docs.{platform}`, which the org
+ * that owns the platform domain has every right to point at one of its own sites. Ownership
+ * of a host on our own domain is an authorization question (see `requiresOperator` in
+ * custom-domain.ts), not a structural one.
+ */
+export function isReservedPlatformHost(host: string | null): boolean {
+  if (!host) return true;
+  const name = host.split(":")[0].toLowerCase();
+  if (!name.includes(".")) return true; // bare label (localhost, app)
+  if (/^[0-9.]+$/.test(name)) return true; // raw IPv4
+  if (name === PLATFORM_DOMAIN || name === TENANT_DOMAIN) return true;
+  if (name.endsWith(`.${TENANT_DOMAIN}`)) return true; // tenant subdomains
+  if (name.endsWith(".localhost") || name.endsWith(".vercel.app")) return true;
+  if (name.endsWith(`.${PLATFORM_DOMAIN}`)) {
+    const label = name.slice(0, -`.${PLATFORM_DOMAIN}`.length);
+    // Function labels only — `docs.{platform}` is claimable (see RESERVED's comment).
+    return label.includes(".") || PLATFORM_FUNCTION_LABELS.has(label);
+  }
+  return false;
+}
+
+/** Is this host on the domain WE own — i.e. claiming it requires being the operator? */
+export function isOnPlatformDomain(host: string | null): boolean {
+  if (!host) return false;
+  const name = host.split(":")[0].toLowerCase();
+  return name === PLATFORM_DOMAIN || name.endsWith(`.${PLATFORM_DOMAIN}`);
+}

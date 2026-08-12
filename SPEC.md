@@ -567,6 +567,30 @@ repo (hosted docs platforms authors lean on `<img>`, usually inside `<Frame>`), 
    path, so browser and optimizer resolve it identically regardless of host. Result on a real
    subdomain: a 5,106 KiB PNG hero now serves as a 207 KiB AVIF.
 
+**The operator can claim a host on the platform domain as a custom domain (landed
+2026-08-11).** `parseCustomDomain` refused every host under `papervine.io` by calling
+`isPlatformHost`, which answers "is this host ours?" — the right question for *routing* and
+the wrong one for *ownership*. The org that owns the platform domain pointing
+`docs.papervine.io` at one of its own sites is the custom-domain feature working, not an
+exception to it, and the blanket ban is what blocked dogfooding our own docs.
+> Now `isReservedPlatformHost` refuses only what is structurally ours (the apex, the
+> `www`/`app`/`api` labels something actually serves, the tenant apex and any tenant
+> subdomain, plus local/preview hosts). Anything else on the platform domain parses, with a
+> `requiresOperator` flag the server action checks against `PLATFORM_ADMIN_EMAILS` — ungated,
+> any customer could park content on our brand's subdomain *and* put third-party content back
+> on the cookie domain. Authorization lives in the action because `custom-domain.ts` is pure
+> and has no session.
+>
+> **Two gates had to move together.** Saving is `parseCustomDomain`; serving is middleware,
+> which gated its custom-domain branch on `isPlatformHost`. Relaxing only the first would let
+> a claimed host save cleanly and then never route — it falls through to the marketing apex.
+> Pinned by a middleware unit test asserting `docs.{platform}` rewrites to `/custom-domain`.
+>
+> **`docs` is reserved from slug resolution but not from claiming**, and the split matters:
+> `RESERVED` keeps it from resolving as a tenant subdomain (which would drag it into the
+> legacy 308 and bounce it to the tenant domain), while `PLATFORM_FUNCTION_LABELS` — the
+> unclaimable set — excludes it. Conflating those two is the original bug in miniature.
+
 **Tenant docs moved to their own registrable domain (landed 2026-08-11).** Customer-authored
 MDX rendered on `{slug}.papervine.io` — the same registrable domain the control plane's
 cookies live on. The session cookie is host-only on `app.`, and the benign `pv_signed_in`

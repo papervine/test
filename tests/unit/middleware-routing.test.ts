@@ -54,6 +54,22 @@ describe("middleware host routing", () => {
     expect(res.status).not.toBe(308);
   });
 
+  it("routes a claimed host on our own domain through custom-domain resolution", () => {
+    // The other half of allowing `docs.{platform}` as a custom domain: saving it is
+    // pointless if middleware still treats every platform-domain host as ours and drops it
+    // on the marketing apex. Gating on isReservedPlatformHost (not isPlatformHost) is what
+    // makes a claimed host actually serve.
+    const res = middleware(req(`docs.${domains.platform}`, "/quickstart"));
+    expect(res.headers.get("x-middleware-rewrite")).toContain("/custom-domain/quickstart");
+  });
+
+  it("still keeps the platform's function hosts off the custom-domain path", () => {
+    for (const label of ["app", "www", "api"]) {
+      const res = middleware(req(`${label}.${domains.platform}`, "/"));
+      expect(res.headers.get("x-middleware-rewrite") ?? "").not.toContain("/custom-domain");
+    }
+  });
+
   it("still bounces apex /login to the app host (control-plane auth path)", () => {
     const res = middleware(req("localhost:3000", "/login"));
     const loc = res.headers.get("location") ?? "";

@@ -169,6 +169,19 @@ There are two **independent** domain systems. Don't conflate them.
     can't CNAME an apex); we attach the domain to the project; the platform issues a per-host
     cert via HTTP-01, with no nameserver change from the customer.
   </Step>
+  <Step title="docs.papervine.io — a host on our own domain">
+    Papervine's *own* organization can point a host on the platform domain at one of its own
+    sites — that is the custom-domain feature, not an exception to it. What is refused is
+    only what is **structurally** ours: the apex, the `www`/`app`/`api` labels we actually
+    serve from, and anything on the tenant domain. Everything else on the platform domain is
+    claimable, but **only by the operator** (`PLATFORM_ADMIN_EMAILS`) — otherwise any customer
+    could park content on a subdomain of the platform's own brand.
+
+    Two checks that must agree, and did not at first: `parseCustomDomain` decides whether the
+    host may be *saved*, and middleware decides whether it *routes*. Gate the second on "is
+    this host ours?" instead of "is this host structurally reserved?" and a claimed host saves
+    happily, then silently falls through to the marketing page.
+  </Step>
   <Step title="Verify, then route">
     We poll until the cert verifies. A live check (`GET {domain}/api/site-identity`) confirms
     the cert issued *and* that middleware maps the host to the right slug — strictly stronger
