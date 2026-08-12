@@ -567,6 +567,41 @@ repo (hosted docs platforms authors lean on `<img>`, usually inside `<Frame>`), 
    path, so browser and optimizer resolve it identically regardless of host. Result on a real
    subdomain: a 5,106 KiB PNG hero now serves as a 207 KiB AVIF.
 
+**Reader auth became per-page, matching the source platform (landed 2026-08-12).** The gate
+ran in the *shell*: `authEnabled` bounced every visitor to `/login` before any content
+rendered, so `public: true` could only mean "exempt from group checks *after* signing in".
+That made "public docs and internal docs on one site" impossible to express — the shape the
+homepage was already advertising.
+> **Checked against the source platform rather than invented.** Its rules: auth is per page,
+> *"All pages require authentication by default"*, `public: true` makes a page readable
+> without signing in, an ungated page is readable by any authenticated reader, and denial is
+> a 404. A first pass added a site-level `authRequireAll` toggle instead; it reached the same
+> outcome but inverted the default (flipping it exposed every ungated page) and would have
+> mis-rendered a migrated repo that relies on `public: true` — a security-relevant
+> incompatibility, and a violation of "match the source format, don't guess". Backed out
+> entirely (column, migration, action, UI) before it shipped.
+>
+> **Where the gate lives is the crux.** The shell only sees `{site}`, never the path, so a
+> gate there can only make one whole-site decision. Auth is a property of a page, so the
+> decision moved into the article (`requireReaderForPage`) where the frontmatter is known.
+> The shell still renders nav filtered by the same predicate, so anonymous readers see chrome
+> listing only what they can open.
+>
+> **`signedIn` is a distinct input from the groups list.** An anonymous visitor and a
+> password-method reader (which carries no groups, by design) both have zero groups, but only
+> the latter may read an ungated page. Collapsing them would make every page lacking a
+> `groups:` line world-readable the instant auth was enabled — inverting default-deny. Pinned
+> by unit tests with identical arguments and opposite answers on that one flag.
+>
+> **Anonymous → sign-in; signed-in-but-wrong-group → 404.** Different answers on purpose: a
+> 404 for the first would strand a reader who could legitimately gain access; a 403 for the
+> second would confirm the page exists.
+>
+> **Known consequence.** With `loading.tsx` streaming, the article's `redirect()` lands as a
+> *client-side* navigation rather than a 302, and a gated page returns 200 with the not-found
+> body instead of 404. Content does not leak (asserted), but this is now the second
+> correctness property the streaming bug undercuts — it has earned its own fix.
+
 **The operator can claim a host on the platform domain as a custom domain (landed
 2026-08-11).** `parseCustomDomain` refused every host under `papervine.io` by calling
 `isPlatformHost`, which answers "is this host ours?" — the right question for *routing* and

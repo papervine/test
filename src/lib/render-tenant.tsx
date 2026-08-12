@@ -56,20 +56,38 @@ export async function sitesTenantTarget(slug: string): Promise<{ base: string; a
 }
 
 /**
- * Layer 2 reader-auth gate (SPEC §11.2). A site with auth enabled only renders to a reader
- * holding a valid docs session for it; everyone else is bounced to the site's login. Runs in
- * the shell (layout) so it gates every page under it before any content renders; the login
- * route lives outside the (docs) group, so it isn't gated — no redirect loop. Enforcement
- * lives here, not in middleware, because the per-site config is a DB read the edge runtime
- * can't do. The layout sees only the {site} param (not the deep path), so login round-trips
- * to the site root rather than the exact page — acceptable for the v2/partial reader-auth.
+ * Layer 2 reader-auth gate (SPEC §11.2), applied **per page** to match the established
+ * `docs.json` platform so a migrated repo gates identically. With auth on, every page needs a
+ * reader session *unless* it carries `public: true` — default-deny, with explicit opt-outs.
+ *
+ * This deliberately does NOT run in the shell. The layout only sees `{site}`, not the deep
+ * path, so a gate there can only make one whole-site decision: bounce everyone to login,
+ * including visitors to a page the author marked public. Auth is a property of the page, so
+ * the decision belongs where the frontmatter is known — the article.
+ *
+ * An anonymous reader on a non-public page is sent to the site's login (they may be able to
+ * sign in and read it). A *signed-in* reader who simply isn't in the page's `groups` gets a
+ * 404 from the caller instead — never a 403, which would confirm the page exists.
+ *
+ * Enforcement lives here, not in middleware, because the per-site config is a DB read the
+ * edge runtime can't do. The login route sits outside the (docs) group, so it is never itself
+ * gated — no redirect loop.
  */
-async function gateReaderAuth(slug: string, base: string): Promise<void> {
+async function requireReaderForPage(
+  slug: string,
+  base: string,
+  frontmatter: { public?: boolean },
+  currentPath: string,
+): Promise<void> {
   const record = await getSiteBySlug(slug);
   if (!record?.authEnabled) return;
+  if (frontmatter.public) return;
   const cookie = (await cookies()).get(READER_COOKIE)?.value;
   if (!readerSessionValid(cookie, record.id)) {
-    redirect(`${base}/login?redirect=${encodeURIComponent(base || "/")}`);
+    // Round-trip to the page they asked for, not the site root — they land where they meant
+    // to go after signing in.
+    const target = `${base}/${currentPath}`.replace(/\/+$/, "") || "/";
+    redirect(`${base}/login?redirect=${encodeURIComponent(target)}`);
   }
 }
 
@@ -135,8 +153,10 @@ export async function TenantDocsShell({
   assetBase: string;
   children: React.ReactNode;
 }) {
-  await gateReaderAuth(slug, base);
-
+  // No auth gate here on purpose — see requireReaderForPage. The shell can't see which page
+  // is being requested, and with per-page auth that decision needs the frontmatter. The nav
+  // this shell renders is already filtered by the same access predicate, so an anonymous
+  // reader sees chrome listing only the pages they can actually open.
   const src = await requestContentSource(slug);
   if (!src) notFound();
 
@@ -219,9 +239,16 @@ export async function TenantDocsArticle({
       }
       notFound();
     }
-    // Per-page group gate (SPEC §11.2): a reader who isn't in the page's `groups` gets a 404,
-    // NOT a 403 — a 403 would confirm a protected page exists at this URL. The shell already
-    // hides it from the nav; this stops a direct-URL hit.
+    // Per-page auth gate (SPEC §11.2), in two steps, because "you need to sign in" and "you
+    // signed in but this isn't for you" deserve different answers:
+    //
+    //  1. No session and the page isn't `public: true` → send them to the site's login, with
+    //     a redirect back to this page. Answering 404 here would strand a legitimate reader
+    //     with no way to discover that signing in would work.
+    //  2. Signed in but not in the page's `groups` → 404, NOT 403. A 403 would confirm a
+    //     protected page exists at this URL. The nav already hides it; this stops a
+    //     direct-URL hit.
+    await requireReaderForPage(slug, base, page.frontmatter, slugStr);
     if (!canAccess(page.frontmatter)) notFound();
 
     const toc = extractToc(page.body);

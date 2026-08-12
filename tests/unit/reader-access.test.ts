@@ -25,6 +25,29 @@ describe("canAccessPage (per-page group gate, SPEC §11.2)", () => {
     expect(canAccessPage(["admin"], false, ["beta"])).toBe(false);
     expect(canAccessPage(["admin"], undefined, [])).toBe(false); // password reader (no groups)
   });
+
+  // Auth is DEFAULT-DENY per page: with auth on, a page needs a session unless it says
+  // `public: true`. These pin the anonymous half, which is what makes "some pages public,
+  // the rest protected" work on one site.
+  describe("anonymous readers (signedIn = false)", () => {
+    it("allows only pages explicitly marked public", () => {
+      expect(canAccessPage(undefined, true, [], false)).toBe(true);
+      expect(canAccessPage(["admin"], true, [], false)).toBe(true); // public wins over groups
+    });
+
+    it("denies an ungated page — the difference from a signed-in reader", () => {
+      // The regression this guards: treating "anonymous" as "authenticated with no groups"
+      // would make every page lacking a `groups:` line world-readable the moment auth was
+      // switched on. Same arguments, opposite answers — only `signedIn` differs.
+      expect(canAccessPage(undefined, undefined, [], false)).toBe(false);
+      expect(canAccessPage(undefined, undefined, [], true)).toBe(true);
+    });
+
+    it("denies a group-gated page regardless of the groups claimed", () => {
+      expect(canAccessPage(["admin"], undefined, [], false)).toBe(false);
+      expect(canAccessPage(["admin"], undefined, ["admin"], false)).toBe(false);
+    });
+  });
 });
 
 // Nav hiding: pages the reader can't access are dropped from the sidebar entirely (so a

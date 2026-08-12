@@ -45,8 +45,13 @@ export function accessForRecord(
   opts?: { anonymous?: boolean },
 ): PageAccess {
   if (!record?.authEnabled) return ALLOW_ALL;
-  const groups = opts?.anonymous ? [] : readerSession(cookieValue, record.id)?.groups ?? [];
-  return (fm: PageFrontmatter) => canAccessPage(fm.groups, fm.public, groups);
+  // `signedIn` is carried separately from the groups list because "anonymous" and
+  // "authenticated but group-less" are different entitlements: the first sees only
+  // `public: true` pages, the second also sees every ungated page.
+  const session = opts?.anonymous ? null : readerSession(cookieValue, record.id);
+  const groups = session?.groups ?? [];
+  const signedIn = Boolean(session);
+  return (fm: PageFrontmatter) => canAccessPage(fm.groups, fm.public, groups, signedIn);
 }
 
 /**

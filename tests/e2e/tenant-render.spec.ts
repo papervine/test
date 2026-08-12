@@ -26,6 +26,11 @@ const SLUG = "regression-nav";
 const NOASSIST_SITE_ID = "e2e-tenant-render-noassist";
 const NOASSIST_SLUG = "regression-no-assistant";
 
+// A third tenant with reader auth ON, carrying a `public: true` page alongside a
+// group-gated one — the "public docs + internal docs on one site" shape.
+const GATED_SITE_ID = "e2e-tenant-render-gated";
+const GATED_SLUG = "regression-gated";
+
 // Distinctive nav that exists ONLY in this tenant's repo — nothing the platform's
 // content/ docs.json contains — so a leak from the default source is unmistakable.
 const DOCS_JSON = JSON.stringify({
@@ -94,10 +99,41 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     await put(`${nprefix}index.mdx`, `---\ntitle: Tenant Home\n---\nNOASSIST_HOME_MARKER\n`);
     await put(`${nprefix}tenant-page.mdx`, `---\ntitle: Tenant Page\n---\nTENANT_PAGE_MARKER\n`);
     await put(`${nprefix}logo.svg`, LOGO_SVG, "image/svg+xml");
+
+    // Reader auth ON, with one page explicitly `public: true` and one gated by group.
+    await sql`delete from site where id = ${GATED_SITE_ID}`;
+    await sql`insert into site (id, organization_id, name, slug, repo_owner, repo_name, branch, status, auth_enabled)
+              values (${GATED_SITE_ID}, ${org.id}, 'Gated Tenant', ${GATED_SLUG}, 'acme', 'docs', 'main', 'live', true)`;
+    const gprefix = `sites/${GATED_SITE_ID}/`;
+    await put(
+      `${gprefix}docs.json`,
+      JSON.stringify({
+        name: "Gated Tenant",
+        navigation: {
+          tabs: [
+            { tab: "Public", groups: [{ group: "Open", pages: ["index"] }] },
+            {
+              tab: "Internal",
+              groups: [{ group: "Staff", pages: ["internal", "members-only"] }],
+            },
+          ],
+        },
+      }),
+    );
+    // The three states of a page on an auth-enabled site.
+    await put(`${gprefix}index.mdx`, `---\ntitle: Public Home\npublic: true\n---\nPUBLIC_MARKER\n`);
+    await put(
+      `${gprefix}internal.mdx`,
+      `---\ntitle: Internal\ngroups: [staff]\n---\nINTERNAL_MARKER\n`,
+    );
+    // No `public`, no `groups` — the default. Any SIGNED-IN reader may read it; anonymous
+    // readers may not. This is the page that would leak if "anonymous" were ever collapsed
+    // into "authenticated with no groups".
+    await put(`${gprefix}members-only.mdx`, `---\ntitle: Members Only\n---\nMEMBERS_MARKER\n`);
   });
 
   test.afterAll(async () => {
-    await sql`delete from site where id in (${SITE_ID}, ${NOASSIST_SITE_ID})`;
+    await sql`delete from site where id in (${SITE_ID}, ${NOASSIST_SITE_ID}, ${GATED_SITE_ID})`;
     await sql.end();
   });
 
@@ -217,6 +253,45 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     // …and not slide sideways, which is the scrollbar-gutter half.
     expect(short.x).toBe(long.x);
     expect(short.clientWidth).toBe(long.clientWidth);
+  });
+
+  test("an anonymous reader can open a `public: true` page on an auth-enabled site", async ({
+    page,
+  }) => {
+    // The "public docs + internal docs, one site" shape: reader auth ON, the landing page
+    // marked `public: true`, an internal page gated by group. An anonymous visitor should
+    // read the public page and never see the gated one.
+    //
+    // The per-page predicate already supports this — canAccessPage() returns true for a
+    // public/ungated page with no reader groups, which is the path the MCP server uses. The
+    // question this test settles is whether a BROWSER gets the same treatment, or whether
+    // the site-wide gate bounces it to /login before any page renders.
+    const res = await page.goto(docsUrl(`/sites/${GATED_SLUG}`));
+
+    expect(page.url(), "anonymous reader was redirected to sign-in").not.toContain("/login");
+    expect(res?.status()).toBe(200);
+    await expect(page.getByText("PUBLIC_MARKER")).toBeVisible();
+
+    // …and the gated tab/page must not leak into the navigation.
+    await expect(page.getByRole("link", { name: "Internal" })).toHaveCount(0);
+
+    // Hiding it from the nav is presentation. The load-bearing part is that guessing the
+    // URL yields no content — for BOTH kinds of protected page.
+    await page.goto(docsUrl(`/sites/${GATED_SLUG}/internal`));
+    expect(await page.content()).not.toContain("INTERNAL_MARKER");
+
+    // The default page (no `public`, no `groups`) must also be closed to an anonymous
+    // reader. Sending them to sign-in is the right answer here — unlike the group-gated
+    // page, signing in genuinely would let them read it.
+    //
+    // `goto` can abort rather than resolve: the article's redirect() runs after loading.tsx
+    // has already begun streaming, so Next delivers it as a client-side navigation instead
+    // of an HTTP 302. Swallow the abort and assert on where the browser ends up.
+    await page
+      .goto(docsUrl(`/sites/${GATED_SLUG}/members-only`))
+      .catch(() => null);
+    await page.waitForURL(/\/login/, { timeout: 15_000 });
+    expect(await page.content()).not.toContain("MEMBERS_MARKER");
   });
 
   test("tenant pages resolve; platform-only pages 404 (no phantom links)", async ({ page }) => {

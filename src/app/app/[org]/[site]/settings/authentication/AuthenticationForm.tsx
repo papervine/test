@@ -111,6 +111,36 @@ export function AuthenticationForm({
         />
       </div>
 
+      {/* Who can see what is decided per PAGE, in frontmatter — not by a setting here. This
+          panel exists so the rule is discoverable at the moment someone turns auth on, since
+          the surprising half is that enabling auth gates everything by default. */}
+      {enabled && (
+        <div className="db-feature rounded-xl px-5 py-5">
+          <h2 className="text-base font-medium">Which pages are protected</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">
+            With authentication on, <strong>every page requires sign-in by default</strong>.
+            Open individual pages back up in their frontmatter:
+          </p>
+          <ul className="mt-3 space-y-2 text-sm text-[var(--muted)]">
+            <li>
+              <code className="text-[var(--fg)]">public: true</code> — anyone can read it,
+              signed in or not. Use this for the pages you want indexed and shareable.
+            </li>
+            <li>
+              <code className="text-[var(--fg)]">groups: [staff]</code> — only readers in a
+              listed group. Everyone else gets a 404 and never sees it in the navigation.
+            </li>
+            <li>
+              Neither — any signed-in reader can view it.
+            </li>
+          </ul>
+          <p className="mt-3 text-sm text-[var(--muted)]">
+            A group whose pages are all restricted disappears from the sidebar entirely, so a
+            protected section leaves no trace for readers who can&apos;t open it.
+          </p>
+        </div>
+      )}
+
       {/* Custom Authentication — only relevant once gating is on */}
       {enabled && (
         <div className="db-feature rounded-xl px-5 py-5">

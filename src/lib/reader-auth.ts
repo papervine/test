@@ -153,19 +153,32 @@ export function customerLoginUrl(loginUrl: string, redirectPath: string): string
 }
 
 /**
- * Per-page group access control (SPEC §11.2). A page with no `groups` (or `public: true`) is
- * open to any reader who cleared the site gate; a page with `groups` requires the reader to
- * be in **at least one** listed group. `readerGroups` comes from the auth handshake (the
- * password method has none, so it can never satisfy a `groups:` page — by design). Pure so it
- * unit-tests without a session; the caller turns a `false` into a 404 (not 403 — don't leak
- * that a protected page exists) and hides the page from the nav.
+ * Per-page access control on an auth-enabled site (SPEC §11.2), matching the established
+ * `docs.json` platform's rules so a migrated repo gates identically:
+ *
+ *   1. `public: true`                  → anyone, signed in or not.
+ *   2. otherwise, not signed in        → denied. Auth is DEFAULT-DENY per page: with auth on,
+ *                                        every page needs a session unless marked public.
+ *   3. signed in, no `groups` on page  → allowed (any authenticated reader).
+ *   4. signed in, `groups` on page     → must be in at least one listed group.
+ *
+ * Rule 2 is the one worth being careful about. `signedIn` is a separate input rather than
+ * "readerGroups is empty" because those are different states: an anonymous visitor and a
+ * reader authenticated by the password method (which carries no groups, by design) both have
+ * zero groups, yet only the latter may read an ungated page. Collapsing them would make every
+ * ungated page world-readable the moment auth was switched on — the opposite of default-deny.
+ *
+ * Pure so it unit-tests without a session. The caller turns `false` into a 404 (never a 403 —
+ * that would confirm a protected page exists) and hides the page from the nav.
  */
 export function canAccessPage(
   pageGroups: string[] | undefined,
   isPublic: boolean | undefined,
   readerGroups: readonly string[],
+  signedIn = true,
 ): boolean {
   if (isPublic) return true;
+  if (!signedIn) return false;
   if (!pageGroups || pageGroups.length === 0) return true;
   return pageGroups.some((g) => readerGroups.includes(g));
 }
