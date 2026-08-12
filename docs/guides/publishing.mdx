@@ -1,0 +1,102 @@
+---
+title: Publishing and syncing
+description: How a change in your repository becomes a live page, what triggers a rebuild, and what to do when one doesn't.
+---
+
+Papervine keeps your site in step with a branch of your repository. You write and push;
+your docs update. This page covers what actually triggers that, how long it takes, and what
+to check when a change doesn't appear.
+
+## What triggers a rebuild
+
+<CardGroup cols={2}>
+  <Card title="A push to your branch">
+    The usual path. Pushing to the branch you connected triggers a build automatically —
+    no action in the dashboard.
+  </Card>
+  <Card title="Connecting the site">
+    The first build runs the moment you connect a repository.
+  </Card>
+  <Card title="A manual re-sync">
+    The **Re-sync** control on the site's Overview forces a build from the current branch
+    tip. Useful after changing a setting, or when a push was missed.
+  </Card>
+  <Card title="Publishing from Studio">
+    Publishing an edit in the [browser editor](/control-plane/editor) writes a commit,
+    which triggers a build like any other push.
+  </Card>
+</CardGroup>
+
+Only the branch you connected publishes. Pushing to other branches does nothing — which is
+what makes it safe to draft in a branch and open a pull request against the published one.
+
+## What a build does
+
+A build reads the changed files from your repository, compiles your MDX, measures your
+images, and rebuilds the search index — then swaps the result in.
+
+Two properties matter to you as an author:
+
+**Readers never see a half-updated site.** A build assembles the new version completely and
+switches to it in one step. Nobody lands on a page that's half old and half new.
+
+**Later builds are much faster than the first.** The first sync reads everything; after
+that, only what changed moves. A typo fix is usually live in seconds.
+
+## Watching a build
+
+The site's **Overview** shows an [Activity feed](/control-plane/overview) with builds and
+their status — building, live, or failed — updating on its own as the build progresses. You
+don't need to refresh.
+
+A failed build leaves the previously published version live. Your site never goes down
+because a new build failed; you keep serving the last good version until a build succeeds.
+
+## When a change doesn't appear
+
+Work down this list — it's ordered by how often each is the cause.
+
+<Steps>
+  <Step title="Check you pushed to the connected branch">
+    Publishing follows one branch. A commit on `docs-update` won't appear on a site
+    connected to `main`.
+  </Step>
+  <Step title="Check the Activity feed">
+    If the build **failed**, the feed says so and why. If no build appeared at all, the push
+    never reached Papervine — re-sync manually and the problem is likely the repository
+    connection rather than your content.
+  </Step>
+  <Step title="Check the page is in your navigation">
+    A new file that isn't listed in `docs.json` renders at its URL but appears in no sidebar.
+    See [organizing your docs](/guides/navigation).
+  </Step>
+  <Step title="Force a re-sync">
+    Use **Re-sync** on the Overview. This rebuilds from the branch tip regardless of what
+    webhooks did or didn't deliver.
+  </Step>
+  <Step title="Rule out your browser">
+    Published pages are cached hard so they load fast. A private window confirms whether
+    you're looking at a stale copy of a page that did in fact update.
+  </Step>
+</Steps>
+
+<Note>
+  Automatic rebuild-on-push depends on the repository connection being fully authorized. If
+  pushes never trigger builds but manual re-sync always works, that connection is what to
+  look at — not your content.
+</Note>
+
+## Previewing before you publish
+
+Two ways to see a change before readers do:
+
+- **[The CLI](/cli)** — `npx papervine dev` renders your folder locally with the same engine
+  as the hosted site, with live reload.
+- **A pull request** — draft on a branch, open a PR, and merge when ready. The published
+  site keeps serving the connected branch throughout.
+
+## Taking a page down
+
+Deleting the file and pushing removes the page on the next build. To keep it published but
+out of the way, drop it from your `docs.json` navigation — it stays reachable by direct link
+for anyone who bookmarked it, which is usually kinder than a 404.

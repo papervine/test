@@ -1,0 +1,142 @@
+---
+title: Organizing your docs
+description: Build the sidebar, tabs, and groups your readers navigate — all from docs.json.
+---
+
+One `docs.json` at the root of your docs folder controls your site: its name, colors, logo,
+and — the part you'll edit most — its navigation.
+
+Papervine never guesses your structure from folder layout. The sidebar is exactly what
+`docs.json` says it is, so moving a page in the sidebar never means moving a file.
+
+## The smallest useful config
+
+```json
+{
+  "name": "Acme Docs",
+  "colors": { "primary": "#16A34A" },
+  "navigation": {
+    "groups": [
+      { "group": "Get started", "pages": ["index", "quickstart"] },
+      { "group": "Guides", "pages": ["guides/auth", "guides/webhooks"] }
+    ]
+  }
+}
+```
+
+Each string under `pages` is a **path to a file**, relative to your docs folder and without
+the `.mdx` extension. `"guides/auth"` means `guides/auth.mdx`.
+
+## Groups
+
+A group is a labelled section of the sidebar. Order matters — groups render top to bottom in
+the order you list them, and so do the pages inside them.
+
+Groups can nest. Use a nested group when a section has genuine sub-sections, and keep it to
+one level of nesting; deeper than that and readers lose track of where they are.
+
+```json
+{
+  "group": "API",
+  "pages": [
+    "api/overview",
+    {
+      "group": "Endpoints",
+      "pages": ["api/users", "api/orders"]
+    }
+  ]
+}
+```
+
+## Tabs
+
+Tabs split a site into distinct areas shown across the top, each with its own sidebar. They
+suit documentation with two genuinely different audiences or modes — a user guide and an API
+reference, say. **These docs use exactly that**: User Documentation and Technical
+Documentation.
+
+```json
+{
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          { "group": "Get started", "pages": ["index", "quickstart"] }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "openapi": "/openapi.yaml"
+      }
+    ]
+  }
+}
+```
+
+<Tip>
+  Reach for tabs when a reader would otherwise scroll past a whole section that is never
+  relevant to them. If every reader needs everything, groups alone are simpler — a tab the
+  reader never opens is a section you've hidden from them.
+</Tip>
+
+A tab pointed at an OpenAPI file needs no page list: Papervine generates one page per
+operation. See the [API playground](/features/api-playground).
+
+## Anchors and external links
+
+Anchors sit above the sidebar and can point anywhere, including off-site — a community
+forum, a status page, or your main product.
+
+```json
+{
+  "navigation": {
+    "global": {
+      "anchors": [
+        { "anchor": "Community", "href": "https://discord.gg/…", "icon": "discord" }
+      ]
+    }
+  }
+}
+```
+
+## Branding
+
+```json
+{
+  "name": "Acme Docs",
+  "logo": { "light": "/logo-light.svg", "dark": "/logo-dark.svg" },
+  "favicon": "/favicon.png",
+  "colors": { "primary": "#16A34A", "light": "#4ADE80", "dark": "#15803D" }
+}
+```
+
+`colors.primary` drives links, active states, and accents. Supplying `light` and `dark`
+variants lets each theme use a shade with enough contrast against its own background.
+
+Give the logo both variants too — a dark logo on a dark background is the most common
+first-day complaint, and it's avoidable.
+
+## Hiding a page without deleting it
+
+A page that exists in your repository but is listed in **no** group simply doesn't appear in
+the navigation. It still renders if someone has the direct link, which makes this a
+reasonable way to park a draft or keep an old page reachable for existing links.
+
+To hide a page from readers *and* from search engines, add `noindex: true` to its
+frontmatter. To restrict it to signed-in readers in particular groups, see
+[reader auth](/auth/reader-auth).
+
+## When something looks wrong
+
+**A page isn't in the sidebar.** Its path is probably missing from `docs.json`, or has a
+typo — remember the path is relative to your docs folder with no extension.
+
+**An unfamiliar key.** Papervine is deliberately lenient: unknown fields are ignored with a
+warning rather than failing the build, so config from another tool won't break your site.
+Some keys are accepted but not yet acted on. The
+[config reference](/rendering/config) lists what's honored today.
+
+**Everything renders but looks unstyled.** Check `docs.json` is valid JSON — a trailing
+comma is the usual culprit. Running [`papervine dev`](/cli) locally surfaces this
+immediately.

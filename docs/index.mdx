@@ -1,70 +1,88 @@
 ---
 title: Introduction
-description: Papervine is a docs platform — it renders a docs site from a Git repo of MDX + a docs.json.
+description: Papervine turns a folder of MDX into a fast, searchable documentation site — built for your readers and the AI agents they use.
 ---
 
-Papervine renders a fast, themeable documentation site from a folder of **MDX + a
-`docs.json`**, in a format that is a **drop-in for existing `docs.json` + MDX repos**. Point
-it at an existing `docs.json` repo and it renders unchanged.
+Papervine publishes documentation from your own files. Point it at a repository of MDX and a
+`docs.json` and you get a complete site: navigation, full-text search, dark mode, an API
+reference generated from your OpenAPI spec, and an AI assistant grounded in your content.
 
-<Note>
-  These docs are written in Papervine's own format and render in Papervine itself. The
-  source lives in [`docs/`](https://github.com/papervine/papervine/tree/main/docs) and is
-  crawled in CI as a renderer regression test. If you can read this page, the dogfood works.
-</Note>
+Your docs stay files you own. There's no proprietary store to get locked into, and no
+export step to escape.
 
-## What it is
-
-- **Own your docs.** MDX files in your repo, rendered by software you control. Your content
-  is always just files — there is no proprietary store to get locked into.
-- **Compatible with existing `docs.json` projects.** Papervine reads the same `docs.json` +
-  MDX, matching its navigation schema and behavior so real repos migrate unchanged. We
-  smoke-test against real-world docs repos.
-- **Multi-tenant.** One deployment serves many docs sites — each at `{slug}.papervine.io`,
-  a custom domain, or a path-based fallback (`/sites/{slug}`).
-
-## Core principles
-
-These three rules drive most of the architecture. When in doubt, they win.
-
-<CardGroup cols={1}>
-  <Card title="Never let one unsupported feature 500 a page">
-    Unknown MDX components degrade to their children; a compile failure renders an inline
-    notice, not a 500. A single bad page must not take down the site.
+<CardGroup cols={2}>
+  <Card title="Quickstart" href="/guides/quickstart" icon="rocket">
+    Connect a repository and publish a site in about five minutes.
   </Card>
-  <Card title="Config is a compatibility layer: warn, don't throw">
-    A single unexpected `docs.json` field must never break the site. Every field is lenient;
-    unknown keys pass through with a warning.
-  </Card>
-  <Card title="Match the source format, don't guess">
-    `docs.json` is compatible with existing `docs.json` projects so real repos migrate
-    unchanged. When unsure how something should behave, check it against a real-world
-    `docs.json` repo.
+  <Card title="Migrating in" href="/guides/migrate" icon="arrow-right">
+    Already using a `docs.json`-based platform? Most repos render unchanged.
   </Card>
 </CardGroup>
 
 ## How these docs are organized
 
-- **[Architecture](/architecture)** — the two deployable planes, tenant resolution, custom
-  domains, and the tech stack.
-- **Rendering** — the [content pipeline](/rendering/content-pipeline) (Git sync),
-  [`docs.json` config](/rendering/config), the [component library](/rendering/components),
-  and the [renderer internals](/rendering/internals) (the hybrid MDX pipeline you must not
-  break).
-- **Features** — [search](/features/search), the [API playground](/features/api-playground),
-  the [AI assistant](/features/ai-assistant), and the [MCP servers](/features/mcp-servers).
-- **Control plane** — the dashboard: [overview](/control-plane/overview),
-  [analytics](/control-plane/analytics), [automate](/control-plane/automate),
-  [exports](/control-plane/exports), and the [danger zone](/control-plane/danger-zone).
-- **Auth & access** — the [two separate auth systems](/auth/overview):
-  [platform auth](/auth/platform-auth) and [reader auth](/auth/reader-auth).
-- **Contributing** — [working on Papervine](/contributing/working-on-papervine),
-  [testing](/contributing/testing), the hard-won [gotchas](/contributing/gotchas), and the
-  [roadmap](/roadmap).
+There are two tabs at the top of this site, for two different jobs.
+
+**User Documentation** is for using Papervine: writing pages, organizing navigation,
+publishing, connecting a domain, managing your team, and turning on features like the
+assistant and reader access control. If you're here to run a docs site, stay in this tab.
+
+**Technical Documentation** is for how Papervine is built and operated: architecture, the
+rendering pipeline, deployment and configuration, and the contributor guide. You need it to
+self-host, to contribute, or when you're curious what's happening underneath.
+
+<Note>
+  These docs are written in Papervine's own format and rendered by Papervine itself. The
+  source lives in [`docs/`](https://github.com/papervine/papervine/tree/main/docs) and is
+  crawled in CI as a renderer regression test. If you can read this page, the dogfood works.
+</Note>
+
+## What you get
+
+<CardGroup cols={2}>
+  <Card title="Write in MDX" href="/guides/authoring">
+    Markdown with components when you need them. Unknown components degrade gracefully
+    instead of breaking the page.
+  </Card>
+  <Card title="Search that's already built" href="/features/search">
+    `Cmd/Ctrl-K` across every page, heading and code block. No separate service to run.
+  </Card>
+  <Card title="An API playground" href="/features/api-playground">
+    Drop in an OpenAPI spec for per-endpoint pages with a live "Try it" panel.
+  </Card>
+  <Card title="An AI assistant" href="/features/ai-assistant">
+    Answers grounded in your docs, with citations — and embeddable in your own product.
+  </Card>
+  <Card title="Edit in the browser" href="/control-plane/editor">
+    Studio, with real-time collaboration and an AI editing agent. No Git required.
+  </Card>
+  <Card title="Public and private pages" href="/auth/reader-auth">
+    Gate pages to reader groups; hidden pages don't even appear in the navigation.
+  </Card>
+</CardGroup>
+
+## Principles
+
+Three rules shape most of how Papervine behaves. They're worth knowing because they explain
+why the system fails softly.
+
+<CardGroup cols={1}>
+  <Card title="One unsupported feature never takes down a page">
+    Unknown components render their contents; a page that can't compile shows an inline
+    notice. A single bad page never breaks the site around it.
+  </Card>
+  <Card title="Config warns, it doesn't throw">
+    An unexpected `docs.json` field is passed through with a warning rather than rejected —
+    which is what lets a config written for another tool render unchanged.
+  </Card>
+  <Card title="Match the format, don't guess">
+    Papervine follows the established `docs.json` schema and behavior so real repositories
+    migrate without edits.
+  </Card>
+</CardGroup>
 
 <Info>
-  These docs describe **how the system works** (evergreen reference). For the design
-  *decisions*, dated status notes, and roadmap rationale, see
-  [`SPEC.md`](https://github.com/papervine/papervine/blob/main/SPEC.md); for what does and
-  doesn't render yet versus real-world `docs.json` repos, see `GAP-REPORT.md`.
+  These pages describe how the system works, in the present tense. For design *decisions*,
+  dated status notes, and roadmap rationale, see
+  [`SPEC.md`](https://github.com/papervine/papervine/blob/main/SPEC.md).
 </Info>

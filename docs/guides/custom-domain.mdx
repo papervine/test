@@ -1,0 +1,89 @@
+---
+title: Using your own domain
+description: Serve your docs at docs.yourcompany.com, at the root of a domain, or under a /docs path.
+---
+
+Every site gets a working address the moment you connect it. A custom domain puts those same
+docs on your own brand — `docs.acme.com` rather than a subdomain of ours.
+
+## Connect a domain
+
+<Steps>
+  <Step title="Enter the domain">
+    Go to **Settings → Domain** and enter the host you want, for example `docs.acme.com`.
+    Enter the hostname only — no `https://`, no trailing path. Papervine cleans up the
+    obvious variations, but the bare host is what it's asking for.
+  </Step>
+  <Step title="Add the DNS record">
+    The dashboard shows the exact record to create. It's a `CNAME` on the subdomain,
+    pointing at the target shown.
+
+    Add it in whatever manages DNS for that domain — your registrar, or a provider like
+    Cloudflare or Route 53.
+
+    <Note>
+      An **apex** domain (`acme.com`, with no subdomain) can't use a `CNAME` — that's a DNS
+      rule, not a Papervine limitation. Use an `A`, `ALIAS`, or `ANAME` record instead,
+      depending on what your provider supports.
+    </Note>
+  </Step>
+  <Step title="Wait for verification">
+    Papervine watches for the record and issues an HTTPS certificate automatically. The
+    status flips to **Connected** on its own — no button to press.
+
+    DNS changes usually take minutes, occasionally longer depending on your provider's TTL.
+  </Step>
+</Steps>
+
+The check behind that **Connected** badge is deliberately strict: it confirms the
+certificate issued *and* that a real request for your domain reaches the right site. A
+domain that merely resolves isn't reported as connected, because that's the state where
+things look fine and readers still get an error.
+
+## Root or `/docs`
+
+The **Host at `/docs`** toggle decides where your docs sit on the domain:
+
+- **Off** — docs at the root, `docs.acme.com/quickstart`. Use this for a dedicated docs
+  subdomain.
+- **On** — docs under a path, `acme.com/docs/quickstart`. Use this when the domain already
+  serves your marketing site and docs are one section of it.
+
+Set this at the same time as the domain. Changing it later changes every URL on your site,
+which breaks inbound links and anything readers have bookmarked.
+
+## HTTPS
+
+Certificates are issued and renewed automatically. There's nothing to buy, upload, or
+remember to rotate — and no way to be woken up by an expired certificate.
+
+## Moving a domain from another provider
+
+If the domain currently serves docs elsewhere, the cutover is the DNS record: the old host
+serves until you change it, and Papervine serves once the new record propagates. To keep
+the gap as short as possible, connect the domain in Papervine **first**, then change DNS —
+that way the certificate is ready before traffic arrives.
+
+## Removing or changing a domain
+
+Removing a custom domain from **Settings → Domain** returns the site to its default address
+immediately. Your content is untouched — only the address changes.
+
+Old URLs stop working once DNS no longer points at us, so if the domain was public, plan a
+redirect from whatever takes it over.
+
+## Troubleshooting
+
+**Stuck on pending.** The DNS record usually doesn't match what the dashboard asked for —
+a common cause is a record on `docs.acme.com.acme.com`, which happens when a provider
+appends the zone to a name you already typed in full. Check the record's actual resolved
+value.
+
+**A certificate error in the browser.** Verification hasn't finished. It resolves on its own
+once the certificate issues; a hard refresh after a minute usually clears a cached error.
+
+**"That host is reserved."** You've entered a host Papervine itself serves from. Use a domain
+you control.
+
+**Works for you, not for a colleague.** Almost always DNS caching on their side rather than
+a Papervine problem — it clears with time.

@@ -1,0 +1,74 @@
+---
+title: Quickstart
+description: Publish a documentation site from a Git repository in about five minutes.
+---
+
+This walks the whole path once: create an account, connect a repository, and get a live
+docs site. Everything after this page is detail you can come back for.
+
+<Info>
+  **What you need.** A GitHub repository containing MDX files and a `docs.json`. If you
+  don't have one, Papervine's starter template is a working example you can fork — or
+  point Papervine at an existing docs repo, which usually renders unchanged.
+</Info>
+
+<Steps>
+  <Step title="Create your organization">
+    Sign up, then name your organization. The name you pick becomes a URL-safe **slug**,
+    and that slug is part of your docs site's address — you'll see the preview update as
+    you type.
+
+    An organization owns your sites, your teammates, and your plan. Most companies need
+    exactly one.
+  </Step>
+
+  <Step title="Connect a repository">
+    From the dashboard, choose **Connect** and authorize Papervine to read the repository
+    you want to publish. Pick the repo, the branch to publish from (usually `main`), and
+    the folder holding your docs if they aren't at the root.
+
+    Papervine reads the repository — it never writes to it unless you explicitly use the
+    [browser editor](/control-plane/editor) and choose to publish.
+  </Step>
+
+  <Step title="Wait for the first sync">
+    Connecting kicks off a build immediately and returns you to the site's Overview, where
+    the [Activity feed](/control-plane/overview) shows progress. The first sync reads every
+    file, compiles your MDX, and builds the search index, so it takes longer than later
+    ones — a large repository can take a minute or two.
+
+    You don't need to wait on this screen. The status moves to **Live** on its own.
+  </Step>
+
+  <Step title="Open your site">
+    The Overview shows your site's address. Open it and you have a complete docs site:
+    navigation from your `docs.json`, [full-text search](/features/search) on `Cmd/Ctrl-K`,
+    dark mode, and — if enabled — the [AI assistant](/features/ai-assistant).
+  </Step>
+
+  <Step title="Publish a change">
+    Edit a page in your repository and push to the branch you connected. Papervine picks up
+    the push and rebuilds automatically. See [Publishing and syncing](/guides/publishing)
+    for what triggers a rebuild and how to force one.
+
+    Prefer not to touch Git? [Studio](/control-plane/editor) edits the same content in the
+    browser and publishes as a commit or a pull request.
+  </Step>
+</Steps>
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Write your content" href="/guides/authoring">
+    Page structure, frontmatter, and the Markdown you can use.
+  </Card>
+  <Card title="Organize the sidebar" href="/guides/navigation">
+    How `docs.json` builds your navigation, tabs, and groups.
+  </Card>
+  <Card title="Use your own domain" href="/guides/custom-domain">
+    Serve the site at `docs.yourcompany.com`.
+  </Card>
+  <Card title="Coming from another platform" href="/guides/migrate">
+    What carries over unchanged, and what to check.
+  </Card>
+</CardGroup>

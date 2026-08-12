@@ -1,0 +1,149 @@
+---
+title: Writing content
+description: How a page is structured — frontmatter, Markdown, components, links, and images.
+---
+
+Every page in your docs site is one `.mdx` file in your repository. MDX is Markdown that
+can also use components, so ordinary Markdown works exactly as you'd expect and components
+are there when plain prose isn't enough.
+
+## The shape of a page
+
+A page is frontmatter followed by content:
+
+```mdx
+---
+title: Installing the SDK
+description: Add the client library to your project and make your first call.
+---
+
+Install from npm:
+
+​```bash
+npm install @acme/sdk
+​```
+
+Then initialize it with your API key.
+```
+
+The `title` becomes the page's `<h1>`, its sidebar label, and its browser title. The
+`description` appears under the heading and is used as the page summary in search results
+and social previews. **Write a real description for every page** — it's the line a reader
+uses to decide whether this is the page they wanted.
+
+<Tip>
+  Don't repeat the title as an `# H1` in the body. The title already renders as the heading;
+  a second one gives you two competing headings and a confusing outline.
+</Tip>
+
+### Frontmatter you can set
+
+| Field | What it does |
+|---|---|
+| `title` | Page heading, sidebar label, browser title |
+| `description` | Summary under the heading; used by search and social previews |
+| `sidebarTitle` | A shorter label for the sidebar when the real title is long |
+| `icon` | An icon shown beside the sidebar entry |
+| `groups` | Restricts the page to reader groups — see [reader auth](/auth/reader-auth) |
+| `noindex` | Keeps the page out of search engines |
+
+Unknown fields are ignored rather than treated as errors, so a stray key from another tool
+won't break your build.
+
+## Headings and the page outline
+
+Use `##` and `###` for structure. Papervine builds the "On this page" table of contents from
+them automatically, and each heading gets a linkable anchor — hover it to grab the link.
+
+Keep the outline shallow. Two levels covers nearly everything; a fourth level usually means
+the page is really two pages.
+
+## Links
+
+Link between your own pages with **root-absolute paths**, no file extension:
+
+```mdx
+See [reader auth](/auth/reader-auth) for the full handshake.
+```
+
+This is the form to prefer because it keeps working no matter how the site is served —
+subdomain, custom domain, or a path-based fallback. Relative links like `../auth/overview`
+resolve differently depending on the current URL and are easy to break by moving a file.
+
+External links are ordinary Markdown links and open in a new tab.
+
+## Images and files
+
+Put images in your repository and reference them with a root-absolute path:
+
+```mdx
+![The dashboard overview](/images/overview.png)
+```
+
+Assets are served from the same place as your content, so they survive a domain change and
+work identically in local preview. Papervine measures your images at sync time and reserves
+the right amount of space for them as the page loads, so pictures don't shove text around
+while a reader is already reading.
+
+## Components
+
+When prose isn't enough, use a component. The full set is in the
+[component library](/rendering/components) — callouts, cards, tabs, steps, accordions, code
+groups, and frames.
+
+Two rules worth knowing:
+
+**An unknown component never breaks the page.** If you use a component Papervine doesn't
+have, it renders its contents as plain content and the rest of the page is unaffected. You
+get a slightly plainer page, not a broken site.
+
+**A malformed page degrades to a notice, not an error page.** If the MDX can't compile, that
+page shows an inline notice explaining the problem. The rest of the site keeps working.
+
+## Code blocks
+
+Fence code with triple backticks and name the language for syntax highlighting:
+
+````mdx
+```ts
+const client = new Client({ apiKey: process.env.API_KEY });
+```
+````
+
+Highlighting is generated once when your docs are built, not in the reader's browser, so
+long code-heavy pages stay fast. Both light and dark themes are produced at the same time,
+so code looks right the instant a reader flips the theme.
+
+To show the same thing in several languages, use a
+[CodeGroup](/rendering/components) so readers can switch between tabs.
+
+## Reusing content
+
+To avoid maintaining the same paragraph twice, keep it in one file and include it where
+it's needed. A snippet is just an `.mdx` file you import:
+
+```mdx
+import Prerequisites from '/snippets/prerequisites.mdx';
+
+<Prerequisites />
+```
+
+Good candidates: prerequisites, auth requirements, deprecation warnings — anything that
+would otherwise drift out of sync between pages.
+
+## Previewing before you publish
+
+Run the [CLI](/cli) in your docs folder to see exactly what will ship:
+
+```bash
+npx papervine dev
+```
+
+It renders with the same engine as the hosted site, with live reload as you edit. This is
+the fastest way to check an unfamiliar component or a tricky table before pushing.
+
+<Note>
+  Prefer editing in a browser? [Studio](/control-plane/editor) gives you the same content
+  in a visual editor, with an AI agent that can draft and revise alongside you, and
+  publishes as a commit or pull request.
+</Note>

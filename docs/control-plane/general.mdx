@@ -1,13 +1,56 @@
 ---
-title: General
-description: Rename a site — set the display name shown across the dashboard.
+title: General settings
+description: Rename a site, and understand the three different names a site has — display name, slug, and published title.
 ---
 
-The **General** page (**Settings → General**) holds a site's basic settings. Today that is the
-**project name** — the label shown across the dashboard: the site switcher and the breadcrumb.
+**Settings → General** holds a site's basic settings. Today that's the **project name**.
 
-Edit the name and **Save changes**. Only **owners and admins** can rename a site.
+Edit the name and **Save changes**. Only **owners and admins** can rename a site; members
+see the field read-only.
 
-The name is a display label only. It is **not** the site's URL — that's the slug, which stays
-fixed — and it's **not** the title rendered on the published docs, which comes from your repo's
-`docs.json`.
+## A site has three names
+
+This trips people up, because changing one does not change the others. They're separate on
+purpose.
+
+| Name | Where it shows | Where it's set | Changeable |
+|---|---|---|---|
+| **Display name** | The dashboard — site switcher, breadcrumb, activity feed | Here, in General | Yes, any time |
+| **Slug** | The site's default web address | Set when you connect the site | No |
+| **Published title** | The live docs site's navbar and browser title | `name` in your repo's `docs.json` | Yes, by editing your repo |
+
+So renaming a site here changes what **you and your teammates** see in the dashboard. It
+doesn't move the site's URL, and readers won't notice anything.
+
+<Note>
+  Want to change what readers see at the top of the docs? That's the `name` field in your
+  repository's `docs.json` — see [organizing your docs](/guides/navigation). It updates on
+  the next build.
+</Note>
+
+## Why the slug doesn't change
+
+The slug is part of your site's address, so changing it would break every existing link to
+your docs — including anything readers have bookmarked and anything search engines have
+indexed.
+
+If you need a different public address, the better answer is
+[a custom domain](/guides/custom-domain): it gives you the address you want without
+invalidating the old one, since the original keeps working.
+
+## Related settings
+
+<CardGroup cols={2}>
+  <Card title="Domain" href="/guides/custom-domain">
+    Serve the site on your own domain.
+  </Card>
+  <Card title="Members" href="/control-plane/members">
+    Invite teammates and manage who can change these settings.
+  </Card>
+  <Card title="Plans & billing" href="/control-plane/billing">
+    Your plan, trial, and AI credits.
+  </Card>
+  <Card title="Danger zone" href="/control-plane/danger-zone">
+    Transfer a site to another organization, or delete it.
+  </Card>
+</CardGroup>

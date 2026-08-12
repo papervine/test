@@ -1,7 +1,7 @@
 {
   "$schema": "https://papervine.io/schema.json",
   "name": "Papervine",
-  "description": "Architecture and contributor reference for Papervine — the docs platform. These docs are written in Papervine's own format and render in Papervine itself.",
+  "description": "Documentation for Papervine — how to publish and run a docs site, and how the platform is built.",
   "favicon": {
     "light": "/favicon.ico",
     "dark": "/favicon.ico"
@@ -12,74 +12,115 @@
     "dark": "#5B21B6"
   },
   "navigation": {
-    "groups": [
+    "tabs": [
       {
-        "group": "Get started",
-        "pages": [
-          "index",
-          "architecture",
-          "tech-stack",
-          "cli"
+        "tab": "User Documentation",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "index",
+              "guides/quickstart",
+              "guides/migrate"
+            ]
+          },
+          {
+            "group": "Write your docs",
+            "pages": [
+              "guides/authoring",
+              "guides/navigation",
+              "rendering/components",
+              "cli"
+            ]
+          },
+          {
+            "group": "Publish",
+            "pages": [
+              "guides/publishing",
+              "guides/custom-domain",
+              "control-plane/exports"
+            ]
+          },
+          {
+            "group": "Edit in the browser",
+            "pages": [
+              "control-plane/editor",
+              "control-plane/collaboration",
+              "control-plane/automate"
+            ]
+          },
+          {
+            "group": "Search & AI",
+            "pages": [
+              "features/search",
+              "features/ai-assistant",
+              "features/assistant-widget",
+              "features/api-playground",
+              "features/mcp-servers"
+            ]
+          },
+          {
+            "group": "Reader access",
+            "pages": [
+              "auth/reader-auth"
+            ]
+          },
+          {
+            "group": "Manage your account",
+            "pages": [
+              "control-plane/overview",
+              "control-plane/general",
+              "control-plane/members",
+              "control-plane/billing",
+              "control-plane/analytics",
+              "control-plane/danger-zone"
+            ]
+          }
         ]
       },
       {
-        "group": "Rendering",
-        "pages": [
-          "rendering/content-pipeline",
-          "rendering/config",
-          "rendering/components",
-          "rendering/internals"
-        ]
-      },
-      {
-        "group": "Features",
-        "pages": [
-          "features/search",
-          "features/api-playground",
-          "features/ai-assistant",
-          "features/assistant-widget",
-          "features/mcp-servers"
-        ]
-      },
-      {
-        "group": "Control plane",
-        "pages": [
-          "control-plane/overview",
-          "control-plane/general",
-          "control-plane/billing",
-          "control-plane/members",
-          "control-plane/editor",
-          "control-plane/collaboration",
-          "control-plane/analytics",
-          "control-plane/automate",
-          "control-plane/exports",
-          "control-plane/danger-zone",
-          "control-plane/platform-admin"
-        ]
-      },
-      {
-        "group": "Auth & access",
-        "pages": [
-          "auth/overview",
-          "auth/platform-auth",
-          "auth/google-sign-in",
-          "auth/transactional-email",
-          "auth/reader-auth"
-        ]
-      },
-      {
-        "group": "Local AI",
-        "pages": [
-          "local-ai"
-        ]
-      },
-      {
-        "group": "Contributing",
-        "pages": [
-          "contributing/working-on-papervine",
-          "contributing/testing",
-          "contributing/gotchas",
-          "roadmap"
+        "tab": "Technical Documentation",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture",
+              "tech-stack",
+              "roadmap"
+            ]
+          },
+          {
+            "group": "Rendering",
+            "pages": [
+              "rendering/content-pipeline",
+              "rendering/config",
+              "rendering/internals"
+            ]
+          },
+          {
+            "group": "Auth & access",
+            "pages": [
+              "auth/overview",
+              "auth/platform-auth",
+              "auth/google-sign-in",
+              "auth/transactional-email"
+            ]
+          },
+          {
+            "group": "Operating a deployment",
+            "pages": [
+              "local-ai",
+              "control-plane/platform-admin"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "pages": [
+              "contributing/working-on-papervine",
+              "contributing/testing",
+              "contributing/gotchas"
+            ]
+          }
         ]
       }
     ]

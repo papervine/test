@@ -129,17 +129,43 @@ apex path form (`/sites/{slug}/login`), or a custom domain (`docs.example.com/lo
 
 ## Access control
 
-Gating is **default-deny**: an auth-enabled site requires a valid reader session, and on top
-of that you gate individual pages by group.
+Access is decided **per page**, and it is **default-deny**: with auth enabled, every page
+requires a reader session unless its frontmatter opens it up. Nothing is configured in the
+dashboard — the pages themselves carry the rules, so access lives in your repository and
+changes through the same review as any other content change.
 
-- **Gate by group** with `groups: ["admin"]` in a page's frontmatter — the reader must belong
-  to at least one listed group (groups come from the handshake's `groups` claim). A reader
-  who isn't in any listed group can't reach the page **and never sees it in the sidebar** —
-  it's dropped from the nav entirely, so its existence doesn't leak. Because groups come from
-  the handshake, the **password** method (which has no per-user identity) can't satisfy a
-  `groups:` page — group gating needs the JWT or OAuth method.
-- **Opt a page out of group gating** with `public: true` in its frontmatter — any reader who
-  cleared the site's sign-in sees it, regardless of groups.
+| Frontmatter | Anonymous visitor | Signed-in reader |
+|---|---|---|
+| `public: true` | Reads it | Reads it |
+| *(none)* | Sent to sign-in | Reads it |
+| `groups: ["admin"]` | Sent to sign-in | Only if in a listed group — otherwise 404 |
+
+- **Make a page public** with `public: true`. It needs no session at all, so it stays
+  shareable and indexable. This is what lets one site carry public documentation *and*
+  internal pages.
+- **Gate by group** with `groups: ["admin"]` — the reader must belong to at least one listed
+  group (groups come from the handshake's `groups` claim). A reader outside every listed
+  group can't reach the page **and never sees it in the sidebar** — it's dropped from the nav
+  entirely, so its existence doesn't leak. Because groups come from the handshake, the
+  **password** method (which has no per-user identity) can't satisfy a `groups:` page —
+  group gating needs the JWT or OAuth method.
+- **Say nothing** and the page is available to any signed-in reader. This is the default,
+  which is why enabling auth on a site with no `public: true` pages makes the whole site
+  private.
+
+<Warning>
+  "Anonymous" and "signed in but in no groups" are **not** the same. A reader authenticated by
+  the password method carries no groups, yet may still read ungated pages; an anonymous
+  visitor may not. Treating them alike would make every page without a `groups:` line
+  world-readable the moment auth was switched on.
+</Warning>
+
+<Tip>
+  A page that isn't public sends anonymous visitors to your sign-in rather than a 404 —
+  signing in may genuinely grant access, so a dead end would be unhelpful. A **signed-in**
+  reader who lacks the group gets the 404, because for them the answer really is "there is
+  nothing here for you."
+</Tip>
 
 A group or tab whose pages are **all** gated away from a reader disappears entirely — no empty
 heading, no teasing "Internal" tab. Access lives on the page; the sidebar and tabs are derived
