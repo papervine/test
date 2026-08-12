@@ -28,12 +28,11 @@ export const metadata: Metadata = {
     "Documentation built for humans and AI. Write, publish, and maintain world-class docs — with an API playground, instant search, and an AI assistant.",
 };
 
-// Our own docs, dogfooded as an ordinary tenant site (SPEC §2) — hence the doubled
-// label: `docs` is in the host resolver's RESERVED set (src/lib/tenant-host.ts), so
-// `docs.papervine.io` can't be a tenant slug and falls through to this marketing apex.
-// An absolute <a>, not <Link>: a different host is a hard navigation, never a soft
-// RSC nav (the tenant-host rewrite gotcha in CLAUDE.md).
-const DOCS = "https://papervine-docs.papervine.io/";
+// Our own docs, dogfooded through Papervine as an ordinary site whose custom domain is a
+// host on our own domain (SPEC §2 — operator-claimable, gated by PLATFORM_ADMIN_EMAILS).
+// An absolute <a>, not <Link>: a different host is a hard navigation, never a soft RSC nav
+// (the tenant-host rewrite gotcha in CLAUDE.md).
+const DOCS = "https://docs.papervine.io/";
 
 // The hero announcement pill links at the page explaining what it announces.
 const DOCS_READER_AUTH = `${DOCS}auth/reader-auth`;
