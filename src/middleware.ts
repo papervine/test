@@ -6,6 +6,7 @@ import {
   isAppHost,
   appHostFor,
   parentDomain,
+  legacyTenantRedirectHost,
 } from "./lib/tenant-host";
 import { SIGNED_IN_FLAG } from "./lib/signed-in-flag";
 import { isOAuthCallbackPath } from "./lib/social-auth";
@@ -209,9 +210,24 @@ export function middleware(req: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Multi-tenant host routing (SPEC §2): a tenant subdomain ({slug}.papervine.io,
-  // or {slug}.localhost in dev) serves that tenant's docs. Rewrite the whole host
-  // to /_sites/{slug}/… and let that route resolve the site + fetch its content.
+  // Tenant docs moved to their own registrable domain (SPEC §2 — so customer-authored
+  // content never runs on a domain our cookies are scoped to). Old `{slug}.{platform}`
+  // URLs are already in bookmarks, README links and search indexes, so send them to the
+  // canonical host with a permanent redirect rather than breaking them. Path, query and
+  // hash ride along. Only genuine tenant labels redirect — `app.`/`www.`/`api.`/`docs.` on
+  // the platform domain are ours and fall through to the handling below.
+  const legacyHost = legacyTenantRedirectHost(req.headers.get("host"));
+  if (legacyHost && !process.env.PAPERVINE_CONTENT) {
+    const url = req.nextUrl.clone();
+    url.host = legacyHost.split(":")[0];
+    url.port = "";
+    return NextResponse.redirect(url, 308);
+  }
+
+  // Multi-tenant host routing (SPEC §2): a tenant subdomain ({slug}.papervine.page,
+  // {slug}.localhost in dev, or a legacy {slug}.papervine.io that hasn't redirected yet)
+  // serves that tenant's docs. Rewrite the whole host to /_sites/{slug}/… and let that
+  // route resolve the site + fetch its content.
   // (Per-tenant asset/dashboard handling is apex-only for now.)
   const tenant = resolveTenantSlug(req.headers.get("host"));
   if (tenant) {

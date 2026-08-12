@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { normalizeOrigin, isOriginAllowed, resolveDocsBaseUrl } from "@/lib/widget";
+import { domains } from "@/lib/tenant-host";
 
 describe("normalizeOrigin", () => {
   it("accepts a plain https origin unchanged", () => {
@@ -85,9 +86,12 @@ describe("resolveDocsBaseUrl", () => {
     ).toBe("https://docs.acme.com");
   });
 
-  it("uses subdomain mode when the apex supports wildcard tenants", () => {
+  it("uses the configured TENANT domain, not the host that served the request", () => {
+    // Citations are minted while serving an embed on a customer's page, and the request
+    // arrives on the platform/app host. Deriving the docs origin from that host would send
+    // readers to the legacy `{slug}.{platform}` domain instead of the canonical tenant one.
     expect(resolveDocsBaseUrl("app.papervine.io", { customDomain: null, slug: "acme" })).toBe(
-      "https://acme.papervine.io",
+      `https://acme.${domains.tenant}`,
     );
   });
 
@@ -97,9 +101,9 @@ describe("resolveDocsBaseUrl", () => {
     );
   });
 
-  it("strips the app./www. prefix before deriving the apex", () => {
+  it("lands on the tenant domain from the www. host too", () => {
     expect(resolveDocsBaseUrl("www.papervine.io", { customDomain: null, slug: "acme" })).toBe(
-      "https://acme.papervine.io",
+      `https://acme.${domains.tenant}`,
     );
   });
 

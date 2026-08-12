@@ -1,4 +1,4 @@
-import { supportsSubdomainTenants } from "@/lib/tenant-host";
+import { supportsSubdomainTenants, tenantHostFor } from "@/lib/tenant-host";
 
 /**
  * Pure helpers for the embeddable assistant widget (SPEC §8.7). Kept DB-free so they're
@@ -49,8 +49,13 @@ export function resolveDocsBaseUrl(
 ): string {
   if (site.customDomain) return `https://${site.customDomain}`;
   const proto = host.includes("localhost") ? "http" : "https";
+  // The tenant host comes from configuration (tenantHostFor), NOT from stripping `app.`
+  // off the requesting host — the widget's citations are minted while serving a customer's
+  // page, and deriving from the request would point them at the legacy domain.
+  const tenantHost = tenantHostFor(site.slug, host);
+  if (supportsSubdomainTenants(tenantHost.replace(/^[^.]+\./, ""))) {
+    return `${proto}://${tenantHost}`;
+  }
   const apexBase = host.replace(/^(app|www)\./, "");
-  return supportsSubdomainTenants(apexBase)
-    ? `${proto}://${site.slug}.${apexBase}`
-    : `${proto}://${apexBase}/sites/${site.slug}`;
+  return `${proto}://${apexBase}/sites/${site.slug}`;
 }

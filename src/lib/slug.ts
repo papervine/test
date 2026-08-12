@@ -28,3 +28,22 @@ export const RESERVED_ORG_SLUGS = new Set([
 export function isReservedOrgSlug(slug: string): boolean {
   return RESERVED_ORG_SLUGS.has(slug);
 }
+
+// Slugs a SITE may not take. A site slug is its subdomain on the tenant domain.
+//
+//  • `connect` sits beside the org-level route (/:org/:site vs /:org/connect), so a site
+//    slugged "connect" would be shadowed by that page.
+//  • `docs` is ours — we dogfood our own documentation as an ordinary tenant site, and it
+//    would otherwise be first-come-first-served.
+//
+// Deliberately absent: `www`, `app`, `api`. Before tenants moved to their own domain those
+// were unassignable *by accident* — the host resolver refused to map them while this list
+// let them through, so connecting a repo named "api" created a site whose subdomain
+// silently served the marketing page instead of its docs. Nothing of ours answers on the
+// tenant domain, so they're ordinary working slugs now. The unit test pins that this list
+// and the host resolver agree, which is what silently drifted before.
+export const RESERVED_SITE_SLUGS = new Set(["connect", "docs"]);
+
+export function isReservedSiteSlug(slug: string): boolean {
+  return RESERVED_SITE_SLUGS.has(slug);
+}

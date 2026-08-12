@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { NextRequest } from "next/server";
 import { middleware } from "@/middleware";
+import { domains } from "@/lib/tenant-host";
 
 // The control-plane auth-path bounce (apex `/login` → app host) must NOT hijack a tenant
 // subdomain's `/login`, which is the *reader* login (SPEC §11.2). Regression for the bug
@@ -30,6 +31,27 @@ describe("middleware host routing", () => {
   it("rewrites tenant subdomain docs to /sites/{slug}", () => {
     const res = middleware(req("starter.localhost:3000", "/quickstart"));
     expect(res.headers.get("x-middleware-rewrite")).toContain("/sites/starter/quickstart");
+  });
+
+  it("serves tenant docs on the tenant domain", () => {
+    const res = middleware(req(`starter.${domains.tenant}`, "/quickstart"));
+    expect(res.headers.get("x-middleware-rewrite")).toContain("/sites/starter/quickstart");
+  });
+
+  it("permanently redirects a legacy tenant host to the tenant domain, keeping the path", () => {
+    // Old links (bookmarks, READMEs, search results) must survive the domain move.
+    const res = middleware(req(`starter.${domains.platform}`, "/guides/setup?x=1"));
+    expect(res.status).toBe(308);
+    const loc = res.headers.get("location") ?? "";
+    expect(loc).toContain(`starter.${domains.tenant}`);
+    expect(loc).toContain("/guides/setup");
+    expect(loc).toContain("x=1");
+  });
+
+  it("does not redirect the platform's own hosts", () => {
+    // `app.` is the control plane, not a tenant called "app".
+    const res = middleware(req(`app.${domains.platform}`, "/"));
+    expect(res.status).not.toBe(308);
   });
 
   it("still bounces apex /login to the app host (control-plane auth path)", () => {

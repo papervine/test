@@ -18,7 +18,7 @@ import { getInstallationToken } from "@/lib/github-app";
 import { runSync } from "@/lib/sync-runner";
 import { revalidateSiteRow } from "@/lib/tenant";
 import { encryptSecret } from "@/lib/crypto";
-import { slugify } from "@/lib/slug";
+import { slugify, RESERVED_SITE_SLUGS } from "@/lib/slug";
 import { siteBase, siteRoute } from "@/lib/dashboard-nav";
 
 // `redirectTo` is the new site's bare URL; the client does the navigation. A server
@@ -26,12 +26,10 @@ import { siteBase, siteRoute } from "@/lib/dashboard-nav";
 // rewrite (the documented tenant-URL gotcha), landing on the apex instead of the site.
 export type ConnectState = { error?: string; redirectTo?: string };
 
-// Site slugs sit beside the org-level `connect` route (/:org/:site vs /:org/connect), so
-// a site slugged "connect" would be shadowed by that page — reserve it.
-const RESERVED_SITE_SLUGS = new Set(["connect"]);
-
-// Globally-unique site slug (it's the *.papervine.io subdomain). Append -2, -3… on
+// Globally-unique site slug (it's the subdomain on the tenant domain). Append -2, -3… on
 // collision, and treat a reserved slug as taken so it falls through to "<root>-2".
+// The list itself lives in lib/slug.ts — this is a "use server" file and may only export
+// async functions, and the unit test needs to read it.
 async function uniqueSlug(base: string): Promise<string> {
   const root = slugify(base) || "site";
   const taken = new Set(

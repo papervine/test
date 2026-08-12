@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { authClient } from "@/lib/auth-client";
 import { slugify } from "@/lib/slug";
+import { domains } from "@/lib/tenant-host";
 import { Button } from "@/components/platform/Button";
 import { Field } from "@/components/platform/Field";
 
 // First-run: create the organization (tenant) the user will own. Slug doubles as
-// the *.papervine.io subdomain, so it must be URL-safe.
+// the subdomain on the tenant domain, so it must be URL-safe.
 export default function OnboardingPage() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +49,7 @@ export default function OnboardingPage() {
         hint={
           name && (
             <span className="mt-1 block text-xs text-[var(--muted)]">
-              {slugify(name) || "—"}.papervine.io
+              {slugify(name) || "—"}.{domains.tenant}
             </span>
           )
         }

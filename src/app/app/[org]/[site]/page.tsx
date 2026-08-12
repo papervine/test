@@ -2,7 +2,7 @@ import Link from "next/link";
 import { headers } from "next/headers";
 import { and, desc, eq } from "drizzle-orm";
 import { ExternalLink, GitBranch, Globe, Lock, PenLine } from "lucide-react";
-import { supportsSubdomainTenants } from "@/lib/tenant-host";
+import { supportsSubdomainTenants, tenantHostFor } from "@/lib/tenant-host";
 import { AUTH_METHOD_META, isAuthMethod } from "@/lib/reader-auth";
 import { db } from "@/lib/db";
 import { user } from "@/lib/db/schema";
@@ -39,19 +39,19 @@ export default async function SiteOverview({
   const firstName = session.user.name.split(" ")[0];
   const base = siteBase(orgSlug, siteSlug);
 
-  // Build the site's live docs URL from the current host so it's right in dev
-  // ({slug}.localhost:3100) and prod ({slug}.papervine.io), or its custom domain. On a
+  // The site's live docs URL. The tenant host is CONFIGURED (tenantHostFor), not derived
+  // from this request — the dashboard runs on app.{platform}, so deriving would produce the
+  // legacy `{slug}.{platform}` host. Dev stays on {slug}.localhost:3100 with the port. On a
   // host without wildcard-subdomain support (e.g. a bare *.vercel.app), fall back to the
   // path form (/sites/{slug}) — the interim that resolves there (SPEC §2).
   const host = (await headers()).get("host") ?? "";
   const proto = host.includes("localhost") ? "http" : "https";
   const apexBase = host.replace(/^(app|www)\./, "");
-  const subdomains = supportsSubdomainTenants(apexBase);
+  const tenantHost = tenantHostFor(activeSite.slug, host);
+  const subdomains = supportsSubdomainTenants(tenantHost.replace(/^[^.]+\./, ""));
   const siteHostUrl =
     activeSite.customDomain ??
-    (subdomains
-      ? `${activeSite.slug}.${apexBase}`
-      : `${apexBase}/sites/${activeSite.slug}`);
+    (subdomains ? tenantHost : `${apexBase}/sites/${activeSite.slug}`);
   const siteUrl = activeSite.customDomain
     ? `https://${activeSite.customDomain}`
     : `${proto}://${siteHostUrl}`;

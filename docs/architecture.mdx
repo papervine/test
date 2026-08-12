@@ -66,7 +66,7 @@ modes:
 
 <Tabs>
   <Tab title="Subdomain mode">
-    `{slug}.papervine.io` → tenant by **slug**. Middleware rewrites to
+    `{slug}.{tenant-domain}` → tenant by **slug**. Middleware rewrites to
     `/sites/[tenant]/[...slug]`. This is the primary, production form, and needs a wildcard
     domain you own plus wildcard TLS.
   </Tab>
@@ -81,6 +81,51 @@ modes:
 
 The apex, `www`, and reserved labels resolve to the platform landing and control plane —
 **never** a tenant. The `isAppHost` check routes the `app.` host to the control plane.
+
+### Two domains, and why
+
+Papervine serves from **two separate registrable domains**, and the separation is load-bearing:
+
+| | Domain | Serves |
+|---|---|---|
+| **Platform** | `papervine.io` | marketing apex, and the control plane on `app.` |
+| **Tenant** | `papervine.page` | every customer's docs site, at `{slug}.papervine.page` |
+
+The reason is cookie scope. A docs site renders **customer-authored MDX**, and for as long as
+that ran on a subdomain of the platform domain, it shared a registrable domain with the
+control plane's cookies. The dashboard session is host-only on `app.`, and even the benign
+"signed in" hint had to be `httpOnly` precisely because it reached tenant subdomains. Moving
+tenants to their own domain removes that exposure instead of mitigating it.
+
+Two further consequences fall out of the split:
+
+- **No reserved labels on the tenant domain.** Nothing of ours answers there, so `docs`,
+  `app`, `www` and `api` are ordinary site slugs. Reserved labels still apply on the platform
+  domain and on `*.localhost` in dev, where the platform and tenants share a suffix.
+- **The tenant host is configuration, not inference.** `tenantHostFor()` returns the
+  configured tenant domain rather than deriving one from the incoming request. Deriving would
+  be wrong wherever a URL is minted while serving a *platform* request — the dashboard's live
+  links, the MCP endpoint, the widget's citations — all of which run on `app.` and would
+  otherwise emit the wrong domain.
+
+Both domains come from `NEXT_PUBLIC_PLATFORM_DOMAIN` / `NEXT_PUBLIC_TENANT_DOMAIN`, so a
+deployment can differ. Leave them unset locally: dev shares `.localhost` for both, which
+means **the split is not exercised in local development** — it only becomes real in an
+environment with two actual domains.
+
+<Info>
+  URLs minted before the split keep working. A legacy `{slug}.{platform-domain}` host still
+  resolves and is **308-redirected** to its canonical home on the tenant domain, path and
+  query intact, so bookmarks and inbound links survive the move.
+</Info>
+
+<Tip>
+  Choosing a tenant domain? Two independent protections are worth knowing apart. A TLD like
+  `.page` or `.dev` is **HSTS-preloaded wholesale**, so every host under it is HTTPS-only from
+  registration with nothing to submit. Isolating tenants' cookies **from each other** is a
+  different mechanism — the Public Suffix List — and needs a per-domain submission no TLD
+  grants automatically.
+</Tip>
 
 <Info>
   Path mode is **additive**, not a downgrade: in subdomain (host) mode the base is empty, so

@@ -567,6 +567,48 @@ repo (hosted docs platforms authors lean on `<img>`, usually inside `<Frame>`), 
    path, so browser and optimizer resolve it identically regardless of host. Result on a real
    subdomain: a 5,106 KiB PNG hero now serves as a 207 KiB AVIF.
 
+**Tenant docs moved to their own registrable domain (landed 2026-08-11).** Customer-authored
+MDX rendered on `{slug}.papervine.io` — the same registrable domain the control plane's
+cookies live on. The session cookie is host-only on `app.`, and the benign `pv_signed_in`
+hint is scoped to the parent domain *specifically so the marketing apex can read it*, which
+means it also reached every tenant subdomain; that is why it had to be `httpOnly` (a
+mitigation, not a fix). Tenants now serve from **`papervine.page`**, a second registrable
+domain, so no platform cookie can be scoped anywhere customer content runs.
+> **Why `.page` over `.site`.** Both were available and either would have delivered the
+> platform↔tenant separation above, which is the main prize. `.page` is **HSTS-preloaded as
+> an entire TLD**, so every tenant host is HTTPS-only from registration with no submission
+> and no way to lose it to a misconfiguration. Worth separating from a protection it does
+> *not* grant: isolating tenants' cookies **from each other** is the Public Suffix List, a
+> per-domain submission that is still outstanding and is the long pole (weeks–months into
+> browser releases). The TLD choice was made before any DNS or PSL submission existed,
+> because PSL removal is as slow as addition — cheap then, awkward later.
+>
+> **Shape of the change.** `PLATFORM_DOMAIN`/`TENANT_DOMAIN` are configuration
+> (`NEXT_PUBLIC_*`, defaulted in `tenant-host.ts`), not constants scattered through the app.
+> `isPlatformHost` must include the tenant domain — miss that and middleware treats every
+> tenant host as a candidate customer vanity domain and tries to DB-resolve it. The
+> load-bearing new helper is **`tenantHostFor()`**: the old rule "strip `app.`/`www.` off the
+> request host" is wrong the moment tenants live elsewhere, because the dashboard, the MCP
+> endpoint page, and the widget all mint tenant URLs *while serving a platform request* and
+> would emit the legacy domain. Two widget unit tests failed on exactly that when the change
+> landed — the intended catch.
+>
+> **Consequences.** Reserved labels no longer apply on the tenant domain (nothing of ours
+> answers there), so `docs.papervine.page` is an ordinary site — which is what unblocks
+> dogfooding our own docs as a tenant, and it dissolves rather than patches the
+> `RESERVED_SITE_SLUGS` drift: `www`/`app`/`api` used to be *assignable but unresolvable*, so
+> connecting a repo named "api" produced a site whose subdomain silently served the marketing
+> page. A unit test now pins that every assignable slug actually resolves. Legacy
+> `{slug}.papervine.io` hosts still resolve and **308** to the canonical host with path and
+> query intact, so existing links survive.
+>
+> **Not exercised locally.** Dev shares `.localhost` for both domains, so the cookie isolation
+> this buys is only real on an environment with two actual domains.
+>
+> **Still open:** the PSL submission for `papervine.page`; `CUSTOM_DOMAIN_CNAME_TARGET` is
+> still unset, so customers are told to CNAME straight at the provider edge instead of a
+> branded `cname.papervine.page` in our own zone (the portability seam).
+
 **Persistent shell layout for tenant docs (landed 2026-06-16).** Every tenant page navigation
 re-rendered and re-streamed the *entire* page — navbar, tabs, sidebar, assistant, AND article —
 because `renderTenantDocs` was one page component with no layout; the sidebar flashed and lost

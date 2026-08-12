@@ -1,6 +1,6 @@
 import { headers } from "next/headers";
 import { Plug } from "lucide-react";
-import { supportsSubdomainTenants } from "@/lib/tenant-host";
+import { supportsSubdomainTenants, tenantHostFor } from "@/lib/tenant-host";
 import { requireSite } from "@/lib/dashboard-context";
 
 // The per-site MCP server surface (SPEC §8.5). The /mcp endpoint already exists and is
@@ -17,13 +17,16 @@ export default async function McpPage({
   const host = (await headers()).get("host") ?? "";
   const proto = host.includes("localhost") ? "http" : "https";
   const apexBase = host.replace(/^(app|www)\./, "");
-  const subdomains = supportsSubdomainTenants(apexBase);
+  const tenantHost = tenantHostFor(site.slug, host);
+  const subdomains = supportsSubdomainTenants(tenantHost.replace(/^[^.]+\./, ""));
 
-  // The docs host (custom domain wins; else subdomain, else the apex path form), then
-  // its /mcp endpoint — the same host resolution the dashboard home uses for live URLs.
+  // The docs host (custom domain wins; else the configured tenant subdomain, else the apex
+  // path form), then its /mcp endpoint — the same resolution the dashboard home uses. This
+  // URL gets pasted into people's MCP client config, so it must be the canonical tenant
+  // host, never the legacy one derived from whatever host served the dashboard.
   const docsHost =
     site.customDomain ??
-    (subdomains ? `${site.slug}.${apexBase}` : `${apexBase}/sites/${site.slug}`);
+    (subdomains ? tenantHost : `${apexBase}/sites/${site.slug}`);
   const mcpUrl = site.customDomain
     ? `https://${site.customDomain}/mcp`
     : `${proto}://${docsHost}/mcp`;

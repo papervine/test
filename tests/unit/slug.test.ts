@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { isReservedOrgSlug, slugify } from "@/lib/slug";
+import { isReservedOrgSlug, isReservedSiteSlug, slugify } from "@/lib/slug";
+import { resolveTenantSlug, domains } from "@/lib/tenant-host";
 
 describe("slugify", () => {
   it("lowercases and hyphenates", () => {
@@ -28,5 +29,27 @@ describe("isReservedOrgSlug", () => {
   it("allows normal org slugs", () => {
     expect(isReservedOrgSlug("acme")).toBe(false);
     expect(isReservedOrgSlug("adminco")).toBe(false);
+  });
+});
+
+describe("reserved SITE slugs agree with the host resolver", () => {
+  // The bug this exists to prevent: a slug that site creation happily assigns but the host
+  // resolver refuses to map. Such a site is created, shows in the dashboard, and its
+  // subdomain silently serves the marketing page instead of its docs — no error anywhere.
+  // The two lists lived in different files and drifted exactly that way.
+  it("every assignable slug actually resolves on the tenant domain", () => {
+    for (const slug of ["api", "app", "www", "acme", "my-docs", "connect", "docs"]) {
+      if (isReservedSiteSlug(slug)) continue; // refused up front — fine, never created
+      expect(
+        resolveTenantSlug(`${slug}.${domains.tenant}`),
+        `site slug "${slug}" is assignable but does not resolve to a tenant`,
+      ).toBe(slug);
+    }
+  });
+
+  it("keeps the slugs we genuinely need to hold back", () => {
+    expect(isReservedSiteSlug("connect")).toBe(true); // shadowed by /:org/connect
+    expect(isReservedSiteSlug("docs")).toBe(true); // our own dogfooded docs site
+    expect(isReservedSiteSlug("acme")).toBe(false);
   });
 });

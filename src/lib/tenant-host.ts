@@ -1,31 +1,99 @@
 // Pure host→tenant-slug mapping. No imports — safe in edge middleware (must not
 // pull in the DB/node deps that tenant.ts uses).
+//
+// TWO DOMAINS, on purpose (SPEC §2). The *platform* domain carries the marketing apex and
+// the control plane (`app.`); the *tenant* domain serves customers' docs sites. They are
+// deliberately different registrable domains so that a tenant's own MDX never runs on a
+// domain any platform cookie is scoped to — the control-plane session is host-only on
+// `app.{platform}`, and even the benign `pv_signed_in` flag is scoped to the platform
+// parent domain. Same-registrable-domain hosting is what forced that flag to be httpOnly;
+// splitting removes the exposure rather than mitigating it. It also frees the whole
+// tenant namespace: `docs`, `www`, `app` and `api` are ordinary slugs on the tenant domain
+// because nothing of ours answers there.
+//
+// Both are configurable so dev/preview/prod can differ, and so this file never becomes the
+// place a domain rename has to be hunted down.
+// NEXT_PUBLIC_ because client components display these too (the onboarding slug preview
+// shows you your future docs URL as you type). They're public domain names, not secrets,
+// and one variable each beats keeping a server/client pair in sync.
+const PLATFORM_DOMAIN = (
+  process.env.NEXT_PUBLIC_PLATFORM_DOMAIN || "papervine.io"
+).toLowerCase();
+// `.page` is HSTS-preloaded as an entire TLD, so every tenant host is HTTPS-only from the
+// moment it exists — no preload submission, and no way to lose it to a misconfiguration.
+// (Cookie isolation BETWEEN tenants is a separate matter: that needs the Public Suffix
+// List, which is a per-domain submission and is not implied by the TLD.)
+const TENANT_DOMAIN = (process.env.NEXT_PUBLIC_TENANT_DOMAIN || "papervine.page").toLowerCase();
 
-// Subdomains that address the platform itself, never a tenant.
+// Labels that address the platform itself rather than a tenant. These only matter on hosts
+// where the platform and tenants SHARE a suffix — `*.localhost` in dev (where `app.localhost`
+// is the control plane), and the legacy `*.{platform}` tenant hosts we still answer on for
+// old links. On the tenant domain proper there is nothing to collide with, so no label is
+// reserved there.
 const RESERVED = new Set(["www", "app", "api", "docs"]);
 
 /**
  * Map a request Host to a tenant slug, or null for the apex/platform host.
- * Local dev uses `{slug}.localhost`; prod uses `{slug}.papervine.io`. Custom domains
- * (a DB lookup) are a follow-up. A null return on the apex is also what flips the
- * `/sites/{slug}` route into path-based serving (SPEC §2 "Interim path-based serving").
+ *
+ * Canonical tenant hosts are `{slug}.{TENANT_DOMAIN}`; `{slug}.localhost` is the dev
+ * equivalent, and `{slug}.{PLATFORM_DOMAIN}` still resolves so links minted before the
+ * domain split keep working (middleware redirects those to the canonical host — see
+ * `legacyTenantRedirect`). A null return on the apex is also what flips the `/sites/{slug}`
+ * route into path-based serving (SPEC §2 "Interim path-based serving").
+ *
+ * RESERVED applies only to the shared-suffix hosts. On the tenant domain every label is a
+ * legal slug, which is what makes `docs.{TENANT_DOMAIN}` an ordinary site we can dogfood.
  */
 export function resolveTenantSlug(host: string | null): string | null {
   if (!host) return null;
   const name = host.split(":")[0].toLowerCase();
-  for (const suffix of [".localhost", ".papervine.io"]) {
+  const suffixes: Array<{ suffix: string; reserved: boolean }> = [
+    { suffix: `.${TENANT_DOMAIN}`, reserved: false },
+    { suffix: ".localhost", reserved: true },
+    { suffix: `.${PLATFORM_DOMAIN}`, reserved: true },
+  ];
+  for (const { suffix, reserved } of suffixes) {
     if (name.endsWith(suffix)) {
       const label = name.slice(0, -suffix.length);
-      if (label && !label.includes(".") && !RESERVED.has(label)) return label;
+      if (!label || label.includes(".")) continue;
+      if (reserved && RESERVED.has(label)) continue;
+      return label;
     }
   }
   return null;
 }
 
+/**
+ * A legacy tenant host (`{slug}.{PLATFORM_DOMAIN}`) that should 301 to its canonical home on
+ * the tenant domain — returns the new host, or null when the host is already canonical (or
+ * isn't a tenant host at all). Keeps every URL minted before the split alive instead of
+ * breaking bookmarks and inbound links. Dev (`*.localhost`) is left alone: there's only one
+ * local suffix, so there's nothing to migrate to.
+ */
+export function legacyTenantRedirectHost(host: string | null): string | null {
+  if (!host || PLATFORM_DOMAIN === TENANT_DOMAIN) return null;
+  const [name, port] = host.split(":");
+  const suffix = `.${PLATFORM_DOMAIN}`;
+  const lower = name.toLowerCase();
+  if (!lower.endsWith(suffix)) return null;
+  const label = lower.slice(0, -suffix.length);
+  if (!label || label.includes(".") || RESERVED.has(label)) return null;
+  const target = `${label}.${TENANT_DOMAIN}`;
+  return port ? `${target}:${port}` : target;
+}
+
 // Hosts Papervine itself answers on — the apex marketing/control plane and every
 // preview/dev surface — as opposed to a tenant's own vanity domain (docs.example.com).
-const PLATFORM_APEXES = new Set(["papervine.io"]);
-const PLATFORM_SUFFIXES = [".localhost", ".papervine.io", ".vercel.app"];
+// The tenant domain is OURS even though tenants' content lives on it — it must stay a
+// "platform host" or middleware would treat every `{slug}.{TENANT_DOMAIN}` request as a
+// candidate vanity domain and try to DB-resolve it as a custom domain.
+const PLATFORM_APEXES = new Set([PLATFORM_DOMAIN, TENANT_DOMAIN]);
+const PLATFORM_SUFFIXES = [
+  ".localhost",
+  `.${PLATFORM_DOMAIN}`,
+  `.${TENANT_DOMAIN}`,
+  ".vercel.app",
+];
 
 /**
  * Is this Host one Papervine owns (apex, a tenant subdomain, a preview, a dev/test
@@ -115,3 +183,33 @@ export function appOriginFor(baseUrl: string): string | null {
 export function supportsSubdomainTenants(apexBase: string): boolean {
   return resolveTenantSlug(`probe.${apexBase}`) === "probe";
 }
+
+/**
+ * The host a tenant's docs are served on, given the CURRENT request's host.
+ *
+ * This exists because the old rule — "strip `app.`/`www.` off the request host and use
+ * what's left" — is wrong the moment tenants live on their own domain: a dashboard request
+ * arrives on `app.{PLATFORM_DOMAIN}` and would derive `{slug}.{PLATFORM_DOMAIN}`, the
+ * legacy host. The tenant domain is configuration, not something to infer from whoever is
+ * asking.
+ *
+ * Dev is the exception and is inferred deliberately: everything local shares `.localhost`
+ * (there is no second local registrable domain to split onto), so a request on
+ * `app.localhost:3000` yields `{slug}.localhost:3000` and keeps the port. This is also why
+ * the domain split is NOT exercised locally — cookie isolation between the control plane
+ * and tenant content only materialises in an environment with two real domains.
+ *
+ * Returns a bare host (no scheme); callers add the protocol they need.
+ */
+export function tenantHostFor(slug: string, requestHost: string | null): string {
+  const [name = "", port] = (requestHost ?? "").split(":");
+  const base = name.toLowerCase().replace(/^(www|app)\./, "");
+  // Local/preview hosts have no separate tenant domain — stay on the host we're serving from.
+  if (base === "localhost" || base.endsWith(".localhost") || base.endsWith(".vercel.app")) {
+    return port ? `${slug}.${base}:${port}` : `${slug}.${base}`;
+  }
+  return `${slug}.${TENANT_DOMAIN}`;
+}
+
+/** The configured domains, for callers that need to name them (docs copy, DNS guidance). */
+export const domains = { platform: PLATFORM_DOMAIN, tenant: TENANT_DOMAIN } as const;
