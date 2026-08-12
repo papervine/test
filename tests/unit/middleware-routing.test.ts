@@ -54,6 +54,27 @@ describe("middleware host routing", () => {
     expect(res.status).not.toBe(308);
   });
 
+  it("does NOT bounce auth paths on a claimed host to a nonexistent app.<host>", () => {
+    // Regression, caught on production. The bounce guarded on `isPlatformHost`, which is true
+    // for EVERY host under our domain — including one claimed as a site's custom domain. So
+    // docs.papervine.io/login 307'd to app.docs.papervine.io/login, a host that doesn't
+    // exist: ERR_CONNECTION_CLOSED. It also breaks reader auth, whose sign-in page lives at
+    // /login on the docs host.
+    for (const path of ["/login", "/signup"]) {
+      const res = middleware(req(`docs.${domains.platform}`, path));
+      const loc = res.headers.get("location") ?? "";
+      expect(loc, `${path} bounced to a nonexistent app host`).not.toContain(
+        `app.docs.${domains.platform}`,
+      );
+    }
+  });
+
+  it("still bounces auth paths on the platform's real front-door hosts", () => {
+    // The other half — narrowing the guard must not stop the bounce where it belongs.
+    const res = middleware(req(`www.${domains.platform}`, "/login"));
+    expect(res.headers.get("location") ?? "").toContain(`app.${domains.platform}`);
+  });
+
   it("routes a claimed host on our own domain through custom-domain resolution", () => {
     // The other half of allowing `docs.{platform}` as a custom domain: saving it is
     // pointless if middleware still treats every platform-domain host as ours and drops it

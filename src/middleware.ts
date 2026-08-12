@@ -2,7 +2,6 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getSessionCookie } from "better-auth/cookies";
 import {
   resolveTenantSlug,
-  isPlatformHost,
   isAppHost,
   appHostFor,
   parentDomain,
@@ -180,11 +179,20 @@ export function middleware(req: NextRequest) {
   // is set there, not on the marketing apex. Skipped in single-repo preview mode, which
   // has no control plane. Public URLs are bare, so strip the internal /app prefix.
   //
-  // Guard with `!resolveTenantSlug`: `isPlatformHost` is true for tenant subdomains too
-  // (`{slug}.localhost` / `{slug}.papervine.io` — they're ours, not vanity domains), but on
+  // Two guards, and both are load-bearing.
+  //
+  // `!resolveTenantSlug`: reserved-platform hosts include tenant subdomains
+  // (`{slug}.localhost` / `{slug}.papervine.page` — they're ours, not vanity domains), but on
   // a tenant host `/login` is the *reader* login (→ sites/{slug}/login below), NOT a control-
   // plane path. Without this guard the bounce hijacks it to `app.{slug}.localhost/login` (the
   // Papervine account login), so reader auth never reaches its own login card in subdomain mode.
+  //
+  // `isReservedPlatformHost`, NOT `isPlatformHost`: the latter is true for *every* host under
+  // our own domain, including one an operator has claimed as a site's custom domain. That
+  // sent `docs.papervine.io/login` to `app.docs.papervine.io/login` — a host that does not
+  // exist, so the browser got ERR_CONNECTION_CLOSED. Only the platform's genuine front-door
+  // hosts (the apex and its `www`/`app`/`api` labels) should bounce; a host serving a
+  // tenant's docs must keep its own auth paths, which is exactly what reader auth needs.
   //
   // Social sign-in callbacks ride the same bounce (SPEC §10.1). The OAuth redirect URI is
   // registered on the APEX because Google refuses one on a subdomain of localhost, so dev
@@ -194,7 +202,7 @@ export function middleware(req: NextRequest) {
   // set — those cookies are host-only on `app.`, so exchanging the code on the apex would
   // always fail. A redirect, not a rewrite: the browser has to re-send its cookies.
   if (
-    isPlatformHost(reqHost) &&
+    isReservedPlatformHost(reqHost) &&
     !resolveTenantSlug(reqHost) &&
     !process.env.PAPERVINE_CONTENT &&
     (isAuthPath(pathname) ||
