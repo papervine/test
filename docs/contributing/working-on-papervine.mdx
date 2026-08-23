@@ -124,6 +124,35 @@ don't hand-walk signup → onboarding. Seed a known account and drive a real bro
   platform's.
 </Note>
 
+### Testing the GitHub App locally
+
+Most work needs none of this — the connect form's access-token path covers public and
+private repos without an App. Set one up when you want to exercise what only the App
+provides: installation-scoped access, push-triggered auto-sync, and publishing from Studio.
+
+Only the **webhook** needs to be publicly reachable. The App's Setup URL redirects your
+*browser*, so `http://app.localhost:3000/api/github/setup` works untunnelled — and that
+callback is what ties an installation to an organization. GitHub's servers, though, POST
+webhooks directly, and they can't reach your machine.
+
+Start a channel at [smee.io](https://smee.io), use its URL as the App's **Webhook URL**, and
+put the same URL in `.env.local`:
+
+```
+GITHUB_APP_WEBHOOK_PROXY_URL=https://smee.io/your-channel
+```
+
+`npm run dev` picks it up and runs the forwarder as a `smee` layer, the same way it forwards
+Stripe webhooks when those are configured.
+
+<Warning>
+  **Don't skip the relay once `GITHUB_APP_ID` is set.** Publishing from Studio deliberately
+  hands the sync to the push webhook whenever the App is configured, so with no relay running
+  a publish commits to GitHub and then your site stays stale until someone hits **Re-sync** —
+  which looks like a broken publish rather than a missing webhook. `npm run dev` prints a hint
+  when it sees the App configured without a proxy URL, for exactly this reason.
+</Warning>
+
 ## Database migrations (GitOps)
 
 The schema is **versioned** — every change is a committed SQL migration, never a live
@@ -167,11 +196,16 @@ npm run dev                 # the whole stack: docker services, the app, and the
                             # worker (cron ticks and runs execute only while it's connected).
                             # Peripheral layers attach when you've configured them — Stripe
                             # webhook forwarding starts only if STRIPE_SECRET_KEY,
-                            # STRIPE_WEBHOOK_SECRET, and the `stripe` CLI are all present.
+                            # STRIPE_WEBHOOK_SECRET, and the `stripe` CLI are all present;
+                            # GitHub webhook forwarding (smee) only if GITHUB_APP_ID and
+                            # GITHUB_APP_WEBHOOK_PROXY_URL are.
                             # Every layer degrades independently: no docker → no-DB mode, no
                             # Trigger.dev login → automations just don't execute.
 npm run dev:app             # just the Next server (renderer-only work)
 npm run dev:fresh           # kill the dev server, wipe .next, restart clean (use when chunks/manifests are corrupted)
+                            # Tests can run WHILE the dev server is up: each harness builds into
+                            # its own directory (.next-smoke / .next-crawl / .next-e2e) via
+                            # NEXT_DIST_DIR, so they never share output or fight over the lock.
 npm run build               # production build
 npm run typecheck           # tsc --noEmit
 npm test                    # smoke: renderer + control-plane gate (zero-dep, no DB)

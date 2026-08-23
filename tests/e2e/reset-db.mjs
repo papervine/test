@@ -10,6 +10,14 @@
 // tests/e2e/global-setup.ts (which specs import TEST_DB_URL from).
 import { execSync } from "node:child_process";
 import postgres from "postgres";
+import { requireNoDevServer } from "../dev-lock.mjs";
+
+// Bail BEFORE dropping the test database: the `next dev` half of the webServer command
+// can't start while a dev server holds this directory, and Playwright would otherwise
+// report only "Process from config.webServer was not able to start" — after this script had
+// already rebuilt the DB. Reusing the dev server isn't an option; it points at the dev
+// database and real integrations, not `papervine_test` with them blanked.
+requireNoDevServer(process.cwd(), "the e2e suite", process.env.NEXT_DIST_DIR ?? ".next-e2e");
 
 const HOST = "127.0.0.1:5432";
 const ADMIN_URL = `postgres://papervine:papervine@${HOST}/postgres`;

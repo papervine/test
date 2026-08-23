@@ -18,6 +18,13 @@
 // keeps running. `npm run dev:app` is the bare app loop (and what this spawns).
 //
 // Zero dependencies: plain spawn + prefixed output.
+//
+// Run it via `npm run dev`, which passes `--env-file-if-exists=.env.local`: every when()
+// below reads process.env, and Node does NOT load .env.local on its own. Without that flag
+// the whole declared-intent mechanism is inert for anyone who keeps config in .env.local —
+// which is exactly where this repo says to put it — so layers silently never start and their
+// hints never fire either (each hint short-circuits on the same var it's reporting about).
+// `-if-exists` rather than `--env-file` so a fresh clone with no .env.local still boots.
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
@@ -25,6 +32,7 @@ import { join } from "node:path";
 const CYAN = "\x1b[36m";
 const MAGENTA = "\x1b[35m";
 const BLUE = "\x1b[34m";
+const GREEN = "\x1b[32m";
 const YELLOW = "\x1b[33m";
 const DIM = "\x1b[2m";
 const RESET = "\x1b[0m";
@@ -83,6 +91,41 @@ const LAYERS = [
           "copy its whsec_ into .env.local."
         );
       return null;
+    },
+  },
+  {
+    tag: "smee",
+    color: GREEN,
+    // GitHub App webhook delivery (SPEC §3). GitHub's servers can't reach localhost, so a
+    // relay is the only way to exercise push auto-sync and uninstall cleanup locally.
+    //
+    // This matters more than it looks: `publishDraft`'s commit mode SKIPS its inline sync
+    // whenever the App is configured, on the assumption that the push webhook will do it
+    // (authoring-core.ts). So with GITHUB_APP_ID set and no relay running, publishing from
+    // Studio commits to GitHub and then the site silently never updates until someone hits
+    // Re-sync. Hence the hint below fires loudly rather than staying quiet.
+    //
+    // Only the webhook needs relaying: the App's Setup URL redirects the BROWSER, so
+    // http://app.localhost:PORT/api/github/setup works untunnelled, and that callback is
+    // what links an installation to an org.
+    when: () => has("GITHUB_APP_ID") && has("GITHUB_APP_WEBHOOK_PROXY_URL"),
+    cmd: "npx",
+    args: [
+      "--yes",
+      "smee-client@latest",
+      "--url",
+      process.env.GITHUB_APP_WEBHOOK_PROXY_URL ?? "",
+      "--target",
+      `http://127.0.0.1:${PORT}/api/github/webhook`,
+    ],
+    hint: () => {
+      if (!has("GITHUB_APP_ID")) return null; // no GitHub App work — stay quiet
+      return (
+        "GITHUB_APP_ID is set but GITHUB_APP_WEBHOOK_PROXY_URL isn't, so GitHub webhooks " +
+        "can't reach you: pushes won't auto-sync, and publishing from Studio will commit " +
+        "but leave the site stale until a manual Re-sync. Start a channel at https://smee.io, " +
+        "set it as the App's webhook URL, and put it in .env.local."
+      );
     },
   },
 ];

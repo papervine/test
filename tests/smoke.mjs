@@ -13,6 +13,7 @@ import { spawn } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import process from "node:process";
+import { requireNoDevServer } from "./dev-lock.mjs";
 
 const PKG_ROOT = process.cwd();
 const PORT = Number(process.env.SMOKE_PORT ?? 4178);
@@ -20,6 +21,7 @@ const PORT = Number(process.env.SMOKE_PORT ?? 4178);
 // first while `next dev` listens on IPv4, so requests never connect.
 const BASE = `http://127.0.0.1:${PORT}`;
 const FIXTURES = path.resolve(PKG_ROOT, "tests/fixtures");
+const DIST_DIR = process.env.NEXT_DIST_DIR ?? ".next-smoke";
 const nextBin = path.join(PKG_ROOT, "node_modules", ".bin", "next");
 
 // slug, then content assertions. Every page must return HTTP 200 (i.e. never 500).
@@ -170,7 +172,10 @@ const CONTROL_PLANE_CHECKS = [
   {
     host: "app.localhost",
     path: "/acme/connect",
-    desc: "unauthenticated app host /:org/connect redirects to /login",
+    // The start-method chooser (SPEC §10.11). The page itself needs a session AND Postgres
+    // (requireOrg), so the redirect is the only thing assertable in this DB-free gate — the
+    // chooser's own behavior is covered by tests/e2e/new-site.spec.ts.
+    desc: "unauthenticated app host /:org/connect (start-method chooser) redirects to /login (SPEC §10.11)",
     redirectTo: "/login",
   },
   {
@@ -351,10 +356,14 @@ async function waitForReady(timeoutMs = 180_000) {
 }
 
 async function run() {
+  // Next allows one dev server per directory, and this one needs PAPERVINE_CONTENT pointed
+  // at the fixtures — so a running `npm run dev` has to be stopped, not reused.
+  requireNoDevServer(PKG_ROOT, "the smoke gate", DIST_DIR);
   log(`▶ booting renderer against ${FIXTURES} on :${PORT}`);
   const server = spawn(nextBin, ["dev", "-H", "0.0.0.0", "-p", String(PORT)], {
     cwd: PKG_ROOT,
-    env: { ...process.env, PAPERVINE_CONTENT: FIXTURES },
+    // Its own build output, so this can run alongside `npm run dev` (see next.config.mjs).
+    env: { ...process.env, PAPERVINE_CONTENT: FIXTURES, NEXT_DIST_DIR: DIST_DIR },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let serverLog = "";

@@ -52,6 +52,19 @@ export default defineConfig({
       // threshold, restarting…"), and each restart is a brief window where page.goto hits
       // ERR_CONNECTION_REFUSED and cascades spec failures. Same fix the CI build step already uses.
       NODE_OPTIONS: "--max-old-space-size=6144",
+      // Own build output, so the suite runs alongside `npm run dev` instead of fighting it
+      // over `.next` (one dev server per distDir — see next.config.mjs). reset-db.mjs reads
+      // the same value to check the right lock.
+      NEXT_DIST_DIR: ".next-e2e",
+      // Forwarded so the GitHub App surfaces render their real shape. Without the client
+      // credentials the hosted→Git page shows only its existing-repo view, and a spec
+      // asserting the one-click choice would silently skip the thing it tests.
+      ...(process.env.GITHUB_APP_CLIENT_ID
+        ? { GITHUB_APP_CLIENT_ID: process.env.GITHUB_APP_CLIENT_ID }
+        : {}),
+      ...(process.env.GITHUB_APP_CLIENT_SECRET
+        ? { GITHUB_APP_CLIENT_SECRET: process.env.GITHUB_APP_CLIENT_SECRET }
+        : {}),
       DATABASE_URL: TEST_DB_URL,
       BETTER_AUTH_SECRET: "e2e-only-deterministic-secret-do-not-use-in-production-0123456789",
       // Auth happens on the app host — trust that origin (Better Auth's CSRF check reads

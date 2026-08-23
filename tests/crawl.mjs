@@ -9,6 +9,7 @@
  * Exits non-zero if any page returns HTTP 500 — usable as an ad-hoc gate.
  */
 import { spawn } from "node:child_process";
+import { requireNoDevServer } from "./dev-lock.mjs";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -29,6 +30,7 @@ const CONTENT = path.resolve(dir);
 // first while `next dev` listens on IPv4, so requests never connect.
 const BASE = `http://127.0.0.1:${port}`;
 const nextBin = path.join(PKG_ROOT, "node_modules", ".bin", "next");
+const DIST_DIR = process.env.NEXT_DIST_DIR ?? ".next-crawl";
 
 function slugsIn(root) {
   const out = [];
@@ -61,11 +63,15 @@ async function waitForReady(timeoutMs = 180_000) {
 
 const all = slugsIn(CONTENT);
 const slugs = sample > 0 ? all.filter((_, i) => i % Math.ceil(all.length / sample) === 0) : all;
+// Same one-dev-server-per-directory rule as the smoke gate; this needs PAPERVINE_CONTENT
+// pointed at the repo being crawled.
+requireNoDevServer(PKG_ROOT, "the crawl", DIST_DIR);
 console.log(`▶ crawling ${slugs.length}/${all.length} pages from ${CONTENT} on :${port}`);
 
 const server = spawn(nextBin, ["dev", "-H", "0.0.0.0", "-p", String(port)], {
   cwd: PKG_ROOT,
-  env: { ...process.env, PAPERVINE_CONTENT: CONTENT },
+  // Its own build output, so this can run alongside `npm run dev` (see next.config.mjs).
+  env: { ...process.env, PAPERVINE_CONTENT: CONTENT, NEXT_DIST_DIR: DIST_DIR },
   stdio: ["ignore", "pipe", "pipe"],
 });
 let serverLog = "";

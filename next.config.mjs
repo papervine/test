@@ -1,6 +1,16 @@
 import { withSentryConfig } from "@sentry/nextjs";
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Build output directory, overridable so a test harness can have its OWN.
+  //
+  // Next allows one `next dev` per distDir (it holds `<distDir>/dev/lock`), and two dev
+  // servers sharing one output tree also interleave their compiled chunks and manifests —
+  // which is how running the smoke gate while `npm run dev` was up corrupted the dev
+  // server's `.next` and forced a `dev:fresh`. Each harness now sets NEXT_DIST_DIR
+  // (`.next-smoke`, `.next-crawl`, `.next-e2e`), so tests run happily alongside your dev
+  // server: separate output, separate lock, and — since e2e already uses `papervine_test` —
+  // separate database. Unset (dev, `next build`, Vercel) keeps the default `.next`.
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   // Content lives outside the app dir (../content) and is read at request time,
   // so nothing tenant-specific is baked into the build. Mirrors the runtime-render
   // model in SPEC.md §2.

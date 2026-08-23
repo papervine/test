@@ -1,6 +1,8 @@
 # node_modules / build output — match at any depth (workspace packages + apps)
 node_modules/
 .next/
+# Per-harness build output (NEXT_DIST_DIR) so tests can run beside `npm run dev`.
+.next-*/
 /out
 /build
 *.tsbuildinfo
