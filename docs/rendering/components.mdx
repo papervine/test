@@ -20,6 +20,10 @@ it is for. Because these docs render in Papervine itself, several are demonstrat
 a responsive grid (`cols`). Use them for navigation hubs and feature overviews. (`<Columns>`
 is the current name for the grid; `<CardGroup>` is the legacy alias.)
 
+`cols` is the count for a screen wide enough to hold it. On phone-width screens the grid is
+always a **single column**, however many you asked for — two 150px-wide cards break headings
+mid-word, so the column count applies from tablet width up.
+
 <CardGroup cols={2}>
   <Card title="Linkable" icon="link">
     A card can wrap a link, turning the whole panel into a navigation target.
