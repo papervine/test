@@ -8,6 +8,14 @@
 // `npx papervine` runs: a lean, prebuilt, renderer-only package with no control plane
 // (SPEC §10.6). The two are intentionally different programs; if you are changing what
 // end users get, you want the other file.
+//
+// Reached only through the `papervine` *script* in the root package.json. Do not add a
+// root `bin` field for it: the root is `private: true`, so a `bin` there can never reach
+// a registry, but `npm link` at the repo root would still put THIS script on your PATH as
+// `papervine` — shadowing the real CLI with a program that boots the entire control plane
+// under the same name. And since `npx` prefers a binary already on PATH over the registry,
+// the shadowing is silent: `npx papervine` would look like it was testing the published
+// package while running this.
 
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";

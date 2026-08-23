@@ -7,9 +7,6 @@
     "packages/*",
     "apps/*"
   ],
-  "bin": {
-    "papervine": "bin/papervine.mjs"
-  },
   "scripts": {
     "papervine": "node bin/papervine.mjs",
     "dev": "node --env-file-if-exists=.env.local scripts/dev.mjs",
