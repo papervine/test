@@ -73,6 +73,20 @@ const MIRRORED_PATHS = ["apps/cli", "packages/renderer"];
 // rather than product code, so it travels with them. 68K.
 const MIRRORED_TEST_DATA = ["tests/fixtures"];
 
+// Everything whose change can alter the published snapshot, used to select which commits to
+// replay. Wider than the mirrored paths on purpose: the templates and this script *generate*
+// part of the output, so a fix to either has to be publishable. Without them a generator fix
+// reports "nothing to publish" while the public repo stays broken — which is exactly what
+// happened to the lockfile fix.
+const SOURCE_PATHS = [
+  ...MIRRORED_PATHS,
+  ...MIRRORED_TEST_DATA,
+  "tests/unit",
+  "tests/cli-package.mjs",
+  "scripts/mirror-cli",
+  "scripts/mirror-cli.mjs",
+];
+
 const log = (m) => console.log(m);
 const step = (m) => console.log(`\x1b[36m▶\x1b[0m ${m}`);
 const ok = (m) => console.log(`  \x1b[32m✓\x1b[0m ${m}`);
@@ -463,17 +477,7 @@ try {
   const range = lastSha ? `${lastSha}..${headSha}` : headSha;
   const commits = INITIAL
     ? [headSha]
-    : git([
-        "log",
-        "--reverse",
-        "--format=%H",
-        range,
-        "--",
-        ...MIRRORED_PATHS,
-        ...MIRRORED_TEST_DATA,
-        "tests/unit",
-        "tests/cli-package.mjs",
-      ])
+    : git(["log", "--reverse", "--format=%H", range, "--", ...SOURCE_PATHS])
         .split("\n")
         .filter(Boolean);
 
