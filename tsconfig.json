@@ -40,7 +40,9 @@
     ".next-crawl/types/**/*.ts",
     ".next-crawl/dev/types/**/*.ts",
     ".next-e2e/types/**/*.ts",
-    ".next-e2e/dev/types/**/*.ts"
+    ".next-e2e/dev/types/**/*.ts",
+    ".next-dbg/types/**/*.ts",
+    ".next-dbg/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -941,6 +941,11 @@ Ship a styled component set resolved at compile time. Parity targets with hosted
 | Mermaid | diagrams — ```mermaid fences → client-rendered SVG (BUILT 2026-06-29) |
 | `<ParamField>` `<ResponseField>` | API param docs |
 | `<Update>` | changelog entries |
+| `<Badge>` `<Tile>` `<Color>` `<Tree>`/`<FileTree>` | labels, image tiles, swatches, file trees |
+| `<Danger>` `<Callout>` | severity callout + the bring-your-own-icon variant |
+| `<Prompt>` `<GitHub.Repo>` | copyable AI prompts, repo cards |
+| `<Visibility>` `<View>` | audience-split and variant content |
+| `<Panel>` `<RequestExample>` `<ResponseExample>` | supplementary panels |
 
 > **Mermaid — BUILT (2026-06-29).** A ```mermaid fence renders as a diagram, not a highlighted
 > code block. A remark plugin (`remarkMermaid` in `packages/renderer/lib/mdx.tsx`) rewrites the
@@ -957,6 +962,60 @@ Ship a styled component set resolved at compile time. Parity targets with hosted
 > Cache key bumped `mdx-compile-v2` → `v3`. Guard: a `mermaid` smoke fixture asserts the page SSRs
 > an `aria-label="Diagram"` container and that the chart source is absent from the HTML (i.e. not
 > a code block).
+
+> **Status (2026-08-23):** closed the component-coverage gap (GAP-REPORT M1 item 5). Added 16
+> new tags: `Danger` + a generic `Callout`, `Badge`, `Icon`, `Tooltip`, `Tile`,
+> `Tree`/`FileTree` (+ `Tree.Folder`/`Tree.File`), `Color` (+ `.Item`/`.Row`), `Update`,
+> `Prompt`, `GitHub.Repo`, `Visibility`, `View`, `Panel`, and
+> `RequestExample`/`ResponseExample`. Tag names and props were read off the upstream docs
+> rather than guessed — compatibility is the whole point, and a near-miss name is a silent
+> fallback.
+>
+> **The gotcha worth keeping: a member-expression component cannot be a client component.**
+> `Tree.File` and `GitHub.Repo` compile to member expressions, so the map entry has to be an
+> object carrying `.File`/`.Repo`. Next replaces the exports of a `"use client"` module with
+> client-reference proxies, and **those proxies do not carry arbitrary static properties** — so
+> the attached sub-components came back `undefined` and MDX threw `Expected component
+> `Tree.File` to be defined`. Two ways out, both used here: `Tree` and `Color` are server
+> components outright (`Tree` collapses with native `<details>`, so it needs no state at all),
+> while `GitHub.Repo` genuinely needs client JS for its API fetch, so the *namespace* is
+> assembled in a server module (`GitHub.tsx`) that imports the client card
+> (`GitHubRepo.tsx`). Note this is separate from the existing member-expression *fallback* —
+> the Proxy in `componentsForCompiled` stops unknown dotted tags from throwing, but a fallback
+> only renders children, so the real structure still has to resolve.
+>
+> **Three deliberate fidelity gaps**, recorded in GAP-REPORT rather than hidden: `Icon`
+> resolves Lucide names only (three icon libraries is bad weight for a package built to be
+> light; unknown names render nothing and `src` is the escape hatch); `View` renders every
+> variant as a labelled section instead of collapsing siblings into one dropdown (sibling
+> elements can't see each other — parity needs a page-level MDX transform); and
+> `Panel`/`RequestExample`/`ResponseExample` render inline instead of moving into the right
+> column (the route fixes the layout before MDX runs). In each case content stays complete and
+> linkable, which is the invariant that matters — see "zero page 500s beats fidelity".
+>
+> Also learned: **`banner` is config, not a component** (`docs.json`: `content`,
+> `dismissible`, `type`, `color`). It's on the GAP-REPORT list unparsed, not in the component
+> map, which is where an index-page reading would have put it.
+>
+> **Testing.** `tests/fixtures/components-extended.mdx` + a `CHECKS` entry asserting ~35
+> markers. The assertions pair each content marker with *markup only the real component
+> emits* — `role="tooltip"`, `id="2026-08-23"`, `rounded-full`, an `<svg class="lucide…">` —
+> because a bare marker proves nothing: the children fallback would render the same text.
+> `for="agents"` is asserted *absent* rather than hidden, since CSS-hidden content is still
+> read by scrapers and screen readers. Implementing `Tree` also broke `unknowns.mdx`, which
+> had been using `<Tree.File>` as its example of an *unimplemented* member expression; it now
+> uses an invented `<Widget.Panel>`, which is the durable form of that fixture.
+>
+> Two house conventions caught in review: component anchors need the `card-link` class to
+> escape `.prose a` underlines (Tile, GitHub.Repo, Tooltip's cta, Update's label anchor, and
+> Prompt's Cursor link all needed it), and the starter example (`scripts/mirror-cli/examples/
+> starter/components.mdx`) is now the full showcase — it doubles as the public repo's CI
+> fixture, so every component there is actually exercised on each mirror push.
+>
+> **Verified:** typecheck (root + CLI) clean, unit 981/981, smoke 17 pages green including the
+> new fixture, crawl of `docs/` 41/41 with 0×500, clean-room gate green, the mirror snapshot
+> self-validates and passes its own `test:cli` against the new starter, and the starter's
+> component page browser-checked with a clean console.
 
 - **Theming:** named theme presets (`theme` in docs.json — `mint`/`maple`/`palm`/`willow`/`linden`/`almond`/`aspen`/`sequoia`/`luma`, hosted docs platforms' set) defined as token bundles in `src/lib/theme.ts` and applied as CSS variables on `<html data-theme="…">`, so the whole UI re-skins from one config value. Adding/tuning a theme = one registry entry (+ optional CSS keyed on `[data-theme="…"]`). Brand accent from `docs.json` `colors`; light/dark default from `appearance.default`.
 - **Markdown features:** GFM, footnotes, auto-linked headings, frontmatter (title, description, icon, sidebar overrides), `og:` image generation per page.

@@ -1,6 +1,6 @@
 ---
 title: Component library
-description: The v1 MDX components Papervine ships — cards, tabs, steps, callouts, code groups, accordions, and frames.
+description: The MDX components Papervine ships — callouts, cards, tabs, steps, code groups, trees, badges, changelog entries, and more.
 public: true
 ---
 
@@ -135,12 +135,64 @@ theme and it redraws to match. Node labels may use simple inline HTML (`<br/>`, 
 are stripped. A diagram that fails to parse falls back to showing its source, so a typo never
 breaks the page.
 
-## Beyond v1
+## The full set
 
-Larger docs repos use more components — `<ParamField>` / `<ResponseField>` for API docs,
-`<Expandable>`, `<Update>`, `<Icon>`, `<Tooltip>`, and others. Coverage expands over time;
-until a component is implemented, it degrades gracefully to its children rather than failing
-the page.
+Every name below resolves to a real component. Anything not listed degrades to its children.
+
+| Component | For |
+| --- | --- |
+| `<Note>` `<Tip>` `<Info>` `<Warning>` `<Check>` `<Danger>` | Callouts, by severity |
+| `<Callout icon color>` | A callout with your own icon and color |
+| `<Card>` `<CardGroup>` `<Columns>` | Linkable cards in a responsive grid |
+| `<Tile>` | A card that leads with a preview image |
+| `<Steps>` `<Step>` | Numbered instructions |
+| `<Tabs>` `<Tab>` | Switchable views of the same idea |
+| `<CodeGroup>` | Several code blocks as one tabbed panel |
+| `<Accordion>` `<AccordionGroup>` | Progressive disclosure |
+| `<Expandable>` | Nested detail, usually object shapes |
+| `<Frame>` | A bordered, captioned container for an image |
+| `<Badge>` | Inline status labels |
+| `<Icon>` | An inline icon |
+| `<Tooltip>` | A definition on hover or focus |
+| `<Tree>` / `<FileTree>` with `<Tree.Folder>` `<Tree.File>` | File and folder structures |
+| `<Color>` with `<Color.Item>` `<Color.Row>` | Color swatches, optionally per theme |
+| `<Update>` | A changelog entry, with a linkable anchor |
+| `<Prompt>` | A copyable AI prompt |
+| `<GitHub.Repo>` | A repository card with live stars and forks |
+| `<Visibility for>` | Content for humans or for AI agents |
+| `<View>` | A labelled variant of the same content |
+| `<ParamField>` `<ResponseField>` | API parameter and response definitions |
+| `<RequestExample>` `<ResponseExample>` `<Panel>` | Supplementary panels |
+| ` ```mermaid ` | Diagrams |
+
+### Where fidelity differs
+
+Three components render correctly but not identically to other `docs.json` platforms. The
+differences are deliberate, and in each case the content stays complete and readable.
+
+<AccordionGroup>
+  <Accordion title="Icon resolves Lucide names only">
+    Some platforms resolve icon names against Font Awesome, Lucide and Tabler. Papervine
+    carries Lucide. A name it doesn't have renders nothing rather than breaking the line, and
+    `<Icon src="/path/to/icon.svg" />` accepts any file or URL — which is the escape hatch for
+    an icon we can't resolve by name.
+  </Accordion>
+  <Accordion title="View renders every variant instead of a dropdown">
+    Elsewhere, sibling `<View>` blocks collapse into one dropdown that also filters the table
+    of contents. That requires processing the page as a whole, because the views are siblings
+    rather than children of a wrapper. Here each renders as a labelled section, so nothing is
+    hidden and every variant stays searchable and linkable.
+  </Accordion>
+  <Accordion title="Panels render inline rather than in the sidebar">
+    `<Panel>`, `<RequestExample>` and `<ResponseExample>` are designed to move into the right
+    column, replacing the table of contents. Papervine renders them in place, styled as
+    distinct panels. For a request/response pair the practical difference is that examples sit
+    below the prose instead of beside it; the content, highlighting and copy buttons are
+    unaffected.
+  </Accordion>
+</AccordionGroup>
+
+`banner` is not a component — it's a [config](/rendering/config) field in `docs.json`.
 
 ## Related
 

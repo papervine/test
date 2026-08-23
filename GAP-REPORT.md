@@ -61,9 +61,25 @@ threw when any one component was missing.
 2. ✅ `.md` support, hidden frontmatter, and `sidebarTitle`.
 3. ✅ Graceful unknown-component fallback.
 4. ⏳ Snippet/import resolution.
-5. ⏳ Broader component coverage for changelog, layout, tooltip, badge, tile, panel, and API
-   reference components.
+5. ✅ Broader component coverage. Added `Danger`, generic `Callout`, `Badge`, `Icon`,
+   `Tooltip`, `Tile`, `Tree`/`FileTree` (+ `Tree.Folder`/`Tree.File`), `Color` (+ `.Item`/
+   `.Row`), `Update`, `Prompt`, `GitHub.Repo`, `Visibility`, `View`, `Panel`,
+   `RequestExample`/`ResponseExample`. Pinned by `tests/fixtures/components-extended.mdx`,
+   which asserts each one emits its own *markup* rather than merely showing its text — a
+   marker alone proves nothing, since the children fallback would render it either way.
 6. ✅ Mermaid diagrams.
+7. ⏳ Three known fidelity gaps, each a deliberate trade rather than an oversight:
+   - **`Icon`** resolves Lucide names only, not Font Awesome or Tabler. Three icon libraries
+     is poor weight for a package built to be light; unknown names render nothing and `src`
+     accepts any file or URL as the escape hatch.
+   - **`View`** renders every variant as a labelled section instead of collapsing siblings
+     into one dropdown with a filtered table of contents. Sibling `<View>` elements can't see
+     each other, so parity needs a page-level MDX transform that groups them before render.
+   - **`Panel` / `RequestExample` / `ResponseExample`** render inline instead of moving into
+     the right column. Relocating them means the page layout reaching into compiled MDX to
+     extract elements before render; the layout is fixed by the route before MDX runs.
+8. ⏳ `banner` in `docs.json` (content, dismissible, type, color) — config, not a component,
+   and not yet parsed by the config layer.
 
 ## Renderer Decision
 

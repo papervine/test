@@ -125,6 +125,69 @@ const CHECKS = [
     include: ["MERMAID_PAGE_MARKER", 'aria-label="Diagram"'],
     exclude: ["shiki"],
   },
+  {
+    slug: "components-extended",
+    desc: "every registered component resolves to a real component, not the children fallback",
+    // An unregistered name degrades to its children, so a marker appearing proves nothing on
+    // its own — the text would show either way. What distinguishes "implemented" from
+    // "degraded" is the *markup* each component emits, so every assertion below pairs a
+    // content marker with structure only the real component produces.
+    include: [
+      // Callouts: the shell is a bordered flex row with an icon.
+      "DANGER_MARKER",
+      "CUSTOM_CALLOUT_MARKER",
+      // Badge renders an inline-flex span; the pill variant sets rounded-full.
+      "BADGE_MARKER",
+      "BADGE_PILL_MARKER",
+      "rounded-full",
+      // Icon: a known Lucide name emits an <svg class="lucide…">; an unknown one must
+      // render nothing without taking the surrounding line with it.
+      "lucide",
+      "ICON_FALLBACK_MARKER",
+      "ICON_SRC_MARKER",
+      // Tooltip: role="tooltip" only exists if the component ran.
+      "TOOLTIP_MARKER",
+      'role="tooltip"',
+      "TOOLTIP_TIP_MARKER",
+      // Tile: an href'd tile is an <a>; both variants carry title + description.
+      "TILE_TITLE_MARKER",
+      "TILE_DESC_MARKER",
+      "TILE_NOLINK_MARKER",
+      // Tree + the FileTree alias, including the member-expression children. These are the
+      // ones most likely to silently fall back, since `Tree.Folder` is a member expression.
+      "TREE_FOLDER_MARKER",
+      "TREE_FILE_MARKER",
+      "TREE_ROOT_FILE_MARKER",
+      "FILETREE_ALIAS_MARKER",
+      // Color: swatches are rendered as styled spans, so the value reaches a background.
+      "COLOR_NAME_MARKER",
+      "COLOR_ROW_MARKER",
+      // Update: the label becomes an anchor id so a release is linkable.
+      'id="2026-08-23"',
+      "UPDATE_DESC_MARKER",
+      "UPDATE_TAG_MARKER",
+      "UPDATE_BODY_MARKER",
+      // Visibility: humans render, an unknown audience renders rather than vanishing.
+      "VISIBILITY_HUMAN_MARKER",
+      "VISIBILITY_UNKNOWN_MARKER",
+      // Prompt + View + Panel/examples.
+      "PROMPT_DESC_MARKER",
+      "PROMPT_BODY_MARKER",
+      "VIEW_JS_MARKER",
+      "VIEW_PY_MARKER",
+      "PANEL_MARKER",
+      "REQUEST_EXAMPLE_MARKER",
+      "RESPONSE_EXAMPLE_MARKER",
+      // GitHub.Repo renders its slug and links out server-side.
+      "papervine/cli",
+    ],
+    exclude: [
+      // The agent-only block must be absent from the tree entirely, not merely hidden:
+      // content hidden with CSS is still read by scrapers and screen readers, which is the
+      // opposite of what `for="agents"` asks for.
+      "VISIBILITY_AGENT_MARKER",
+    ],
+  },
 ];
 
 // Full-text search (SPEC.md §6) via /api/search. Backed by search-fixture.mdx
