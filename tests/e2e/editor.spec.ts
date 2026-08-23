@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import postgres from "postgres";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { TEST_DB_URL } from "./global-setup";
-import { ORG_SLUG, sitePath } from "./constants";
+import { ORG_SLUG, sitePath, TEST_S3 } from "./constants";
 
 // The web editor (SPEC §9.2/§10): the 3-panel editor on the shared authoring backend.
 // Deterministic-ish (no GitHub writes): seed a synced site + content into Postgres + MinIO,
@@ -15,18 +15,19 @@ import { ORG_SLUG, sitePath } from "./constants";
 const SITE_ID = "e2e-editor-site";
 const SLUG = "editor-e2e";
 
+// TEST_S3, not process.env with a fallback: `npm run test:e2e` is a bare `playwright test`
+// with no --env-file, so the spec process never has S3_* and the fallback was always what
+// ran — and it guessed `minioadmin`, which this MinIO doesn't have. Every test in this file
+// died in beforeAll with InvalidAccessKeyId.
 const s3 = new S3Client({
-  endpoint: process.env.S3_ENDPOINT ?? "http://127.0.0.1:9000",
-  region: "auto",
-  credentials: {
-    accessKeyId: process.env.S3_ACCESS_KEY_ID ?? "minioadmin",
-    secretAccessKey: process.env.S3_SECRET_ACCESS_KEY ?? "minioadmin",
-  },
+  endpoint: TEST_S3.endpoint,
+  region: TEST_S3.region,
+  credentials: { accessKeyId: TEST_S3.accessKeyId, secretAccessKey: TEST_S3.secretAccessKey },
   forcePathStyle: true,
 });
 
 const put = (key: string, body: string, contentType = "text/plain") =>
-  s3.send(new PutObjectCommand({ Bucket: "papervine-content", Key: key, Body: body, ContentType: contentType }));
+  s3.send(new PutObjectCommand({ Bucket: TEST_S3.bucket, Key: key, Body: body, ContentType: contentType }));
 
 test.describe("web editor @external", () => {
   const sql = postgres(TEST_DB_URL, { max: 1 });
@@ -102,7 +103,9 @@ test.describe("web editor @external", () => {
 
     // Source mode: clicking another page shows that page's raw MDX in CodeMirror, still in Source.
     await page.getByRole("button", { name: "Source mode" }).click();
-    await page.getByRole("button", { name: "Second Page" }).click();
+    // exact: every nav row also has a "Reorder <title>" drag grip, and a non-exact name
+    // matches both buttons (strict-mode violation).
+    await page.getByRole("button", { name: "Second Page", exact: true }).click();
     await expect(page.locator(".cm-content")).toContainText("The second page body", {
       timeout: 10_000,
     });
@@ -131,7 +134,9 @@ test.describe("web editor @external", () => {
 
     // No debounce wait: jump to the second page and straight back. The edit must have been
     // flushed to the draft buffer on the way out, so it's still here on return.
-    await page.getByRole("button", { name: "Second Page" }).click();
+    // exact: every nav row also has a "Reorder <title>" drag grip, and a non-exact name
+    // matches both buttons (strict-mode violation).
+    await page.getByRole("button", { name: "Second Page", exact: true }).click();
     await page.getByRole("button", { name: "Home", exact: true }).click();
     await expect(page.locator(".cm-content")).toContainText("Flushed on switch.", {
       timeout: 10_000,
@@ -149,13 +154,18 @@ test.describe("web editor @external", () => {
     const prose = page.locator(".pv-visual .ProseMirror");
     await expect(prose).toContainText("An inline link", { timeout: 10_000 });
 
-    const editorUrl = page.url();
+    // Compare the PATHNAME, not the whole URL: EditorShell deliberately mirrors the open page
+    // into `?slug=` so the editor is linkable (see syncUrl), and that `router.replace` races the
+    // assertion. What this test actually cares about is that following a docs link loaded the
+    // page INSIDE the editor rather than navigating the app host to /second.
+    const editorPath = new URL(page.url()).pathname;
+    const onEditorRoute = () => new URL(page.url()).pathname;
     const title = page.locator(".pv-doc-title-input");
 
     // A plain markdown link loads that page in the editor — same URL, new document.
     await prose.getByRole("link", { name: "inline link" }).click();
     await expect(title).toHaveValue("Second Page");
-    expect(page.url()).toBe(editorUrl);
+    expect(onEditorRoute()).toBe(editorPath);
 
     // A Card's href is a live next/link wrapping the card; clicking the card (not its editable
     // body) does the same thing rather than routing the app host to a 404.
@@ -163,7 +173,7 @@ test.describe("web editor @external", () => {
     await expect(prose).toContainText("An inline link", { timeout: 10_000 });
     await prose.locator("a").filter({ hasText: "Card body text" }).getByRole("heading").click();
     await expect(title).toHaveValue("Second Page");
-    expect(page.url()).toBe(editorUrl);
+    expect(onEditorRoute()).toBe(editorPath);
 
     // A link to a page that isn't in the site is reported, not followed.
     await page.getByRole("button", { name: "Linky", exact: true }).click();
@@ -171,7 +181,7 @@ test.describe("web editor @external", () => {
     await prose.getByRole("link", { name: "dead one" }).click();
     await expect(page.getByText("No page /nope in this site")).toBeVisible();
     await expect(title).toHaveValue("Linky");
-    expect(page.url()).toBe(editorUrl);
+    expect(onEditorRoute()).toBe(editorPath);
   });
 
   // The card's body is editable content living *inside* its <a>, so clicking there has to place
@@ -210,10 +220,92 @@ test.describe("web editor @external", () => {
     await expect(composer).toBeHidden();
   });
 
+  // Below lg the tree and agent panels are off-canvas drawers, not columns. They used to be
+  // in-flow at every width, so a 256px tree plus the rail left the editor 38px of a 390px
+  // phone — one character per line, with Publish pushed off-screen. A width assertion is the
+  // regression gate: the failure was purely geometric, so a visibility check wouldn't catch it.
+  test.describe("on a phone-sized viewport", () => {
+    // hasTouch/isMobile, not just a narrow viewport: the hover-only affordances below are
+    // gated on the hover CAPABILITY (`@media (hover: hover)`), which a small desktop window
+    // still satisfies. Without these flags the assertions would pass while a real phone stayed
+    // broken.
+    test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+    const editorWidth = (page: import("@playwright/test").Page) =>
+      page.locator(".ProseMirror, .cm-content").first().evaluate((el) => el.getBoundingClientRect().width);
+
+    test("gives the editor the width, and opens the tree as a dismissible overlay", async ({ page }) => {
+      await page.goto(sitePath(SLUG, "editor"));
+      await page.locator(".ProseMirror, .cm-content").first().waitFor();
+
+      // The whole toolbar has to fit — Publish overflowed the viewport before.
+      await expect(page.getByRole("button", { name: "Publish", exact: true })).toBeInViewport();
+      expect(await editorWidth(page)).toBeGreaterThan(240);
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1),
+        "the page must not scroll sideways",
+      ).toBe(true);
+
+      // The tree opens *over* the editor rather than shrinking it...
+      await page.getByRole("button", { name: /Navigation/ }).first().click();
+      const treeItem = page.getByText("Second Page", { exact: true });
+      await expect(treeItem).toBeVisible();
+      expect(await editorWidth(page)).toBeGreaterThan(240);
+
+      // ...and picking a page dismisses it, so you can see what you just opened.
+      await treeItem.click();
+      await expect(treeItem).toBeHidden();
+    });
+
+    // Controls revealed only on :hover are invisible AND unreachable on a touch device — there
+    // is no hover to trigger them. The per-file revert in the Publish panel and the nav tree's
+    // settings cog were both `opacity-0 group-hover:opacity-100` unconditionally. Assert on
+    // computed opacity with no pointer over the element: a visibility check passes either way,
+    // because an opacity-0 button still has a box.
+    test("shows hover-only controls outright, since there is no hover to reveal them", async ({ page }) => {
+      await page.goto(sitePath(SLUG, "editor"));
+      await page.locator(".ProseMirror, .cm-content").first().waitFor();
+
+      // Guard the premise: if Chromium reported hover support here, the assertions below would
+      // be testing the desktop branch and would pass while a phone stayed broken.
+      expect(await page.evaluate(() => matchMedia("(hover: hover)").matches)).toBe(false);
+
+      // The nav tree's settings cog.
+      await page.getByRole("button", { name: /Navigation/ }).first().click();
+      const cog = page.locator(".pv-nav-cog").first();
+      await expect(cog).toBeVisible();
+      expect(await cog.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+      await page.getByRole("button", { name: "Close navigation" }).click();
+
+      // The Publish panel's per-file revert. Make our own change rather than inheriting a draft
+      // from an earlier test in the file, so this reads the same run alone or in file order.
+      await page.locator(".ProseMirror, .cm-content").first().click();
+      await page.keyboard.type(" touch-revert");
+      await expect(page.getByText("Draft saved")).toBeVisible();
+
+      await page.getByRole("button", { name: "Publish options" }).click();
+      const revert = page.locator('button[aria-label^="Revert"]').first();
+      await expect(revert).toBeVisible();
+      expect(await revert.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+      // And it's big enough to actually hit — p-1 alone is a 22px target in a dense row.
+      const box = (await revert.boundingBox())!;
+      expect(box.width).toBeGreaterThanOrEqual(28);
+      expect(box.height).toBeGreaterThanOrEqual(28);
+    });
+  });
+
   // Publish results show as a toast (auto-dismissing, dismissible) — not the old persistent banner
   // that never went away. Publishing with no edits returns "No open edit session" with no GitHub
   // write, so it's a side-effect-free way to assert the toast wiring (provider mounted, useToast).
   test("publish shows a dismissible toast, not a persistent banner", async ({ page }) => {
+    // "No open edit session" is only true if there ISN'T one — and the earlier tests in this
+    // file each open one by loading a page. Run alone this passed; run in file order it got
+    // whatever message a real publish produced. Assert the precondition instead of inheriting
+    // it, so the test says what it means wherever it sits in the file.
+    await sql`delete from draft_file where session_id in (
+                select id from editor_session where site_id = ${SITE_ID} and status = 'open')`;
+    await sql`delete from editor_session where site_id = ${SITE_ID} and status = 'open'`;
+
     await page.goto(sitePath(SLUG, "editor"));
     await page.getByRole("button", { name: "Publish", exact: true }).click();
 
@@ -331,7 +423,9 @@ test.describe("web editor @external", () => {
 
     // Switching pages flushes the pending edit (see the dedicated flush test above) before
     // this second edit lands its own draft.
-    await page.getByRole("button", { name: "Second Page" }).click();
+    // exact: every nav row also has a "Reorder <title>" drag grip, and a non-exact name
+    // matches both buttons (strict-mode violation).
+    await page.getByRole("button", { name: "Second Page", exact: true }).click();
     await expect(cm).toContainText("The second page body", { timeout: 10_000 });
     await cm.click();
     await page.keyboard.type(" Second edit.");

@@ -32,6 +32,27 @@ overview).
   <Step title="Navigation (middle)">
     Your `docs.json` navigation, rendered from the **draft** of the current branch. Click any
     page to load it into the editor.
+
+    Each group carries two controls — a **+** to add to it, and a cog that opens its settings
+    (a page's cog opens that page's frontmatter). The **+** offers:
+
+    - **New page** — name it, and Papervine creates the file and lists it in that group. The
+      URL comes from the title. You land in the new page, ready to write.
+    - **Add existing page** — for a page that exists as a file but isn't in your navigation
+      yet. Only appears when there is one.
+    - **New group** — an empty group nested inside this one, ready to fill.
+    - **New tab** — a section across the top of your site. If your site doesn't use tabs yet,
+      your current navigation becomes a first tab called **Documentation** and the new tab sits
+      beside it; the dialog tells you before you commit to it, and nothing is lost either way.
+
+    Everything here writes to your draft, so a new page and its navigation entry publish
+    together as one change — and revert together too.
+
+    **Drag to reorganize.** Each row has a grip: drag a page to reorder it inside its group or
+    move it to another one, and drag a group to move it among its siblings. Drop a page onto a
+    group's own row to put it in a group that has no pages yet. The grip is a button, so this
+    works from the keyboard too — focus it, press <kbd>Space</kbd>, move with the arrows, and
+    press <kbd>Space</kbd> again to drop.
   </Step>
   <Step title="Editor (right)">
     Edit the page in **Visual** mode (WYSIWYG — the page rendered, editable in place) or **Source**
@@ -42,6 +63,21 @@ overview).
     collaboration](/control-plane/collaboration).
   </Step>
 </Steps>
+
+## On a phone or a narrow window
+
+Three side-by-side panels don't fit on a phone, so below roughly 1024px the two side panels
+become **overlays** instead of columns: the editor keeps the full width, and **Navigation**,
+**Files**, or **Ask agent** slide in over it. Dismiss an overlay by tapping outside it, by its
+✕, or — for the navigation — just by picking a page, which closes it so you can see what you
+opened.
+
+Nothing is hidden at narrow widths; the panels are the same panels, they just take turns. At
+desktop widths the layout is unchanged.
+
+Controls that a mouse reveals by hovering — a page's settings cog in the navigation, the revert
+icon beside a changed file in the Publish panel — are **always visible on a touch device**,
+where there's no hover to reveal them. Nothing in Studio is reachable only by hovering.
 
 ## Links keep you inside the editor
 
@@ -81,6 +117,17 @@ theme. So what you see in Preview is exactly what readers get: what you see is w
 Editing happens in **Source** (raw MDX), and that MDX string is exactly what gets committed —
 no conversion to a block model, no second source of truth. Git stays canonical. Preview reads
 your current draft, so unsaved-but-buffered edits appear the moment you switch to it.
+
+### Previewing the whole site
+
+The Preview tab shows the page you're editing. The **Preview** button in the editor's toolbar
+opens the **entire site** in a new tab — navbar, tabs, sidebar, search — rendered from your
+draft, so you can click around and check the things a single page can't show you: navigation
+order, how groups and tabs read, whether links between pages land where you meant.
+
+It's your draft, not your published site, so nobody else sees it and nothing is live until you
+**Publish**. Gated pages are visible to you here even if you don't hold the reader groups they
+require — you're previewing your own site.
 
 ## Branches and the draft buffer
 

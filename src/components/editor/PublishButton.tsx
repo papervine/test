@@ -173,7 +173,17 @@ export function PublishButton({
                       aria-label={`Revert ${c.title}`}
                       disabled={pending}
                       onClick={() => revert(c.path)}
-                      className="shrink-0 rounded p-1 text-neutral-500 opacity-0 hover:bg-neutral-200 group-hover:opacity-100 dark:hover:bg-neutral-700"
+                      // Reveal-on-hover only where hover EXISTS. This was unconditionally
+                      // `opacity-0 group-hover:opacity-100`, so on a touch device the revert
+                      // control was invisible and unreachable — there's no hover to trigger it.
+                      // Keyed on the capability rather than a width breakpoint because a
+                      // touch laptop at desktop width has exactly the same problem.
+                      // focus-visible keeps it reachable by keyboard on a hover device too.
+                      // `p-2` on a touch device: at p-1 this is a 22px tap target wedged
+                      // between the status text and the panel edge. Capped at roughly the row
+                      // height on purpose — a target big enough to overlap the neighbouring
+                      // row's revert would let a mis-tap revert the wrong file.
+                      className="shrink-0 rounded p-1 text-neutral-500 hover:bg-neutral-200 focus-visible:opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:none)]:p-2 dark:hover:bg-neutral-700"
                     >
                       <RotateCcw className="h-3.5 w-3.5" />
                     </button>
