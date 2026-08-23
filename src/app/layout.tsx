@@ -10,6 +10,7 @@ import { resolveTheme, themeCssVars } from "@papervine/renderer/lib/theme";
 import { appearanceInitScript } from "@papervine/renderer/lib/appearance";
 import { Favicon } from "@papervine/renderer/components/Favicon";
 import { EnvBadge } from "@/components/platform/EnvBadge";
+import { LogRocketInit } from "@/components/platform/LogRocketInit";
 
 // The root layout renders for every host, including tenant docs. Read config within
 // the request's tenant content source (if any) so the title/theme/favicon — and, crucially,
@@ -94,7 +95,18 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             double-count against the per-tenant analytics we already collect first-party
             (PageViewBeacon → Insights, SPEC §10.1). `isTenant` is false on the apex and on
             the app host, which is exactly the set of pages we own. */}
-        {!isTenant && <Analytics />}
+        {/* Both are OURS, and both stop at the tenant boundary. Analytics counts pageviews;
+            LogRocket records sessions (DOM, network, console) — so on a tenant page it would be
+            recording our customers' readers. `isTenant` is false on the apex and the app host,
+            i.e. exactly the pages we own: marketing, auth, onboarding, /admin, the dashboard.
+            The dashboard layout mounts LogRocketInit again WITH the signed-in user, which is
+            the only place a session exists; the init is deduped. */}
+        {!isTenant && (
+          <>
+            <Analytics />
+            <LogRocketInit appId={process.env.NEXT_PUBLIC_LOGROCKET_APP_ID} />
+          </>
+        )}
       </body>
     </html>
   );

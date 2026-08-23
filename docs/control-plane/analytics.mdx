@@ -120,9 +120,9 @@ stop at the tenant boundary by design:
 | | Where it runs | Where it never runs |
 | --- | --- | --- |
 | Vercel Analytics | The marketing pages and the dashboard | Any documentation site |
-| LogRocket session replay (`NEXT_PUBLIC_LOGROCKET_APP_ID`) | The dashboard only | Documentation sites, marketing |
+| LogRocket session replay (`NEXT_PUBLIC_LOGROCKET_APP_ID`) | Marketing, sign-in, onboarding and the dashboard | Any documentation site |
 
 Session replay records the page, network activity and console, so pointing it at a documentation
-site would mean recording *your readers*. It is deliberately mounted only in the dashboard, is off
-unless you set the environment variable, and masks every form input — the dashboard holds real
-credentials, like your GitHub token and reader-auth signing secret.
+site would mean recording *your readers* — which is why it stops at that boundary. It is off unless
+you set the environment variable, and it masks every form input: these pages hold real credentials,
+from your GitHub token and reader-auth signing secret to the password on the sign-in form.

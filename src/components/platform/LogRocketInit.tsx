@@ -1,56 +1,47 @@
 "use client";
 
 import { useEffect } from "react";
+import { ensureLogRocket } from "./logrocket-client";
 
-// LogRocket session replay, for the control plane only.
+// LogRocket session replay. Mounted twice, on purpose:
 //
-// Mounted from the dashboard layout (`app/[org]/layout.tsx`) rather than the root layout, which
-// is where <Analytics/> lives. That's deliberate and it is the important decision here: the root
-// layout also renders every TENANT's docs site, and LogRocket doesn't count pageviews — it
-// records sessions (DOM, network, console). Initialising it there would record our customers'
-// READERS browsing their docs. The dashboard is both the only place it's wanted and the only
-// place there's a logged-in user to identify.
+//  • the ROOT layout, with no `user` — so replay covers everything we own: marketing, pricing,
+//    the auth pages, onboarding, /admin and the dashboard. Anonymous until the person signs in.
+//  • the DASHBOARD layout, with `user` — the only place a session exists, so it's the only place
+//    that can say who the recording is of. ensureLogRocket dedupes the init between them.
 //
-// Two guards that matter more than the init itself:
+// The root layout also renders every TENANT's docs site, so the mount there is gated on
+// `!isTenant` exactly like <Analytics/>. That gate is the load-bearing part: replay records the
+// DOM, network and console, so on a tenant page it would be recording our customers' READERS
+// browsing their own documentation.
 //
-//  • `appId` comes from NEXT_PUBLIC_LOGROCKET_APP_ID, never a literal. This codebase is
-//    deployable by others; a hardcoded id would stream a self-hoster's users' sessions into our
-//    LogRocket project. Absent env var → this renders nothing, which is also why a dev machine
-//    doesn't burn session quota by default.
-//
-//  • `inputSanitizer` is ON. The dashboard has fields holding real credentials — the GitHub
-//    token on Git settings, widget keys, the reader-auth JWT secret. Session replay records
-//    input values unless told not to, so recording them verbatim would put customer secrets in
-//    a third-party replay. Sanitising every input is the only safe default here; loosen it per
-//    field only with a reason.
+// `appId` is always NEXT_PUBLIC_LOGROCKET_APP_ID, never a literal: this codebase is deployable by
+// others, and a hardcoded id would stream a self-hoster's users' sessions into our project.
+// Absent env var → renders nothing, which also keeps dev machines off the session quota.
 export function LogRocketInit({
   appId,
   user,
 }: {
   appId: string | undefined;
-  user: { id: string; name?: string | null; email?: string | null; plan?: string | null };
+  user?: { id: string; name?: string | null; email?: string | null; plan?: string | null };
 }) {
+  const { id, name, email, plan } = user ?? {};
+
   useEffect(() => {
-    if (!appId) return;
     let cancelled = false;
-    // Dynamic import: LogRocket is a browser-only bundle and pulling it into the server graph
-    // breaks the RSC build. This also keeps it out of the initial chunk.
-    void import("logrocket").then(({ default: LogRocket }) => {
-      if (cancelled) return;
-      LogRocket.init(appId, {
-        dom: { inputSanitizer: true },
-      });
-      LogRocket.identify(user.id, {
-        ...(user.name ? { name: user.name } : {}),
-        ...(user.email ? { email: user.email } : {}),
-        ...(user.plan ? { plan: user.plan } : {}),
+    void ensureLogRocket(appId).then((LogRocket) => {
+      if (!LogRocket || cancelled || !id) return;
+      LogRocket.identify(id, {
+        ...(name ? { name } : {}),
+        ...(email ? { email } : {}),
+        ...(plan ? { plan } : {}),
       });
     });
     return () => {
       cancelled = true;
     };
     // Re-identify if the signed-in user changes (impersonation, account switch).
-  }, [appId, user.id, user.name, user.email, user.plan]);
+  }, [appId, id, name, email, plan]);
 
   return null;
 }

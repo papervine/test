@@ -2629,8 +2629,24 @@ Minimum to operate the SaaS:
 > markup-based `exclude` would have passed whether the gate existed or not. The test watches for
 > both the injected tag and any request to `/_vercel/insights` from a tenant page.
 >
-> **LogRocket session replay (same date) is scoped harder still — the dashboard layout, not the
-> root layout.** Replay records the DOM, network and console, so the tenant boundary matters more
+> **LogRocket session replay (same date) covers every surface we own, and stops there.** Init is
+> in the ROOT layout behind the same `isTenant` gate as `<Analytics/>`, so replay reaches
+> marketing, pricing, the auth pages, onboarding, `/admin` and the dashboard — but never a
+> tenant's docs site, where it would be recording our customers' *readers*. `identify` still runs
+> from the dashboard layout, the only place a session exists; the two mounts share one init via a
+> module-level promise in `logrocket-client.ts`, because React runs a child's effects BEFORE its
+> parent's and the identify call would otherwise fire first.
+>
+> Measuring this taught a lesson worth keeping: **neither obvious detector for "is LogRocket
+> running" is sound.** A Next chunk is *named* after the dependency
+> (`node_modules_logrocket_...js`), so matching request URLs on "logrocket" false-positives on
+> every page that merely bundles it; and `window.LogRocket` is only set by the UMD script build,
+> not by a module import, so it false-negatives everywhere. Both fooled an intermediate check in
+> opposite directions. The sound signal is a request to LogRocket's own hosts —
+> `cdn.logr-in.com` (recorder) and `POST r.logr-in.com/i` (ingest). Verified that way: present on
+> all seven of our surfaces, and a tenant page makes NO cross-origin requests at all.
+>
+> Originally scoped to the dashboard layout only: Replay records the DOM, network and console, so the tenant boundary matters more
 > here than for pageview counting: in the root layout it would record our customers' *readers*
 > browsing their docs. `app/[org]/layout.tsx` is both the only place it's wanted and the only
 > place there's a signed-in user to `identify` — so the mount point supplies the identity for
