@@ -43,6 +43,12 @@ its detail view: the exact instructions the agent received (the run keeps its ow
 config edits don't rewrite history), the files it changed, the full agent summary, model and
 token usage, and the resulting commit — or, for a pending run, the review actions.
 
+A run's **Result** depends on where your content lives. On a Git-backed site it's the commit or
+the pull request the run produced, linked. On a
+[Papervine-hosted site](/guides/start-from-scratch) there's no commit to link, so a run that
+changed something reads **Published to the live site** — and **no changes** means exactly that:
+the agent looked and found nothing to fix.
+
 Both the run list and a run's detail view update live as it progresses — queued, running,
 succeeded/failed/review needed — with no manual reload, whether you triggered it yourself or a
 scheduled/webhook trigger fired it while you were watching.
@@ -95,6 +101,8 @@ Every automation — predefined or custom — shares one config schema:
 </Note>
 
 Enabled automations also expose **Run now** — a manual trigger, which is also how you test one.
+Triggering one confirms with a **View run** button that takes you straight to the run it queued,
+so you can watch it progress rather than hunting for it in the Runs tab.
 
 ### How runs execute
 
