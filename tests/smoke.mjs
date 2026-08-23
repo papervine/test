@@ -153,6 +153,18 @@ const CONTROL_PLANE_CHECKS = [
     redirectTo: "/login",
   },
   {
+    // Sentry's tunnel is a ROOT route, and the app host rewrites everything else onto /app —
+    // so it became /app/monitoring, hit the auth gate, and bounced to /login. Every browser
+    // error report from the dashboard was silently dropped (and the same shape broke tenant
+    // subdomains and custom domains: /sites/{slug}/monitoring). A status assertion here would
+    // depend on whether a DSN is configured; what must always hold is that it is never dragged
+    // through the /app mount.
+    host: "app.localhost",
+    path: "/monitoring",
+    desc: "the Sentry tunnel is not rewritten onto /app (dropped error reports)",
+    rejectRedirectTo: "/login",
+  },
+  {
     host: "app.localhost",
     path: "/acme/docs",
     desc: "unauthenticated app host /:org/:site redirects to /login",
@@ -577,6 +589,17 @@ async function run() {
               (c) => c.startsWith(`${check.clearsCookie}=`) && /max-age=0|expires=/i.test(c),
             );
             if (!cleared) failures.push(`[${tag}] expected Set-Cookie clearing ${check.clearsCookie} — ${check.desc}`);
+          }
+        } else if (check.rejectRedirectTo) {
+          // For a path whose EXISTENCE depends on the environment (the Sentry tunnel route only
+          // exists when a DSN is configured), asserting a status would be flaky. What holds
+          // unconditionally is that the middleware didn't route it through the /app mount —
+          // which would hit the auth gate and bounce to /login.
+          if (
+            [301, 302, 303, 307, 308].includes(res.status) &&
+            res.location.includes(check.rejectRedirectTo)
+          ) {
+            failures.push(`[${tag}] must NOT redirect to ${check.rejectRedirectTo}, got ${res.status} → "${res.location}" — ${check.desc}`);
           }
         } else if (check.redirectTo) {
           if (![301, 302, 303, 307, 308].includes(res.status) || !res.location.includes(check.redirectTo)) {

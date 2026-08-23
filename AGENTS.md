@@ -385,6 +385,18 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   added, check what `next-env.d.ts` imports before touching the route. Also: routes here
   hand-write `params: Promise<{…}>` rather than using the generated `LayoutProps<…>`/`PageProps<…>`
   — CI typechecks BEFORE building, so on a clean checkout those helpers don't exist yet.
+- **A ROOT route on a rewritten host needs an explicit middleware bypass — or it 404s and you
+  never hear about it.** Every non-apex host class rewrites its whole path space: the app host
+  onto `/app/*`, a tenant subdomain onto `/sites/{slug}/*`, a custom domain onto
+  `/custom-domain/*`. So Sentry's tunnel (`tunnelRoute: "/monitoring"` in `next.config.mjs`, a
+  root route the browser POSTs to so ad blockers don't eat error reports) became
+  `/app/monitoring` → the auth gate → **307 to `/login`**, and `/sites/{slug}/monitoring` → 404.
+  Sentry silently dropped every browser report from the dashboard and from every tenant docs
+  site — everywhere except the marketing apex, which is where errors matter least, and nothing
+  surfaced it but 404s in a user's console. `SENTRY_TUNNEL` is now bypassed in all three
+  branches. If you add any other root-level route that isn't under `/api/`, add it to those
+  bypasses too. Guarded by a smoke check that asserts `/monitoring` on the app host is NOT
+  bounced to `/login` (a status assertion would depend on whether a DSN is configured).
 - **The index page has two spellings — normalize before comparing a nav href to a page slug.**
   `listPageSlugs()` reports the index page as **`""`** (its route is `/`, see `s3-source.ts`),
   while `docs.json` writes it as **`"index"`** and `buildNav` emits the href **`/index`**. So any
