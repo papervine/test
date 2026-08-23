@@ -1,0 +1,134 @@
+---
+title: Start from scratch
+description: Create a Papervine-hosted site with no Git repository — write in Studio and publish from the browser.
+public: true
+---
+
+When you add a site, Papervine asks how you want to start. **Start from scratch** creates a
+site with no Git repository at all: Papervine hosts the content, you write it in
+[Studio](/control-plane/editor), and **Publish** puts it live.
+
+This is the fastest way to a real docs site, and it needs no GitHub account. If you already
+keep docs in a repository, [connect it instead](/guides/quickstart) — that path is unchanged.
+
+## Create the site
+
+<Steps>
+  <Step title="Open the chooser">
+    From the site switcher, choose **New site**. If your organization has no sites yet,
+    you land here automatically after signing up.
+  </Step>
+
+  <Step title="Pick Start from scratch">
+    Selecting it opens a single field: the site name. The name becomes your site's
+    address, and you'll see the subdomain preview update as you type.
+  </Step>
+
+  <Step title="Create it">
+    Papervine adds a starter `docs.json` and a couple of pages, so the site renders
+    immediately rather than showing you an empty shell. There's no first sync to wait
+    on — the site is **Live** as soon as it exists, and you land in Studio.
+  </Step>
+</Steps>
+
+## Writing and publishing
+
+Everything happens in [Studio](/control-plane/editor). Edit a page, and your changes are
+saved as a draft that only you and your teammates can see. When you're ready, hit
+**Publish** and the change is live on your site.
+
+Publishing is one action. There are no branches to choose between and no pull request to
+merge, because there's no repository underneath — Papervine writes your published content
+straight to your site.
+
+<Note>
+  Drafts are safe. If a publish fails partway through, your draft stays exactly as it was
+  and publishing again picks up where it left off. Your live site keeps serving its
+  previous content until a publish completes.
+</Note>
+
+## What differs from a Git-backed site
+
+Only the things that are *about* Git:
+
+| | Papervine-hosted | Git-backed |
+| --- | --- | --- |
+| Source of truth | Your content in Papervine | Your repository |
+| Editing | [Studio](/control-plane/editor) | Studio, or your editor and a `git push` |
+| Publishing | One **Publish** action, straight to live | A commit or a pull request |
+| Branches | One | Any branch in your repo |
+| Rebuild on push | — | Every push to the connected branch |
+| **Git settings** | Connect to GitHub | Repository, branch, and docs folder |
+
+Everything else is identical, because it isn't about where the content came from:
+[your own domain](/guides/custom-domain), [search](/features/search), the
+[AI assistant](/features/ai-assistant), [reader access control](/auth/reader-auth),
+[analytics](/control-plane/analytics), [exports](/control-plane/exports), and
+[Autopilot](/control-plane/automate) all work the same way.
+
+## Which should you pick?
+
+Start from scratch if you want to be writing in the next minute, if your team doesn't work
+in Git, or if these docs don't have a natural home in an existing repository.
+
+Connect a repository if your docs already live in one, if you want changes to go through
+code review, or if you want your documentation to ship alongside the code it describes.
+
+You aren't locked in either way — see [Moving to GitHub later](#moving-to-github-later).
+
+## Moving to GitHub later
+
+A hosted site can be handed over to Git whenever you want, from **Settings → Git
+settings → Connect to GitHub**. Papervine commits everything the site currently publishes
+into a repository you own, then Git becomes the source of truth: pushes rebuild the site,
+and Studio publishes as a commit or a pull request.
+
+There are two ways to do it:
+
+- **Let Papervine create the repository.** Pick a name, authorize the GitHub app, and it
+  creates the repository on your account and commits your content into it in one step. You'll
+  only see this option if your Papervine deployment is set up for it.
+- **Create the repository yourself.** Make a new empty one on GitHub, install the GitHub App
+  on it so Papervine can write to it, then enter `owner/name`.
+
+Either way, **Papervine needs write access** to the repository, which is what installing the
+GitHub App grants.
+
+### If the repository already has docs in it
+
+An empty repository is the simple case: your content becomes its first commit. If the
+repository already has documentation, Papervine asks which version should be live from now on,
+rather than guessing.
+
+- **Keep this site's content** — your pages are committed over the repository's. What was there
+  stays in the repository's history, so it's still recoverable; it just stops being what the
+  site serves.
+- **Keep the repository's content** — the site adopts the repository and starts serving it.
+  Your current pages are committed to a `papervine/hosted-content` branch first, because unlike
+  the repository's files they have no history to fall back on.
+
+<Note>
+  Nothing is discarded in either direction — whichever side doesn't win ends up in Git, where
+  you can recover or cherry-pick from it.
+</Note>
+
+One limit: the repository can only take over if it contains a `docs.json` or `mint.json`.
+Without one there'd be no configuration for the site to render from, so that option isn't
+offered.
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Studio" href="/control-plane/editor">
+    The browser editor: pages, navigation, and publishing.
+  </Card>
+  <Card title="Write your content" href="/guides/authoring">
+    Page structure, frontmatter, and the Markdown you can use.
+  </Card>
+  <Card title="Organize the sidebar" href="/guides/navigation">
+    How `docs.json` builds your navigation, tabs, and groups.
+  </Card>
+  <Card title="Use your own domain" href="/guides/custom-domain">
+    Serve the site at `docs.yourcompany.com`.
+  </Card>
+</CardGroup>

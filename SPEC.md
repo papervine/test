@@ -14,7 +14,13 @@ can be simpler, cheaper, or more open. One deployment serves many tenants.
 
 ## 1. Vision & Principles
 
-- **Docs-as-code.** Source of truth is MDX + `docs.json` in the user's Git repo. The platform is a renderer + control plane, never the source of truth.
+- **Docs-as-code — by default, not by requirement.** For a Git-backed site the source of truth
+  is MDX + `docs.json` in the user's repo, and the platform is a renderer + control plane over
+  it. *(Amended 2026-08-21, §10.11: a **Papervine-hosted** site has no repo — its draft buffer
+  is the source of truth and publishing writes object storage directly. Docs-as-code stays the
+  default and the recommended path; requiring a GitHub account just to write a page was
+  excluding people the product is for. Both kinds render through the same `s3Source`, so the
+  renderer never learns the difference.)*
 - **Multi-tenant from day one.** A single app instance serves all customer doc sites, addressable by subdomain (`acme.papervine.io`) and custom domain (`docs.example.com`).
 - **`docs.json`-compatible.** Use the public `docs.json` schema as the compatibility target
   so existing MDX docs repos migrate with minimal changes. The schema link remains
@@ -411,6 +417,17 @@ fire-and-forget queue (the same reconcile-against-reality pattern the sync uses)
 3. Render Plane reads compiled bundles at request time. **No live MDX compilation on the hot path** (compile-on-sync, not compile-on-request) — this is the key perf decision.
 
 > Note: hosted docs platforms compiles some things (e.g. Twoslash) on the fly via serverless. We prefer compile-on-sync for predictability; revisit if it limits dynamic features.
+
+> **A second content origin (2026-08-21, §10.11).** Git is no longer the *only* way content
+> reaches object storage. A **Papervine-hosted** site (`site.source_kind = 'native'`) has no
+> repo: its draft buffer is the source of truth and the editor's publish writes straight into
+> `sites/{id}/…`. Steps 1–2 above simply don't run for it — there is no clone, no webhook (the
+> push fan-out matches on `repo_owner`/`repo_name`, which are NULL, so it can never match), and
+> no `.manifest.json` (its values are git blob SHAs, and `planSync` is the only consumer).
+> **Step 3 is untouched and is the point:** both origins write the same storage layout, so the
+> Render Plane reads them identically through `s3Source` and knows nothing about the
+> difference. Compile-on-sync becomes compile-on-publish for a hosted site; the hot path is
+> still never compiling.
 
 ### 3.1 Static assets
 
@@ -1819,6 +1836,18 @@ ours (AGENTS.md), and the implementation keeps that contract by sharing the writ
 The **read MCP is shipped** (§9.1 Slice 1) — it was a thin wrapper over the assistant tool
 layer.
 
+> **Status 2026-08-21 — the authoring layer is source-aware.** `publishDraft` now dispatches on
+> `site.source_kind` (§10.11): a Git site commits or opens a PR exactly as before, a
+> Papervine-hosted site writes its drafts straight to object storage (`native-publish.ts`) with
+> no GitHub credentials anywhere in the path. Everything *around* publish is unchanged and
+> source-agnostic by construction — the draft buffer, the change list, per-file revert, and
+> discard are pure Postgres + storage and needed no branching at all, which is the payoff of
+> §9.2's "one backend, two front-ends" split. `checkoutBranch` skips its `getRef` base-head
+> stamp on a hosted site (nothing to diverge from, and no repo to read a head from), and the
+> agent's toolset drops `list_branches` and loses the PR mode from `publish`'s input schema, so
+> the model is never offered a capability the site doesn't have. Editor chrome follows: no
+> branch switcher and a single **Publish** action (`publishModeFor` → `'native'`).
+>
 > **Authoring backend + editor — BUILT (2026-06-14).** The shared authoring backend and both
 > its front-ends shipped together. Architecture, as built:
 > - **One backend, two transports.** `authoring-core.ts` (`checkoutBranch` / `saveDraft` /
@@ -2162,7 +2191,8 @@ Minimum to operate the SaaS:
 - **Workspace / site switcher:** an org may own several sites (§2), so the dashboard's
   **top-left switcher** selects the **active site** that per-site pages (Analytics, Editor,
   Settings) scope to — mirrors hosted docs platforms' top-left switcher. Lists the sites the user can
-  access + a **New site** action. *(Status 2026-06-10: the control plane is now
+  access + a **New site** action, which opens the **start-method chooser** (§10.11) — pick
+  a Papervine-hosted site or a connected repo — not a repo form. *(Status 2026-06-10: the control plane is now
   **URL-scoped on its own host**, mirroring hosted docs platforms' `app.example.com/{org}/{site}`.
   The active site is the URL (`app.papervine.io/:org/:site`, `app.localhost:3000` in dev),
   not a cookie — switching sites navigates (`SiteSwitcher` → `switchSiteHref`, preserving
@@ -2871,6 +2901,10 @@ domains/§2, workflows/§10.2), not new capability. Layout, top to bottom:
   **Sync** (trigger a manual sync — same path as §10 Projects "manual sync") and **Open
   editor** (→ §10 web-editor / §9.2 shared authoring backend). Below: **Domain**
   (`docs.example.com ↗`, §2 custom domains), the **repo** (`org/repo ↗`), and the **branch**.
+  *(§10.11: Sync and the repo/branch rows are **Git-backed only** — there's nothing to
+  re-sync from on a Papervine-hosted site, which shows a **Source: Papervine — edited in
+  Studio** row in their place. The commit-sha links in the Activity feed already degrade
+  when there's no repo URL.)*
 - **Workflow upsell banner** — a dismissible CTA ("Keep your site up to date, automatically
   · Set up your first Workflow in minutes" → **Start setup**) linking into **Automate ›
   Workflows (§10.2)**. Shows until the org has configured a workflow.
@@ -3447,6 +3481,190 @@ the webServer command itself (`tests/e2e/reset-db.mjs && next dev`, before boot)
 hardenings ride along: the first overview visit is `test.slow()` (dev cold compile > 30s),
 and the assistant-toggle reload assertions retry via `toPass` (optimistic flip vs
 server-action write race).
+
+### 10.11 Creating a site — the start-method chooser
+
+Adding a site is a **choice of where the content lives**, not a repo form. `/:org/connect`
+presents the start methods as a card list; picking one expands its fields inline, and one
+primary button submits.
+
+Two ways in today:
+
+- **Start from scratch** — a **Papervine-hosted** site. No repo, no GitHub account. The draft
+  buffer (`editor_session` / `draft_file`) is the source of truth, and publishing writes it
+  straight into the site's object-storage prefix. Seeded at creation with a starter
+  `docs.json` + two pages, so it renders immediately.
+- **Connect a GitHub repo** — the existing flow, unchanged: `syncSite` copies repo → storage
+  and the editor publishes by commit or PR.
+
+The discriminator is **`site.source_kind`** (`'git' | 'native'`, default `'git'`). Deliberately
+*not* `contentSource`: `ContentSource` is already a renderer type, and **both kinds render
+through the same `s3Source`** — only the *authoring* source of truth differs. Read it through
+the three predicates in `src/lib/site-source.ts` rather than comparing the string inline:
+`isNativeSite` (affirmatively-hosted copy), `hasGitRepo` (the honest gate for every repo-shaped
+control — also false for a git site whose connect never completed), and `hasRenderableSource`
+(the render gate).
+
+**Hosted publish** (`src/lib/native-publish.ts`, pure core in `native-publish-plan.ts`) is
+**at-least-once and retry-safe, not atomic**. There is no transaction across N object writes,
+so: writes are phased **pages → `docs.json` → deletes** (a partial publish never leaves
+navigation pointing at absent pages, and a crash before the deletes leaves orphan objects the
+renderer can't see rather than nav entries that 404), and the session is left **open** on
+failure so the drafts survive and a retry is an idempotent overwrite. Real atomicity needs a
+content-addressed prefix (`sites/{id}/@{rev}/` + a pointer flip) — which would also fix the
+concurrent-sync race — and is the deferred upgrade for both. Until then, concurrent publishes
+reuse the existing `syncInFlight` time-window guard rather than a second mechanism; the
+`pg_advisory_xact_lock` named earlier in §3 remains the real fix, and this is the cheapest
+place to prove it when we get there.
+
+**`updatedAt` is load-bearing.** The content-cache version key is
+`${lastSyncedCommitSha ?? ""}:${updatedAt}`, and a hosted site's sha is null *forever* — so
+`updatedAt` is the entire key. The bump therefore lives in exactly one place,
+`markSiteLive` in the new `src/lib/deployment-log.ts` (which also holds the `openDeployment` /
+`resolveDeployment` pair that `runSync` and the connect flow had each copy-pasted). Its
+revalidation is wrapped in try/catch: `markSiteLive` is reachable from a Trigger.dev task and
+from `after()`, neither of which has a Next request context, and the bytes are already written
+by then — the `updatedAt` write is the invalidation that always works, the tags just make it
+immediate instead of TTL-bounded.
+
+**No sidecars for a hosted site.** `.manifest.json`'s values are *git blob SHAs* and its only
+consumer is `planSync` inside `syncSite`, a path a hosted site never enters; absent is also
+positively correct for a future git-upgrade, whose first sync must be full. `.dimensions.json`
+absent means `{}` by `s3Source.loadAssetDimensions()`'s contract, and the starter ships no
+images — **but the moment the editor can upload an image to a hosted site, that upload must
+measure and merge dimensions**, or hosted sites permanently lose `next/image` sizing.
+
+Repo-shaped UI degrades through the predicates above: the Re-sync button, the Repository row
+(replaced by **Source: Papervine — edited in Studio**), the *Git settings* nav item **and its
+route** (`notFound()` — hiding a link is not gating a URL), the editor's branch switcher, and
+Publish's PR/commit menu entries. `publishModeFor` returns `'native'` for a hosted site on any
+branch, and `PublishResult` gained a third arm (`mode: 'native'`) rather than a fabricated sha
+— `publishResultRef` is what the two automation call sites use to record a commit sha, a PR
+URL, or nothing.
+
+Branch semantics are unchanged: a hosted site keeps `branch = 'main'` as an inert label for the
+published stream. Dropping the concept would mean a nullable `editorSession.baseBranch`, a
+changed `draftSource` cache key, and touching the partial unique index — for no gain, since
+working branches there are already just Postgres draft namespaces.
+
+> **Status — start-method chooser + Papervine-hosted sites (2026-08-21).** `/:org/connect` is
+> no longer a repo form; it's the chooser described above (`NewSiteChooser.tsx` +
+> `GitConnectFields.tsx` / `ScratchFields.tsx`, on the shadcn **RadioGroup** retargeted to
+> `@radix-ui/react-radio-group` to match this repo's scoped-radix convention, so radiogroup
+> semantics and arrow-key nav come for free). **One route, client step state:** `connectHref`
+> is the redirect target for a site-less org and the Git path's shell already carries
+> `maxDuration = 300` plus the `githubInstallation` lookup, so a second route would duplicate
+> both and gain nothing, while a `?method=` param would round-trip the server on every radio
+> click and lose the inline expansion. The URL kept its name deliberately — renaming to
+> `/:org/new` would cost `connectHref`, `RESERVED_SITE_SLUGS`, three e2e URL waits and two
+> `SiteSwitcher` links for a cosmetic gain. **One `<form>` wraps the card list AND the submit
+> button**, with the action chosen by the selected method: only the selected method's fields
+> are mounted, so a single dynamic action is unambiguous. Framing is state- and role-aware —
+> *Create your first site* for a site-less org (no Back link: `/:org` redirects straight back
+> here, so one would loop), *Add a site* otherwise, and the scratch card renders
+> disabled-with-a-reason for a `member`, since Studio is gated to `editor.workspace: "admin"`
+> and they'd otherwise create a site they can't edit. Post-create landing is the pure
+> `postCreateHref`: Studio for anyone who can see it, Overview otherwise — so it follows the
+> feature gate with no code change. Migration `drizzle/0023_slippery_vermin.sql` is one
+> additive `ADD COLUMN` (Postgres fills `NOT NULL DEFAULT` from the catalog; no backfill, and a
+> pre-existing row with a null `repo_owner` is a *failed git connect*, not a hosted site).
+> Also landed here: `insertSiteWithUniqueSlug` retries the check-then-insert slug race that
+> used to 500 `connectRepo` (hosted sites make collisions far likelier — everyone types
+> "Docs"), `TEXT_CONTENT_TYPE` names the content type both storage writers share so hosted and
+> synced storage are indistinguishable, and two CSS tokens the old connect form was the only
+> user of (`--border`, `--bg-subtle`) were replaced with the real `--line` / `--card`.
+> **The one thing not to regress:** `fireContentUpdateAutomations` deduped on
+> `commitSha ?? \`manual-sync-${randomUUID()}\`` — a *fresh* key every fire, which defeats the
+> self-trigger loop breaker its own comment describes. A hosted publish always has a null sha,
+> so a `content_update` automation that published would re-trigger itself until
+> `DAILY_RUN_CAP` (500/day) stopped it. Fixed both ways: the parameter is now a general `ref`
+> (callers pass `commit?.sha ?? deploymentId`, which also hardens the manual-sync path), and
+> an automation's own publish passes `origin: "automation"` to suppress the fan-out entirely.
+> Verified end-to-end in a browser on a seeded hosted site: create → seed → render at
+> `{slug}.localhost` → edit in Studio → Publish → the edit live on the tenant host, with the
+> Activity feed reading "Published from the editor", and the Git path (Re-sync, Repository row,
+> Git settings, branch switcher, PR/commit menu) unchanged. Tests: `tests/unit/`
+> `site-source` · `site-template` · `native-publish-plan` · `native-publish` · `start-methods`
+> (new), `authoring-publish` · `authoring-tools` · `publish-mode` · `settings-nav` ·
+> `dashboard-nav` · `overview` (extended), and `tests/e2e/new-site.spec.ts` — the chooser and
+> every degradation deterministic in CI, the create journey `@external` because it needs
+> MinIO. Smoke gained no check: the page needs a session *and* Postgres, so the only DB-free
+> fact — the `/login` redirect — was already covered.
+>
+> **Status — hosted → Git conversion (2026-08-22).** Hiding *Git settings* on a hosted site
+> was wrong: the first thing anyone does after writing in Studio is look there for a way to
+> connect GitHub, find nothing, and conclude it's impossible. The item is now shown for **both**
+> kinds and the page branches — a Git site gets the re-point form, a hosted site gets
+> **Connect to GitHub** (`ConnectToGitHubForm`). `settingsNavFor`'s `hasRepo`/`gitOnly` gating
+> is gone with it.
+>
+> The operation is a **hand-over, not a re-point** (`convertToGit`): read the site's live
+> content out of storage, commit it into the target repo, then flip `source_kind` to `'git'`,
+> set the repo columns, and let the normal sync pull it back. `saveGitSettings` still refuses a
+> hosted site and now points at this action, because *it* would attach a repo without moving
+> the content over first — the destructive path the refusal was always guarding.
+>
+> **An empty repo needs no decision; a non-empty one gets asked about.** `repoEmptiness`
+> (`src/lib/git-conversion.ts`) classifies the target, treating GitHub's initializer files
+> (`README`/`LICENSE`/`.gitignore`, top level only) as still-empty — otherwise we'd reject the
+> exact thing we tell people to create. `commitFiles` gained parentless-initial-commit support
+> (`baseCommitSha: null` → no `base_tree`, `parents: []`) so a repo with *no* commits works
+> too, with `createBranch` creating the ref instead of `updateRef` moving it.
+>
+> An earlier cut of this **refused** non-empty repos outright, on the grounds that merging two
+> `docs.json` navigations has no safe answer. The merge premise still holds — but refusing was
+> the wrong conclusion, because a repo with existing docs is a legitimate target and the owner
+> knows which side is current. So `handOverToGit` takes a `resolution` (`'local' | 'repo'`) and
+> **never guesses**: without one it returns `needsResolution`, which the UI turns into a
+> which-version-wins dialog rather than an error.
+>
+> **The two outcomes aren't symmetric, and that's the whole design.** `'local'` commits the
+> hosted content over the repo's, whose version survives in git history — safe by construction.
+> `'repo'` lets the sync overwrite the storage prefix, and the hosted pages have **no history to
+> fall back on**, so they're committed to a **`papervine/hosted-content`** branch first (landing
+> on its tip when re-run, avoiding the non-fast-forward trap `publishDraft` documents). Nothing
+> is unrecoverable either way. `'repo'` additionally requires the repo to carry a
+> `docs.json`/`mint.json` — adopting one without a config leaves the site with nothing to
+> render and `loadConfig` **throws**, so that option is refused server-side and disabled in the
+> dialog rather than flipping the site into a permanently 500ing state.
+>
+> Ordering makes every failure recoverable: commit → flip the row → sync. A crash after the
+> commit leaves a repo holding the content and a still-hosted site (re-run it); after the flip,
+> a Git site whose repo has everything (a Re-sync finishes it).
+>
+> **Status — one-click repo creation (2026-08-22).** An earlier note here claimed a GitHub App
+> can't create a repo on a personal account. **That was wrong**, and the correction matters:
+> GitHub documents `POST /user/repos` as **Administration: write, UAT ✓ / IAT ✗** — an
+> *installation* token can't, but a **user access token** from the same App can. So no separate
+> OAuth provider is needed; the App just has to act as the person rather than as the
+> installation. That's what a competitor's "Authorize with GitHub — we'll need access to create
+> or connect a repository" screen is doing.
+>
+> Built as `src/lib/github-user-auth.ts` + `api/github/user-auth/callback`: authorize →
+> exchange `code` for a user token → `POST /user/repos` (`auto_init: true`, so a first commit
+> exists and `repoEmptiness` still passes — a top-level README is an initializer file) → the
+> same `handOverToGit`. The hand-over core was extracted to `src/lib/git-handover.ts` so the
+> manual and one-click paths share the risky part. Gated on `GITHUB_APP_CLIENT_ID` /
+> `GITHUB_APP_CLIENT_SECRET`: unset, the UI shows only the manual path, so this degrades like
+> every other configured layer.
+>
+> **The user token is never persisted.** It can create repositories, it's needed for exactly
+> one call, and the whole exchange completes inside one callback request. What crosses the wire
+> is the `state`, which is AES-GCM-encrypted via the existing `encryptSecret` — GCM is
+> authenticated, so a tampered state fails to decrypt rather than steering the flow, and the
+> site/repo names aren't readable in the URL. Authorization is still re-derived from the
+> session in the callback; the state is a hint, never a capability.
+>
+> **The constraint that shaped the design:** `PUT /user/installations/{id}/repositories/{id}`
+> — "add a repository to an app installation" — is documented as **PATs (classic) only**, so we
+> *cannot* programmatically add the freshly-created repo to the App installation. The push
+> therefore tries the installation token first (the durable credential syncs will use) and
+> falls back to the user token; if neither can reach the new repo, the callback reports that the
+> repo *was* created and names installing the App on it as the fix, because otherwise a retry
+> just hits "repository already exists" with no explanation.
+>
+> **Still not built:** "download my content as a zip". `src/lib/tar.ts` only *reads* archives
+> and `export-content.ts` feeds the PDF export, so there's no archive writer to reuse.
 
 ### 10.x Instant settings navigation (Router-Cache reuse)
 

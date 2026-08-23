@@ -8,6 +8,12 @@ Papervine keeps your site in step with a branch of your repository. You write an
 your docs update. This page covers what actually triggers that, how long it takes, and what
 to check when a change doesn't appear.
 
+<Info>
+  This page describes a **Git-backed** site. A
+  [Papervine-hosted site](/guides/start-from-scratch) has no repository, so none of these
+  triggers apply to it — see [Papervine-hosted sites](#papervine-hosted-sites) below.
+</Info>
+
 ## What triggers a rebuild
 
 <CardGroup cols={2}>
@@ -101,3 +107,15 @@ Two ways to see a change before readers do:
 Deleting the file and pushing removes the page on the next build. To keep it published but
 out of the way, drop it from your `docs.json` navigation — it stays reachable by direct link
 for anyone who bookmarked it, which is usually kinder than a 404.
+
+## Papervine-hosted sites
+
+A [site you started from scratch](/guides/start-from-scratch) has no repository, so nothing
+on this page about pushes, branches, or re-syncing applies to it. There is exactly one way
+to publish: edit in [Studio](/control-plane/editor) and hit **Publish**. The change is live
+on your site — there's no build to wait for and no pull request to merge.
+
+Your live site keeps serving its previous content until a publish completes, and a publish
+that fails leaves your draft untouched, so you can simply publish again.
+
+To take a page down, delete it in Studio and publish.

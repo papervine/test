@@ -224,6 +224,12 @@ hand-walk signup → onboarding. Seed a known account and drive a real browser:
     exercises the real EdDSA handshake: `node --env-file=.env.local scripts/sign-reader-jwt.mjs
     --groups admin` prints a `…/login/jwt-callback#…` URL.)
   - **`large-docs`** — a large repo for exercising the renderer at scale.
+
+  All seeded sites are **Git-backed** (`source_kind = 'git'`). To exercise a
+  **Papervine-hosted** site (SPEC §10.11) there's nothing to seed — create one through the
+  product in a few seconds: `app.localhost:3000/dev-org/connect` → *Start from scratch* → name
+  it. It's seeded with starter content and live immediately, which is the point. (Adding one to
+  `db:seed` would be reasonable if hosted sites become a frequent test bed.)
 - The **control plane lives on the `app.` host** (SPEC §10): log in at
   **`http://app.localhost:3000/login`**, and the dashboard is at bare
   **`app.localhost:3000/:org/:site`** (seed → `app.localhost:3000/dev-org/starter`). New
@@ -332,6 +338,72 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   (`PlatformShell`); a `dark:` utility on an element *outside* `.db` (e.g. on `<body>` itself)
   won't see the platform theme. This is why the editor chrome once rendered all-white on the
   dark platform. Don't add a global `.dark` sync — it would flip light-appearance docs pages.
+- **A random dedupe key is not a dedupe key.** `fireContentUpdateAutomations` is the
+  self-trigger loop breaker for `content_update` automations: an automation's own commit
+  re-syncs under a sha that already has a run row, so it doesn't re-fire. Its no-sha fallback
+  used to be `manual-sync-${randomUUID()}` — a *fresh* key every call, which silently defeats
+  the whole mechanism for any content change without a commit. Papervine-hosted sites (§10.11)
+  have a null sha **always**, so an automation that published would re-trigger itself until
+  `DAILY_RUN_CAP` (500/day) stopped it — bounded, but 500 AI runs a day of real money. The
+  parameter is now a general `ref` and callers pass something **stable for that deployment**
+  (`commit?.sha ?? deploymentId`); an automation's own publish additionally passes
+  `origin: "automation"` to suppress the fan-out. If you add a new "content changed" path, its
+  ref must be stable across retries of the same change — never freshly random.
+- **`markSiteLive`'s `updatedAt` bump is the invalidation; the tags are a nicety.** The content
+  cache's version key is `${lastSyncedCommitSha ?? ""}:${updatedAt}`, and a Papervine-hosted
+  site's sha is null forever — so `updatedAt` is the *entire* key and skipping the bump serves
+  the pre-publish copy indefinitely. That's why the bump lives in exactly one place
+  (`src/lib/deployment-log.ts`) and why its `revalidateSiteRow`/`revalidateSite` calls are
+  wrapped in try/catch: `markSiteLive` is reachable from a Trigger.dev task and from `after()`,
+  neither of which has a Next request context, and by then the bytes are already written.
+- **`scripts/dev.mjs` only sees `.env.local` because `npm run dev` passes
+  `--env-file-if-exists`.** Node does not load `.env.local` on its own, and the dev
+  orchestrator's `when()` predicates read `process.env` directly. For a long time the `dev`
+  script had no `--env-file` (every other script in package.json does), so the entire
+  declared-intent mechanism was **inert** for config kept in `.env.local` — which is exactly
+  where this repo says to put it. Stripe webhook forwarding never started for anyone, and the
+  hint that was supposed to explain why never fired either, because each `hint()`
+  short-circuits on the same variable it's reporting about. If you add a layer, verify it
+  actually starts (`npm run dev` prints `running N process(es)`) rather than trusting the
+  predicate to be reached.
+- **Tests run alongside `npm run dev` — each harness owns its own `distDir`.** Next allows one
+  `next dev` per *distDir* (it holds `<distDir>/dev/lock`), and two dev servers sharing one
+  output tree also interleave their compiled chunks and manifests — which is how running the
+  smoke gate while dev was up corrupted `.next` and forced a `dev:fresh`. `next.config.mjs` now
+  reads `distDir: process.env.NEXT_DIST_DIR || ".next"`, and each harness sets its own
+  (`.next-smoke`, `.next-crawl`, `.next-e2e`). So separate output, separate lock, and — since
+  e2e already used `papervine_test` — separate database. **Unset stays `.next`**, so `next build`
+  and Vercel are untouched; verify that if you change this (a `.next/BUILD_ID` after
+  `npm run build` is the check). Costs ~700MB per harness dir; `.next-*/` is gitignored, and
+  `dev:fresh` deliberately clears only `.next` since it's about the dev server.
+  `tests/dev-lock.mjs` still guards the case that remains real — two runs of the SAME harness —
+  and fails OPEN on a stale/corrupt lock (dead pid, malformed JSON, absent file) so a killed
+  server never blocks a run. **Reuse was never an option**, which is why it refuses rather than
+  adopting a running server: smoke needs `PAPERVINE_CONTENT=tests/fixtures`, crawl needs the
+  repo under test, e2e needs the test DB with integrations blanked — pointing any of them at a
+  dev server serving `content/` and the dev DB makes the assertions meaningless, or passes them
+  by accident. Related: after wiping a distDir, expect `auth.setup.ts` to occasionally blow its
+  90s budget on the cold signup→onboarding compile. Re-run warm before suspecting your change.
+- **The GitHub App Setup URL must be the APP host, and the callback must not trust `req.url`.**
+  The Better Auth session cookie is host-only on `app.` by design, so a Setup URL pointing at
+  the apex means `/api/github/setup` sees no session, bounces to `/login`, and — because
+  `new URL(path, req.url)` inherits the request's host — lands on the *apex*, which reads as
+  "installing the App did nothing" while GitHub thinks it succeeded and nothing is recorded in
+  `github_installation`. The callback now resolves redirects against `appOriginFor(...)` and
+  carries the whole GitHub redirect through `/login?redirect=` so signing in resumes the
+  install. Also: its `state` is a real payload now (`encodeInstallState`) so the callback
+  returns you where the install *started* — it used to send everyone to `/{org}/connect`
+  regardless, which strands anyone who installed from a hosted site's Connect to GitHub page.
+  The state carries identifiers only and the decoder projects just those fields, so it can
+  never become an open redirect.
+- **Before concluding a DOM behavior is broken, prove the event reached the element.** The
+  add-site chooser first used one `<form>` per option plus a shared submit button wired with
+  `form="…"`, and it appeared not to submit at all. The actual cause was an automated click
+  landing on a button below the fold — `agent-browser scrollintoview` first (or focus + Enter)
+  and it works fine. A silently-swallowed click and a silently-ignored handler look identical,
+  and the wrong diagnosis gets written into a comment as fact. (The chooser now uses one
+  `<form>` around the card list with the action chosen by the selection, which is simpler
+  regardless — but that's a design call, not a workaround.)
 
 ## Commands
 

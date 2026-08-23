@@ -167,8 +167,7 @@ export async function listInstallationRepos(
 }
 
 // The page we send owners to to install the App (the connect UI's "Install" button).
-// `state` round-trips through GitHub back to our setup callback so we can tie the
-// resulting installation to the org that started the flow.
+// `state` round-trips through GitHub back to our callback — see encodeGithubFlowState.
 export function installUrl(state: string): string | null {
   const slug = process.env.GITHUB_APP_SLUG;
   if (!slug) return null;

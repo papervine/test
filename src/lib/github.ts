@@ -250,8 +250,12 @@ export async function commitFiles(
   owner: string,
   name: string,
   opts: {
-    baseCommitSha: string;
-    baseTreeSha: string;
+    // Null for an INITIAL commit into a repo with no commits yet (adopting a
+    // Papervine-hosted site into a fresh repo, SPEC §10.11): the tree is built from
+    // scratch with no `base_tree`, and the commit has no parents. Every other caller
+    // passes the base it read from `getRef`.
+    baseCommitSha: string | null;
+    baseTreeSha: string | null;
     files: FileChange[];
     message: string;
     token?: string;
@@ -259,6 +263,11 @@ export async function commitFiles(
 ): Promise<{ commitSha: string } | { error: string }> {
   const { baseCommitSha, baseTreeSha, files, message, token } = opts;
   if (files.length === 0) return { error: "commitFiles: no changes" };
+  // A deletion is meaningless with nothing to delete from, and GitHub rejects a null-sha
+  // tree entry that matches no path — catch it here with a clearer message.
+  if (baseTreeSha === null && files.some((f) => f.content === null)) {
+    return { error: "commitFiles: cannot delete paths in an initial commit" };
+  }
   const tree = files.map((f) =>
     f.content === null
       ? { path: f.path, mode: "100644", type: "blob", sha: null }
@@ -267,14 +276,19 @@ export async function commitFiles(
   const treeRes = await fetch(`${API}/repos/${owner}/${name}/git/trees`, {
     method: "POST",
     headers: jsonHeaders(token),
-    body: JSON.stringify({ base_tree: baseTreeSha, tree }),
+    // Omit base_tree entirely for an initial commit — passing null makes GitHub 422.
+    body: JSON.stringify(baseTreeSha === null ? { tree } : { base_tree: baseTreeSha, tree }),
   });
   if (!treeRes.ok) return { error: `createTree ${treeRes.status}: ${(await treeRes.text()).slice(0, 200)}` };
   const newTreeSha = (await treeRes.json()).sha;
   const commitRes = await fetch(`${API}/repos/${owner}/${name}/git/commits`, {
     method: "POST",
     headers: jsonHeaders(token),
-    body: JSON.stringify({ message, tree: newTreeSha, parents: [baseCommitSha] }),
+    body: JSON.stringify({
+      message,
+      tree: newTreeSha,
+      parents: baseCommitSha === null ? [] : [baseCommitSha],
+    }),
   });
   if (!commitRes.ok)
     return { error: `createCommit ${commitRes.status}: ${(await commitRes.text()).slice(0, 200)}` };

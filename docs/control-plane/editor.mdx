@@ -84,6 +84,14 @@ your current draft, so unsaved-but-buffered edits appear the moment you switch t
 
 ## Branches and the draft buffer
 
+<Info>
+  Branches and pull requests are **Git-backed features**. On a
+  [Papervine-hosted site](/guides/start-from-scratch) there's no repository, so Studio shows
+  no branch switcher and **Publish** is a single action straight to your live site. Everything
+  else on this page — the draft buffer, the change list, per-file revert, discard, the agent —
+  works identically on both kinds of site.
+</Info>
+
 The editor opens on your site's **deploy branch** — the one marked **Default** in the branch
 switcher (top left). You edit it directly; the switcher also lists your open edit sessions and
 can **create a new branch** for changes you'd rather land through review.
@@ -111,8 +119,12 @@ caret menu lets you pick either mode explicitly:
   </Card>
 </CardGroup>
 
-The outcome — a pull-request link, a commit hash, or an error — appears as a toast that clears
-itself (and that you can dismiss).
+On a [Papervine-hosted site](/guides/start-from-scratch) there is no repository and therefore
+no third option: **Publish** writes your draft straight to the live site, and the caret menu
+shows only the change list, per-file revert, and discard.
+
+The outcome — a pull-request link, a commit hash, a plain confirmation, or an error — appears
+as a toast that clears itself (and that you can dismiss).
 
 If the deploy branch moved since you started editing, Publish stops with a conflict rather than
 clobbering it — re-check-out to pick up the latest, then publish again.

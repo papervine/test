@@ -21,6 +21,7 @@
             "pages": [
               "index",
               "guides/quickstart",
+              "guides/start-from-scratch",
               "guides/migrate"
             ]
           },

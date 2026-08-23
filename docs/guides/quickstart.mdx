@@ -11,6 +11,10 @@ docs site. Everything after this page is detail you can come back for.
   **What you need.** A GitHub repository containing MDX files and a `docs.json`. If you
   don't have one, Papervine's starter template is a working example you can fork — or
   point Papervine at an existing docs repo, which usually renders unchanged.
+
+  **No repository?** You don't need one. [Start from
+  scratch](/guides/start-from-scratch) creates a site Papervine hosts for you, which you
+  write in the browser.
 </Info>
 
 <Steps>
@@ -23,10 +27,14 @@ docs site. Everything after this page is detail you can come back for.
     exactly one.
   </Step>
 
-  <Step title="Connect a repository">
-    From the dashboard, choose **Connect** and authorize Papervine to read the repository
-    you want to publish. Pick the repo, the branch to publish from (usually `main`), and
-    the folder holding your docs if they aren't at the root.
+  <Step title="Choose how to start">
+    Adding a site starts with a choice: **Start from scratch**, or **Connect a GitHub
+    repo**. This page follows the repository path — for the other one, see
+    [Start from scratch](/guides/start-from-scratch).
+
+    Choose **Connect a GitHub repo** and authorize Papervine to read the repository you
+    want to publish. Pick the repo, the branch to publish from (usually `main`), and the
+    folder holding your docs if they aren't at the root.
 
     Papervine reads the repository — it never writes to it unless you explicitly use the
     [browser editor](/control-plane/editor) and choose to publish.
@@ -39,6 +47,9 @@ docs site. Everything after this page is detail you can come back for.
     ones — a large repository can take a minute or two.
 
     You don't need to wait on this screen. The status moves to **Live** on its own.
+
+    A [Papervine-hosted site](/guides/start-from-scratch) skips this step entirely — there's
+    no repository to read, so it's live the moment you create it.
   </Step>
 
   <Step title="Open your site">

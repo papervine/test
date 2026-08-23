@@ -1,10 +1,11 @@
 import { type NextRequest, NextResponse } from "next/server";
-import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { db } from "@/lib/db";
-import { githubInstallation } from "@/lib/db/app-schema";
 import { getSession, listOrganizations } from "@/lib/session";
-import { fetchInstallation } from "@/lib/github-app";
+import { recordInstallation } from "@/lib/github-installations";
+import { decodeGithubFlowState } from "@/lib/github-user-auth";
+import { findSite } from "@/lib/dashboard-context";
+import { appOriginFor } from "@/lib/tenant-host";
+import { connectHref } from "@/lib/dashboard-nav";
+import { settingsHref } from "@/lib/settings-nav";
 
 /**
  * GitHub App "Setup URL" callback (SPEC §3). After an owner installs the App, GitHub
@@ -18,19 +19,43 @@ export async function GET(req: NextRequest) {
   // gate — so unlike a page, it can be hit with no session. listOrganizations() throws an
   // Unauthorized APIError in that case, so guard it: any auth failure → bounce to login
   // (where the gate sends them right back here once signed in).
+  // Where the install started, so we can put them back (see encodeInstallState). Decoded
+  // before the session check, because it's also what makes the post-login bounce land
+  // somewhere useful rather than on the dashboard root.
+  const intent = decodeGithubFlowState(req.nextUrl.searchParams.get("state"));
+
+  // This route only functions on the APP host: the Better Auth session cookie is host-only
+  // there by design, so on the apex `getSession()` finds nothing and we'd bounce to a login
+  // that can't help. Resolve every redirect against the app origin explicitly rather than
+  // `req.url`, which is how a misconfigured Setup URL silently dumped people on the apex.
+  const appOrigin =
+    appOriginFor(process.env.BETTER_AUTH_URL ?? req.nextUrl.origin) ?? req.nextUrl.origin;
+  const to = (path: string) => NextResponse.redirect(new URL(path, appOrigin));
+
   let session: Awaited<ReturnType<typeof getSession>> = null;
   let org: Awaited<ReturnType<typeof listOrganizations>>[number] | undefined;
   try {
     session = await getSession();
-    org = (await listOrganizations())?.[0];
+    org = (await listOrganizations())?.find((o) => !intent || o.slug === intent.org) ??
+      (await listOrganizations())?.[0];
   } catch {
     session = null;
   }
   if (!session || !org) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    // Keep the whole GitHub redirect (installation_id + state) so signing in resumes the
+    // install rather than losing it — otherwise the App is installed on GitHub's side with
+    // nothing recorded here, which looks like the install simply didn't work.
+    const resume = `${req.nextUrl.pathname}${req.nextUrl.search}`;
+    return to(`/login?redirect=${encodeURIComponent(resume)}`);
   }
 
-  const back = NextResponse.redirect(new URL(`/${org.slug}/connect`, req.url));
+  // Back where the install was started from: a hosted site's Connect to GitHub page, or the
+  // add-site chooser. Rebuilt from identifiers, never from a path in the state.
+  const backPath =
+    intent?.site && (await findSite(org.slug, intent.site))
+      ? settingsHref(org.slug, intent.site, "git")
+      : connectHref(org.slug);
+  const back = to(backPath);
 
   const idParam = req.nextUrl.searchParams.get("installation_id");
   const installationId = idParam ? Number(idParam) : NaN;
@@ -38,33 +63,7 @@ export async function GET(req: NextRequest) {
   // store yet — just return to connect; the install webhook/next visit will catch up.
   if (!Number.isInteger(installationId)) return back;
 
-  const info = await fetchInstallation(installationId);
-
-  // Upsert: an install can be re-run or moved between orgs. Key on the unique
-  // installation_id; refresh the owning org + account label.
-  const existing = await db
-    .select()
-    .from(githubInstallation)
-    .where(eq(githubInstallation.installationId, installationId))
-    .limit(1);
-
-  if (existing[0]) {
-    await db
-      .update(githubInstallation)
-      .set({
-        organizationId: org.id,
-        accountLogin: info?.accountLogin ?? existing[0].accountLogin,
-        updatedAt: new Date(),
-      })
-      .where(eq(githubInstallation.installationId, installationId));
-  } else {
-    await db.insert(githubInstallation).values({
-      id: randomUUID(),
-      organizationId: org.id,
-      installationId,
-      accountLogin: info?.accountLogin ?? "",
-    });
-  }
+  await recordInstallation(org.id, installationId);
 
   return back;
 }
