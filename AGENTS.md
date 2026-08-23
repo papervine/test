@@ -435,6 +435,12 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   and Vercel are untouched; verify that if you change this (a `.next/BUILD_ID` after
   `npm run build` is the check). Costs ~700MB per harness dir; `.next-*/` is gitignored, and
   `dev:fresh` deliberately clears only `.next` since it's about the dev server.
+  **The harnesses are isolated from `npm run dev`; `npm run build` is NOT.** It writes `.next` —
+  the same tree the dev server is serving from — so building while dev is up replaces that tree
+  with a production one and the running server starts 404ing routes it served a minute earlier
+  (a `.next/BUILD_ID` appearing is the tell). Nothing warns you. Either stop the dev server first
+  or build into a scratch dir (`NEXT_DIST_DIR=.next-verify npm run build`); afterwards the dev
+  server needs a restart, or `npm run dev:fresh` if it's confused.
   `tests/dev-lock.mjs` still guards the case that remains real — two runs of the SAME harness —
   and fails OPEN on a stale/corrupt lock (dead pid, malformed JSON, absent file) so a killed
   server never blocks a run. **Reuse was never an option**, which is why it refuses rather than

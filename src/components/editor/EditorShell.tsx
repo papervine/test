@@ -1,10 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import {
+  useCallback,
+  useEffect,
+  useOptimistic,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { ChevronRight, Eye, X, ListTree, FolderOpen, type LucideIcon } from "lucide-react";
 import { toast } from "sonner";
 import { unlistedPageSlugs } from "@/lib/nav-edit";
+import { moveGroupInSections, moveLeafInSections } from "@/lib/nav-tree-move";
 import type { NavSection } from "@papervine/renderer/lib/nav";
 import { NavTree } from "./NavTree";
 import { FileTree } from "./FileTree";
@@ -23,6 +31,12 @@ import {
   readDraftPageAction,
   saveDraftAction,
 } from "@/lib/actions/authoring";
+
+// One drag, as the optimistic reducer sees it. Mirrors moveNavItemAction's input so the local
+// and server halves of a move can't drift apart.
+type NavMove =
+  | { kind: "page"; from: { group: string; index: number }; to: { group: string; index: number } }
+  | { kind: "group"; group: string; toIndex: number };
 
 // The 3-panel editor (SPEC §9.2/§10): editing-agent chat | navigation | multi-modal editor.
 // Holds the active page + branch and routes every read/write through the authoring backend,
@@ -253,23 +267,53 @@ export function EditorShell({
     to: { group: string; index: number },
   ) =>
     start(async () => {
-      const res = await moveNavItemAction(org, site, branch, { kind: "page", from, to });
-      if ("error" in res) {
-        toast.error(res.error);
-        return;
+      applyMove({ kind: "page", from, to });
+      try {
+        const res = await moveNavItemAction(org, site, branch, { kind: "page", from, to });
+        if ("error" in res) {
+          toast.error(res.error);
+          return; // the optimistic value drops when the transition ends → the row springs back
+        }
+        router.refresh();
+      } catch {
+        // A dropped connection rejects rather than returning {error}; without this the move
+        // reverted but the failure surfaced as an unhandled rejection instead of a message.
+        toast.error("Couldn't save that move — check your connection and try again.");
       }
-      router.refresh();
     });
 
   const moveGroupTo = (group: string, toIndex: number) =>
     start(async () => {
-      const res = await moveNavItemAction(org, site, branch, { kind: "group", group, toIndex });
-      if ("error" in res) {
-        toast.error(res.error);
-        return;
+      applyMove({ kind: "group", group, toIndex });
+      try {
+        const res = await moveNavItemAction(org, site, branch, { kind: "group", group, toIndex });
+        if ("error" in res) {
+          toast.error(res.error);
+          return;
+        }
+        router.refresh();
+      } catch {
+        toast.error("Couldn't save that move — check your connection and try again.");
       }
-      router.refresh();
     });
+
+  // A drop has to land instantly. The tree is the SERVER's view of docs.json, so the naive
+  // version awaited the write plus a router.refresh() — during which the row springs back to
+  // where it came from and then jumps to its new home. useOptimistic shows the moved tree for
+  // the duration of the transition; because `router.refresh()` runs INSIDE that transition,
+  // React holds the optimistic value until the refreshed RSC payload has actually arrived, so
+  // there's no gap where the old order flashes back.
+  //
+  // The revert is free and is why this is safe: if the action returns an error we simply don't
+  // refresh, the transition ends, and the optimistic value is discarded — the row animates back
+  // and the toast explains why. The UI can't end up disagreeing with docs.json.
+  const [optimisticSections, applyMove] = useOptimistic(
+    sections,
+    (current: NavSection[], move: NavMove) =>
+      move.kind === "page"
+        ? moveLeafInSections(current, move.from, move.to)
+        : moveGroupInSections(current, move.group, move.toIndex),
+  );
 
   // Whether the site uses tabs at all — a section carries a `tab` label only when it does.
   // Drives the dialog's warning that adding a first tab restructures the navigation.
@@ -399,7 +443,7 @@ export function EditorShell({
           </div>
           {treeView === "nav" ? (
             <NavTree
-              sections={sections}
+              sections={optimisticSections}
               activeSlug={slug}
               onSelect={selectPage}
               onPageSettings={openPageSettings}

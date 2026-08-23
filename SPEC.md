@@ -1895,9 +1895,24 @@ layer.
 > Pages are addressed **positionally** (`{group, index}`), not by slug — the same slug may
 > legitimately appear in two groups, and the row you grabbed is the one that should move. The
 > mutators splice the entry out and back in rather than reading it as a string, so object entries
-> (an OpenAPI selector, a page with its own `href`) survive the trip. No optimistic local
-> reorder: the tree IS the server's view of `docs.json`, and a rejected move would leave the UI
-> lying, so the drop writes and re-reads.
+> (an OpenAPI selector, a page with its own `href`) survive the trip.
+>
+> **Optimistic, via `useOptimistic` (revised 2026-08-23).** The first cut deliberately wasn't:
+> the tree is the server's view of `docs.json`, so it awaited the write plus a `router.refresh()`
+> to avoid a UI that could disagree with the file. Wrong trade — during that round trip the row
+> springs back to where it came from and then jumps to its new home, which is worse than the
+> risk. The move now applies locally the instant you drop (`nav-tree-move.ts` — the same move in
+> the BUILT `NavSection[]` shape, with index semantics deliberately identical to nav-edit's, or
+> the row would land in one slot and settle in another). Measured: new order visible **38ms**
+> after mouse-up, and no spring-back at any sample out to 3.2s — because `router.refresh()` runs
+> INSIDE the transition, React holds the optimistic value until the refreshed RSC payload has
+> arrived. The original concern is answered by the revert rather than by refusing to be
+> optimistic: on error we simply don't refresh, the transition ends, and React discards the
+> optimistic value — verified by aborting the action's POST (identified by its `Next-Action`
+> header; aborting *every* POST kills the RSC payload and unmounts the tree instead of testing
+> anything). That test also found a real gap: an aborted action REJECTS rather than returning
+> `{error}`, so the move calls are now wrapped — a dropped connection gets a toast instead of an
+> unhandled rejection.
 >
 > Three things this cost, all invisible except in the console or a second run:
 > 1. **`closestCenter` is type-blind.** Pages and groups share one `DndContext` and page rows are
