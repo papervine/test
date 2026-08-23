@@ -27,7 +27,7 @@ import { TableOfContents } from "@papervine/renderer/components/TableOfContents"
 import { PageViewBeacon } from "@/components/analytics/PageViewBeacon";
 import { Assistant } from "@/components/assistant/Assistant";
 import { AskAssistantButton } from "@/components/assistant/AskAssistantButton";
-import { SearchButton } from "@/components/SearchDialog";
+import { SearchButton } from "@papervine/renderer/components/SearchDialog";
 
 /**
  * Tenant docs render as a persistent SHELL (layout: navbar + tabs + sidebar + assistant)
@@ -187,7 +187,7 @@ export async function TenantDocsShell({
           config={config}
           base={base}
           assetBase={assetBase}
-          search={<SearchButton site={slug} />}
+          search={<SearchButton site={slug} track />}
           assistant={assistantOn ? <AskAssistantButton /> : null}
         />
         <NavTabs sections={sections} />

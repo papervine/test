@@ -278,6 +278,30 @@ async function run() {
     const nf = await fetch(BASE + "/definitely-not-a-page");
     if (nf.status !== 404) failures.push(`missing page returned ${nf.status}, expected 404`);
     log(`  ${failures.length === nfBefore ? "✓" : "✗"} missing page 404s`);
+
+    // Search: an in-memory Orama index over the served folder, so it has to work from the
+    // packaged bundle with no backend. The query is derived from the nav rather than
+    // hardcoded, since this runs against a different docs repo in the mirrored repo.
+    const searchBefore = failures.length;
+    const term = (slugs.find((s) => s !== "index") ?? "").split("/").pop() ?? "";
+    if (!term) {
+      failures.push("could not derive a search term from the nav");
+    } else {
+      const res = await fetch(`${BASE}/api/search?q=${encodeURIComponent(term)}`);
+      if (res.status !== 200) {
+        failures.push(`/api/search returned ${res.status}`);
+      } else {
+        const body = await res.json();
+        if (!Array.isArray(body.results)) {
+          failures.push(`/api/search returned no results array: ${JSON.stringify(body).slice(0, 80)}`);
+        } else if (!body.results.length) {
+          failures.push(`/api/search found nothing for "${term}", which is a page in the nav`);
+        } else if (!body.results[0].href) {
+          failures.push(`/api/search hit has no href: ${JSON.stringify(body.results[0]).slice(0, 80)}`);
+        }
+      }
+    }
+    log(`  ${failures.length === searchBefore ? "✓" : "✗"} search returns hits (q="${term}")`);
   } catch (e) {
     // Boot failures are the interesting ones and the server's own output is the only
     // place the reason appears, so re-throw with it attached rather than losing it.

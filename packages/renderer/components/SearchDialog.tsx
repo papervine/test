@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search } from "lucide-react";
-import { reduceSearch } from "@/lib/search-track";
+import { reduceSearch } from "../lib/search-track";
 
 type Hit = {
   title: string;
@@ -14,7 +14,12 @@ type Hit = {
 };
 
 /** The navbar search trigger + the Cmd/Ctrl-K command palette (SPEC.md §6). */
-export function SearchButton({ site }: { site?: string }) {
+/**
+ * `track` opts into search analytics. The hosted app passes it; the CLI doesn't, because
+ * there's no `/api/search/track` endpoint in the CLI and firing beacons at a route that
+ * 404s just litters the network panel of anyone previewing their docs.
+ */
+export function SearchButton({ site, track = false }: { site?: string; track?: boolean }) {
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -39,12 +44,20 @@ export function SearchButton({ site }: { site?: string }) {
         <span className="flex-1 text-left">Search...</span>
         <kbd className="rounded border border-zinc-200 px-1.5 text-xs dark:border-zinc-700">⌘K</kbd>
       </button>
-      {open && <SearchModal onClose={() => setOpen(false)} site={site} />}
+      {open && <SearchModal onClose={() => setOpen(false)} site={site} track={track} />}
     </>
   );
 }
 
-function SearchModal({ onClose, site }: { onClose: () => void; site?: string }) {
+function SearchModal({
+  onClose,
+  site,
+  track: trackEnabled,
+}: {
+  onClose: () => void;
+  site?: string;
+  track: boolean;
+}) {
   const router = useRouter();
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<Hit[]>([]);
@@ -53,11 +66,12 @@ function SearchModal({ onClose, site }: { onClose: () => void; site?: string }) 
 
   // The most-specific query of the search the user is currently refining. We log a
   // single "search" analytics event per *intent* (on settle's topic-switch, on a
-  // result click, or on close) — not per keystroke. See src/lib/search-track.ts.
+  // result click, or on close) — not per keystroke. See lib/search-track.ts.
   const pendingRef = useRef("");
 
   const track = useCallback(
     (query: string) => {
+      if (!trackEnabled) return;
       const trimmed = query.trim();
       if (!trimmed) return;
       const payload = JSON.stringify({ q: trimmed, site });
@@ -76,7 +90,7 @@ function SearchModal({ onClose, site }: { onClose: () => void; site?: string }) 
         keepalive: true,
       }).catch(() => {});
     },
-    [site],
+    [site, trackEnabled],
   );
 
   // Debounced query.

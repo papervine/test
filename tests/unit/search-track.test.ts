@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { reduceSearch } from "@/lib/search-track";
+import { reduceSearch } from "@papervine/renderer/lib/search-track";
 
 describe("reduceSearch — collapse a keystroke-prefix chain to one search intent", () => {
   it("never commits while typing a single term forward (the ~8-events bug)", () => {

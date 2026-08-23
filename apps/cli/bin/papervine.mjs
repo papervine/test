@@ -18,7 +18,7 @@
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { existsSync, statSync } from "node:fs";
-import { createServer } from "node:net";
+import { Socket } from "node:net";
 import path from "node:path";
 
 import { parseDevArgs, validateContentDir } from "./args.mjs";
@@ -35,6 +35,7 @@ const red = (s) => `\x1b[31m${s}\x1b[0m`;
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
 const bold = (s) => `\x1b[1m${s}\x1b[0m`;
 const dim = (s) => `\x1b[2m${s}\x1b[0m`;
+const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
 
 function fail(msg) {
   console.error(`${red("papervine:")} ${msg}`);
@@ -61,14 +62,43 @@ JSX/JavaScript. Only run it on docs repos you trust.
 `);
 }
 
-/** Is `port` free on HOST? Resolves true/false, never rejects. */
-function isPortFree(port) {
-  return new Promise((resolve) => {
-    const probe = createServer();
-    probe.once("error", () => resolve(false));
-    probe.once("listening", () => probe.close(() => resolve(true)));
-    probe.listen(port, HOST);
-  });
+/**
+ * Is anything listening on `port`? Resolves true/false, never rejects.
+ *
+ * This *connects* rather than trying to bind, which matters more than it looks. A bind
+ * probe on `127.0.0.1` does not see a server listening on `::`/`*` — the usual shape for
+ * `next dev` — so the probe reports the port free, the server then "binds" it, prints
+ * "Ready", and receives no traffic at all, because the pre-existing wildcard listener
+ * keeps answering. A success message on a port you don't own is the worst possible
+ * failure mode: it sends you off debugging your docs when you're looking at someone
+ * else's server. (This repo already knows the IPv4/IPv6 loopback split bites — see the
+ * gotcha about tests fetching 127.0.0.1 rather than localhost. This is its other face.)
+ *
+ * A connection attempt is address-family agnostic: a dual-stack `::` listener accepts an
+ * IPv4-mapped connection, so it gets caught. Both loopback addresses are probed for the
+ * case where something is bound only to `::1`.
+ */
+async function isPortFree(port) {
+  const canConnect = (address) =>
+    new Promise((resolve) => {
+      const socket = new Socket();
+      const done = (result) => {
+        socket.destroy();
+        resolve(result);
+      };
+      socket.setTimeout(600);
+      socket.once("connect", () => done(true));
+      socket.once("timeout", () => done(false));
+      // ECONNREFUSED is the clean "nothing is listening". Anything else (EHOSTUNREACH on
+      // a host without IPv6, say) also isn't evidence of a listener.
+      socket.once("error", () => done(false));
+      socket.connect(port, address);
+    });
+
+  for (const address of ["127.0.0.1", "::1"]) {
+    if (await canConnect(address)) return false;
+  }
+  return true;
 }
 
 /**
@@ -82,7 +112,17 @@ async function resolvePort(start, explicit) {
     fail(`port ${start} is already in use — pass a different \`--port\`.`);
   }
   for (let port = start; port < start + 10; port++) {
-    if (await isPortFree(port)) return port;
+    if (await isPortFree(port)) {
+      // Say it loudly when we move. Quietly serving somewhere other than where the user
+      // is about to look is how "my images are broken" turns out to be "you're reading a
+      // different server" — worth a line of noise to prevent.
+      if (port !== start) {
+        console.log(
+          `${yellow("!")} port ${start} is in use — serving on ${bold(String(port))} instead`,
+        );
+      }
+      return port;
+    }
   }
   fail(`no free port in ${start}–${start + 9} — pass an explicit \`--port\`.`);
 }
