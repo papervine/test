@@ -3522,6 +3522,48 @@ the hosted API over HTTPS, they don't embed it.
 > surface. Tripwire: if porting PRs becomes routine, split for real — move both packages out and
 > have the hosted app consume the renderer. That costs atomic renderer + control-plane commits,
 > which is why it's premature now, not wrong forever.
+
+> **Status (2026-08-23): the starter site moved into this repo** as `examples/starter`, and
+> `scripts/mirror-cli.mjs` gained a second target (`--target starter` → `papervine/starter`,
+> `npm run mirror:starter`). Same machinery as the CLI mirror: one-directional, per-commit
+> replay with authorship preserved, and a divergence guard.
+>
+> **Why, and it isn't tidiness.** `db:seed` builds its dev sites *from* `papervine/starter`
+> over the network — including `starter-gated`, the reader-auth test bed whose `internal/*`
+> pages carry the `groups:` frontmatter that exercises §11.2. So the monorepo's own dev and
+> test setup depended on an external repo it didn't version: seeding needed network and a
+> GitHub quota, and a change over there could alter what the RBAC tests run against without
+> review. That's the same argument that keeps `packages/renderer` in this repo, pointing the
+> same way. Now it's versioned with the tests that consume it, and `tests/crawl.mjs
+> examples/starter` is a CI gate — nothing verified the starter rendered at all before.
+>
+> **`db:seed` still fetches from GitHub on purpose.** That fetch walks the tree API and pulls
+> raw blobs exactly as `syncSite` does, so seeding doubles as a smoke test of the real sync
+> path; reading locally would quietly delete that coverage. `PAPERVINE_STARTER_DIR` overrides
+> it with a local directory for offline work, and says so in its output.
+>
+> **It also collapsed a duplicate.** The component gallery existed twice — in the starter repo
+> and as a hello-world in the CLI mirror's templates. The CLI snapshot now ships
+> `examples/starter` at the same path, so its `npm run dev -- examples/starter` and its
+> `test:cli` fixture are the *same* site that publishes to `papervine/starter`. One copy, four
+> jobs (published, CLI example, seed source, crawl target). This supersedes the trim committed
+> earlier the same day: that was correct while there were two copies, and moot once there's one.
+>
+> **Validation differs by target**, because a docs repo has nothing to install. The CLI
+> snapshot runs `npm ci` + typecheck + unit; the starter snapshot checks that `docs.json`
+> parses and that every page its navigation names exists — a nav entry pointing at a deleted
+> file is the realistic breakage, and it would otherwise reach a forker before anyone noticed.
+> Rendering is covered by the CI crawl.
+>
+> **The cost, stated plainly:** a starter template attracts drive-by PRs far more than a CLI
+> does, and every one now hits the "reviewed here, merged upstream" flow on the repo where a
+> casual contributor is least likely to tolerate it. Accepted because the seed/test-bed
+> coupling was a present problem and starter PRs are a hypothetical one — but if community
+> edits to the starter become common, that trade should be revisited.
+>
+> Verified: typecheck clean, smoke 17 pages green, `crawl examples/starter` 10/10 with 0×500,
+> both mirror targets dry-run and self-validate, and the CLI snapshot's own `test:cli` passes
+> against the starter it now ships (9 pages).
 >
 > **Second undeclared dependency, found by the mirror: `mermaid`** (`components/mdx/Mermaid.tsx`).
 > It hid from the `shiki` audit because it's a **dynamic** `await import("mermaid")`, and a

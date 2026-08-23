@@ -44,6 +44,26 @@ dependency name (`@mintlify/mdx`), the `mint` theme value, and internal design d
 name them where people are *searching*, not where they're already *reading*. (This reverses
 the blanket strip in SPEC's 2026-06-14 note — don't re-apply it to the discovery surfaces.)
 
+## Four docs directories, four jobs (don't merge them)
+
+Each of these is a folder of MDX + `docs.json`, which makes them easy to confuse. They are
+not interchangeable:
+
+| Directory | Job |
+|---|---|
+| `docs/` | **The dogfood site.** Papervine's own documentation, rendered by Papervine. `node tests/crawl.mjs docs` is a gate. |
+| `tests/fixtures/` | **Assertion-shaped edge cases.** Object favicons, `.md` pages, bad frontmatter, unknown components, marker strings for `CHECKS`. Deliberately ugly; never show it to anyone. |
+| `examples/starter/` | **The forkable example**, published to `papervine/starter` (`npm run mirror:starter`). Also the CLI mirror's `examples/starter`, the site `db:seed` seeds from, and a CI crawl target. It's the component gallery — the one people judge the product by. |
+| `content/` | The local dev default when `PAPERVINE_CONTENT` is unset. |
+
+`examples/starter` earns its place in this repo rather than being maintained in
+`papervine/starter` because **the monorepo depends on it**: `db:seed` builds `starter` and
+`starter-gated` from it, and the latter is the reader-auth test bed whose `internal/*` pages
+carry the `groups:` frontmatter that exercises SPEC §11.2. A fixture defined in a repo we
+don't version is a fixture that can change under the tests relying on it. Seeding still
+*fetches* it from GitHub on purpose — that exercises the real sync path — with
+`PAPERVINE_STARTER_DIR` as a local override for offline work.
+
 ## The engineering loop (how every task runs)
 
 Every feature, bugfix, or behavior change runs the same loop — full doctrine in
@@ -454,7 +474,9 @@ npm test                    # smoke: renderer + control-plane gate (zero-dep, no
 npm run test:unit           # vitest — pure-logic unit tests
 npm run test:e2e            # playwright — authed journeys (needs docker Postgres + MinIO)
 npm run test:cli            # clean-room: packs the real papervine tarball, installs it OUTSIDE the repo, serves docs/ from it (slow — runs a full next build)
-npm run mirror:cli -- --dry-run   # build + validate the public papervine/cli snapshot without touching the remote (add --push to publish; --initial for the first import)
+npm run mirror:cli -- --dry-run       # build + validate the public papervine/cli snapshot without touching the remote (add --push to publish; --initial for the first import)
+npm run mirror:starter -- --dry-run   # same, for the forkable example site → papervine/starter
+node tests/crawl.mjs examples/starter # crawl the example site (a CI gate)
 npm run db:generate         # generate a versioned SQL migration from schema changes
 npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
 node bin/papervine.mjs dev <dir>     # preview any docs repo (docs dev analogue)

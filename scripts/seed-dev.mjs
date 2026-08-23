@@ -10,6 +10,8 @@
 // PROD-GUARDED: refuses any non-local DATABASE_URL — a known password must never reach a
 // real database. After seeding, log in at /login with the printed credentials.
 import { randomUUID, generateKeyPairSync, createCipheriv, randomBytes } from "node:crypto";
+import { readFileSync, readdirSync } from "node:fs";
+import path from "node:path";
 import { execFileSync } from "node:child_process";
 import postgres from "postgres";
 
@@ -122,8 +124,73 @@ const ASSET_EXT = /\.(png|jpe?g|gif|svg|webp|avif|ico|bmp|mp4|webm|pdf|woff2?)$/
 // Mirrors sync-plan.ts RASTER_IMAGE_EXT: the formats we measure for next/image.
 const RASTER_EXT = /\.(png|jpe?g|webp|avif|bmp)$/i;
 
-/** Copy a repo's docs (config + MDX + assets) into sites/{id}/… (mirrors syncSite). */
+/**
+ * The `PAPERVINE_STARTER_DIR` path: upload a local docs directory instead of fetching a repo.
+ * Same uploads and same `.dimensions.json` manifest as the GitHub path, so what the renderer
+ * reads is identical — only the transport differs.
+ */
+async function syncFromDisk({ id, dir }) {
+  const files = [];
+  (function walk(current) {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+      const full = path.join(current, entry.name);
+      if (entry.isDirectory()) walk(full);
+      else if (TEXT_EXT.test(entry.name) || ASSET_EXT.test(entry.name)) {
+        files.push(path.relative(dir, full).split(path.sep).join("/"));
+      }
+    }
+  })(dir);
+
+  const dimensions = {};
+  for (const rel of files) {
+    const isAsset = ASSET_EXT.test(rel);
+    const bytes = readFileSync(path.join(dir, rel));
+    if (isAsset && RASTER_EXT.test(rel)) {
+      try {
+        const { width, height } = imageSize(bytes);
+        if (width > 0 && height > 0) dimensions[rel] = { width, height };
+      } catch {
+        // unreadable image — skip
+      }
+    }
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: S3_BUCKET,
+        Key: `sites/${id}/${rel}`,
+        Body: isAsset ? new Uint8Array(bytes) : bytes.toString("utf8"),
+        ContentType: isAsset ? undefined : "text/plain; charset=utf-8",
+      }),
+    );
+  }
+  await s3.send(
+    new PutObjectCommand({
+      Bucket: S3_BUCKET,
+      Key: `sites/${id}/.dimensions.json`,
+      Body: JSON.stringify(dimensions),
+      ContentType: "application/json",
+    }),
+  );
+  console.log(`  ↳ ${files.length} files from ${dir} (local, sync path NOT exercised)`);
+  return files.length;
+}
+
+/**
+ * Copy a repo's docs (config + MDX + assets) into sites/{id}/… (mirrors syncSite).
+ *
+ * Deliberately fetches from GitHub rather than reading `examples/starter` off disk, even
+ * though that directory is now the source of truth for `papervine/starter`. The fetch *is*
+ * coverage: it walks the tree API and pulls raw blobs exactly as `syncSite` does, so seeding
+ * doubles as a smoke test of the real sync path. Reading locally would quietly delete that.
+ *
+ * `PAPERVINE_STARTER_DIR` overrides it with a local directory for offline work or when the
+ * unauthenticated GitHub rate limit bites — at the cost of not exercising sync.
+ */
 async function syncToStorage({ id, repoOwner, repoName, branch }) {
+  const localDir = process.env.PAPERVINE_STARTER_DIR;
+  if (localDir && repoOwner === "papervine" && repoName === "starter") {
+    return syncFromDisk({ id, dir: path.resolve(localDir) });
+  }
   const ghHeaders = { accept: "application/vnd.github+json", "user-agent": "papervine" };
   if (process.env.GITHUB_TOKEN) ghHeaders.authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
 

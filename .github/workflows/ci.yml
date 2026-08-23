@@ -37,6 +37,13 @@ jobs:
       - name: Smoke test (renderer + control-plane gate, no DB)
         run: npm test
 
+      # The forkable example site (examples/starter → papervine/starter). It's the first thing
+      # a prospective user renders, and `db:seed` builds its dev sites from it — including the
+      # reader-auth test bed — so a broken page here breaks local development too. Nothing
+      # verified it until it lived in this repo.
+      - name: Crawl the example docs site
+        run: node tests/crawl.mjs examples/starter
+
       # Packs, audits and installs the real `papervine` tarball, then serves docs/ from
       # it. Every other job runs with the workspace's hoisted node_modules in scope, so
       # this is the only one that can catch a break that exists solely once published —

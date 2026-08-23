@@ -1,32 +1,40 @@
 #!/usr/bin/env node
 /**
- * Publish the open-source half of this monorepo to the public `papervine/cli` repo.
+ * Publish the public-facing parts of this monorepo to their own GitHub repos.
+ *
+ * Two targets (`--target`), one mechanism:
+ *   - `cli`     → `papervine/cli`, the MIT CLI + render engine
+ *   - `starter` → `papervine/starter`, the forkable example docs site
  *
  * The monorepo is the single source of truth. This is a **one-directional** publish:
  * monorepo → public repo, never the reverse. That is deliberate — the renderer is shared
  * with the hosted control plane, so it has to stay here for renderer + control-plane
- * changes to land atomically. A submodule would invert the dependency; `git subtree split`
- * doesn't fit either, because the CLI's build needs `packages/renderer`, which lives
- * outside `apps/cli`. See SPEC §10.6.
+ * changes to land atomically, and the starter is what `db:seed` builds its test beds from,
+ * so it has to be versioned with the tests that depend on it. A submodule would invert the
+ * dependency; `git subtree split` doesn't fit either, because the CLI's build needs
+ * `packages/renderer`, which lives outside `apps/cli`. See SPEC §10.6.
  *
- * Because it's one-directional, **PRs on the public repo must never be merged there** — a
+ * Because it's one-directional, **PRs on a public repo must never be merged there** — a
  * merge would be silently reverted by the next run. Instead they get ported upstream (with
  * the contributor's authorship preserved) and flow back out. The divergence guard below
  * turns a merge-that-would-be-reverted into a loud failure instead of quiet data loss,
  * which is the whole reason it exists.
  *
  * Usage:
- *   node scripts/mirror-cli.mjs --dry-run          # build + validate, don't touch git remote
- *   node scripts/mirror-cli.mjs --initial          # first import (one squashed commit)
- *   node scripts/mirror-cli.mjs                    # replay new commits, then push
+ *   node scripts/mirror-cli.mjs --dry-run                     # build + validate, touch nothing
+ *   node scripts/mirror-cli.mjs --target starter --dry-run
+ *   node scripts/mirror-cli.mjs --initial                     # first import (one commit)
+ *   node scripts/mirror-cli.mjs --push                        # replay new commits, then push
  *
  * Flags:
+ *   --target <cli|starter>  Which repo to publish (default: cli).
  *   --dry-run      Build the snapshot and validate it; never clone/commit/push.
- *   --initial      Seed an empty public repo with a single "Initial import" commit.
+ *   --initial      Seed a repo with a single squashed "Initial import" commit.
  *   --push         Actually push (otherwise it commits locally and tells you the command).
+ *   --from <sha>   Publish this commit instead of HEAD (also skips the clean-tree check).
  *   --repo <url>   Override the target remote.
  *   --keep         Leave the work directory in place for inspection.
- *   --no-validate  Skip typecheck/unit in the staged snapshot (faster, less safe).
+ *   --no-validate  Skip the staged-snapshot checks (faster, less safe).
  */
 import { spawnSync } from "node:child_process";
 import {
@@ -57,7 +65,29 @@ const INITIAL = has("--initial");
 const DO_PUSH = has("--push");
 const KEEP = has("--keep");
 const VALIDATE = !has("--no-validate");
-const REMOTE = val("--repo", "git@github.com:papervine/cli.git");
+
+/**
+ * Two publish targets, same machinery.
+ *
+ *  - **cli** → `papervine/cli`: the MIT open-source half of the monorepo (the CLI and the
+ *    render engine it's built from), plus a generated workspace root, tests and CI.
+ *  - **starter** → `papervine/starter`: the forkable example docs site. It lives here rather
+ *    than being maintained over there because the monorepo *depends* on it — `db:seed` builds
+ *    its dev sites from it, including `starter-gated`, the reader-auth test bed whose
+ *    `internal/*` pages carry the `groups:` frontmatter that exercises SPEC §11.2. A test
+ *    fixture defined in a repo we don't version is a fixture that can change under the tests
+ *    that rely on it.
+ */
+const TARGET = val("--target", "cli");
+const TARGETS = {
+  cli: { remote: "git@github.com:papervine/cli.git", label: "the CLI + render engine" },
+  starter: { remote: "git@github.com:papervine/starter.git", label: "the example docs site" },
+};
+if (!TARGETS[TARGET]) {
+  console.error(`mirror: unknown --target "${TARGET}". Use one of: ${Object.keys(TARGETS).join(", ")}`);
+  process.exit(1);
+}
+const REMOTE = val("--repo", TARGETS[TARGET].remote);
 
 // Records which monorepo commit the public repo currently reflects. Committed into the
 // snapshot so the state lives with the artifact rather than in someone's shell history.
@@ -73,27 +103,38 @@ const MIRRORED_PATHS = ["apps/cli", "packages/renderer"];
 // rather than product code, so it travels with them. 68K.
 const MIRRORED_TEST_DATA = ["tests/fixtures"];
 
-// `examples/starter` is deliberately a hello-world, not a component gallery. The gallery
-// lives in one place — the public `papervine/starter` repo, which is what people fork — and
-// two human-facing showcases would drift, which is worse than one thin one: a stale gallery
-// misrepresents the product to exactly the people evaluating it. Nothing is lost in coverage,
-// because `tests/fixtures/components-extended.mdx` is mirrored too and asserts every
-// component, so the public repo's CI still exercises the full set. Don't "improve" this by
-// expanding it back into a second showcase.
+// The forkable example docs site. One directory, four jobs: the source published to
+// `papervine/starter`, the CLI mirror's `examples/starter`, the site `db:seed` seeds from, and
+// a crawl target in CI. It used to be duplicated — a gallery in the starter repo and a
+// hello-world in the CLI templates — which is exactly the drift this collapses.
+const STARTER = "examples/starter";
 
 // Everything whose change can alter the published snapshot, used to select which commits to
 // replay. Wider than the mirrored paths on purpose: the templates and this script *generate*
 // part of the output, so a fix to either has to be publishable. Without them a generator fix
 // reports "nothing to publish" while the public repo stays broken — which is exactly what
 // happened to the lockfile fix.
-const SOURCE_PATHS = [
-  ...MIRRORED_PATHS,
-  ...MIRRORED_TEST_DATA,
-  "tests/unit",
-  "tests/cli-package.mjs",
-  "scripts/mirror-cli",
-  "scripts/mirror-cli.mjs",
-];
+const SOURCE_PATHS = {
+  cli: [
+    ...MIRRORED_PATHS,
+    ...MIRRORED_TEST_DATA,
+    STARTER,
+    "tests/unit",
+    "tests/cli-package.mjs",
+    "scripts/mirror-cli",
+    "scripts/mirror-cli.mjs",
+  ],
+  // The starter repo is *only* the docs site, so only its own content and the generator can
+  // change what gets published.
+  starter: [STARTER, "scripts/mirror-cli.mjs"],
+}[TARGET];
+
+/** One-line description of what a snapshot contains, shaped to the target. */
+function summarize(info) {
+  return TARGET === "starter"
+    ? `${info.fileCount} files`
+    : `${info.fileCount} mirrored files, ${info.testCount} portable unit tests, v${info.version}`;
+}
 
 const log = (m) => console.log(m);
 const step = (m) => console.log(`\x1b[36m▶\x1b[0m ${m}`);
@@ -280,12 +321,47 @@ next-env.d.ts
 `;
 
 /** Build the complete public-repo tree for monorepo commit `sha` into `dest`. */
+/** Dispatch to the right builder for `--target`. */
 function buildSnapshot(sha, dest) {
+  return TARGET === "starter" ? buildStarterSnapshot(sha, dest) : buildCliSnapshot(sha, dest);
+}
+
+/**
+ * The starter repo is the docs site and nothing else — `examples/starter` lifted to the repo
+ * root. No generated manifest, no CI, no lockfile: there's nothing to install or build, which
+ * is the point of a docs repo you can fork and immediately render.
+ */
+function buildStarterSnapshot(sha, dest) {
+  rmSync(dest, { recursive: true, force: true });
+  mkdirSync(dest, { recursive: true });
+
+  const staged = path.join(dest, "__staged");
+  const fileCount = extractPath(sha, STARTER, staged);
+  if (!fileCount) fail(`no files under ${STARTER} at ${sha}`);
+
+  // `extractPath` writes repo-relative paths, so the content lands at
+  // <staged>/examples/starter/… — hoist it to the root the forked repo expects.
+  for (const entry of readdirSync(path.join(staged, STARTER))) {
+    cpSync(path.join(staged, STARTER, entry), path.join(dest, entry), {
+      recursive: true,
+      dereference: true,
+    });
+  }
+  rmSync(staged, { recursive: true, force: true });
+
+  writeFileSync(path.join(dest, STAMP), `${sha}\n`);
+  return { fileCount, version: "" };
+}
+
+function buildCliSnapshot(sha, dest) {
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dest, { recursive: true });
 
   let fileCount = 0;
-  for (const rel of [...MIRRORED_PATHS, ...MIRRORED_TEST_DATA]) {
+  // `examples/starter` rides along at the same path it has here, so the CLI repo's
+  // `npm run dev -- examples/starter` and its `test:cli` fixture are the *same* docs site
+  // that gets published to papervine/starter. One copy, no drift.
+  for (const rel of [...MIRRORED_PATHS, ...MIRRORED_TEST_DATA, STARTER]) {
     fileCount += extractPath(sha, rel, dest);
   }
 
@@ -319,7 +395,6 @@ function buildSnapshot(sha, dest) {
   cpSync(path.join(dest, "apps/cli/LICENSE"), path.join(dest, "LICENSE"));
 
   cpSync(path.join(TEMPLATES, "CONTRIBUTING.md"), path.join(dest, "CONTRIBUTING.md"));
-  cpSync(path.join(TEMPLATES, "examples"), path.join(dest, "examples"), { recursive: true });
   mkdirSync(path.join(dest, ".github/workflows"), { recursive: true });
   cpSync(path.join(TEMPLATES, "workflows"), path.join(dest, ".github/workflows"), {
     recursive: true,
@@ -344,6 +419,8 @@ function buildSnapshot(sha, dest) {
 // ---------------------------------------------------------------------------
 
 function validateSnapshot(dir) {
+  if (TARGET === "starter") return validateStarterSnapshot(dir);
+
   step("validating the snapshot (npm ci + typecheck + unit)");
   // `npm ci`, not `npm install` — it's what the public repo's CI runs, and it fails if the
   // generated lockfile is out of sync with the generated package.json rather than quietly
@@ -363,6 +440,48 @@ function validateSnapshot(dir) {
     ok(label);
   }
   log("  (test:cli is left to the public repo's CI — it runs a full build)");
+}
+
+/**
+ * There is nothing to install or typecheck in a docs repo, so validate what can actually be
+ * wrong: `docs.json` has to parse, and every page its navigation names has to exist. A nav
+ * entry pointing at a deleted file is the realistic breakage here — it renders as a 404 in a
+ * repo people fork, and nothing else would catch it before they did.
+ *
+ * Full rendering is covered by `node tests/crawl.mjs examples/starter` in CI, which serves the
+ * site through the real renderer.
+ */
+function validateStarterSnapshot(dir) {
+  step("validating the snapshot (docs.json + every page it references)");
+
+  const configPath = path.join(dir, "docs.json");
+  if (!existsSync(configPath)) fail(`no docs.json in the snapshot`);
+  let config;
+  try {
+    config = JSON.parse(readFileSync(configPath, "utf8"));
+  } catch (err) {
+    fail(`docs.json does not parse: ${err.message}`);
+  }
+  ok("docs.json parses");
+
+  const slugs = new Set();
+  (function walk(node) {
+    if (typeof node === "string") return slugs.add(node);
+    if (Array.isArray(node)) return node.forEach(walk);
+    if (node && typeof node === "object") {
+      for (const key of ["tabs", "groups", "pages", "navigation", "anchors"]) {
+        if (node[key]) walk(node[key]);
+      }
+    }
+  })(config.navigation ?? config);
+
+  const missing = [...slugs].filter(
+    (slug) => !existsSync(path.join(dir, `${slug}.mdx`)) && !existsSync(path.join(dir, `${slug}.md`)),
+  );
+  if (missing.length) {
+    fail(`docs.json references pages that don't exist:\n  ${missing.join("\n  ")}`);
+  }
+  ok(`${slugs.size} navigation pages all present`);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,7 +511,7 @@ try {
   if (DRY_RUN) {
     step(`building snapshot of ${headSha.slice(0, 12)} (dry run)`);
     const info = buildSnapshot(headSha, STAGE);
-    ok(`${info.fileCount} mirrored files, ${info.testCount} portable unit tests, v${info.version}`);
+    ok(summarize(info));
     if (VALIDATE) validateSnapshot(STAGE);
     log(`\nSnapshot left at:\n  ${STAGE}\n`);
     log("Nothing was pushed. Re-run without --dry-run to publish.");
@@ -541,7 +660,7 @@ try {
     published++;
     log(`  ${published}/${commits.length} ${subject.slice(0, 68)}`);
     if (INITIAL) {
-      ok(`${info.fileCount} mirrored files, ${info.testCount} portable unit tests`);
+      ok(summarize(info));
     }
   }
 
