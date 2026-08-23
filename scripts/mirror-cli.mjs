@@ -73,6 +73,14 @@ const MIRRORED_PATHS = ["apps/cli", "packages/renderer"];
 // rather than product code, so it travels with them. 68K.
 const MIRRORED_TEST_DATA = ["tests/fixtures"];
 
+// `examples/starter` is deliberately a hello-world, not a component gallery. The gallery
+// lives in one place — the public `papervine/starter` repo, which is what people fork — and
+// two human-facing showcases would drift, which is worse than one thin one: a stale gallery
+// misrepresents the product to exactly the people evaluating it. Nothing is lost in coverage,
+// because `tests/fixtures/components-extended.mdx` is mirrored too and asserts every
+// component, so the public repo's CI still exercises the full set. Don't "improve" this by
+// expanding it back into a second showcase.
+
 // Everything whose change can alter the published snapshot, used to select which commits to
 // replay. Wider than the mirrored paths on purpose: the templates and this script *generate*
 // part of the output, so a fix to either has to be publishable. Without them a generator fix
