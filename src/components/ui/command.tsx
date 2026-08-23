@@ -19,7 +19,7 @@ import { cn } from "@/lib/utils";
 function Command({ className, ...props }: React.ComponentProps<typeof CommandPrimitive>) {
   return (
     <CommandPrimitive
-      // Transparent: the surface comes from the portalled PopoverContent's `db-glass`.
+      // Transparent by design: the surface comes from the portalled PopoverContent.
       className={cn("flex w-full flex-col overflow-hidden rounded-xl", className)}
       {...props}
     />

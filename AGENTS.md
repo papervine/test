@@ -366,6 +366,53 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   short-circuits on the same variable it's reporting about. If you add a layer, verify it
   actually starts (`npm run dev` prints `running N process(es)`) rather than trusting the
   predicate to be reached.
+- **`next dev` rewrites `next-env.d.ts` AND `tsconfig.json` to point at its distDir — so the last
+  harness you ran owns your typecheck.** Next wires up generated route types by editing two files
+  in the checkout: `next-env.d.ts` gets `import "./<distDir>/dev/types/routes.d.ts"`, and
+  `tsconfig.json` gains `<distDir>/types/**` includes. Each harness runs with its own
+  `NEXT_DIST_DIR`, so after `node tests/crawl.mjs` those files point at `.next-crawl` — a snapshot
+  frozen at that moment. Add a route, typecheck, and Next's route-export validator rejects it with
+  `params: Promise<unknown>` and nothing naming the cause; the generated types in `.next` are
+  perfectly correct and simply aren't the ones being read. tsconfig `exclude` **cannot** save you
+  here — `next-env.d.ts` imports the file explicitly, and an import always beats exclude. Fixes,
+  in place on all three paths: smoke and crawl snapshot/restore both files (`protectNextEnv` in
+  `tests/dev-lock.mjs`), `npm run test:e2e` goes through `scripts/e2e.mjs` which canonicalises them
+  after Playwright exits (`tests/e2e/restore-config.mjs`), and tsconfig excludes `.next-*/**` so the
+  `**/*.ts` glob can't sweep stale harness types back in. Two e2e approaches that DON'T work, so
+  nobody retries them: a `globalTeardown` hook runs *before* Playwright stops the webServer, so
+  `next dev` rewrites the files again on its way out; and snapshotting at config load fails because
+  Playwright imports the config more than once, re-snapshotting the already-rewritten files. If you ever see `Promise<unknown>` for params on a route you just
+  added, check what `next-env.d.ts` imports before touching the route. Also: routes here
+  hand-write `params: Promise<{…}>` rather than using the generated `LayoutProps<…>`/`PageProps<…>`
+  — CI typechecks BEFORE building, so on a clean checkout those helpers don't exist yet.
+- **The index page has two spellings — normalize before comparing a nav href to a page slug.**
+  `listPageSlugs()` reports the index page as **`""`** (its route is `/`, see `s3-source.ts`),
+  while `docs.json` writes it as **`"index"`** and `buildNav` emits the href **`/index`**. So any
+  code that diffs "pages that exist" against "pages in the nav" by raw string finds the index page
+  in neither set and reports it as unlisted — with an empty label. This is what made the nav
+  tree's "Add existing page" submenu look *empty*: on a site where every other page was listed,
+  a single blank row was the whole menu. Compare through `canonicalSlug` / `unlistedPageSlugs`
+  (`src/lib/nav-edit.ts`), and write the canonical form into `docs.json` — an empty nav entry
+  resolves to nothing.
+- **A spec's `process.env.X ?? fallback` IS the fallback — `test:e2e` loads no env file.**
+  `npm run test:e2e` is a bare `playwright test`, so the *spec* process has no `S3_*` (the
+  config's `webServer.env` block configures the **app**, not the test). `editor.spec.ts` built
+  its S3 client from `process.env.S3_ACCESS_KEY_ID ?? "minioadmin"` and therefore always used
+  `minioadmin`, which this MinIO doesn't have — every test in the file died in `beforeAll` with
+  `InvalidAccessKeyId`, which reads like "MinIO is down" rather than "the constant is wrong."
+  Shared e2e infrastructure values live in **`tests/e2e/constants.ts`** (`TEST_S3`) and are read
+  by both `playwright.config.ts` and the specs, so there's one definition to be right. A
+  defaulted env read in a spec is a smell: prefer an imported constant, since the default is the
+  only branch that ever runs.
+- **An order-dependent e2e assertion passes alone and fails in the file.** The publish-toast spec
+  asserted the `"No open edit session for this branch."` message, which is only true when no
+  earlier test in the file has opened one — and each load-then-type test does. Opening the editor
+  alone doesn't create a session (writing does), so it passed in isolation and got whatever a
+  real publish returned in file order. Specs share one Postgres and run `workers: 1` in
+  declaration order: **set up the precondition you assert on** (this one now deletes open
+  sessions + their `draft_file` rows first) rather than inheriting it from whatever ran before.
+  Related: this file's failing set genuinely shifts between runs, so re-run before concluding
+  your change broke a spec.
 - **Tests run alongside `npm run dev` — each harness owns its own `distDir`.** Next allows one
   `next dev` per *distDir* (it holds `<distDir>/dev/lock`), and two dev servers sharing one
   output tree also interleave their compiled chunks and manifests — which is how running the
