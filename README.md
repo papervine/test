@@ -53,11 +53,18 @@ papervine dev ./docs       # preview ./docs
 papervine dev -p 4000      # custom port
 ```
 
-Pre-release, invoke it via `npm run papervine -- dev ./docs`. Once published: `npx papervine dev`. Under the hood it sets `PAPERVINE_CONTENT` to the target folder, so the env var works directly too:
+Under the hood it sets `PAPERVINE_CONTENT` to the target folder, so the env var works directly too:
 
 ```bash
 PAPERVINE_CONTENT=/path/to/docs-repo npm run dev
 ```
+
+**Two different programs, on purpose:**
+
+- `npm run papervine -- dev ./docs` (`bin/papervine.mjs`) is the **contributor** tool. It runs this monorepo's app — control plane included — under `next dev`, so you get HMR while working on the renderer.
+- `npx papervine dev ./docs` ([`apps/cli`](./apps/cli)) is the **published** CLI: renderer only, no control plane, shipped prebuilt so it starts in about a second with no build toolchain. Edits appear on refresh rather than via HMR. See [`apps/cli/README.md`](./apps/cli/README.md).
+
+The published CLI is currently the `papervine@0.0.1` placeholder on npm; `0.1.0` is built and gated but not yet released (see SPEC §10.6).
 
 ## Migrating existing docs
 

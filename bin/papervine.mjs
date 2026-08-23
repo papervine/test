@@ -1,7 +1,13 @@
 #!/usr/bin/env node
-// Papervine CLI — minimal `papervine dev` for previewing any docs repo locally.
-// Mirrors `docs dev`: run it inside a folder of MDX + docs.json and it
-// boots the Papervine renderer pointed at that folder (SPEC.md §10, CLI parity).
+// Papervine dev preview — the CONTRIBUTOR tool, run as `npm run papervine -- dev <dir>`
+// or `node bin/papervine.mjs dev <dir>`. It boots the *monorepo's* app (control plane
+// included) against a content dir, so you get `next dev` and real HMR while working on
+// the renderer.
+//
+// This is NOT the published CLI. That one is `apps/cli/bin/papervine.mjs` — what
+// `npx papervine` runs: a lean, prebuilt, renderer-only package with no control plane
+// (SPEC §10.6). The two are intentionally different programs; if you are changing what
+// end users get, you want the other file.
 
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";

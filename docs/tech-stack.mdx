@@ -23,7 +23,7 @@ but owns the parts that make it a multi-tenant platform.
 | MDX | **Hybrid**: serializer output + `@mdx-js/mdx` `run` | High-fidelity highlighting/snippets, plus a catchable render that never 500s |
 | Syntax highlighting | **Shiki** | Fast, accurate, dual light/dark themes |
 | API reference | `@scalar/openapi-parser` + a native renderer | In-nav endpoint pages, not a foreign embed |
-| CLI | `papervine dev <dir>` (`bin/papervine.mjs`) | Preview any MDX + `docs.json` repo locally |
+| CLI | `papervine dev <dir>` (`apps/cli`, published prebuilt) | Preview any MDX + `docs.json` repo locally |
 | Styling | **Tailwind CSS** + CSS variables | Theme tokens come from `docs.json` |
 | Search | **Orama** (Algolia optional) | Embeddable, multi-tenant |
 | Database | **Postgres** + `pgvector` (hosted: **Neon**) | Tenants, config, embeddings; serverless Postgres for the Vercel deploy |

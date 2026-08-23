@@ -1,8 +1,8 @@
 {
   "name": "@papervine/mdx-prosemirror",
   "version": "0.1.0",
-  "description": "Bidirectional MDX <-> ProseMirror conversion for Papervine's collaborative WYSIWYG editor. Pure and isomorphic (no React, no server-only).",
-  "private": false,
+  "description": "Bidirectional MDX <-> ProseMirror conversion for Papervine's collaborative WYSIWYG editor. Pure and isomorphic (no React, no server-only). Internal: not published to npm.",
+  "private": true,
   "type": "module",
   "license": "MIT",
   "main": "./index.ts",

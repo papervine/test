@@ -5,9 +5,8 @@ public: true
 ---
 
 `papervine` is a **local development tool**. You run it inside a folder of MDX + a
-`docs.json` and it boots the Papervine renderer pointed at that folder, with live reload —
-the same renderer that powers hosted Papervine sites, so what you see locally is what you
-ship.
+`docs.json` and it serves that folder with the Papervine renderer — the same renderer that
+powers hosted Papervine sites, so what you see locally is what you ship.
 
 ```bash
 npx papervine dev          # preview ./ (must contain docs.json)
@@ -15,23 +14,58 @@ npx papervine dev ./docs   # preview a subfolder
 npx papervine dev -p 4000  # preview on a specific port
 ```
 
+Requires Node 20.9 or newer.
+
 <Note>
   The CLI is a previewer, not a deployer — it has **no `deploy` and no `login`**. Publishing
   happens through Git (push your repo) and the hosted control plane, not the CLI.
 </Note>
 
+## Options
+
+| Flag | Description | Default |
+| --- | --- | --- |
+| `-p, --port <port>` | Port to serve on | `3000` |
+| `-h, --help` | Show help | — |
+
+Without `--port`, a busy port is skipped and the next free one is used. With an explicit
+`--port`, a busy port is an error instead — an explicit request shouldn't be quietly
+redirected somewhere you weren't told about.
+
+The preview binds loopback (`127.0.0.1`) rather than every network interface, so it isn't
+reachable from the rest of the network by default. Set `HOSTNAME=0.0.0.0` when you need to
+reach it from outside the machine, such as from a container host.
+
+## Editing your docs
+
+Pages render per request and read your files from disk each time, so **saving a file and
+refreshing the browser shows the change**. There is no hot reload — a refresh is the update.
+
+That's a consequence of how the CLI ships: the renderer is **prebuilt** into the package.
+Nothing is compiled on your machine, so there's no build toolchain to install and no
+first-run compile — the preview starts serving in about a second. The tradeoff is the
+missing hot reload.
+
 ## What ships in the CLI
 
-The CLI is just the **renderer**. It depends on `@papervine/renderer` (the shared render
-engine — MDX compilation, `docs.json` parsing, navigation, the component set, OpenAPI
-endpoint pages) plus Next.js and React. It deliberately carries **none** of the hosted
-control plane — no authentication, database, object storage, realtime, or AI assistant.
-Those are services of the hosted product, not things a local previewer needs, so they're
-absent from the package entirely rather than disabled at runtime.
+The CLI is just the **renderer** — MDX compilation, `docs.json` parsing, navigation, the
+component set, OpenAPI endpoint pages — compiled into the package as one self-contained
+application.
+
+It deliberately carries **none** of the hosted control plane — no authentication, database,
+object storage, realtime, or AI assistant. Those are services of the hosted product, not
+things a local previewer needs, so they're absent from the package entirely rather than
+disabled at runtime. Nothing to install, and nothing to audit.
 
 A practical consequence: the navbar's search palette and "Ask AI" button are control-plane
 features supplied by the host app as optional slots. The CLI leaves them empty, so a local
 preview shows the docs chrome (logo, navigation, sidebar, table of contents) without them.
+
+<Note>
+  Because the stylesheet is compiled when the package is built, arbitrary Tailwind utility
+  classes written in your own MDX aren't in it. Use the built-in components and `docs.json`
+  theming instead.
+</Note>
 
 ## Trust and execution
 
@@ -39,18 +73,31 @@ preview shows the docs chrome (logo, navigation, sidebar, table of contents) wit
 That's expected for your own docs, but it means you should only run the CLI on docs repos you
 trust, the same way you'd only run `npm install` in a project you trust.
 
-## How it relates to the renderer package
+## Troubleshooting
+
+**`no docs.json in <dir>`** — the CLI is a docs-repo previewer, so it needs a `docs.json` at
+the root of the folder you point it at. Docs usually live in a subdirectory, so pass it:
+`papervine dev ./docs`.
+
+**`port 3000 is already in use`** — you passed an explicit `--port` that's taken. Choose
+another, or drop the flag and let the CLI pick the next free port.
+
+**A component renders as plain text** — unknown components degrade to their children rather
+than failing the page, which is deliberate. Check the name against the
+[component library](/rendering/components).
+
+## How it relates to the hosted product
 
 Papervine is one repository that produces two products from a shared core:
 
 <CardGroup cols={2}>
-  <Card title="@papervine/renderer">
-    The render engine: compiles MDX, parses `docs.json`, builds navigation, renders the
-    component set and OpenAPI pages. Shared by both products below.
+  <Card title="The render engine">
+    Compiles MDX, parses `docs.json`, builds navigation, renders the component set and
+    OpenAPI pages. An internal library, shared by both products.
   </Card>
   <Card title="papervine (CLI)">
-    A thin app that mounts the renderer over a local folder for `papervine dev`. The lean
-    package behind `npx papervine`.
+    A thin app that mounts the render engine over a local folder for `papervine dev`,
+    published prebuilt. The one package behind `npx papervine`.
   </Card>
 </CardGroup>
 
@@ -58,3 +105,9 @@ The hosted control plane consumes the same `@papervine/renderer`, then adds mult
 Git sync, auth, analytics, and the assistant on top. Because the renderer is one shared
 engine, a docs repo renders identically whether you preview it locally with the CLI or
 deploy it to a hosted site.
+
+## Roadmap
+
+`dev` is the whole command surface today. Planned next: `broken-links` (dead internal links),
+`validate` (a strict config/frontmatter gate for CI), `openapi-check`, `new` (scaffold from
+the starter template), and `build` (static export).

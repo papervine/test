@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { loadPage, listPageSlugs, loadConfig } from "@papervine/renderer/lib/content";
+import { loadPage, loadConfig } from "@papervine/renderer/lib/content";
 import { buildNav, findGroupLabel } from "@papervine/renderer/lib/nav";
 import { loadApiCatalog } from "@papervine/renderer/lib/openapi";
 import { Mdx, extractToc } from "@papervine/renderer/lib/mdx";
@@ -9,12 +9,16 @@ import { EndpointReference } from "@papervine/renderer/components/api/EndpointRe
 
 type Params = { slug?: string[] };
 
-export async function generateStaticParams(): Promise<Params[]> {
-  const slugs = await listPageSlugs();
-  const config = await loadConfig();
-  const opSlugs = [...(await loadApiCatalog(config)).keys()];
-  return [...slugs, ...opSlugs].map((s) => ({ slug: s === "" ? [] : s.split("/") }));
-}
+// The CLI ships this app *prebuilt* (SPEC §10.6), and the folder it renders is only
+// known at runtime, from `PAPERVINE_CONTENT`. So nothing may be prerendered: a page
+// baked at publish time would have been rendered against the build machine's empty
+// content dir. Rendering per request is also what makes an edited MDX file show up
+// on refresh — `loadPage` re-reads it from disk every time.
+//
+// This is why there's no `generateStaticParams` here. Enumerating the route tree at
+// build time is a static-export concern, and static export belongs to the (not yet
+// shipped) `papervine build` command, which will run against a known content dir.
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,

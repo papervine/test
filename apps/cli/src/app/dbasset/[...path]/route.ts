@@ -10,6 +10,11 @@ import type { NextRequest } from "next/server";
  * `public/`. This route streams them from the content dir; `middleware.ts`
  * rewrites asset requests here.
  */
+// Prebuilt at publish time, pointed at a folder only known at runtime — so this
+// must never be prerendered or cached against the build machine's content dir.
+// See the matching note in `(docs)/[[...slug]]/page.tsx`.
+export const dynamic = "force-dynamic";
+
 const CONTENT_DIR = path.resolve(
   process.env.PAPERVINE_CONTENT ?? path.join(process.cwd(), "content"),
 );

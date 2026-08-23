@@ -3234,7 +3234,7 @@ order, smallest lift first):
 
 | Command | Does | Reuses |
 | --- | --- | --- |
-| `papervine dev [dir]` | Local preview w/ live reload (**built**) | `bin/papervine.mjs` → `next dev` + `PAPERVINE_CONTENT` |
+| `papervine dev [dir]` | Local preview; edits show on refresh, no HMR (**built, prebuilt tarball**) | `bin/papervine.mjs` → the packed `server/server.js` + `PAPERVINE_CONTENT` |
 | `papervine broken-links [dir]` | Report dead internal links / missing pages | `tests/crawl.mjs` link-graph |
 | `papervine openapi-check [dir]` | Validate referenced OpenAPI specs | `src/lib/openapi.ts` + `@scalar/openapi-parser` |
 | `papervine validate [dir]` | Strict-mode config + frontmatter + nav report (CI gate) | `src/lib/config.ts` run in *report* mode instead of its lenient warn-don't-throw default |
@@ -3310,6 +3310,177 @@ the hosted API over HTTPS, they don't embed it.
 > `@papervine/renderer@0.1.0` (26 files / 23.8 kB), `papervine@0.1.0` (12 files / 7.3 kB).
 > **Not done on purpose:** the actual `npm publish` (awaiting go) — `papervine@0.1.0` will land
 > over the `0.0.1` placeholder.
+>
+> **Status (2026-08-23):** made the CLI actually publishable, and **changed how it ships** —
+> the tarball now carries a **prebuilt** renderer instead of source + a runtime `next dev`.
+> Publish is still deferred (see the handover at the end of this note).
+>
+> **Why prebuild.** Shipping `src/` + configs and running `next dev` from inside
+> `node_modules` meant every user paid a ~40s first-run compile *and* needed a TypeScript
+> toolchain the package never declared — Next would have tried to self-install one into the
+> npx cache. So `prepack` now runs `next build` with `output: "standalone"` and packs the
+> result; `bin/papervine.mjs` spawns the compiled `server/server.js`. Measured: **ready in
+> ~1.3s** from a real tarball install, no toolchain fetched, `dependencies` empty. Cost:
+> **23.9 MB packed / 102 MB unpacked** (vs. 7.3 kB), and **no HMR** — pages are
+> `force-dynamic` and re-read content per request, so an edit appears on refresh. `standalone`
+> specifically (not a plain build) because it's the only mode designed to be *relocated* to
+> another machine: it traces imports and copies a pruned `node_modules`, which is what lets
+> the package declare zero runtime deps.
+>
+> **Four bugs that only exist once published**, none visible to any pre-existing suite —
+> they all pass because the workspace's hoisted `node_modules` is in scope:
+> - **`shiki` was imported but never declared** by `@papervine/renderer` (`lib/highlight.ts`,
+>   added after the dep audit this section records as "exact — nothing missing"). Resolved by
+>   hoisting in the monorepo; unresolvable standalone. Now declared, pinned to `1.29.2`.
+> - **Turbopack symlinks its `serverExternalPackages` aliases.** It rewrites
+>   `@mintlify/mdx` to a content-hashed `build/node_modules/@mintlify/mdx-<hash>` and makes it
+>   a *symlink*. `npm pack` drops symlinks, so the tree ran fine from a checkout and 500'd
+>   every page once installed from a tarball ("Failed to load external module"). Fixed by
+>   copying with `dereference: true`, and prepack now **fails if any symlink survives** into
+>   the packed output.
+> - **The build reached across the packaging boundary and leaked a production secret.**
+>   Turbopack's project root resolves to the monorepo root (it *must* equal
+>   `outputFileTracingRoot`, which has to be the root for the workspace renderer to be traced —
+>   Next warns and overrides otherwise), so the CLI compiled the **web app's**
+>   `src/instrumentation.ts`, and with it `sentry.server.config.ts` and its **hardcoded
+>   production DSN**, into the tarball. Every `npx papervine` user's errors would have reported
+>   into the hosted Sentry project, from a public artifact. Fixed with a deliberately empty
+>   `apps/cli/src/instrumentation.ts` that shadows it — the CLI has no telemetry by design.
+>   This is the sharpest argument yet for §10.6's "physically absent, not disabled at runtime":
+>   a `files` allowlist would not have caught it either, because the leak was *compiled in*.
+> - **`loadConfig()` throws with no docs repo in scope**, which is right for a tenant site and
+>   fatal at CLI build time (Next always prerenders `/_not-found`, which renders the root
+>   layout). Handled app-locally via `loadBuildSafeConfig()` rather than softening shared
+>   renderer semantics; the fallback is unreachable at runtime because the bin refuses to start
+>   without a `docs.json`.
+>
+> **Also fixed/decided:** `packages/renderer`'s stale `phishy/papervine` repo URL (provenance
+> validates it); `next` aligned to `^16.3.0` across the workspace (was `^15.5.19`, so the
+> lockfile carried a second nested `next@15.5.23`) and `engines.node` to `>=20.9.0`;
+> `publishConfig` added; **version `0.1.0`**, not the `0.2.0` briefly in the tree, since this
+> section and the published placeholder both promise `0.1.0`. `outputFileTracingExcludes` was
+> tried for the over-trace and **does not work** — the whole-project fallback triggered by
+> `content.ts`'s runtime-computed reads ignores it (verified on 16.3) — so prepack prunes
+> explicitly, and only *our* sources: pruning `node_modules` by size looked free and broke
+> everything, because `@mintlify/mdx` imports `typescript` at runtime for twoslash.
+>
+> **Tests.** The bin had **zero** coverage. Now: its decision core is extracted to
+> `apps/cli/bin/args.mjs` and unit-tested (`tests/unit/cli-args.test.ts`, 15 cases), and
+> `tests/cli-package.mjs` is a **clean-room gate** — packs both tarballs, audits the listing
+> for control-plane code and for a leaked Sentry DSN, installs into a temp dir *outside* the
+> repo, and serves `docs/` through the installed binary (pages, nested nav, stylesheet, a
+> docs-repo asset, a 404). It is the only layer that can see this whole bug class, so it gates
+> the release. Deliberately out of `npm test` (it runs a full build).
+>
+> **Verified:** root + `apps/cli` typecheck clean; unit **981/981**; smoke all green; crawl of
+> `docs/` **41/41, 0 × 500**; clean-room gate green; browser-checked light **and** dark with a
+> **clean console**; an MDX edit confirmed visible on refresh.
+>
+> **Reversal: `@papervine/renderer` is NOT published** (`private: true`). This section's
+> earlier plan to publish it (and the "publish vs. `bundledDependencies`" deliberation) was
+> settled by the prebuild decision, which made the question moot: the renderer is *compiled
+> into* the CLI tarball, so it's a build-time dependency and nothing installs it. Publishing it
+> would commit us to a second versioned public artifact plus a stable subpath API it doesn't
+> have (`index.ts` is `export {}`, deep imports only, no `exports` map, ships raw TSX) to serve
+> an embedder who doesn't exist yet. The publish workflow ships one package; revisit if someone
+> actually wants to embed the renderer. Consequence worth noting: an undeclared renderer
+> dependency (the `shiki` bug) now surfaces as a missing module *inside the bundle* rather than
+> a failed install — which is why the clean-room gate has to exercise the built tarball, not a
+> dependency listing.
+>
+> **The published tarball contains no source.** Only compiled bundles; the four shipped
+> `.js.map` files are empty (0 `sources`, 0 `sourcesContent`), so no original TS/TSX is
+> distributed. Relevant to the source-availability question, and worth re-checking if the build
+> ever turns on productionBrowserSourceMaps or ships `build/server/chunks/*.map` — those *do*
+> carry full `sourcesContent` (it's how the Sentry DSN leak above was read back out).
+>
+> **The publish workflow lives in `papervine/cli`, not here.** It moved out of
+> `.github/workflows/publish.yml` (deleted) into the mirror templates
+> (`scripts/mirror-cli/workflows/publish.yml`), so it is generated into the public repo and
+> triggered by a `v*` tag *there*, gated on that repo's typecheck + unit + `test:cli`. Reason:
+> npm validates that a package's `repository` field matches the repo the workflow runs in
+> ("Ensure your package.json is configured with a public repository that matches
+> (case-sensitive) where you are publishing with provenance from"), and `apps/cli/package.json`
+> points at `papervine/cli` — a publish from the monorepo is rejected on that mismatch. It's
+> also the right home on the merits: an attestation is only worth something if it points at a
+> repo the reader can open. So `NPM_TOKEN` goes on **`papervine/cli`**, not here.
+>
+> **Correction — provenance does NOT require a public git repository.** An earlier version of
+> this note claimed it did; that was wrong, and it matters because it made "flip the repo
+> public" look like a precondition for shipping. The only visibility gate npm enforces is on
+> the **package** (`libnpmpublish/lib/publish.js`, `ensureProvenanceGeneration`: `if
+> (!visibility.public && opts.provenance === true && opts.access !== 'public')` — that
+> `visibility` is fetched from `/-/package/<name>/visibility`, the npm package, not the repo).
+> The real prerequisites are: a supported CI (GitHub Actions or GitLab), `id-token: write`, and
+> `--access public`. So the CLI can be mirrored, reviewed, and even published while
+> `papervine/cli` is still private; going public is about provenance being *useful* to a
+> reader, not about permission. Note that `--provenance` does write the repo URL and commit sha
+> into Sigstore's public transparency log — identifiers only, not code.
+>
+> **Decision (2026-08-23): the CLI is MIT open source in its own public repo,
+> `papervine/cli`.** Not the monorepo made public — that carries this SPEC, pricing/billing
+> internals and the whole control plane, and public git history is irreversible. The CLI's
+> `repository`/`homepage`/`bugs` now point at `papervine/cli` (and the `directory` field is
+> dropped, since the CLI sits at that repo's root), which is also what unblocks `--provenance`.
+> `LICENSE` (MIT) lives at **`apps/cli/LICENSE`**, deliberately *not* the repo root: a root
+> LICENSE would assert MIT over the control plane too.
+>
+> **Consequence to be explicit about: this open-sources the render engine, not just the CLI.**
+> `apps/cli` is 19 files of glue; the substance is `packages/renderer` (38 files), and a public
+> CLI repo that anyone can actually build has to contain it. That's a coherent open-core split —
+> the moat is the hosted control plane (multi-tenancy, Git sync, auth, analytics, assistant,
+> billing), none of which is in either package — but it is a bigger giveaway than "the CLI" makes
+> it sound, and it is the reason the packaging boundary in this section is worth keeping exact.
+>
+> **Sync mechanism: a one-directional publish mirror, no submodules and no subtree**
+> (`scripts/mirror-cli.mjs`, `npm run mirror:cli`). The monorepo stays the single source of
+> truth. The monorepo must never *depend* on the public repo, which is exactly what a submodule
+> would create; `git subtree split` is also wrong here because the CLI's build needs
+> `packages/renderer`, which lives outside `apps/cli`.
+>
+> The snapshot is `apps/cli` + `packages/renderer` + `tests/fixtures` + the portable subset of
+> `tests/unit` + `tests/cli-package.mjs`, plus a generated two-package workspace root, tsconfig,
+> vitest config, `.npmrc` (`legacy-peer-deps` — a plain `npm ci` fails without it), CI, a
+> CONTRIBUTING explaining the PR flow, a PR-greeting action, and `examples/starter` (which is
+> both the CI fixture and the clone-and-run asset). It's read out of git objects, not the
+> worktree, and file modes are carried across — `git show` alone drops the executable bit on
+> `bin/papervine.mjs`. Verified: the generated repo installs, typechecks, runs 18 unit test files
+> (123 tests), and passes its own `test:cli` end-to-end.
+>
+> **The portable-test filter resolves paths rather than pattern-matching.** A first version
+> rejected only the `@/` alias and let `draft-source.test.ts` through, which reaches the private
+> app as `../../src/lib/draft-source`.
+>
+> **PRs: reviewed on the public repo, never merged there, ported upstream.** A merge on the
+> public repo would be silently reverted by the next sync, so the mirror carries a **divergence
+> guard** — it rebuilds the snapshot for the sha recorded in `.mirror-source`, diffs it against
+> the public tree, and refuses to publish on any mismatch, telling you to port those commits
+> first. Silent data loss becomes a loud, actionable stop. It also **replays one public commit
+> per upstream commit, preserving author/date/message**, so the public repo has real history and
+> contributors get real credit (GitHub matches the contribution graph by commit email) — that's
+> what makes "closed, not merged" a fair deal. And it **never force-pushes**: that would break
+> open PRs' ability to rebase and would paper over the very divergence the guard exists to
+> surface. Tripwire: if porting PRs becomes routine, split for real — move both packages out and
+> have the hosted app consume the renderer. That costs atomic renderer + control-plane commits,
+> which is why it's premature now, not wrong forever.
+>
+> **Second undeclared dependency, found by the mirror: `mermaid`** (`components/mdx/Mermaid.tsx`).
+> It hid from the `shiki` audit because it's a **dynamic** `await import("mermaid")`, and a
+> `from "…"` grep doesn't match that — the audit command in `packages/renderer/README.md` now
+> matches `import(`/`require` too. Note it also hid from `npm run test:cli`: the tarball is built
+> *inside* the monorepo, where hoisting still resolves it, so the published CLI was fine and only
+> a build outside the workspace fails. That's precisely the gap `mirror:cli --dry-run` closes, and
+> it's why renderer import changes now owe both gates.
+>
+> **Reversal of the 2026-06-14 "strip the incumbent from user-facing surfaces" note (below):** on
+> **discovery** surfaces the competitor names are the point — they are how people search. The npm
+> `description`/`keywords`, the public repo description/topics, and the CLI README's
+> Compatibility section now say "docs.json-compatible" and "alternative to GitBook / ReadMe"
+> deliberately. This is nominative comparative use (describing real interop), carries a
+> not-affiliated disclaimer, and must never use another product's logo or imply endorsement.
+> **In-product docs prose stays neutral** — a docs page explaining a feature by reference to a
+> competitor reads worse and ages badly. So: name them where people are searching, not where
+> people are already reading.
 
 ### 10.7 Error resilience (route boundaries)
 

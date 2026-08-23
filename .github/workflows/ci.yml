@@ -37,6 +37,16 @@ jobs:
       - name: Smoke test (renderer + control-plane gate, no DB)
         run: npm test
 
+      # Packs, audits and installs the real `papervine` tarball, then serves docs/ from
+      # it. Every other job runs with the workspace's hoisted node_modules in scope, so
+      # this is the only one that can catch a break that exists solely once published —
+      # an undeclared dep, a symlinked Turbopack external, or the monorepo's own Sentry
+      # config compiled into the CLI. Runs a full `next build`, so it's the slow one.
+      - name: Clean-room CLI package test
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+        run: node tests/cli-package.mjs
+
   # Authed control-plane journeys (Playwright + real Postgres). The @external connect
   # spec hits the GitHub API, so it's skipped here to keep CI deterministic; run it
   # locally with `npm run test:e2e`.

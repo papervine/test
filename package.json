@@ -22,6 +22,8 @@
     "test": "node tests/smoke.mjs",
     "test:unit": "vitest run",
     "test:e2e": "playwright test",
+    "test:cli": "node tests/cli-package.mjs",
+    "mirror:cli": "node scripts/mirror-cli.mjs",
     "eval": "node --env-file=.env.local evals/run.mjs",
     "eval:web": "node --env-file=.env.local evals/serve.mjs",
     "worktree:setup": "bash bin/setup-worktree.sh",

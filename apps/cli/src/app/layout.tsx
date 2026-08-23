@@ -1,13 +1,13 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { loadConfig } from "@papervine/renderer/lib/content";
+import { loadBuildSafeConfig } from "../lib/build-safe-config";
 import { resolveTheme, themeCssVars } from "@papervine/renderer/lib/theme";
 
 // The CLI renders a single local docs repo (the folder `papervine dev` points at,
 // via PAPERVINE_CONTENT), so config reads come straight from the default content
 // source — no per-tenant content-source resolution like the hosted app needs.
 export async function generateMetadata(): Promise<Metadata> {
-  const config = await loadConfig();
+  const config = await loadBuildSafeConfig();
   return {
     title: { default: config.name, template: `%s · ${config.name}` },
   };
@@ -21,7 +21,7 @@ function buildThemeScript(defaultAppearance: "light" | "dark" | "system") {
 }
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const config = await loadConfig();
+  const config = await loadBuildSafeConfig();
 
   const theme = resolveTheme(config.theme);
   const colors = config.colors;

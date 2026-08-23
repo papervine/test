@@ -3,6 +3,10 @@ node_modules/
 .next/
 # Per-harness build output (NEXT_DIST_DIR) so tests can run beside `npm run dev`.
 .next-*/
+# The CLI's prebuilt renderer (apps/cli/scripts/prepack.mjs output). Generated at
+# publish time and shipped in the tarball, never committed.
+apps/cli/build/
+apps/cli/server/
 /out
 /build
 *.tsbuildinfo

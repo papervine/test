@@ -1,6 +1,6 @@
 ---
 title: Testing
-description: Three test layers — unit, smoke, and e2e — where each lives, what it covers, and the CI gate that keeps them green.
+description: The test layers — unit, smoke, and e2e, plus the repo crawl and the clean-room package gate — where each lives, what it covers, and the CI gate that keeps them green.
 ---
 
 Regression protection is a hard requirement, not optional (it's part of the
@@ -81,14 +81,39 @@ Used to validate against real-world `docs.json` repos. It reports rendered / deg
 counts and exits non-zero on any 500 — run it for every renderer, config, or nav change.
 Compatibility findings vs. real-world `docs.json` repos are tracked in `GAP-REPORT.md`.
 
+## Clean-room CLI package test
+
+```bash
+npm run test:cli
+```
+
+Run this for any change to what the published [CLI](/cli) ships — `apps/cli`, the renderer's
+declared dependencies, or the packaging script.
+
+It packs the real `papervine` tarball, audits its contents, installs it into a temporary
+directory **outside** the repository, and then serves the `docs/` folder through the installed
+binary, asserting that pages, the stylesheet, and docs-repo assets all come back.
+
+The reason it exists is that every other layer runs with the monorepo's own `node_modules` in
+scope, which hides a whole class of failure that appears *only* once a package is installed
+from a tarball: a dependency that was used but never declared, a file the packaging step
+dropped, or something from the surrounding repository accidentally compiled in. Those all pass
+unit, smoke, and e2e, and then fail on a user's first run. This is the only layer that can see
+them, so it gates releases.
+
+It runs a full production build, so it's slow and deliberately not part of `npm test`.
+
 ## The CI gate
 
 CI lives in `.github/workflows/ci.yml` and has two jobs — keep both green.
 
 | Job | Runs | Services |
 | --- | --- | --- |
-| `verify` | typecheck + unit + build + smoke | none |
+| `verify` | typecheck + unit + build + smoke + clean-room CLI package | none |
 | `e2e` | Playwright (skipping `@external`) | Postgres |
+
+Releases are gated too, by a publish workflow that reruns these checks before shipping so a
+version tag can never publish a broken package.
 
 <Info>
   Migrations are part of the test story: they're versioned SQL committed to `drizzle/`,

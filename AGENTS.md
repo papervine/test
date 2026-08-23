@@ -33,6 +33,17 @@ customer site") instead of by name or domain, no matter how illustrative the spe
 was. This applies even when the name is also this project's own operator/company — the
 rule is about customer-identifying info, not about any one name specifically.
 
+**Competitor names: allowed on discovery surfaces, not in product prose** (decided
+2026-08-23; SPEC §10.6). Naming competitors is how people find us, so the npm
+`description`/`keywords`, the public `papervine/cli` repo description/topics, and the CLI
+README's Compatibility section deliberately say "docs.json-compatible" and "alternative to
+GitBook / ReadMe". Keep the not-affiliated disclaimer, and never use another product's logo
+or imply endorsement. **`docs/` prose stays neutral** — explaining our own feature by
+reference to a competitor reads worse and ages badly. Also still fine anywhere: a factual
+dependency name (`@mintlify/mdx`), the `mint` theme value, and internal design docs. So:
+name them where people are *searching*, not where they're already *reading*. (This reverses
+the blanket strip in SPEC's 2026-06-14 note — don't re-apply it to the discovery surfaces.)
+
 ## The engineering loop (how every task runs)
 
 Every feature, bugfix, or behavior change runs the same loop — full doctrine in
@@ -146,6 +157,8 @@ change is done:
 | Fixing a bug (any layer) | A regression test **at the lowest layer that reproduces it**, written failing before the fix. |
 | Building client interactivity / collab | Pure decision core extracted → unit-tested; the user journey → e2e. |
 | Changing the DB schema | A committed migration (CI's e2e rebuilds `papervine_test` from it, so a broken one fails CI). |
+| Touching what the **published CLI** ships (`apps/cli`, `packages/renderer` deps, `prepack`) | `npm run test:cli` — the clean-room gate. Every other suite runs with the workspace's hoisted `node_modules` in scope, so none of them can see an undeclared dep, a symlinked Turbopack external that `npm pack` drops, or the monorepo's own config compiled in. If it only breaks once installed, this is the only layer that catches it. |
+| Touching `packages/renderer` **imports** | Also `npm run mirror:cli -- --dry-run`. It typechecks the renderer *outside* the monorepo, where root hoisting can't cover for an undeclared dependency. This is how `mermaid` was caught after `shiki` — and note it hid from `test:cli`, because the tarball is *built here*, where hoisting still works. Audit with the grep in `packages/renderer/README.md`, which matches dynamic imports too (a plain `from "…"` grep is what missed `mermaid`). |
 | Refactoring with zero behavior change | No new tests — the existing suites staying green *is* the test. |
 
 Rule of thumb: **the lowest layer that can catch the regression wins.** A unit test on an
@@ -404,6 +417,28 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   and the wrong diagnosis gets written into a comment as fact. (The chooser now uses one
   `<form>` around the card list with the action chosen by the selection, which is simpler
   regardless — but that's a design call, not a workaround.)
+- **`npm pack` silently drops symlinks — and Turbopack's externals are symlinks.** Turbopack
+  rewrites every `serverExternalPackages` entry to a content-hashed alias inside the dist dir
+  (`build/node_modules/@mintlify/mdx-<hash>`) and makes it a **symlink** to the real package.
+  So a packaged build runs perfectly from a source checkout, and 500s *every page* the moment
+  it's installed from a tarball: `Failed to load external module @mintlify/mdx-<hash>`. Nothing
+  short of installing the tarball can see it. `apps/cli/scripts/prepack.mjs` copies with
+  `dereference: true` and then **fails the build if any symlink survives** into the packed
+  tree. Related trap in the same script: don't prune `node_modules` by size — `@mintlify/mdx`
+  imports `typescript` at runtime for its twoslash plugin, so dropping the 19MB "build-only"
+  compiler 500s the site. Prune only our own sources; the tracer knows the runtime better than
+  a size heuristic.
+- **Turbopack's project root is the MONOREPO root, so a sub-app inherits the root's
+  conventional files.** It must equal `outputFileTracingRoot` (Next warns and overrides
+  otherwise), and that has to be the repo root for workspace packages to be traced at all —
+  so `apps/cli` resolved the *web app's* `src/instrumentation.ts`, which imports
+  `sentry.server.config.ts`, and compiled the **hardcoded production Sentry DSN** into the
+  public `papervine` tarball. Every `npx papervine` user's errors would have reported into the
+  hosted project. The fix is a deliberately **empty** `apps/cli/src/instrumentation.ts` that
+  shadows it — don't delete it for "doing nothing". Note what this defeats: the §10.6
+  packaging boundary is about *dependencies*, and this leak arrived by *compilation*, so
+  neither a `files` allowlist nor a lean `dependencies` list would have stopped it. Only
+  auditing the built tarball does (`npm run test:cli`).
 
 ## Commands
 
@@ -418,6 +453,8 @@ npm run typecheck           # tsc --noEmit
 npm test                    # smoke: renderer + control-plane gate (zero-dep, no DB)
 npm run test:unit           # vitest — pure-logic unit tests
 npm run test:e2e            # playwright — authed journeys (needs docker Postgres + MinIO)
+npm run test:cli            # clean-room: packs the real papervine tarball, installs it OUTSIDE the repo, serves docs/ from it (slow — runs a full next build)
+npm run mirror:cli -- --dry-run   # build + validate the public papervine/cli snapshot without touching the remote (add --push to publish; --initial for the first import)
 npm run db:generate         # generate a versioned SQL migration from schema changes
 npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
 node bin/papervine.mjs dev <dir>     # preview any docs repo (docs dev analogue)
