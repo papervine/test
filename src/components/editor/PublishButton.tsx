@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { ChevronDown, GitPullRequest, GitCommit, FileText, RotateCcw } from "lucide-react";
+import { ChevronDown, GitPullRequest, GitCommit, FileText, RotateCcw, Upload } from "lucide-react";
 import { toast } from "sonner";
 import {
   publishDraftAction,
@@ -10,7 +10,7 @@ import {
   revertFileAction,
   type SessionChangeRow,
 } from "@/lib/actions/authoring";
-import { publishModeForBranch } from "@/lib/publish-mode";
+import { publishModeFor, publishMenuModes, type PublishMode } from "@/lib/publish-mode";
 
 const STATUS_LABEL: Record<SessionChangeRow["status"], string> = {
   added: "Added",
@@ -18,16 +18,19 @@ const STATUS_LABEL: Record<SessionChangeRow["status"], string> = {
   deleted: "Deleted",
 };
 
-// The Publish control. The primary action follows the selected branch, mirroring hosted docs platforms:
-// on the deploy ("Default") branch Publish commits straight to it; on a working branch it
-// opens a PR. The caret menu opens a panel listing every changed file (status + a per-file
-// revert icon on hover) plus a "Discard all changes" action — both wired to the shared
-// authoring backend's session/draft primitives (SPEC §9.2). Surfaces the PR link / conflict.
+// The Publish control. On a Git-backed site the primary action follows the selected branch,
+// mirroring hosted docs platforms: on the deploy ("Default") branch Publish commits straight
+// to it; on a working branch it opens a PR. On a Papervine-hosted site there's no repo, so
+// Publish writes straight to the live site and the Git-only menu entries are omitted
+// (SPEC §10.11). The caret menu opens a panel listing every changed file (status + a
+// per-file revert icon on hover) plus a "Discard all changes" action — all three are
+// draft-buffer features and behave identically on both kinds of site (SPEC §9.2).
 export function PublishButton({
   org,
   site,
   branch,
   deployBranch,
+  gitBacked,
   activePath,
   onBeforeRevert,
   onBeforeDiscardAll,
@@ -37,6 +40,8 @@ export function PublishButton({
   site: string;
   branch: string;
   deployBranch: string;
+  // False for a Papervine-hosted site: no repo, so there are no commit/PR modes to offer.
+  gitBacked: boolean;
   // The path currently open in the editor pane — used to cancel a pending autosave before
   // reverting that exact file, so a stale debounced save can't resurrect it (a real race:
   // the pane's save timer is independent of this panel's revert action).
@@ -52,18 +57,24 @@ export function PublishButton({
   const [changes, setChanges] = useState<SessionChangeRow[] | null>(null);
   const [loadingChanges, setLoadingChanges] = useState(false);
 
-  // On the deploy branch, the natural publish is a direct commit (hosted docs platforms' Publish on Default);
-  // on a working branch it's a PR into the deploy branch.
-  const primaryMode = publishModeForBranch(branch, deployBranch);
+  // On the deploy branch, the natural publish is a direct commit (hosted docs platforms'
+  // Publish on Default); on a working branch it's a PR into the deploy branch. A hosted site
+  // publishes straight to live from any branch.
+  const primaryMode = publishModeFor({ gitBacked, branch, deployBranch });
+  const menuModes = publishMenuModes(gitBacked);
 
-  const publish = (mode: "pr" | "commit") =>
+  const publish = (mode: PublishMode) =>
     start(async () => {
       setOpen(false);
       const res = await publishDraftAction(org, site, branch, mode);
-      if (res.ok && res.mode === "pr") toast.success(`Opened PR #${res.prNumber}`);
-      else if (res.ok) toast.success(`Committed ${res.commitSha.slice(0, 7)} to the deploy branch`);
-      // Errors linger a bit longer than the success default (more to read).
-      else toast.error(res.error, { duration: 8000 });
+      if (!res.ok) {
+        // Errors linger a bit longer than the success default (more to read).
+        toast.error(res.error, { duration: 8000 });
+        return;
+      }
+      if (res.mode === "pr") toast.success(`Opened PR #${res.prNumber}`);
+      else if (res.mode === "commit") toast.success(`Committed ${res.commitSha.slice(0, 7)} to the deploy branch`);
+      else toast.success("Published your changes.");
     });
 
   const openPanel = () => {
@@ -118,7 +129,13 @@ export function PublishButton({
           onClick={() => publish(primaryMode)}
           className="flex items-center gap-1.5 rounded-l-md bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-500 disabled:opacity-60"
         >
-          {primaryMode === "commit" ? <GitCommit className="h-4 w-4" /> : <GitPullRequest className="h-4 w-4" />}
+          {primaryMode === "native" ? (
+            <Upload className="h-4 w-4" />
+          ) : primaryMode === "commit" ? (
+            <GitCommit className="h-4 w-4" />
+          ) : (
+            <GitPullRequest className="h-4 w-4" />
+          )}
           {pending ? "Publishing…" : "Publish"}
         </button>
         <button
@@ -177,23 +194,31 @@ export function PublishButton({
                 </button>
               </>
             )}
-            <div className="my-1 border-t border-neutral-200 dark:border-neutral-800" />
-            <button
-              type="button"
-              disabled={!hasChanges}
-              onClick={() => publish("pr")}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-neutral-100 disabled:opacity-40 dark:hover:bg-neutral-900"
-            >
-              <GitPullRequest className="h-4 w-4" /> Open a pull request
-            </button>
-            <button
-              type="button"
-              disabled={!hasChanges}
-              onClick={() => publish("commit")}
-              className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-neutral-100 disabled:opacity-40 dark:hover:bg-neutral-900"
-            >
-              <GitCommit className="h-4 w-4" /> Commit to the deploy branch
-            </button>
+            {/* Git mechanics only — a hosted site's single Publish action is the primary
+                button, and offering these would fail at the server dispatch. */}
+            {menuModes.includes("pr") && (
+              <>
+                <div className="my-1 border-t border-neutral-200 dark:border-neutral-800" />
+                <button
+                  type="button"
+                  disabled={!hasChanges}
+                  onClick={() => publish("pr")}
+                  className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-neutral-100 disabled:opacity-40 dark:hover:bg-neutral-900"
+                >
+                  <GitPullRequest className="h-4 w-4" /> Open a pull request
+                </button>
+              </>
+            )}
+            {menuModes.includes("commit") && (
+              <button
+                type="button"
+                disabled={!hasChanges}
+                onClick={() => publish("commit")}
+                className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm hover:bg-neutral-100 disabled:opacity-40 dark:hover:bg-neutral-900"
+              >
+                <GitCommit className="h-4 w-4" /> Commit to the deploy branch
+              </button>
+            )}
           </div>
         </>
       )}

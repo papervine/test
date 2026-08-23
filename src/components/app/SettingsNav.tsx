@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { parseSitePath } from "@/lib/dashboard-nav";
-import { SETTINGS_NAV, settingsHref } from "@/lib/settings-nav";
+import { settingsNavFor, settingsHref } from "@/lib/settings-nav";
 
 // The Settings subnav — a second sidebar beside the AppRail (SPEC §9 control plane).
 // Grouped sections mirror hosted docs platforms' settings IA; the nav config lives in
@@ -19,12 +19,7 @@ export function SettingsNav({ platformAdmin = false }: { platformAdmin?: boolean
   // Always set here — the subnav only renders under a settings route (/:org/:site/settings).
   const { orgSlug = "", siteSlug = "" } = parseSitePath(pathname);
 
-  // Drop operator-only items (TEMPORARY — see settings-nav.ts), then drop any section left
-  // empty (e.g. "Security & access" is operator-only-api-keys today, so it vanishes too).
-  const sections = SETTINGS_NAV.map((section) => ({
-    ...section,
-    items: section.items.filter((item) => !item.operatorOnly || platformAdmin),
-  })).filter((section) => section.items.length > 0);
+  const sections = settingsNavFor({ platformAdmin });
 
   return (
     <>

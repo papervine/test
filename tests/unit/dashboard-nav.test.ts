@@ -7,6 +7,7 @@ import {
   parseSitePath,
   pickCurrentSite,
   switchSiteHref,
+  postCreateHref,
 } from "@/lib/dashboard-nav";
 
 const sites = [
@@ -91,5 +92,21 @@ describe("switchSiteHref", () => {
     expect(switchSiteHref("acme", "beta", "/acme/connect", sites)).toBe(
       "/acme/beta",
     );
+  });
+});
+
+// Where a freshly-created site drops you (SPEC §10.11). A Papervine-hosted site is seeded
+// and live immediately, so the next action is writing — but Studio is gated to
+// owners/admins, and sending anyone else there would hit its notFound().
+describe("postCreateHref", () => {
+  it("opens Studio for someone who can see it", () => {
+    expect(postCreateHref("acme", "docs", "owner")).toBe("/acme/docs/editor");
+    expect(postCreateHref("acme", "docs", "admin")).toBe("/acme/docs/editor");
+  });
+
+  it("falls back to the site Overview for anyone who can't", () => {
+    expect(postCreateHref("acme", "docs", "member")).toBe("/acme/docs");
+    expect(postCreateHref("acme", "docs", null)).toBe("/acme/docs");
+    expect(postCreateHref("acme", "docs", undefined)).toBe("/acme/docs");
   });
 });

@@ -67,6 +67,16 @@ export function mimeForPath(path: string): string {
   return MIME[ext] ?? "application/octet-stream";
 }
 
+/**
+ * The content type every *text* docs file is stored under — MDX, Markdown, `docs.json`,
+ * OpenAPI YAML, all of it. Deliberately uniform (and deliberately not `application/json`
+ * for the config): the render path reads these with `getObjectText`, never serves them to a
+ * browser by content type, so one value keeps storage written by the repo sync and storage
+ * written by a Papervine-hosted publish byte-for-byte indistinguishable. Only binary assets
+ * get a real type, via `mimeForPath`.
+ */
+export const TEXT_CONTENT_TYPE = "text/plain; charset=utf-8";
+
 // One docs file in the repo: its docs-relative path and its GitHub blob SHA (content id).
 export type Blob = { path: string; sha: string };
 

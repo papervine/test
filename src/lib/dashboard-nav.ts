@@ -6,6 +6,7 @@
 //   • PUBLIC (bare)   — what the user sees: links, router.push, redirect() targets.
 //   • INTERNAL (/app) — the real route path: revalidatePath only, never shown to a user.
 // Kept pure (no "use client"/server-only) so it's unit-testable and shared client + server.
+import { canSeeFeature } from "./features";
 
 // The invisible internal mount the app-host middleware rewrites bare paths onto. Nothing
 // user-facing should ever contain it.
@@ -22,9 +23,26 @@ export function siteHref(orgSlug: string, siteSlug: string, sub = ""): string {
   return sub ? `${base}/${sub}` : base;
 }
 
-/** PUBLIC "connect a new site" form for an org: /:org/connect. */
+/** PUBLIC "add a site" start-method chooser for an org: /:org/connect (SPEC §10.11). */
 export function connectHref(orgSlug: string): string {
   return `/${orgSlug}/connect`;
+}
+
+/**
+ * Where a freshly-created site drops you. A Papervine-hosted site is seeded and live the
+ * moment it exists, so the next thing to do is WRITE — send its creator to Studio. Anyone
+ * who can't see Studio (it's gated to owners/admins) would hit a `notFound()` there, so they
+ * get the Overview instead. Following the feature gate rather than hardcoding a role means
+ * flipping `editor.workspace` to "everyone" needs no change here.
+ */
+export function postCreateHref(
+  orgSlug: string,
+  siteSlug: string,
+  role: string | null | undefined,
+): string {
+  return canSeeFeature("editor.workspace", role)
+    ? siteHref(orgSlug, siteSlug, "editor")
+    : siteBase(orgSlug, siteSlug);
 }
 
 /**

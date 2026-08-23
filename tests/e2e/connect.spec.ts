@@ -6,6 +6,9 @@ import { ORG_SLUG } from "./constants";
 test("connect a public repo and land on its site overview @external", async ({ page }) => {
   await page.goto(`/${ORG_SLUG}/connect`);
 
+  // The chooser preselects "Start from scratch" (SPEC §10.11), so pick the Git path first —
+  // its fields only mount once its card is selected.
+  await page.getByRole("radio", { name: /Connect a GitHub repo/ }).click();
   await page.getByLabel("Site name").fill("Starter E2E");
   await page.getByLabel("GitHub repository").fill("papervine/starter");
   await page.getByRole("button", { name: "Connect repository" }).click();

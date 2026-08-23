@@ -23,9 +23,10 @@ test("a signed-in non-admin gets a 404 from /admin (invisible surface)", async (
 
 test("a non-admin's rail has no Platform Admin link", async ({ page }) => {
   await page.goto(`/${ORG_SLUG}/connect`);
-  await expect(
-    page.getByRole("heading", { name: "Connect a repository" }),
-  ).toBeVisible();
+  // Wait on the start-method chooser's radiogroup rather than its heading: the heading is
+  // deliberately state-dependent ("Create your first site" vs "Add a site", SPEC §10.11) and
+  // which one shows here depends on whether an earlier spec has created a site.
+  await expect(page.getByRole("radiogroup")).toBeVisible();
   await expect(page.getByRole("link", { name: "Platform Admin" })).toHaveCount(0);
 });
 

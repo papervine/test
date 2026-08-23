@@ -1,16 +1,11 @@
 import "server-only";
-import { randomUUID } from "node:crypto";
-import { eq } from "drizzle-orm";
-import { db } from "./db";
-import { site as siteTable, deployment } from "./db/app-schema";
+import { site as siteTable } from "./db/app-schema";
 import { syncSite, type SyncResult } from "./sync";
 import { fetchLatestCommit, type CommitInfo } from "./github";
 import { repoTokenForSite } from "./github-token";
 import { revalidateSite } from "./s3-source";
-import { revalidateSiteRow } from "./tenant";
 import { syncErrorDetail } from "./sync-error";
-import { triggerActivity } from "./realtime";
-import { fireContentUpdateAutomations } from "./automations/runs";
+import { openDeployment, resolveDeployment, markSiteLive } from "./deployment-log";
 
 type SiteRow = typeof siteTable.$inferSelect;
 
@@ -79,21 +74,14 @@ export async function runSync(
   // silent nothing. Every attempt leaves a trace.
   // When the caller pre-created the building row (connectRepo, so the user can be redirected
   // immediately while this runs in after()), reuse it; otherwise insert one now.
-  const deploymentId = opts.deploymentId ?? randomUUID();
-  if (!opts.deploymentId) {
-    await db.insert(deployment).values({
-      id: deploymentId,
+  const deploymentId =
+    opts.deploymentId ??
+    (await openDeployment({
       siteId: site.id,
-      status: "building",
-      target: "live",
-      commitMessage: trigger === "connect" ? "Connecting repository…" : "Syncing…",
       trigger,
+      commitMessage: trigger === "connect" ? "Connecting repository…" : "Syncing…",
       actorUserId,
-    });
-    // Nudge any open Activity feed to show the building row now, not on its next poll.
-    // Best-effort: unconfigured/failed realtime no-ops (the row is already durable in the DB).
-    await triggerActivity(site.id);
-  }
+    }));
 
   let result: SyncResult | null = null;
   let error: string | null = null;
@@ -127,48 +115,32 @@ export async function runSync(
   // Resolve the building row to its outcome. Includes how long it took, since a sync that
   // genuinely runs near the function time limit is itself diagnostic.
   const isConnect = trigger === "connect";
-  await db
-    .update(deployment)
-    .set({
-      status: result ? "successful" : "failed",
-      commitSha: commit?.sha ?? null,
-      commitMessage: deploymentMessage(trigger, commit, result),
-      error,
-      filesAdded: isConnect ? (result?.files ?? 0) : 0,
-      // Re-syncs now record what actually changed (the diff), not the whole file count —
-      // incremental sync only moves changed/new blobs (src/lib/sync.ts).
-      filesEdited: isConnect ? 0 : (result?.uploaded ?? 0),
-      durationMs: Date.now() - startedAt,
-    })
-    .where(eq(deployment.id, deploymentId));
+  await resolveDeployment(deploymentId, {
+    siteId: site.id,
+    ok: Boolean(result),
+    commitSha: commit?.sha ?? null,
+    commitMessage: deploymentMessage(trigger, commit, result),
+    error,
+    filesAdded: isConnect ? (result?.files ?? 0) : 0,
+    // Re-syncs now record what actually changed (the diff), not the whole file count —
+    // incremental sync only moves changed/new blobs (src/lib/sync.ts).
+    filesEdited: isConnect ? 0 : (result?.uploaded ?? 0),
+    durationMs: Date.now() - startedAt,
+  });
   console.log(
     `[sync] done trigger=${trigger} site=${site.id} status=${result ? "successful" : "failed"} files=${result?.files ?? 0} ms=${Date.now() - startedAt}`,
   );
-  // Second ping: the building pill flips to Successful/Failed in the feed without a poll.
-  await triggerActivity(site.id);
 
   // On success: promote to live (the schema's "draft until first successful sync") and
   // stamp the synced head so a redelivered/duplicate push webhook can no-op.
+  // Promotes to live, bumps updatedAt (the content-cache version key — see
+  // deployment-log.ts), drops the cached site row, and fans out to content_update
+  // automations keyed on the commit sha (SPEC §10.2), which is also what stops an
+  // automation's own commit from re-firing itself.
   if (result) {
-    // Bump updatedAt on every success — the render's content-cache key folds it in (see
-    // request-source.ts), so a re-sync of the SAME commit still produces a fresh key and
-    // serves the new content instead of the pre-sync copy.
-    await db
-      .update(siteTable)
-      .set({
-        status: "live",
-        lastSyncedCommitSha: commit?.sha ?? null,
-        updatedAt: new Date(),
-      })
-      .where(eq(siteTable.id, site.id));
-    // Drop the cached site row so the new sha/updatedAt (the content-cache version key) is read
-    // fresh. Immediate for a manual sync (server-action context); a no-op for the push webhook,
-    // whose runSync is in after() — there the SITE_ROW_TTL backstop applies (see tenant.ts).
-    revalidateSiteRow({ slug: site.slug, domains: [site.customDomain] });
-    // Content just went live → fan out to the site's enabled content_update automations
-    // (SPEC §10.2). Never throws; idempotent per commit sha, which is also what stops an
-    // automation's own commit from re-firing itself; no-op when no executor is configured.
-    await fireContentUpdateAutomations(site.id, commit?.sha ?? null);
+    // A commit-less sync (a manual re-pull) falls back to the deployment id as the
+    // dedupe ref — stable if this same run is retried, unlike the old random fallback.
+    await markSiteLive(site, { commitSha: commit?.sha ?? null, fallbackRef: deploymentId });
   }
 
   return { result, error, commitSha: commit?.sha ?? null };

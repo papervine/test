@@ -17,6 +17,9 @@ import {
 } from "./draft-store";
 import { getObjectText } from "./storage";
 import { runSync } from "./sync-runner";
+import { isNativeSite } from "./site-source";
+import { publishNative } from "./native-publish";
+import type { PublishResult } from "./publish-mode";
 
 const PAGE_EXTS = [".mdx", ".md"];
 
@@ -35,10 +38,9 @@ function repoPath(site: SiteRow, path: string): string {
   return site.docsPath ? `${site.docsPath}/${path}` : path;
 }
 
-export type PublishResult =
-  | { ok: true; mode: "commit"; commitSha: string }
-  | { ok: true; mode: "pr"; prUrl: string; prNumber: number }
-  | { ok: false; conflict?: true; error: string };
+// Defined in publish-mode.ts (pure) so the hosted publisher can produce one too without an
+// import cycle. Re-exported here because this module is the authoring layer's front door.
+export type { PublishResult };
 
 /**
  * Open (or attach to) an edit session. With `branchName` it re-attaches to an existing
@@ -56,9 +58,12 @@ export async function checkoutBranch(
 
   // Record the deploy-branch head at checkout for the publish-time divergence check.
   // Best-effort: a token-less/unreadable repo leaves baseCommitSha null (publish skips
-  // the optimistic check and relies on updateRef(force:false)).
-  const token = await repoTokenForSite(site);
-  const base = await getRef(site.repoOwner!, site.repoName!, site.branch, token);
+  // the optimistic check and relies on updateRef(force:false)). A Papervine-hosted site has
+  // no repo to read a head from — and nothing to diverge from, since its publish writes
+  // storage directly — so skip GitHub entirely rather than calling it with a null owner.
+  const base = isNativeSite(site)
+    ? null
+    : await getRef(site.repoOwner!, site.repoName!, site.branch, await repoTokenForSite(site));
   const session = await createSession({
     siteId: site.id,
     branch,
@@ -203,8 +208,26 @@ export async function revertDraftFile(
 export async function publishDraft(
   site: SiteRow,
   branch: string,
-  opts: { mode: "commit" | "pr"; message?: string; actorUserId?: string | null },
+  opts: {
+    mode: "commit" | "pr";
+    message?: string;
+    actorUserId?: string | null;
+    /** Threaded to the hosted publisher so an automation's own publish can't re-fire it. */
+    origin?: "editor" | "automation";
+  },
 ): Promise<PublishResult> {
+  // A Papervine-hosted site has no repo to commit to: the draft buffer is the source of
+  // truth and publishing writes it straight to object storage. `opts.mode` is meaningless
+  // there (no PR target), so it's ignored rather than validated — the server decides what
+  // publishing means for this site, whatever the UI proposed.
+  if (isNativeSite(site)) {
+    return publishNative(site, branch, {
+      message: opts.message,
+      actorUserId: opts.actorUserId,
+      origin: opts.origin,
+    });
+  }
+
   const session = await findOpenSession(site.id, branch);
   if (!session) return { ok: false, error: "No open edit session for this branch." };
 

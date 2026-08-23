@@ -64,11 +64,14 @@ test.describe("dashboard site switcher", () => {
     await expect(heading.locator("xpath=following-sibling::*[1]")).toHaveText(BETA.name);
   });
 
-  test("New site action links to the connect form", async ({ page }) => {
+  test("New site action links to the start-method chooser", async ({ page }) => {
     await page.goto(sitePath(ALPHA.slug));
     await page.getByRole("button", { name: "Switch site" }).click();
     await page.getByRole("menu").getByRole("menuitem", { name: "New site" }).click();
     await page.waitForURL(`**/${ORG_SLUG}/connect`);
-    await expect(page.getByRole("heading", { name: "Connect a repository" })).toBeVisible();
+    // This org HAS sites, so the chooser uses its "add another" framing — the counterpart
+    // to auth.setup.ts's first-run assertion (SPEC §10.11).
+    await expect(page.getByRole("heading", { name: "Add a site" })).toBeVisible();
+    await expect(page.getByRole("radio", { name: /Connect a GitHub repo/ })).toBeVisible();
   });
 });

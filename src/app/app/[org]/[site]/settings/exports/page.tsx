@@ -1,6 +1,7 @@
 import { headers } from "next/headers";
 import { ChevronRight, FileDown } from "lucide-react";
 import { requireSite } from "@/lib/dashboard-context";
+import { isNativeSite } from "@/lib/site-source";
 
 // Concrete Exports surface — overrides the settings/[section] placeholder for the
 // "exports" slug. hosted docs platforms' Settings → Exports: download the whole site as one PDF for
@@ -22,8 +23,9 @@ export default async function ExportsSettingsPage({
   const apexBase = host.replace(/^(app|www)\./, "");
   const exportUrl = `${proto}://${apexBase}/sites/${site.slug}/export`;
 
-  // Nothing to export until the repo's content has been synced into object storage
-  // (status flips off "draft" on first sync).
+  // Nothing to export until content is actually in object storage — status flips off
+  // "draft" on a Git site's first sync, and when a hosted site's starter content lands.
+  // The export itself reads storage, so it's source-agnostic.
   const synced = site.status !== "draft";
 
   return (
@@ -57,7 +59,11 @@ export default async function ExportsSettingsPage({
               Export all content
             </span>
             <p className="mt-3 text-sm text-[var(--muted)]">
-              Connect and sync a repo first — there’s nothing to export yet.
+              {isNativeSite(site)
+                ? // A hosted site is live from creation, so reaching this means the seed
+                  // hasn't landed — telling them to connect a repo would be nonsense.
+                  "Publish your first page in Studio — there’s nothing to export yet."
+                : "Connect and sync a repo first — there’s nothing to export yet."}
             </p>
           </>
         )}

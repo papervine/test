@@ -1,0 +1,1 @@
+ALTER TABLE "site" ADD COLUMN "source_kind" text DEFAULT 'git' NOT NULL;

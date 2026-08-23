@@ -305,7 +305,12 @@ export function dbSchedulePersist(automationId: string) {
 // already has a run row.
 export async function fireContentUpdateAutomations(
   siteId: string,
-  commitSha: string | null,
+  /**
+   * The idempotency key for this content change: a commit sha where there is one, else
+   * something else that's STABLE for this deployment (the deployment id). It must never be
+   * freshly random — that's what defeats the self-trigger loop breaker below.
+   */
+  ref: string | null,
   deps: EnqueueDeps = { store: dbRunStore(), executor: getExecutor() },
 ): Promise<void> {
   try {
@@ -315,9 +320,12 @@ export async function fireContentUpdateAutomations(
     for (const a of autos) {
       const result = await enqueueAutomationRun(
         a,
-        // A manual sync has no commit sha; fall back to a per-fire ref so it still runs
-        // (and a retried manual sync isn't deduped away against a real commit's run).
-        { triggerType: "content_update", triggerRef: commitSha ?? `manual-sync-${randomUUID()}` },
+        // A commit-less content change (a manual re-sync, a Papervine-hosted publish)
+        // supplies its deployment id instead, so a RETRY of the same publish dedupes while
+        // two genuinely different publishes don't. The old per-fire `randomUUID()` fallback
+        // was a fresh key every time, which defeated the loop breaker above entirely — an
+        // automation that published would re-trigger itself until the daily cap stopped it.
+        { triggerType: "content_update", triggerRef: ref ?? `manual-sync-${randomUUID()}` },
         deps,
       );
       if (!result.ok && result.reason === "enqueue_failed") {

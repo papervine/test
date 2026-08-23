@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // vi.mock is hoisted above top-level vars, so the shared state these factories close over
 // must be created with vi.hoisted (also hoisted), not plain consts.
-const { git, store, appConfigured, runSync } = vi.hoisted(() => ({
+const { git, store, appConfigured, runSync, publishNative, createSession } = vi.hoisted(() => ({
   git: {
     getRef: vi.fn(),
     commitFiles: vi.fn(),
@@ -16,6 +16,13 @@ const { git, store, appConfigured, runSync } = vi.hoisted(() => ({
   },
   appConfigured: { value: true },
   runSync: vi.fn(async () => ({})),
+  publishNative: vi.fn(async () => ({
+    ok: true as const,
+    mode: "native" as const,
+    files: 1,
+    deploymentId: "dep_native",
+  })),
+  createSession: vi.fn(async () => ({ id: "sess-new" })),
 }));
 
 vi.mock("../../src/lib/github", () => git);
@@ -23,16 +30,19 @@ vi.mock("../../src/lib/draft-store", () => ({
   findOpenSession: vi.fn(async () => store.session),
   listDraftFiles: vi.fn(async () => store.drafts),
   closeSession: vi.fn(async () => {}),
+  createSession,
   // unused by publishDraft but imported by the module under test:
   listOpenSessions: vi.fn(),
-  createSession: vi.fn(),
   upsertDraftFile: vi.fn(),
 }));
+// The hosted publisher is exercised by native-publish.test.ts; here we only assert that
+// publishDraft DISPATCHES to it (and that GitHub stays untouched when it does).
+vi.mock("../../src/lib/native-publish", () => ({ publishNative }));
 vi.mock("../../src/lib/github-token", () => ({ repoTokenForSite: vi.fn(async () => "tok") }));
 vi.mock("../../src/lib/github-app", () => ({ isGithubAppConfigured: () => appConfigured.value }));
 vi.mock("../../src/lib/sync-runner", () => ({ runSync }));
 
-import { publishDraft } from "../../src/lib/authoring-core";
+import { publishDraft, checkoutBranch } from "../../src/lib/authoring-core";
 
 type Site = Parameters<typeof publishDraft>[0];
 const site = {
@@ -143,5 +153,76 @@ describe("publishDraft — guards", () => {
     store.session = null;
     const res = await publishDraft(site, "br", { mode: "commit" });
     expect(res.ok).toBe(false);
+  });
+});
+
+// A Papervine-hosted site (SPEC §10.11) has no repo. The whole point of the dispatch is
+// that GitHub is never reached — calling it with a null owner/name is the failure mode this
+// guards, and it would surface as an opaque 404 from the GitHub API.
+describe("publishDraft — Papervine-hosted dispatch", () => {
+  const nativeSite = {
+    ...site,
+    sourceKind: "native",
+    repoOwner: null,
+    repoName: null,
+  } as unknown as Site;
+
+  it("hands off to the storage publisher and never touches GitHub", async () => {
+    const res = await publishDraft(nativeSite, "main", { mode: "commit" });
+    expect(res).toEqual({ ok: true, mode: "native", files: 1, deploymentId: "dep_native" });
+    expect(publishNative).toHaveBeenCalledOnce();
+    expect(git.getRef).not.toHaveBeenCalled();
+    expect(git.commitFiles).not.toHaveBeenCalled();
+    expect(git.openPullRequest).not.toHaveBeenCalled();
+  });
+
+  // The UI proposes a mode; the server decides. A stale client asking for a PR on a hosted
+  // site must still publish, not error.
+  it("ignores the requested mode, including 'pr'", async () => {
+    await publishDraft(nativeSite, "papervine/edit-x", { mode: "pr" });
+    expect(publishNative).toHaveBeenCalledOnce();
+    expect(git.createBranch).not.toHaveBeenCalled();
+  });
+
+  it("threads origin through, so an automation's publish can suppress the fan-out", async () => {
+    await publishDraft(nativeSite, "main", { mode: "commit", origin: "automation" });
+    expect(publishNative).toHaveBeenCalledWith(
+      nativeSite,
+      "main",
+      expect.objectContaining({ origin: "automation" }),
+    );
+  });
+
+  // A GIT site with empty repo columns is a failed connect, not a hosted site — it must
+  // keep taking the git path (and failing loudly) rather than silently publishing nowhere.
+  it("does not treat a repo-less GIT site as hosted", async () => {
+    const brokenGit = { ...site, sourceKind: "git", repoOwner: null } as unknown as Site;
+    await publishDraft(brokenGit, "main", { mode: "commit" });
+    expect(publishNative).not.toHaveBeenCalled();
+  });
+});
+
+describe("checkoutBranch", () => {
+  // No open session for this branch yet — otherwise checkoutBranch re-attaches to it and
+  // returns before it ever needs a base commit.
+  beforeEach(() => {
+    store.session = null;
+  });
+
+  it("stamps the deploy head on a Git site, for the publish-time divergence check", async () => {
+    await checkoutBranch(site, { branchName: "papervine/edit-x" });
+    expect(git.getRef).toHaveBeenCalledWith("o", "r", "main", "tok");
+    expect(createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ baseCommitSha: "base1" }),
+    );
+  });
+
+  // No repo means no head to read and nothing to diverge FROM (publish overwrites storage),
+  // so calling getRef with a null owner would be a pointless failing GitHub round trip.
+  it("skips GitHub entirely on a hosted site and records no base commit", async () => {
+    const nativeSite = { ...site, sourceKind: "native", repoOwner: null, repoName: null } as unknown as Site;
+    await checkoutBranch(nativeSite, { branchName: "papervine/edit-x" });
+    expect(git.getRef).not.toHaveBeenCalled();
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({ baseCommitSha: null }));
   });
 });

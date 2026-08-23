@@ -47,6 +47,9 @@ export const SETTINGS_NAV: SettingsNavSection[] = [
   },
   {
     heading: "Deployment",
+    // Shown for BOTH site kinds: on a Git site it configures the repo, and on a
+    // Papervine-hosted one it's where you connect to GitHub (SPEC §10.11). Hiding it was
+    // the reason "I made a hosted site and see no way to connect it to GitHub" happened.
     items: [{ slug: "git", label: "Git settings", icon: GitBranch }],
   },
   {
@@ -82,6 +85,22 @@ export function settingsHref(
   slug: string,
 ): string {
   return siteHref(orgSlug, siteSlug, `settings/${slug}`);
+}
+
+/**
+ * The Settings subnav for one viewer: drops items they shouldn't see, then drops any section
+ * left empty — so a heading never sits alone over nothing ("Security & access" is
+ * operator-only API keys today, so it vanishes for everyone else).
+ *
+ * Pure so the visibility rules are unit-tested rather than inferred from a rendered nav.
+ * SETTINGS_NAV / SETTINGS_SLUGS stay the full catalog — route validation still knows every
+ * slug exists, and each route gates itself.
+ */
+export function settingsNavFor(viewer: { platformAdmin: boolean }): SettingsNavSection[] {
+  return SETTINGS_NAV.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => !item.operatorOnly || viewer.platformAdmin),
+  })).filter((section) => section.items.length > 0);
 }
 
 // Flat, ordered slug list — validates [section] routes and seeds the index redirect.

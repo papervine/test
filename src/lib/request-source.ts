@@ -5,6 +5,7 @@ import { s3Source, isSynced } from "./s3-source";
 import { draftSource } from "./draft-source";
 import { READER_COOKIE } from "./reader-session";
 import { accessForRecord } from "./reader-access";
+import { hasRenderableSource } from "./site-source";
 import type { ContentSource } from "@papervine/renderer/lib/content";
 import type { PageAccess } from "@papervine/renderer/lib/nav";
 
@@ -51,7 +52,10 @@ export async function requestContentSource(
   const record = slug
     ? await getSiteBySlug(slug)
     : await getSiteByCustomDomain(h.get("x-papervine-host") ?? h.get("host") ?? "");
-  if (!record?.repoOwner || !record.repoName) return null;
+  // "No repo" no longer means "no site": a Papervine-hosted site has no repo by design and
+  // serves the content its editor published straight to storage (SPEC §10.11). A GIT site
+  // with no repo attached is still nothing to serve. See lib/site-source.ts.
+  if (!record || !hasRenderableSource(record)) return null;
 
   // Everything serves from our own object storage (SPEC §3.1 model C). The sync job —
   // on connect, on re-sync, and in the dev seed — copies the repo's config + pages +

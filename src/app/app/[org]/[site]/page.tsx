@@ -10,6 +10,7 @@ import { deployment } from "@/lib/db/app-schema";
 import { requireSite } from "@/lib/dashboard-context";
 import { canSeeFeature } from "@/lib/features";
 import { siteBase } from "@/lib/dashboard-nav";
+import { hasGitRepo, isNativeSite } from "@/lib/site-source";
 import { getActivityFeed } from "@/lib/activity-feed";
 import { feedParam, parseFeedTarget, timeAgo } from "@/lib/overview";
 import { ActivityFeed } from "@/components/app/ActivityFeed";
@@ -148,7 +149,9 @@ export default async function SiteOverview({
           )}
 
           <div className="mt-4 flex items-center gap-2">
-            <ResyncButton siteId={activeSite.id} />
+            {/* There's nothing to re-sync FROM on a Papervine-hosted site — its content is
+                published from Studio, which the button beside this already opens. */}
+            {hasGitRepo(activeSite) && <ResyncButton siteId={activeSite.id} />}
             {/* The web editor (SPEC §9.2/§10), gated by the editor feature like the rail item. */}
             {canSeeFeature("editor.workspace", role) ? (
               <Link
@@ -200,6 +203,24 @@ export default async function SiteOverview({
                     <GitBranch className="size-3" />
                     {activeSite.branch}
                   </span>
+                </dd>
+              </div>
+            )}
+            {/* Say where the content comes from rather than leaving a gap where the
+                Repository row would be, which reads as a repo we failed to show. */}
+            {isNativeSite(activeSite) && (
+              <div>
+                <dt className="text-xs text-[var(--muted)]">Source</dt>
+                <dd className="mt-0.5 flex items-center gap-1.5">
+                  Papervine
+                  <span className="text-[var(--muted)]">— edited in</span>
+                  {canSeeFeature("editor.workspace", role) ? (
+                    <Link href={`${base}/editor`} className="hover:opacity-80">
+                      Studio
+                    </Link>
+                  ) : (
+                    <span className="text-[var(--muted)]">Studio</span>
+                  )}
                 </dd>
               </div>
             )}

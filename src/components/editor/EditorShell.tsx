@@ -21,6 +21,7 @@ export function EditorShell({
   org,
   site,
   deployBranch,
+  gitBacked,
   initialBranch,
   sections,
   slugs,
@@ -34,6 +35,9 @@ export function EditorShell({
   org: string;
   site: string;
   deployBranch: string;
+  // Git-backed sites get the branch switcher and commit/PR publish modes; a
+  // Papervine-hosted site has one branch and publishes straight to live (SPEC §10.11).
+  gitBacked: boolean;
   initialBranch: string;
   sections: NavSection[];
   slugs: string[];
@@ -253,15 +257,21 @@ export function EditorShell({
                 }
               />
             </div>
-            <span className="h-5 w-px shrink-0 bg-neutral-300 dark:bg-neutral-700" />
-            <BranchSwitcher
-              org={org}
-              site={site}
-              branch={branch}
-              deployBranch={deployBranch}
-              sessionBranches={sessionBranches}
-              onSwitch={switchBranch}
-            />
+            {/* A hosted site has exactly one branch, so a picker offering that single
+                meaningless option is worse than no picker at all. */}
+            {gitBacked && (
+              <>
+                <span className="h-5 w-px shrink-0 bg-neutral-300 dark:bg-neutral-700" />
+                <BranchSwitcher
+                  org={org}
+                  site={site}
+                  branch={branch}
+                  deployBranch={deployBranch}
+                  sessionBranches={sessionBranches}
+                  onSwitch={switchBranch}
+                />
+              </>
+            )}
             <button
               type="button"
               aria-pressed={agentOpen}
@@ -287,6 +297,7 @@ export function EditorShell({
             site={site}
             branch={branch}
             deployBranch={deployBranch}
+            gitBacked={gitBacked}
             activePath={path}
             onBeforeRevert={(revertedPath) => {
               if (revertedPath === path) paneRef.current?.cancel();

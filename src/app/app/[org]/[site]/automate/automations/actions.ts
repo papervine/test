@@ -6,6 +6,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { automation, automationRun } from "@/lib/db/app-schema";
 import { publishDraft, discardSession } from "@/lib/authoring-core";
+import { publishResultRef } from "@/lib/publish-mode";
 import { findSite } from "@/lib/dashboard-context";
 import { siteRoute } from "@/lib/dashboard-nav";
 import {
@@ -294,6 +295,9 @@ export async function acceptRun(ref: SiteRef, runId: string): Promise<Automation
     mode: "commit",
     message: `[automation] ${await runTitle(loaded.row.automationId)}`,
     actorUserId: null,
+    // Accepting an automation's run is still the automation publishing — suppress the
+    // content_update fan-out so it can't re-trigger itself (see native-publish.ts).
+    origin: "automation",
   });
   if (!published.ok) {
     return {
@@ -306,7 +310,8 @@ export async function acceptRun(ref: SiteRef, runId: string): Promise<Automation
     .update(automationRun)
     .set({
       status: "succeeded",
-      resultRef: published.mode === "commit" ? published.commitSha : published.prUrl,
+      // A commit sha, a PR URL, or null on a Papervine-hosted site, which has neither.
+      resultRef: publishResultRef(published),
       reviewBranch: null,
     })
     .where(eq(automationRun.id, runId));

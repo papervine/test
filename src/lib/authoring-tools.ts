@@ -14,6 +14,7 @@ import {
 } from "./authoring-core";
 import { listBranches } from "./github";
 import { repoTokenForSite } from "./github-token";
+import { hasGitRepo } from "./site-source";
 
 /**
  * The editing agent's WRITE tools (SPEC §9.2) — the agent-native half of the authoring
@@ -34,6 +35,11 @@ export function draftContentSource(site: SiteRow, branch: string): ContentSource
 }
 
 export function authoringTools(site: SiteRow, branch: string): ToolSet {
+  // A Papervine-hosted site has no repo and no PR target (SPEC §10.11). Rather than let the
+  // agent call a tool that would hit GitHub with a null owner — or offer it a publish mode
+  // the server will ignore — the Git-only capabilities are omitted from its toolset
+  // entirely, and `publish` describes the one action that actually exists.
+  const gitBacked = hasGitRepo(site);
   return {
     write_page: tool({
       description:
@@ -81,18 +87,22 @@ export function authoringTools(site: SiteRow, branch: string): ToolSet {
       },
     }),
 
-    list_branches: tool({
-      description: "List the repo's git branches and the open Papervine edit sessions.",
-      inputSchema: z.object({}),
-      execute: async () => {
-        const token = await repoTokenForSite(site);
-        const [branches, sessions] = await Promise.all([
-          listBranches(site.repoOwner!, site.repoName!, token),
-          listSessions(site),
-        ]);
-        return { branches, editSessions: sessions.map((s) => s.branch), current: branch };
-      },
-    }),
+    ...(gitBacked
+      ? {
+          list_branches: tool({
+            description: "List the repo's git branches and the open Papervine edit sessions.",
+            inputSchema: z.object({}),
+            execute: async () => {
+              const token = await repoTokenForSite(site);
+              const [branches, sessions] = await Promise.all([
+                listBranches(site.repoOwner!, site.repoName!, token),
+                listSessions(site),
+              ]);
+              return { branches, editSessions: sessions.map((s) => s.branch), current: branch };
+            },
+          }),
+        }
+      : {}),
 
     checkout: tool({
       description:
@@ -108,15 +118,28 @@ export function authoringTools(site: SiteRow, branch: string): ToolSet {
     }),
 
     publish: tool({
-      description:
-        "Publish the current draft. mode 'pr' opens a pull request into the deploy branch " +
-        "(safe default); mode 'commit' commits straight to it. ONLY call this when the user " +
-        "explicitly asks to publish or open a PR — never on your own.",
-      inputSchema: z.object({
-        mode: z.enum(["pr", "commit"]).describe("'pr' opens a PR; 'commit' writes to the deploy branch."),
-        message: z.string().optional().describe("Commit / PR title."),
-      }),
-      execute: async ({ mode, message }) => publishDraft(site, branch, { mode, message }),
+      description: gitBacked
+        ? "Publish the current draft. mode 'pr' opens a pull request into the deploy branch " +
+          "(safe default); mode 'commit' commits straight to it. ONLY call this when the user " +
+          "explicitly asks to publish or open a PR — never on your own."
+        : "Publish the current draft straight to the live site. This site is hosted by " +
+          "Papervine — there is no repository, so there are no branches or pull requests. " +
+          "ONLY call this when the user explicitly asks to publish — never on your own.",
+      inputSchema: gitBacked
+        ? z.object({
+            mode: z
+              .enum(["pr", "commit"])
+              .describe("'pr' opens a PR; 'commit' writes to the deploy branch."),
+            message: z.string().optional().describe("Commit / PR title."),
+          })
+        : z.object({ message: z.string().optional().describe("A short title for this publish.") }),
+      execute: async (input) => {
+        const { message } = input as { message?: string };
+        // Ignored by the hosted publisher; 'commit' is the safe Git default when the
+        // narrower hosted schema means no mode was offered at all.
+        const mode = (input as { mode?: "pr" | "commit" }).mode ?? "commit";
+        return publishDraft(site, branch, { mode, message });
+      },
     }),
 
     discard: tool({

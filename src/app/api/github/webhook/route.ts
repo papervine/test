@@ -69,6 +69,9 @@ export async function POST(req: NextRequest) {
   // All sites pointing at this repo (any org). GitHub repo names are case-insensitive, and
   // a site stores whatever the user typed, so match case-insensitively rather than miss a
   // sync on a casing difference.
+  // Papervine-hosted sites need no exclusion here: their repo columns are NULL, and
+  // `lower(NULL) = '…'` is NULL, never true — so they can never match. Don't "fix" this
+  // into a null-safe comparison, which would start matching them (SPEC §10.11).
   const sites = await db
     .select()
     .from(siteTable)

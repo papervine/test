@@ -25,6 +25,15 @@ export const site = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
     slug: text("slug").notNull().unique(),
+    // Where this site's content comes FROM — the authoring source of truth (SPEC §10.11),
+    // NOT how it renders (both kinds render from sites/{id}/… through s3Source, which is
+    // why this isn't called `contentSource` — that's already a renderer type).
+    //   'git'    — a connected repo; syncSite copies repo → storage, publish commits/PRs.
+    //   'native' — Papervine-hosted: no repo. The draft buffer is the source of truth and
+    //              publish writes it straight to storage (src/lib/native-publish.ts).
+    // Default 'git' so every pre-existing row keeps today's behavior with no backfill.
+    // Read it through src/lib/site-source.ts, never by comparing the string inline.
+    sourceKind: text("source_kind").default("git").notNull(),
     repoOwner: text("repo_owner"),
     repoName: text("repo_name"),
     branch: text("branch").default("main").notNull(),

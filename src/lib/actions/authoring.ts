@@ -20,6 +20,7 @@ import {
   type PublishResult,
   type SessionChange,
 } from "@/lib/authoring-core";
+import type { PublishMode } from "@/lib/publish-mode";
 import { isPagePath, pathToSlug } from "@/lib/draft-source";
 
 // Frontmatter keys the Page settings panel manages (docs.json-compatible). Booleans are only
@@ -284,16 +285,30 @@ export async function saveDraftAction(
   return { ok: true };
 }
 
+/**
+ * `mode` is what the UI *proposes*; the server decides. A Papervine-hosted site has no repo,
+ * so `publishDraft` dispatches to the storage publisher and ignores the mode entirely —
+ * which is why "native" is accepted here rather than rejected (the button sends whatever
+ * `publishModeFor` gave it), and why a stale client asking for a PR on a hosted site still
+ * does the right thing instead of erroring.
+ */
 export async function publishDraftAction(
   orgSlug: string,
   siteSlug: string,
   branch: string,
-  mode: "commit" | "pr",
+  mode: PublishMode,
   message?: string,
 ): Promise<PublishResult> {
   const gate = await gateEditor(orgSlug, siteSlug);
   if ("error" in gate) return { ok: false, error: gate.error };
-  const result = await publishDraft(gate.site, branch, { mode, message, actorUserId: gate.userId });
+  // Narrow back to the Git modes for the Git path; 'native' never reaches it (publishDraft
+  // dispatches on the site row first), and a Git site defaults to the safe non-PR action.
+  const gitMode = mode === "pr" ? "pr" : "commit";
+  const result = await publishDraft(gate.site, branch, {
+    mode: gitMode,
+    message,
+    actorUserId: gate.userId,
+  });
   if (result.ok) revalidatePath(siteRoute(orgSlug, siteSlug));
   return result;
 }

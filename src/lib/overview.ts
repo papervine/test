@@ -93,6 +93,10 @@ export function triggerLabel(
 ): string {
   if (trigger === "webhook") return "GitHub push";
   if (actorName) return actorName;
+  // Actor-less publishes/creates do happen (an automation, the authoring MCP), and calling
+  // those a "Manual Update" would be plainly wrong.
+  if (trigger === "publish") return "Published";
+  if (trigger === "create") return "Site created";
   return "Manual Update";
 }
 
@@ -101,5 +105,8 @@ export function triggerDetail(trigger: string | null): string {
   if (trigger === "webhook") return "GitHub push (auto-sync)";
   if (trigger === "manual") return "Manual re-sync";
   if (trigger === "connect") return "Repository connected";
+  // Papervine-hosted sites (SPEC §10.11): published from the editor, or seeded at creation.
+  if (trigger === "publish") return "Published from the editor";
+  if (trigger === "create") return "Site created";
   return "—";
 }

@@ -129,6 +129,16 @@ describe("triggerLabel (feed byline)", () => {
   it("keeps the legacy fallback for pre-column rows", () => {
     expect(triggerLabel(null, null)).toBe("Manual Update");
   });
+  it("prefers the actor for a Papervine-hosted publish or create", () => {
+    expect(triggerLabel("publish", "Jeff Loiselle")).toBe("Jeff Loiselle");
+    expect(triggerLabel("create", "Jeff Loiselle")).toBe("Jeff Loiselle");
+  });
+  // These genuinely happen with no actor (an automation, the authoring MCP), and calling
+  // an editor publish a "Manual Update" would be plainly wrong.
+  it("names an actor-less publish/create rather than calling it a Manual Update", () => {
+    expect(triggerLabel("publish", null)).toBe("Published");
+    expect(triggerLabel("create", null)).toBe("Site created");
+  });
 });
 
 describe("triggerDetail (expanded panel)", () => {
@@ -137,5 +147,9 @@ describe("triggerDetail (expanded panel)", () => {
     expect(triggerDetail("manual")).toBe("Manual re-sync");
     expect(triggerDetail("connect")).toBe("Repository connected");
     expect(triggerDetail(null)).toBe("—");
+  });
+  it("describes the Papervine-hosted mechanisms (SPEC §10.11)", () => {
+    expect(triggerDetail("publish")).toBe("Published from the editor");
+    expect(triggerDetail("create")).toBe("Site created");
   });
 });

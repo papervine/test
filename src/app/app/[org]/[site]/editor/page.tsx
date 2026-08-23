@@ -4,6 +4,7 @@ import { contentContext } from "@papervine/renderer/lib/content";
 import { buildNav, type NavSection, type NavLeaf, type NavNode } from "@papervine/renderer/lib/nav";
 import { resolvePagePath, listSessions } from "@/lib/authoring-core";
 import { siteHref } from "@/lib/dashboard-nav";
+import { isNativeSite, hasGitRepo } from "@/lib/site-source";
 import { EditorShell } from "@/components/editor/EditorShell";
 
 // The first page slug in the nav (the editor opens on it). Empty string → index.
@@ -50,7 +51,11 @@ export default async function EditorPage({
   if (!src) {
     return (
       <div className="p-10 text-sm text-neutral-500">
-        This site hasn’t synced any content yet. Connect and sync a repo first, then open the editor.
+        {isNativeSite(siteRow)
+          ? // A hosted site is seeded at creation, so "no content" here means the seed is
+            // still in flight or failed — not that a repo needs connecting.
+            "We’re still setting up this site’s starter content. Give it a moment and refresh."
+          : "This site hasn’t synced any content yet. Connect and sync a repo first, then open the editor."}
       </div>
     );
   }
@@ -78,6 +83,7 @@ export default async function EditorPage({
       org={org}
       site={site}
       deployBranch={siteRow.branch}
+      gitBacked={hasGitRepo(siteRow)}
       initialBranch={branch}
       sections={sections}
       slugs={slugs}

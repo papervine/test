@@ -9,6 +9,7 @@ import {
   mergeAssetDimensions,
   mimeForPath,
   planSync,
+  TEXT_CONTENT_TYPE,
   type Blob,
   type ImageDim,
 } from "./sync-plan";
@@ -268,7 +269,7 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
           if (dim) measured[b.path] = dim;
         }
       } else {
-        await putObject(key, data.toString("utf8"), "text/plain; charset=utf-8");
+        await putObject(key, data.toString("utf8"), TEXT_CONTENT_TYPE);
       }
       uploaded++;
     }

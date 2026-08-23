@@ -19,6 +19,8 @@ import { CUSTOM_KEY, getCatalogEntry } from "../lib/automations/catalog";
 import { applyOutcome } from "../lib/automations/apply";
 import { buildRunPrompt } from "../lib/automations/prompt";
 import { checkoutBranch, discardSession, publishDraft } from "../lib/authoring-core";
+import { publishResultRef } from "../lib/publish-mode";
+import { isNativeSite, hasGitRepo } from "../lib/site-source";
 import { authoringTools, draftContentSource } from "../lib/authoring-tools";
 import { assistantTools } from "../lib/assistant-tools";
 import { findOpenSession, listDraftFiles } from "../lib/draft-store";
@@ -76,7 +78,12 @@ export const automationRunTask = task({
       await triggerActivity(run.siteId);
       return { ok: false as const, canceled: true };
     }
-    if (!siteRow.repoOwner || !siteRow.repoName) return fail("site has no connected repo");
+    // A Papervine-hosted site has no repo BY DESIGN and publishes to storage instead, so
+    // only a Git site missing its repo is a misconfiguration. (Reading context repos is
+    // gated separately, on githubInstallationId, below.)
+    if (!isNativeSite(siteRow) && !hasGitRepo(siteRow)) {
+      return fail("site has no connected repo");
+    }
     const provider = aiProviderStatus(aiModelId("automations"));
     if (!provider.ok) return fail(provider.error);
 
@@ -242,6 +249,10 @@ export const automationRunTask = task({
           mode: "commit",
           message: `[automation] ${title}`,
           actorUserId: null,
+          // An automation publishing must NOT fan out content_update automations — on a
+          // Papervine-hosted site there's no commit sha to dedupe on, so this automation
+          // would re-trigger itself until the daily run cap stopped it.
+          origin: "automation",
         });
         if (!published.ok) {
           await db
@@ -254,7 +265,9 @@ export const automationRunTask = task({
               : (published.error ?? "publish failed"),
           );
         }
-        resultRef = published.mode === "commit" ? published.commitSha : published.prUrl;
+        // A commit sha, a PR URL, or null on a Papervine-hosted site, which has neither —
+        // its deployment row is the record of the publish.
+        resultRef = publishResultRef(published);
       }
 
       await db

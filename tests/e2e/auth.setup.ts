@@ -24,10 +24,11 @@ setup("authenticate", async ({ page }) => {
   await page.getByLabel("Organization name").fill(TEST_USER.org);
   await page.getByRole("button", { name: "Create organization" }).click();
 
-  // Org but no site yet → the resolver lands on the connect form at /:org/connect.
+  // Org but no site yet → the resolver lands on the add-site chooser at /:org/connect,
+  // which shows its first-run framing for a site-less org (SPEC §10.11).
   await page.waitForURL(`**/${ORG_SLUG}/connect`);
   await expect(
-    page.getByRole("heading", { name: "Connect a repository" }),
+    page.getByRole("heading", { name: "Create your first site" }),
   ).toBeVisible();
 
   await page.context().storageState({ path: authFile });
