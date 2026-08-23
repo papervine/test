@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import postgres from "postgres";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { TEST_DB_URL } from "./global-setup";
-import { APEX_ORIGIN } from "./constants";
+import { APEX_ORIGIN, TEST_S3 } from "./constants";
 
 // Tenant docs serve on the apex (path mode), but baseURL is the app host (SPEC §10), so
 // address them absolutely.
@@ -47,16 +47,14 @@ const DOCS_JSON = JSON.stringify({
 const LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="28"><rect width="100" height="28" fill="#2563EB"/></svg>`;
 
 const s3 = new S3Client({
-  region: "auto",
-  endpoint: "http://127.0.0.1:9000",
+  region: TEST_S3.region,
+  endpoint: TEST_S3.endpoint,
   forcePathStyle: true,
-  credentials: { accessKeyId: "papervine", secretAccessKey: "papervinesecret" },
+  credentials: { accessKeyId: TEST_S3.accessKeyId, secretAccessKey: TEST_S3.secretAccessKey },
 });
 
 async function put(key: string, body: string, contentType = "text/plain") {
-  await s3.send(
-    new PutObjectCommand({ Bucket: "papervine-content", Key: key, Body: body, ContentType: contentType }),
-  );
+  await s3.send(new PutObjectCommand({ Bucket: TEST_S3.bucket, Key: key, Body: body, ContentType: contentType }));
 }
 
 test.describe("tenant docs render from the tenant's own content @external", () => {
@@ -294,6 +292,32 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     expect(await page.content()).not.toContain("MEMBERS_MARKER");
   });
 
+  // Vercel Analytics is mounted in the ROOT layout, which renders tenant docs as well as our own
+  // marketing and dashboard — so it's gated on `isTenant`. This has to be a browser assertion:
+  // <Analytics/> injects its script client-side, so there is nothing in the server-rendered HTML
+  // for a fetch-based check to look at, and a smoke `exclude` on the markup would pass whether
+  // the gate existed or not. If this ever fails, a third-party beacon is loading on customers'
+  // docs pages and billing their readers' traffic to our quota.
+  test("no Vercel Analytics beacon on a tenant's docs page", async ({ page }) => {
+    const analyticsRequests: string[] = [];
+    page.on("request", (r) => {
+      if (/\/_vercel\/insights|va\.vercel-scripts\.com/.test(r.url())) analyticsRequests.push(r.url());
+    });
+
+    await page.goto(docsUrl(`/sites/${SLUG}/tenant-page`));
+    await expect(page.getByText("TENANT_PAGE_MARKER")).toBeVisible();
+    // Give a client-injected script time to appear and fire.
+    await page.waitForTimeout(1500);
+
+    const injected = await page.evaluate(() =>
+      Array.from(document.querySelectorAll("script")).some((s) =>
+        /insights|vercel-scripts/.test((s as HTMLScriptElement).src || ""),
+      ),
+    );
+    expect(injected, "analytics script must not be injected on a tenant page").toBe(false);
+    expect(analyticsRequests, "analytics must not beacon from a tenant page").toEqual([]);
+  });
+
   test("tenant pages resolve; platform-only pages 404 (no phantom links)", async ({ page }) => {
     const ok = await page.goto(docsUrl(`/sites/${SLUG}/tenant-page`));
     expect(ok?.status()).toBe(200);
@@ -301,7 +325,15 @@ test.describe("tenant docs render from the tenant's own content @external", () =
 
     // content/guides/markdown exists in the platform repo but not this tenant's — must 404,
     // and (per the sidebar assertion above) must never have been linked.
-    const phantom = await page.goto(docsUrl(`/sites/${SLUG}/guides/markdown`));
-    expect(phantom?.status()).toBe(404);
+    // Poll rather than assert the first response's status: `next dev` compiles this route on
+    // first hit, and every `playwright test` invocation starts a fresh server, so this is always
+    // a cold hit — the status of that first response races compilation (observed 200, then 404
+    // on an identical re-run). Polling asserts the settled answer, which is what we mean.
+    await expect
+      .poll(async () => (await page.goto(docsUrl(`/sites/${SLUG}/guides/markdown`)))?.status(), {
+        timeout: 20_000,
+      })
+      .toBe(404);
+    await expect(page.getByText("Page not found")).toBeVisible();
   });
 });
