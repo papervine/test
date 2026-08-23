@@ -9,7 +9,7 @@
  * Exits non-zero if any page returns HTTP 500 — usable as an ad-hoc gate.
  */
 import { spawn } from "node:child_process";
-import { requireNoDevServer } from "./dev-lock.mjs";
+import { protectNextEnv, requireNoDevServer } from "./dev-lock.mjs";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
@@ -66,6 +66,9 @@ const slugs = sample > 0 ? all.filter((_, i) => i % Math.ceil(all.length / sampl
 // Same one-dev-server-per-directory rule as the smoke gate; this needs PAPERVINE_CONTENT
 // pointed at the repo being crawled.
 requireNoDevServer(PKG_ROOT, "the crawl", DIST_DIR);
+// `next dev` will repoint next-env.d.ts at DIST_DIR; put it back so a later typecheck
+// isn't validating routes against this run's frozen snapshot.
+const restoreNextEnv = protectNextEnv(PKG_ROOT);
 console.log(`▶ crawling ${slugs.length}/${all.length} pages from ${CONTENT} on :${port}`);
 
 const server = spawn(nextBin, ["dev", "-H", "0.0.0.0", "-p", String(port)], {
@@ -105,6 +108,7 @@ try {
   }
 } finally {
   server.kill("SIGTERM");
+  restoreNextEnv();
 }
 
 console.log(`  fully rendered : ${ok}`);

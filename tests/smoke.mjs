@@ -13,7 +13,7 @@ import { spawn } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import process from "node:process";
-import { requireNoDevServer } from "./dev-lock.mjs";
+import { protectNextEnv, requireNoDevServer } from "./dev-lock.mjs";
 
 const PKG_ROOT = process.cwd();
 const PORT = Number(process.env.SMOKE_PORT ?? 4178);
@@ -359,6 +359,9 @@ async function run() {
   // Next allows one dev server per directory, and this one needs PAPERVINE_CONTENT pointed
   // at the fixtures — so a running `npm run dev` has to be stopped, not reused.
   requireNoDevServer(PKG_ROOT, "the smoke gate", DIST_DIR);
+  // See protectNextEnv: `next dev` repoints next-env.d.ts at DIST_DIR, which would make a
+  // later typecheck validate routes against this run's frozen snapshot.
+  const restoreNextEnv = protectNextEnv(PKG_ROOT);
   log(`▶ booting renderer against ${FIXTURES} on :${PORT}`);
   const server = spawn(nextBin, ["dev", "-H", "0.0.0.0", "-p", String(PORT)], {
     cwd: PKG_ROOT,
@@ -600,6 +603,7 @@ async function run() {
     failures.push(`fatal: ${e.message}\n--- server log tail ---\n${serverLog.slice(-1500)}`);
   } finally {
     server.kill("SIGTERM");
+    restoreNextEnv();
   }
 
   if (failures.length) {

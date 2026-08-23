@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { TEST_DB_URL } from "./tests/e2e/global-setup";
+import { TEST_S3 } from "./tests/e2e/constants";
 
 // E2E for the authed control plane (SPEC §10): real browser, real Postgres (papervine_test),
 // real MinIO. The renderer/gate smoke gate (no DB) stays tests/smoke.mjs; pure logic is Vitest.
@@ -70,11 +71,13 @@ export default defineConfig({
       // Auth happens on the app host — trust that origin (Better Auth's CSRF check reads
       // BETTER_AUTH_URL into trustedOrigins).
       BETTER_AUTH_URL: `http://app.localhost:${PORT}`,
-      S3_ENDPOINT: "http://127.0.0.1:9000",
-      S3_REGION: "auto",
-      S3_ACCESS_KEY_ID: "papervine",
-      S3_SECRET_ACCESS_KEY: "papervinesecret",
-      S3_BUCKET: "papervine-content",
+      // Shared with the specs that seed storage directly (tests/e2e/constants.ts) — see
+      // TEST_S3 there for why these can't be duplicated per-spec.
+      S3_ENDPOINT: TEST_S3.endpoint,
+      S3_REGION: TEST_S3.region,
+      S3_ACCESS_KEY_ID: TEST_S3.accessKeyId,
+      S3_SECRET_ACCESS_KEY: TEST_S3.secretAccessKey,
+      S3_BUCKET: TEST_S3.bucket,
       // Deterministic GitHub App webhook secret so the push-webhook spec can sign payloads
       // the running server will verify (SPEC §3 auto-sync). Test-only.
       GITHUB_APP_WEBHOOK_SECRET: "e2e-webhook-secret",
