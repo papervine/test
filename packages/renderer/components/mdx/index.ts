@@ -21,6 +21,7 @@ import { Visibility } from "./Visibility";
 import { Prompt } from "./Prompt";
 import { View } from "./View";
 import { Panel, RequestExample, ResponseExample } from "./Panel";
+import { Banner } from "./Banner";
 
 /**
  * The component set available inside every MDX page (SPEC.md §5).
@@ -39,6 +40,7 @@ export const mdxComponents: MDXComponents = {
   Check,
   Danger,
   Callout: CustomCallout,
+  Banner,
 
   // Layout & navigation
   Card,

@@ -78,8 +78,11 @@ threw when any one component was missing.
    - **`Panel` / `RequestExample` / `ResponseExample`** render inline instead of moving into
      the right column. Relocating them means the page layout reaching into compiled MDX to
      extract elements before render; the layout is fixed by the route before MDX runs.
-8. ⏳ `banner` in `docs.json` (content, dismissible, type, color) — config, not a component,
-   and not yet parsed by the config layer.
+8. ✅ `banner` — supported **both** ways. The documented form is a `docs.json` field
+   (`content`, `dismissible`, `type`, `color`), now parsed by the config layer and rendered
+   above the navbar site-wide by both the CLI and the tenant renderer. `<Banner>` also works
+   as an MDX tag for a single page: upstream doesn't document one, but writing it is a
+   reasonable expectation and rendering it costs less than degrading it to bare text.
 
 ## Renderer Decision
 

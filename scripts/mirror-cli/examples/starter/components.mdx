@@ -22,6 +22,22 @@ Or bring your own icon and color:
   A custom callout, with any Lucide icon name and any CSS color.
 </Callout>
 
+## Banners
+
+<Banner type="info" dismissible>
+  A prominent announcement. Use `type="warning"` or `type="critical"` to raise the volume.
+</Banner>
+
+For a notice on *every* page, set `banner` in `docs.json` instead — it renders above the
+navbar site-wide:
+
+```json
+"banner": {
+  "content": "Version 2.0 is live. See the [changelog](/changelog).",
+  "dismissible": true
+}
+```
+
 ## Badges
 
 Inline labels and status. <Badge color="green">Stable</Badge> <Badge color="yellow">Beta</Badge> <Badge color="red">Deprecated</Badge>

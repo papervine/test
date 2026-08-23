@@ -28,6 +28,7 @@ import { PageViewBeacon } from "@/components/analytics/PageViewBeacon";
 import { Assistant } from "@/components/assistant/Assistant";
 import { AskAssistantButton } from "@/components/assistant/AskAssistantButton";
 import { SearchButton } from "@papervine/renderer/components/SearchDialog";
+import { Banner } from "@papervine/renderer/components/mdx/Banner";
 
 /**
  * Tenant docs render as a persistent SHELL (layout: navbar + tabs + sidebar + assistant)
@@ -183,6 +184,15 @@ export async function TenantDocsShell({
       <>
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
         <PageViewBeacon />
+        {/* Site-wide `docs.json` banner, above the navbar. */}
+        {config.banner?.content && (
+          <Banner
+            content={config.banner.content}
+            type={config.banner.type}
+            dismissible={config.banner.dismissible}
+            color={config.banner.color}
+          />
+        )}
         <Navbar
           config={config}
           base={base}

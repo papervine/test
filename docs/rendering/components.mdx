@@ -143,6 +143,7 @@ Every name below resolves to a real component. Anything not listed degrades to i
 | --- | --- |
 | `<Note>` `<Tip>` `<Info>` `<Warning>` `<Check>` `<Danger>` | Callouts, by severity |
 | `<Callout icon color>` | A callout with your own icon and color |
+| `<Banner type dismissible>` | A prominent announcement bar |
 | `<Card>` `<CardGroup>` `<Columns>` | Linkable cards in a responsive grid |
 | `<Tile>` | A card that leads with a preview image |
 | `<Steps>` `<Step>` | Numbered instructions |
@@ -192,7 +193,22 @@ differences are deliberate, and in each case the content stays complete and read
   </Accordion>
 </AccordionGroup>
 
-`banner` is not a component — it's a [config](/rendering/config) field in `docs.json`.
+### Banners, two ways
+
+`<Banner>` works inline, for a notice on one page. For a notice on *every* page, set `banner`
+in [`docs.json`](/rendering/config) and it renders above the navbar site-wide:
+
+```json
+"banner": {
+  "content": "Version 2.0 is live. See the [changelog](/changelog).",
+  "type": "info",
+  "dismissible": true
+}
+```
+
+Both render the same component. `type` is `info`, `warning`, or `critical`; `color` accepts a
+hex override. Dismissal isn't persisted between page loads — there's no stable identity to
+key it to, and a banner that never returns after one click is worse than one that does.
 
 ## Related
 

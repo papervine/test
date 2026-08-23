@@ -136,6 +136,11 @@ const CHECKS = [
       // Callouts: the shell is a bordered flex row with an icon.
       "DANGER_MARKER",
       "CUSTOM_CALLOUT_MARKER",
+      // Banner, both ways in: the `docs.json` field renders site-wide above the navbar, and
+      // the same component is usable as an inline tag.
+      "CONFIG_BANNER_MARKER",
+      'aria-label="Dismiss"',
+      "INLINE_BANNER_MARKER",
       // Badge renders an inline-flex span; the pill variant sets rounded-full.
       "BADGE_MARKER",
       "BADGE_PILL_MARKER",

@@ -111,6 +111,26 @@ unknown theme name falls back to `mint`.
   so the tab icon tracks light/dark. Favicon paths are served from the site's own assets, the
   same as logos and images.
 
+## Site-wide banner
+
+`banner` renders an announcement bar above the navbar on every page:
+
+```json
+"banner": {
+  "content": "Version 2.0 is live. See the [changelog](/changelog).",
+  "type": "info",
+  "dismissible": true
+}
+```
+
+`content` is the only required field, and the only one that matters — without it there's
+nothing to show, so a malformed banner is dropped and the site renders as though it weren't
+there. `type` is `info`, `warning`, or `critical`; `color` takes a hex override (or a
+`{ light, dark }` pair, of which the light value is applied). `dismissible` adds a close
+button, and dismissal is not remembered between page loads.
+
+For a notice on a single page, use the [`<Banner>` component](/rendering/components) instead.
+
 ## Related
 
 - [Content pipeline](/rendering/content-pipeline) — `docs.json` is validated during sync.

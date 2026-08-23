@@ -48,5 +48,10 @@
         ]
       }
     ]
+  },
+  "banner": {
+    "content": "CONFIG_BANNER_MARKER",
+    "type": "warning",
+    "dismissible": true
   }
 }
