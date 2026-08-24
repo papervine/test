@@ -64,18 +64,39 @@ test.describe("platform admin", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
   test.beforeEach(async ({ page }) => signInAsAdmin(page));
 
-  test("/admin lists every customer org with members and totals", async ({
+  // The console is list → detail now, not one page: /admin is counts and recent activity,
+  // /admin/orgs is the table, and members live on an org's own page. Walking that path is also
+  // the regression guard for the nav's active-tab match on a detail route.
+  test("the console lists every customer org, and drills into one for its members", async ({
     page,
   }) => {
     await page.goto("/admin");
-    await expect(
-      page.getByRole("heading", { name: "Operator" }),
-    ).toBeVisible();
-    // The setup project's org + user appear even though the admin isn't a member.
-    await expect(
-      page.getByRole("heading", { name: TEST_USER.org }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+
+    await page.getByRole("link", { name: "Organizations" }).first().click();
+    await expect(page.getByRole("heading", { name: "Organizations" })).toBeVisible();
+    // The setup project's org appears even though the admin isn't a member of it.
+    const orgLink = page.getByRole("link", { name: TEST_USER.org });
+    await expect(orgLink).toBeVisible();
+
+    await orgLink.click();
+    await expect(page.getByRole("heading", { name: TEST_USER.org })).toBeVisible();
+    // Members moved here from the old single page — this is where support actually looks.
     await expect(page.getByText(TEST_USER.email)).toBeVisible();
+  });
+
+  test("every console section loads for an operator", async ({ page }) => {
+    for (const [path, heading] of [
+      ["/admin", "Overview"],
+      ["/admin/orgs", "Organizations"],
+      ["/admin/sites", "Sites"],
+      ["/admin/deploys", "Deploys"],
+      ["/admin/billing", "Billing"],
+    ] as const) {
+      const res = await page.goto(path);
+      expect(res?.status(), `${path} should render`).toBe(200);
+      await expect(page.getByRole("heading", { name: heading })).toBeVisible();
+    }
   });
 
   test("read-only bypass: a non-member admin can open any org's dashboard, marked by the banner", async ({
@@ -89,7 +110,9 @@ test.describe("platform admin", () => {
   test("impersonate → browse as the customer → stop → back on /admin", async ({
     page,
   }) => {
-    await page.goto("/admin");
+    // Impersonate moved to the org's detail page, along with the member list.
+    await page.goto("/admin/orgs");
+    await page.getByRole("link", { name: TEST_USER.org }).click();
     // The admin belongs to no org, so every impersonate control targets a customer;
     // TEST_USER is the only member the setup created.
     await page.getByRole("button", { name: "impersonate" }).first().click();
@@ -109,9 +132,8 @@ test.describe("platform admin", () => {
       await page.getByRole("button", { name: "Stop impersonating" }).click();
       await page.waitForURL(/\/admin$/, { timeout: 5_000 });
     }).toPass({ timeout: 30_000 });
-    await expect(
-      page.getByRole("heading", { name: "Operator" }),
-    ).toBeVisible();
+    // Stopping returns to /admin, which is the console's Overview.
+    await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
   });
 });
 
@@ -164,7 +186,9 @@ test.describe("platform admin — plan comps", () => {
     page,
   }) => {
     await page.goto("/admin/billing");
-    await expect(page.getByRole("heading", { name: "Billing console" })).toBeVisible();
+    // "Billing", not "Billing console": the page's heading now matches its nav label, since the
+    // console's sidebar already says where you are.
+    await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
 
     // The Grant-plan form (first Organization/Reason on the page; the credit-adjustment
     // form below reuses those labels). Blank months = an indefinite comp.

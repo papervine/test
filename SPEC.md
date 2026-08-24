@@ -3929,6 +3929,37 @@ reflects in the switcher); typecheck + unit (`normalizeSiteName`) + smoke + craw
 
 ### 10.10 Platform superadmin (`/admin`)
 
+> **Status 2026-08-24 — split into a real console.** It was one page: four stat cards followed by
+> an unbounded stack of org cards, each inlining that org's members and sites. Fine at three
+> customers, unusable at thirty — and there was no way to answer "which sites are stuck in
+> draft?" or "is anything failing across tenants?" because sites only existed nested inside their
+> org's card. Now a list → detail console with its own subnav, deliberately the same two-mode
+> shape as `SettingsNav` (mobile pill strip / desktop grouped sidebar) so it reads as part of the
+> product: **Overview** (counts + newest orgs/sites/recent deploys), **Organizations** (searchable
+> table → per-org detail carrying the members, impersonate controls and sites), **Sites**
+> (cross-tenant, the view that didn't exist), **Deploys** (cross-tenant activity, with the error
+> inline — a run of failures spanning customers means something of *ours* broke), and the existing
+> **Billing**. `ADMIN_NAV` in `src/lib/admin-nav.ts` is the single source of truth; its one piece
+> of real logic is `activeAdminSlug`, longest-prefix rather than equality, so a detail route keeps
+> its parent tab lit.
+>
+> Every query is now bounded — counts are aggregates, lists are `LIMIT`ed, and rollups are
+> computed only for the ids on the current page. The old page fetched every org, member, site,
+> deploy aggregate and analytics aggregate to render one screen.
+>
+> Two SQL dead ends worth not repeating, both recorded in `admin/data.ts`. Joining four GROUPED
+> subqueries failed because each aliased its count `"n"`, so drizzle rendered every reference as a
+> bare `coalesce("n", 0)` — ambiguous, query rejected. Rewriting them as correlated scalar
+> subqueries failed differently: drizzle renders columns inside a `sql` template UNQUALIFIED,
+> giving `(select count(*) from "member" where "organization_id" = "id")`, which Postgres can't
+> resolve either. The working shape is aggregate-in-SQL, join-in-JS, bounded by the page's ids.
+>
+> The allowlist gate moved to the layout (it can't be forgotten when a section is added) and is
+> ALSO called per page: Next renders a layout and its page concurrently, so a layout-only gate
+> still lets a cross-tenant query run before the 404 wins. `getSession` is per-request cached, so
+> the second check is ~free. Still read-only apart from the pre-existing impersonate and billing
+> actions.
+
 The operator's cross-tenant overview, at **`app.papervine.io/admin`**: every customer org with
 its members (email + role), sites (status, repo, custom domain), deploy counts + last-deploy
 time, and 30-day analytics volume, plus platform totals (customers/users/sites/deploys).
