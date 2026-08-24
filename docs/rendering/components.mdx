@@ -155,7 +155,7 @@ Every name below resolves to a real component. Anything not listed degrades to i
 | `<Badge>` | Inline status labels |
 | `<Icon>` | An inline icon |
 | `<Tooltip>` | A definition on hover or focus |
-| `<Tree>` / `<FileTree>` with `<Tree.Folder>` `<Tree.File>` | File and folder structures |
+| `<Tree>` / `<FileTree>` with `<Tree.Folder>` `<Tree.File>`, or a Markdown list | File and folder structures |
 | `<Color>` with `<Color.Item>` `<Color.Row>` | Color swatches, optionally per theme |
 | `<Update>` | A changelog entry, with a linkable anchor |
 | `<Prompt>` | A copyable AI prompt |
@@ -192,6 +192,36 @@ differences are deliberate, and in each case the content stays complete and read
     unaffected.
   </Accordion>
 </AccordionGroup>
+
+### File trees, two ways
+
+`<Tree>` (also `<FileTree>`) takes explicit elements:
+
+```mdx
+<Tree>
+  <Tree.Folder name="app" defaultOpen>
+    <Tree.File name="page.tsx" highlight />
+  </Tree.Folder>
+</Tree>
+```
+
+Or a Markdown list, which is usually less typing:
+
+```mdx
+<FileTree>
+
+- docs/
+  - index.mdx
+  - guides/
+    - configuration.mdx
+- docs.json
+
+</FileTree>
+```
+
+A trailing slash marks a folder; so does having nested items, since a directory with children
+is a directory either way. Folders with children open by default. Both forms produce the same
+elements and can be mixed in one tree.
 
 ### Banners, two ways
 

@@ -68,10 +68,11 @@ threw when any one component was missing.
    which asserts each one emits its own *markup* rather than merely showing its text — a
    marker alone proves nothing, since the children fallback would render it either way.
 6. ✅ Mermaid diagrams.
-7. ⏳ **`<Tree>` accepts a second input form we don't support.** Alongside
-   `<Tree.Folder>`/`<Tree.File>`, upstream also parses a **Markdown list** inside
-   `<Tree>`/`<FileTree>` — a trailing slash marks a folder, nesting marks children, and
-   folders with children expand by default:
+7. ✅ **`<Tree>` accepts both input forms.** Alongside `<Tree.Folder>`/`<Tree.File>`, a
+   **Markdown list** inside `<Tree>`/`<FileTree>` now converts to the same elements
+   (`remarkTreeList` in `lib/mdx.tsx`, mirroring `remarkMermaid`): a trailing slash marks a
+   folder, nesting marks one too, folders with children open by default, and the two forms
+   can be mixed in one tree.
    ```mdx
    <FileTree>
    - docs/
@@ -81,11 +82,12 @@ threw when any one component was missing.
    - docs.config.ts
    </FileTree>
    ```
-   A repo using that form degrades to a plain bullet list inside the tree container — not
-   broken, but not a tree. Found by visually diffing against the upstream docs, not by
-   reading the component reference, which documents only the JSX form. Fix is a remark
-   transform that rewrites a list child of `Tree`/`FileTree` into the JSX equivalent before
-   compile, the same shape as `remarkMermaid`.
+   Worth noting how this was found: **only by visually diffing rendered pages** against the
+   upstream docs. The component reference documents just the JSX form, so no amount of
+   reading the spec would have surfaced it — the list form degraded quietly to a bullet list
+   inside the tree container. Pinned by `components-extended.mdx`, which asserts all three
+   folder/file rules plus the `<summary>` markup that distinguishes a converted tree from a
+   degraded list.
 8. ⏳ Three known fidelity gaps, each a deliberate trade rather than an oversight:
    - **`Icon`** resolves Lucide names only, not Font Awesome or Tabler. Three icon libraries
      is poor weight for a package built to be light; unknown names render nothing and `src`

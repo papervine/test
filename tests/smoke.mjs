@@ -164,6 +164,15 @@ const CHECKS = [
       "TREE_FILE_MARKER",
       "TREE_ROOT_FILE_MARKER",
       "FILETREE_ALIAS_MARKER",
+      // The Markdown-list input form. `<summary>` only exists if the list became real
+      // Tree.Folder elements — a plain <li> fallback would still show the text, so the
+      // disclosure markup is what distinguishes converted from degraded.
+      "LIST_FOLDER_MARKER",
+      "LIST_NESTED_FILE_MARKER",
+      "LIST_IMPLICIT_FOLDER_MARKER",
+      "LIST_DEEP_FILE_MARKER",
+      "LIST_ROOT_FILE_MARKER",
+      "<summary",
       // Color: swatches are rendered as styled spans, so the value reaches a background.
       "COLOR_NAME_MARKER",
       "COLOR_ROW_MARKER",

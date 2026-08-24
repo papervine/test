@@ -127,6 +127,94 @@ function remarkMermaid() {
   };
 }
 
+/**
+ * A Markdown list inside `<Tree>`/`<FileTree>` → the `<Tree.Folder>`/`<Tree.File>` elements
+ * the component actually renders.
+ *
+ * The list form is the second documented way to write a file tree, and the one a migrating
+ * repo is more likely to use because it's far less typing:
+ *
+ *     <FileTree>
+ *     - docs/
+ *       - index.mdx
+ *       - guides/
+ *         - configuration.mdx
+ *     - docs.config.ts
+ *     </FileTree>
+ *
+ * Without this it degraded to a bullet list inside the tree's container — rendered, but not a
+ * tree. Doing it at the mdast stage means the component only ever sees one input shape, and
+ * both forms can be mixed in the same tree.
+ *
+ * Folder detection follows the documented rules: a trailing slash marks a folder, and so does
+ * having nested items (a directory with children is a directory whether or not it was typed
+ * with a slash). Folders with children open by default, matching the list form's behaviour.
+ */
+function remarkTreeList() {
+  const textOf = (node: Record<string, unknown>): string => {
+    if (typeof node.value === "string") return node.value;
+    const children = node.children as Record<string, unknown>[] | undefined;
+    return Array.isArray(children) ? children.map(textOf).join("") : "";
+  };
+
+  const jsx = (name: string, attrs: Record<string, string | null>, children: unknown[]) => ({
+    type: "mdxJsxFlowElement",
+    name,
+    attributes: Object.entries(attrs).map(([key, value]) => ({
+      type: "mdxJsxAttribute",
+      name: key,
+      value,
+    })),
+    children,
+  });
+
+  /** One `listItem` → a Folder (with its converted children) or a File. */
+  const convertItem = (item: Record<string, unknown>): unknown => {
+    const kids = (item.children as Record<string, unknown>[] | undefined) ?? [];
+    // The label is the item's own inline content; nested lists are its children, not its name.
+    const label = kids
+      .filter((k) => k.type !== "list")
+      .map(textOf)
+      .join("")
+      .trim();
+    const nested = kids.filter((k) => k.type === "list");
+    const converted = nested.flatMap((list) =>
+      ((list.children as Record<string, unknown>[] | undefined) ?? []).map(convertItem),
+    );
+
+    const isFolder = label.endsWith("/") || converted.length > 0;
+    const name = label.replace(/\/$/, "");
+    if (!isFolder) return jsx("Tree.File", { name }, []);
+    // `defaultOpen` is a boolean attribute: a null value emits it bare, as JSX expects.
+    return jsx(
+      "Tree.Folder",
+      converted.length ? { name, defaultOpen: null } : { name },
+      converted,
+    );
+  };
+
+  return (tree: { children?: unknown[] }) => {
+    const visit = (node: Record<string, unknown>) => {
+      const children = node.children as Record<string, unknown>[] | undefined;
+      if (!Array.isArray(children)) return;
+      if (
+        node.type === "mdxJsxFlowElement" &&
+        (node.name === "Tree" || node.name === "FileTree")
+      ) {
+        node.children = children.flatMap((child) =>
+          child.type === "list"
+            ? ((child.children as Record<string, unknown>[] | undefined) ?? []).map(convertItem)
+            : [child],
+        ) as Record<string, unknown>[];
+        return; // converted subtree is already in final form
+      }
+      children.slice().forEach(visit);
+    };
+    const roots = tree.children as Record<string, unknown>[] | undefined;
+    if (Array.isArray(roots)) roots.slice().forEach(visit);
+  };
+}
+
 /** hosted docs platforms' bare code-title convention (```js Label) → rehype/highlighter title="Label". */
 function remarkCodeTitles() {
   return (tree: { children?: unknown[] }) => {
@@ -149,7 +237,7 @@ function remarkCodeTitles() {
 // bug that made us drop next-mdx-remote originally).
 const mdxOptions = {
   development,
-  remarkPlugins: [remarkGfm, remarkCodeTitles, remarkLiteralImg, remarkMermaid],
+  remarkPlugins: [remarkGfm, remarkCodeTitles, remarkLiteralImg, remarkMermaid, remarkTreeList],
   rehypePlugins: [rehypeSlug, [rehypeAutolinkHeadings, { behavior: "wrap" }]],
 } as const;
 

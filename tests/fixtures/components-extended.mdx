@@ -63,6 +63,19 @@ The `FileTree` alias must resolve to the same component:
   <Tree.File name="FILETREE_ALIAS_MARKER" />
 </FileTree>
 
+The Markdown list form is the *other* documented input, converted at the mdast stage. A
+trailing slash marks a folder, nesting also marks one, and everything else is a file:
+
+<FileTree>
+
+- LIST_FOLDER_MARKER/
+  - LIST_NESTED_FILE_MARKER
+  - LIST_IMPLICIT_FOLDER_MARKER
+    - LIST_DEEP_FILE_MARKER
+- LIST_ROOT_FILE_MARKER
+
+</FileTree>
+
 ## Color
 
 <Color variant="compact">
