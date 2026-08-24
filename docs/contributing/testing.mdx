@@ -109,8 +109,9 @@ CI lives in `.github/workflows/ci.yml` and has two jobs — keep both green.
 
 | Job | Runs | Services |
 | --- | --- | --- |
-| `verify` | typecheck + unit + build + smoke + clean-room CLI package | none |
+| `verify` | typecheck + unit + build + smoke + example-site crawl + clean-room CLI package | none |
 | `e2e` | Playwright (skipping `@external`) | Postgres |
+| `mirror` | publishes the example docs site to its own public repo, gated on `verify` passing | none |
 
 Releases are gated too, by a publish workflow that reruns these checks before shipping so a
 version tag can never publish a broken package.
