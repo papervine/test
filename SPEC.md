@@ -3855,6 +3855,17 @@ the hosted API over HTTPS, they don't embed it.
 > server injects its own overlay button, which would put dev chrome in a marketing image. Taken
 > in dark mode at 1440×900, then palette-quantised to 53KB.
 >
+> **Gotcha: a transparent PNG in a GitHub README gets a grey backdrop.** The logo first shipped
+> with rounded corners masked into the alpha channel, which looked broken — a lighter halo
+> tracing the tile. GitHub styles README images with
+> `background-color: var(--bgColor-muted); border-radius: 6px`, so transparent corners expose
+> that muted grey, rounded at only 6px rather than the 56px the artwork used. Markdown cannot
+> override the inline style, so the image simply must not be transparent: the logo is now an
+> **opaque** square and GitHub's own 6px radius softens it for free. Verified by reproducing
+> GitHub's exact inline style over dark, light and npm-white backgrounds. It is also cropped
+> tighter than the source — the original centres the mark in ~49% of the square, which reads as a
+> small glyph adrift in a box at 120px; ~72% is the usual app-icon proportion.
+>
 > Rendering was checked against **GitHub's own markdown API** (`POST /markdown`) rather than
 > assumed, which caught one real thing: badges on separate source lines render with `<br>` between
 > them and stack vertically. They are one line now. Also confirmed `---` under an ATX heading
