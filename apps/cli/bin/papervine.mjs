@@ -103,7 +103,7 @@ function printHelp() {
   );
   out.push(`${dim("JSX/JavaScript. Only run it on docs repos you trust.")}`);
   out.push("");
-  out.push(`${dim("Docs at")} ${brandLight("https://papervine.io")}`);
+  out.push(`${dim("Docs at")} ${brandLight("https://docs.papervine.io")}`);
 
   console.log(out.join("\n"));
 }
