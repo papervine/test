@@ -3923,6 +3923,80 @@ the hosted API over HTTPS, they don't embed it.
 > before, that hangs forever; now the CLI exits after 2.0s with code 137 and the port is freed.
 > The normal path is unchanged at ~10ms.
 >
+> **Design (2026-08-24): the AI assistant in the CLI — one engine, three callers, metering
+> decided by the caller. NOT YET BUILT.** The requirement: the assistant should work in the CLI
+> against the user's own key, and work hosted where it stays metered. Investigated before
+> designing, and the conclusion is that this is mostly *relocation* — the architecture already
+> separates the two.
+>
+> **Retrieval needs no database, which is the fact that makes this feasible at all.**
+> `docs-tools.ts` imports exactly four things: `runSearch` (the Orama index the CLI already ships,
+> and which now warms at startup) plus `loadPage`, `buildNav` and `loadApiCatalog` from
+> `@papervine/renderer`. There are **no embeddings and no pgvector** — retrieval is agentic over
+> full-text search and page reads, every capability of which is already in the tarball. Had the
+> assistant been embedding-based this would need a vector store and the answer would be no.
+>
+> **The metering decision already lives in the route, not the engine** (`api/assistant/route.ts`):
+> `const billing = record ? await authorizeAi(record.organizationId, "assistant") : { allowed: true, metered: false }`.
+> `runAssistantConversation` never decides whether to charge — it is told. And the unmetered
+> branch **already runs in production**: it is how the platform's own apex docs assistant works.
+> So the CLI is not a new mode, it is a third caller of a function that already has two:
+>
+> | caller | `record` | `billing` | result |
+> |---|---|---|---|
+> | hosted tenant | site row | `authorizeAi(org)` | metered, logged, credit-gated |
+> | Papervine's own docs | `null` | `{allowed, metered:false}` | unmetered (today) |
+> | **CLI** | `null` | `{allowed, metered:false}` | unmetered, no DB touched |
+>
+> Every hosted-only call is already guarded on `record` — `logEvent`, `setEventStatus`,
+> `recordAiUsage` — so the CLI path skips all three without adding a single conditional.
+> **Metering cannot leak into the CLI even by accident**: charging requires an `organizationId`
+> and a `creditRateVersion` row, neither of which exists in a package that ships no database
+> driver, and the CLI has no telemetry path to report anything home (verified in the security
+> pass).
+>
+> **The work is module moves, not rewrites.** Into `packages/renderer`: `assistant-run` (131
+> lines), `assistant-tools` (46), `docs-tools` (73), `ai-model` (204), `assistant-outcome` (13),
+> and the UI `Assistant.tsx` (294) + `AskAssistantButton.tsx` (17). Four control-plane imports
+> have to be broken, and three are near-trivial:
+> - `@/lib/reader-access` → the renderer already carries `PageAccess` and an allow-all predicate.
+> - `@/lib/search` → a 32-line wrapper; the renderer holds the core, and already re-exports
+>   `withSearchIndexKey`.
+> - `@/lib/db/app-schema` → a **type-only** import (`typeof site.$inferSelect`); replace with a
+>   structural type.
+> - `@/lib/track` + `@/lib/billing/store` → the only real injection, and both are already
+>   `record`-guarded, so the CLI passes nothing and they no-op.
+>
+> **The UI slot already exists.** `Navbar` takes an optional "Ask AI" slot that the hosted app
+> fills (`assistant={assistantOn ? <AskAssistantButton /> : null}`) and the CLI currently passes
+> `null` to. Filling it is the whole integration.
+>
+> **Keys need no new mechanism.** `ai-model.ts` is entirely env-driven: `ANTHROPIC_API_KEY` with
+> `AI_ROUTING=direct`, or a local OpenAI-compatible server via `AI_BASE_URL` — so a CLI user can
+> run it **free and fully local against Ollama**, which is a good story for an MIT tool.
+> `aiProviderStatus()` already returns human-readable "you haven't configured X" errors.
+>
+> **Packaging is the one real cost, and it is a policy reversal rather than a technical problem.**
+> `ai` is 7.5MB and `@ai-sdk/*` is 18MB, against a 15MB tarball. §10.6's boundary says the CLI
+> carries no AI, `tests/cli-package.mjs` *asserts* `ai-sdk` is absent from the tarball, and the
+> README says so in prose. **Recommendation: make it opt-in exactly as `sharp` is** — the
+> assistant route detects whether the SDK resolves and a key is set, and absent either the navbar
+> simply does not render the button (which is today's behaviour). Users who want it pay the 25MB
+> and bring a key; everyone else keeps a lean previewer, and the boundary assertion stays
+> meaningful as "not by default" rather than "never".
+>
+> **Recorded consequence, so it is a decision and not a surprise:** `PAPERVINE_HOST=0.0.0.0
+> papervine dev` behind a proxy is a legitimate self-host (it is why the sharp platform-lock was
+> worth fixing). With the assistant shipped, someone can serve a *public* docs site with a working
+> assistant, on their own key, entirely unmetered. That is not a hole in the billing code; it is
+> the honest consequence of an MIT package with a serviceable server and a no-lock-in posture.
+> Whether it matters depends on where the hosted value sits — if it is multi-tenancy, Git sync,
+> reader auth, the answered/unanswered analytics the local path structurally cannot produce,
+> custom domains and not operating anything, then a capable free tier is a funnel rather than a
+> leak. A lever exists (restrict the CLI to local/BYO-key providers and keep gateway routing
+> hosted-only) but it is easily circumvented in an MIT package and sits awkwardly beside
+> no-lock-in.
+>
 > Rendering was checked against **GitHub's own markdown API** (`POST /markdown`) rather than
 > assumed, which caught one real thing: badges on separate source lines render with `<br>` between
 > them and stack vertically. They are one line now. Also confirmed `---` under an ATX heading
