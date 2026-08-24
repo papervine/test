@@ -1,16 +1,21 @@
 <div align="center">
-  <a href="https://papervine.io">
-    <h2><b>Papervine CLI</b></h2>
-  </a>
-  <p>
-    Preview a docs repo of MDX + a <code>docs.json</code> on your machine, with the
-    same renderer that serves it in production.
-  </p>
-  <p>
 
-[![npm](https://img.shields.io/npm/v/papervine?logo=npm)](https://www.npmjs.com/package/papervine) [![Website](https://img.shields.io/website?url=https%3A%2F%2Fpapervine.io)](https://papervine.io)
+<img src="https://raw.githubusercontent.com/papervine/cli/main/apps/cli/assets/logo.png" width="120" height="120" alt="Papervine" />
 
-  </p>
+# Papervine
+
+---
+
+**Your docs, rendered locally — by the same engine that serves them in production.**
+
+Point it at a folder of MDX and a `docs.json`. Compatible with docs.json, so an existing project just runs.
+
+[![npm](https://img.shields.io/npm/v/papervine?logo=npm&label=npm&color=7C3AED)](https://www.npmjs.com/package/papervine) [![license](https://img.shields.io/badge/license-MIT-7C3AED)](./LICENSE) [![node](https://img.shields.io/badge/node-%E2%89%A520.9-7C3AED?logo=nodedotjs&logoColor=white)](https://nodejs.org) [![docs](https://img.shields.io/badge/docs-papervine.io-7C3AED)](https://docs.papervine.io)
+
+[Quickstart](#quickstart) · [Commands](#create-a-site) · [What ships](#what-ships-in-this-package) · [Compatibility](#compatibility) · [Docs](https://docs.papervine.io)
+
+<img src="https://raw.githubusercontent.com/papervine/cli/main/apps/cli/assets/screenshot.png" width="900" alt="A docs site rendered by papervine dev — navigation, component gallery and a copyable snippet, in dark mode" />
+
 </div>
 
 ### Quickstart

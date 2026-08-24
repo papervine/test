@@ -3835,6 +3835,31 @@ the hosted API over HTTPS, they don't embed it.
 > mark in the repo. If the web app ever wants to stop shipping a 917KB PNG for a 32px lockup,
 > that path is the place to start.
 >
+> **Status (2026-08-24): the CLI README got a hero.** Logo, title, tagline, badges, nav links and
+> a product screenshot, in the shape most well-marketed dev tools use — the npm page is the first
+> thing anyone sees of Papervine, and it was a text heading and two badges.
+>
+> **The images are absolute `raw.githubusercontent.com` URLs, and that is a sequencing
+> constraint, not a style choice.** npm renders the README *from the registry*, where a
+> repo-relative path resolves to nothing — so the URLs must be absolute, and the only place to
+> host them for free is the public mirror. They point at
+> `papervine/cli/main/apps/cli/assets/*`, which means **the npm page shows broken images until
+> `papervine/cli` is public and has been mirrored at least once.** Publish in that order: flip
+> the repo public → `npm run mirror:cli -- --push` → then `npm publish`. Verified by dry-running
+> the mirror and confirming both files land at exactly those paths in the staged repo.
+>
+> They are deliberately **not** in the package's `files` allowlist, so a 93KB hero costs the
+> tarball nothing — the images live in git for the README's benefit and never ship to a consumer.
+>
+> The screenshot is the starter served by the **real prebuilt CLI**, not `next dev`: the dev
+> server injects its own overlay button, which would put dev chrome in a marketing image. Taken
+> in dark mode at 1440×900, then palette-quantised to 53KB.
+>
+> Rendering was checked against **GitHub's own markdown API** (`POST /markdown`) rather than
+> assumed, which caught one real thing: badges on separate source lines render with `<br>` between
+> them and stack vertically. They are one line now. Also confirmed `---` under an ATX heading
+> becomes a `<hr>` rather than being eaten as a setext underline.
+>
 > **Status (2026-08-24): `papervine new` shipped, and `dev` offers it.** Prompted by a
 > competitor leading with `pnpm dlx create-shiso-app my-docs` — the observation being that a
 > tool should generate a folder when the user hasn't got one. Ours dead-ended instead: `dev`
