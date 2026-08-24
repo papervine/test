@@ -6,9 +6,9 @@
 
 ---
 
-**Your docs, rendered locally — by the same engine that serves them in production.**
+**The docs.json-compatible alternative — open-source MDX documentation.**
 
-Point it at a folder of MDX and a `docs.json`. Compatible with docs.json, so an existing project just runs.
+Preview your docs locally with the same renderer that serves them in production. Point it at a folder of MDX and a `docs.json`.
 
 [![npm](https://img.shields.io/npm/v/papervine?logo=npm&label=npm&color=7C3AED)](https://www.npmjs.com/package/papervine) [![license](https://img.shields.io/badge/license-MIT-7C3AED)](./LICENSE) [![node](https://img.shields.io/badge/node-%E2%89%A520.9-7C3AED?logo=nodedotjs&logoColor=white)](https://nodejs.org) [![docs](https://img.shields.io/badge/docs-papervine.io-7C3AED)](https://docs.papervine.io)
 
