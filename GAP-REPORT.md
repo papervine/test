@@ -39,6 +39,21 @@ The renderer originally resolved only `.mdx`; real docs repos often contain both
 
 - **Fix:** resolve both extensions.
 
+### Author-defined React components (BUILT 2026-08-24)
+
+Pages may define their own components (`export const X = () => …`) and use React hooks with no
+import. Previously a hook threw `useState is not defined` and **500'd the page**, because the
+hooks were never in scope and the throw happened during React's render — after the renderer's
+try/catch had returned.
+
+- **Fix:** author logic is evaluated in the browser (`ClientMdx`) with the hook set injected,
+  never on the server. The server renders markdown, built-in components and literal expressions
+  only. See SPEC §10.6.
+- **Consequence:** an author component is absent from server HTML and appears once the page is
+  interactive; prose and built-ins are unaffected.
+- **Refused by contract:** `export default`, `function` declarations, npm/JSON/relative imports,
+  dynamic `import()`. These degrade to a notice rather than rendering.
+
 ### ESM imports and snippets unresolved
 
 Many docs repos use shared snippets or component imports. Until full snippet resolution lands,

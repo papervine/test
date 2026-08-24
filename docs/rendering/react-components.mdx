@@ -1,0 +1,70 @@
+---
+title: React components
+description: Define your own components inside an MDX page, with React hooks available and no imports to wire up.
+public: true
+---
+
+Beyond the [built-in component library](/rendering/components), you can define your own
+components directly in a page and use them straight away.
+
+```mdx
+export const Counter = () => {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount(count + 1)}>Clicked {count} times</button>;
+};
+
+<Counter />
+```
+
+No import line, no build step, no configuration. React's hooks are already in scope.
+
+## Available hooks
+
+These are provided to your components automatically — you never import React:
+
+`useState` · `useEffect` · `useRef` · `useCallback` · `useMemo` · `useContext` · `useReducer`
+
+## The rules
+
+Components must be **named arrow functions assigned to a const**:
+
+```mdx
+export const Callout = ({ children }) => <aside className="note">{children}</aside>;
+```
+
+<Warning>
+  These forms are not supported and will show a notice instead of rendering the page:
+
+  - `export default` — use a named export
+  - `function` declarations — use an arrow function
+  - importing npm packages, JSON files, or relative paths
+  - dynamic `import()` and `React.lazy`
+
+  The only import a page may make is a snippet: `import { Thing } from "/snippets/thing.mdx"`.
+</Warning>
+
+Everything a component needs must be reachable without a package manager: use browser built-ins
+and write the logic inline. `navigator.clipboard`, `fetch`, `localStorage` and the rest of the
+web platform are all available.
+
+## Where your components run
+
+Your components run **in the reader's browser**, not on the server. That is what makes hooks,
+event handlers and browser APIs work at all — they need a live page.
+
+It has one consequence worth knowing: a component you define appears once the page becomes
+interactive, a moment after the surrounding text. Ordinary Markdown, the built-in components and
+the rest of your page are rendered on the server as usual, so the content readers and search
+engines see is unaffected.
+
+<Note>
+  Because of this split, an expression that inspects the server — `{process.env.SOMETHING}` — has
+  nothing to read. There is no server environment where your component runs. Values that must be
+  fixed at publish time belong in `docs.json` or your page's frontmatter.
+</Note>
+
+## When something goes wrong
+
+A component that throws while rendering shows an inline notice on that page rather than
+breaking the site, the same way an unrecognized component degrades to its children. Run
+[`papervine dev`](/cli) to see the underlying error message while you write.

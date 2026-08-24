@@ -70,6 +70,24 @@ const CHECKS = [
     include: ["CARD_ONE_MARKER", "CARD_TWO_MARKER", "CARD_A_MARKER", "card-link"],
   },
   {
+    slug: "author-code",
+    desc: "author logic is NOT evaluated on the server (SPEC 10.6 execution model)",
+    // The page renders (200, notice-free) and its prose is server-rendered, but the author's own
+    // code must not run here. `{"SERVER" + "_EVALUATED"}` is the load-bearing assertion: the
+    // concatenated RESULT appears nowhere in the source or the compiled module, so finding
+    // "SERVER_EVALUATED" in this HTML would mean the server evaluated an author expression --
+    // which is exactly how `{process.env.DATABASE_URL}` once rendered a live connection string.
+    include: ["AUTHOR_PAGE_MARKER"],
+    exclude: ["SERVER_EVALUATED", "<b>AUTHOR_COMPONENT_OUTPUT</b>"],
+  },
+  {
+    slug: "author-violation",
+    desc: "a page breaking the component contract degrades instead of rendering or executing",
+    // An import outside /snippets/ is refused before evaluation on either side, and the reader
+    // gets the same notice any unsupported feature produces -- never a 500.
+    include: ["couldn", "only /snippets/"],
+  },
+  {
     slug: "unknowns",
     desc: "unknown + member-expr components degrade to children",
     include: ["UNKNOWN_CHILD_MARKER", "MEMBER_EXPR_MARKER"],

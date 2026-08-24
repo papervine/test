@@ -4066,6 +4066,171 @@ the hosted API over HTTPS, they don't embed it.
 > platform, and the tarball loses 17MB), or set `images: { unoptimized: true }` so behaviour is
 > identical everywhere and drop sharp entirely. Deliberately left as a decision rather than
 > fixed — it changes packaging strategy and product behaviour.
+>
+> **Status (2026-08-24): the MDX execution model — server renders data, the browser evaluates
+> author logic. Decided, then BUILT (steps 1–2).** This continues the security-pass thread
+> above: rendering a repo is RCE because author MDX executes
+> server-side (`run()` in `packages/renderer/lib/mdx.tsx`) with full Node scope. Two questions
+> had to be answered together — how to close that, and how to match the incumbent's documented React
+> support (`/customize/react-components`) so "renders as-is" stays true — because the same
+> mechanism decides both.
+>
+> **What the incumbent does, inferred from their rules (not a runtime sandbox).** Their constraints
+> are all *compile-time* tells: `function`-keyword and `export default` are rejected (pure syntax
+> bans, no runtime rationale) → an **AST allowlist pass**; hooks (`useState`…`useReducer`) work
+> without import → an **injected scope**; no npm / JSON / dynamic `import()` / cross-snippet /
+> nested imports, "all code compiles into the page" → a **bounded static module graph, no runtime
+> resolver**; hooks + `useEffect` + `navigator.clipboard` → **client-side execution**. And
+> `@mintlify/mdx` depends on `next-mdx-remote-client`, whose whole job is client-side runtime MDX
+> evaluation — direct corroboration. So their "sandbox" is: compile to a closed-world client
+> bundle with a curated scope; nothing dangerous is ever *in scope*, rather than fenced off at
+> runtime. Their published npm serializer has no guard because the guarding lives in their
+> platform build layer, not the package.
+>
+> **The model we chose (one boundary, both products):** split by *what is provably safe to
+> execute*, not by product.
+> - **Server executes only data:** markdown, our built-in components (our own trusted code), and
+>   literal/constant expressions. None of that is author *logic*, so there is nothing to sandbox
+>   and the server never needs restricting.
+> - **The browser runtime-evaluates author logic:** `export const X = () => …`, hooks,
+>   interactivity — compiled to a string server-side and evaluated client-side with an injected
+>   `React`+hooks scope and a closed import surface.
+>
+> This is the same "literal-only" idea from earlier in this thread, but reframed correctly: not a
+> *restriction on authors* (they can still write hooks; those just run client-side, exactly as
+> the incumbent does) but the *line between server-render and client-eval*. It satisfies every
+> requirement at once — **security** (author logic never runs on the server → no RCE, hosted or
+> CLI; the code simply is not there, so no worker/`vm`/scope-stripping is needed), **compatibility**
+> (hooks and interactivity work → incumbent parity), **perf** (server path stays static and
+> cacheable; client eval only on pages that use author components), **CLI** (the evaluator is a
+> runtime lib in the prebuilt bundle, NOT the Next bundler — so prebuild stays; dropping it was
+> considered and rejected: it only removes one CLI bundler constraint while re-paying the whole
+> §10.6 toolchain/compile/deps cost and does nothing for the multi-tenant case, where a live
+> per-request bundler is the RCE surface, not a fix for it), and **elegance** (one mechanism in
+> `packages/renderer`, shared, no per-product divergence).
+>
+> **Proof-of-concept (2026-08-24), verified end to end before committing to the design:**
+> - *Injection mechanism (Node).* `run(code, opts)` is `new AsyncFunction(code)(opts)`, so inside
+>   the compiled body `arguments[0]` is the options object. Injecting hooks is therefore a
+>   one-line prelude — `const {useState,…} = arguments[0]._pvHooks;` prepended to the compiled
+>   source, with the hooks passed in `opts._pvHooks`. No globals touched. On our REAL compiled
+>   output: without injection, `run()` throws `useState is not defined` (the exact 500 we hit
+>   probing the current renderer); with it, the same source renders `COUNTER_0` plus the
+>   surrounding markdown.
+> - *Client island (real browser).* Server (Node) compiled the MDX to a ~900-byte string written
+>   into the page as inert data; a browser bundle (React + `run()` + injected hooks, one IIFE via
+>   esbuild, no toolchain) evaluated it and mounted the component. The **static HTML the server
+>   produced contained no `COUNTER` at all** — proving the author component never executed
+>   server-side — and two clicks in a real browser drove it `COUNTER_0 → COUNTER_2`, proving
+>   genuine client-side `useState`. So: server compiles (compilation does not execute author
+>   code), browser evaluates, state works, secrets are never in reach.
+>
+> **Phased plan, cleanest first:**
+> 1. **Server-side:** render markdown + built-ins + literal expressions only; stop executing
+>    author logic server-side. *This is the step that kills the RCE.*
+> 2. **Client evaluator** (`packages/renderer`) with injected `React`+hooks scope for author
+>    components, shipped in the bundle. *This restores compatibility and fixes the `useState`
+>    500.* Also owes the C1 validation (arrow-const exports only, closed imports), snippet gather,
+>    and a "degrade, don't 500" boundary for author code that throws inside the browser eval.
+> 3. **Optional later:** worker-backed SSR (empty `env`, stripped globals, denied module
+>    resolution — a separate PoC in this thread showed `new Worker(f,{env:{}})` gives 0 env keys,
+>    `new Function("return process")()` does not recover a removed global, dynamic `import()` is
+>    deniable via a loader hook, and runaway renders are killed by `terminate()` + a parent
+>    timeout with the parent surviving) for the narrow case of an author component that must
+>    appear in SSR HTML. NOT needed for the baseline, which is why the baseline is simpler than
+>    the worker.
+>
+> **Decided (C4): client-evaluate every author component; the server renders only provable
+> data.** The fork was whether a *static* author component (no hooks, purely presentational) that
+> today renders in SSR HTML should keep server-side SSR behind the step-3 worker (C3) or be
+> client-evaluated like everything else (C4). C4, on three grounds, in priority order:
+> 1. **Security by construction, not by containment.** With C4 no server code path ever evaluates
+>    author logic, so server-side author-RCE is *impossible*, and no sandbox has to stay correct.
+>    C3 keeps author code running server-side (de-privileged in the worker) plus a classifier
+>    deciding "is this static?" — both must be correct forever, and a classifier that mislabels a
+>    dynamic component as static is an RCE. For a multi-tenant product (attacker ≠ victim),
+>    "can't happen" beats "contained if the sandbox holds."
+> 2. **One path.** C4 is a single mechanism for all author components. C3 is two paths + a
+>    classifier + the worker on the critical path indefinitely — the divergence the whole model
+>    set out to avoid.
+> 3. **No hydration mismatch.** SSR-then-hydrate (C3) requires the server HTML to match the
+>    client's first render exactly; author code running in two environments (stripped worker vs.
+>    real browser — `window`, `Date`, `Math.random`) is a prime mismatch source. C4 is
+>    client-only render, so that class of React-19 hydration bug cannot occur.
+>
+> The cost is narrow: author components are absent from SSR HTML. But the content that must be in
+> SSR HTML for docs (prose, headings, links, code) is markdown + built-ins, which C4 still renders
+> server-side; author-defined components are near-always interactive widgets, which are
+> client-side regardless. Mitigate the one visible symptom — layout shift — with a server-rendered
+> placeholder that reserves height.
+>
+> **The one scenario that would reopen this:** an author component rendering *indexable text* that
+> must be in SSR HTML for SEO (a content-bearing `<Pricing>`/`<FAQ>` with no hooks). If that
+> pattern proves common among real customers, it is the specific trigger to add C3 via the step-3
+> worker — as an **opt-in** path, not the baseline. C4 does not foreclose it: shipping C4 first
+> and adding the worker only when a real case demands it is strictly less wasted work than
+> building the worker on spec. So the worker stays the documented escape hatch, unbuilt until
+> needed.
+>
+> **Caveats recorded so they are not rediscovered:** the dev/prod JSX-runtime match applies to
+> this path too (compile `development` flag must match the evaluator's runtime, or React 19 throws
+> the "production element in development" error — the same gotcha that made us leave plain
+> next-mdx-remote); and the PoC proved the mechanism, not a clean console — a `pageerror`/React
+> `console.error`-failing e2e (the `editor.spec.ts` pattern) is still owed on the real island.
+>
+> **Status (2026-08-24): steps 1 and 2 SHIPPED.** The split is live in `packages/renderer`.
+>
+> - **`lib/author-code.ts`** — the pure decision layer. `isServerSafeExpression` (literal-only,
+>   allowlisted so an unrecognised ESTree node is a "no" rather than an assumption), `inspectEsm`
+>   (named arrow-const exports and `/snippets/` imports only) and `findDynamicImports`. 24 unit
+>   tests, written against hand-built ESTree so a parser change can't silently move the goalposts.
+> - **`remarkCollectAuthorCode`** — runs first in the remark chain, so it classifies the author's
+>   own syntax rather than our transforms' output (`<PvCodeTitle>`, `<Mermaid>`, `<PvImg>`), and
+>   fills a collector cached alongside the compiled source. Compile cache key `v4 -> v5`.
+> - **`Mdx()` now branches.** Violations degrade to the notice *before* anything is evaluated on
+>   either side. Author code goes to `ClientMdx`. Everything else takes the unchanged server path.
+> - **`components/ClientMdx.tsx`** — the browser evaluator: the hook prelude, the shared component
+>   map, and an error boundary so an author component that throws at *render* time degrades
+>   instead of escaping the try/catch (the exact trap that made a `useState` page 500).
+> - **`lib/mdx-runtime.tsx`** — the client-safe half of `mdx.tsx` (component map, Fallback,
+>   `applyTenantUrls`, `TenantImage`), extracted because a client component cannot import a module
+>   that pulls in `next/cache`. Moved, not copied: one definition, used by both sides.
+>
+> **Measured results.** The `{process.env.DATABASE_URL}` probe that previously rendered
+> `postgres://user:pw@loc...` and a marker secret into a page now yields **zero occurrences of
+> either secret in the server response**, and the browser renders `unreachable` for all three
+> probes because `process` does not exist there. The hooks page that returned **500**
+> (`useState is not defined`) now returns **200** and drives `COUNTER_0 -> COUNTER_2` on click in
+> a real browser. A page importing `node:child_process` with an `export default` returns 200 with
+> a notice naming both violations, evaluated on neither side. Crucially, the marker
+> `STATIC_COMPONENT_RENDERED` appears in the response **only inside the compiled-source string
+> shipped as inert data** (`const Static = () => _jsxDEV("b", {children: "..."})`), never as
+> rendered `<b>` markup — the server compiled without executing.
+>
+> **No perf regression:** an audit classifying every page across `docs/`, `examples/starter`,
+> `content/` and `tests/fixtures` found **94 of 96 on the unchanged server fast path**; the only
+> two that client-evaluate are the fixtures written to exercise the new paths. Literal props
+> (`cols={2}`, `tags={["release"]}`, `value={{light,dark}}`) classify as data, which is why real
+> content is untouched. And the MDX **compiler does not reach the client bundle** — `@mdx-js/mdx`
+> is `sideEffects: false`, so importing only `run` tree-shakes the rest away (verified by grepping
+> the built chunks for `micromark`: absent; for `_pvHooks`: present).
+>
+> **A unified gotcha worth recording:** `remarkPlugins: [remarkCollectAuthorCode(report), ...]`
+> passes a *transformer* where unified expects an *attacher* — it invokes it with no tree, the
+> compile throws, and **every page degrades to the notice**. The symptom is not a crash but a
+> site-wide silent downgrade, and the smoke suite caught it as missing markers. Use the tuple form
+> `[[remarkCollectAuthorCode, report], ...]`.
+>
+> Guarded by `tests/unit/author-code.test.ts` and two smoke fixtures: `author-code` (asserts
+> `{"SERVER" + "_EVALUATED"}` — whose concatenated result appears nowhere in the source or the
+> compiled module, so finding it in the HTML would prove server evaluation) and `author-violation`
+> (asserts the notice). Verified: typecheck (root + CLI) clean, unit 1133, smoke 19 pages, crawls
+> of `docs/` 42/42 and `examples/starter` 36/36 both 0x500, `mirror:cli --dry-run` typecheck
+> outside the monorepo clean, and the clean-room tarball gate green.
+>
+> **Still open:** step 3 (worker-backed SSR) remains unbuilt by design, per the C4 decision above.
+> Snippet *resolution* is unchanged (GAP-REPORT) — the import is allowed, resolving it is separate.
+> The `pageerror`-failing e2e for the client island is still owed.
 
 ### 10.7 Error resilience (route boundaries)
 
