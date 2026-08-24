@@ -49,7 +49,9 @@ describe("collectExportPages", () => {
 
     // "guide/ghost" is in the nav but unloadable → dropped; the rest stay in nav order.
     expect(result.map((p) => p.href)).toEqual([
-      "/index",
+      // The index page is served at `/`, not `/index` — the two spellings are why a nav link
+      // to `/index` prefetched forever (see routeForSlug in lib/nav.ts).
+      "/",
       "/guide/install",
       "/guide/usage",
     ]);

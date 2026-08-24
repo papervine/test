@@ -37,7 +37,14 @@ const CHECKS = [
       'rel="icon"', 'href="/favicon.ico"', "prefers-color-scheme: dark",
       'aria-label="Toggle theme"',
     ],
-    exclude: ["Hidden Page"], // hidden:true → not in sidebar
+    exclude: [
+      "Hidden Page", // hidden:true → not in sidebar
+      // The index page is served at `/`; a nav link to `/index` is a route that does not exist.
+      // Next prefetches it, never records it as satisfied, and asks again — 5,257 requests to
+      // `/index?_rsc` in 20 seconds from a single page load, measured through a counting proxy
+      // because the prebuilt server logs nothing and dev does not prefetch at all.
+      'href="/index"',
+    ],
   },
   { slug: "guide", desc: ".md files are served", include: ["PLAIN_MD_MARKER"] },
   {

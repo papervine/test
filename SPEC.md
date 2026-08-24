@@ -4116,6 +4116,38 @@ the hosted API over HTTPS, they don't embed it.
 > `/components/cards` — quoting those pages' own descriptions. Agentic retrieval over the CLI's
 > own content, with citations, confirmed end to end rather than inferred.
 >
+> **Status (2026-08-24): an infinite prefetch loop, from the index page's two spellings.**
+> Reported as ~17,000 requests to `/index?_rsc=…` from a single page load. Reproduced at **5,257
+> requests in 20 seconds**, and it had nothing to do with the assistant — it reproduced with the
+> assistant fully disabled, and predates it.
+>
+> **Cause:** `buildNav` emitted `href: "/" + slug`, so the index page — written as `"index"` in
+> `docs.json` — got the href `/index`. But that page is *served at* `/`. Next's `<Link>`
+> prefetches `/index`, the response is the tree for `/`, the router never records `/index` as
+> fetched, and the Link asks again. Forever. `resolveLeaf` now routes slugs through
+> `routeForSlug`, which maps `index`/`""` to `/`. Removing the entry from the nav dropped the
+> count 5,257 → 23, and the fix does the same on the real starter.
+>
+> This is the **third** distinct bug from the same root — the gotchas file already records that
+> `listPageSlugs()` reports the index page as `""` while `docs.json` writes `"index"`, which made
+> the nav tree's "Add existing page" menu look empty. Same mismatch, new symptom. The rule stands:
+> anything comparing or constructing a page URL must normalise first.
+>
+> **Why nobody saw it:** invisible three ways over. Next does not prefetch in development, so it
+> only exists in a production build. The CLI's prebuilt server logs no requests, so the server
+> side showed nothing. And it costs the *page* nothing visible — it just hammers the loopback. It
+> took putting a counting proxy in front of the CLI to see it at all; four earlier reproduction
+> attempts "passed" because I was grepping a log that never records requests, which is a
+> reminder that an empty log is not evidence of absence.
+>
+> A wrong hypothesis is worth recording too: the CLI has no `staleTimes` while the web app sets
+> `dynamic: 30`, and with pages being `force-dynamic` that looked like an obvious cause. Setting
+> it changed nothing (5,257 → 5,280) and was reverted. The loop was never about cache lifetime.
+>
+> Guarded in `tests/smoke.mjs`: the fixtures nav includes the index page, so the home check now
+> *excludes* `href="/index"` — the cheapest possible layer for a bug that needs a browser, a
+> production build and a proxy to observe directly.
+>
 > Rendering was checked against **GitHub's own markdown API** (`POST /markdown`) rather than
 > assumed, which caught one real thing: badges on separate source lines render with `<br>` between
 > them and stack vertically. They are one line now. Also confirmed `---` under an ATX heading
