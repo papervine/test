@@ -17,15 +17,53 @@ import {
 import { cookies, headers } from "next/headers";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Brand } from "@/components/Brand";
-import { appHostFor } from "@/lib/tenant-host";
+import { appHostFor, domains } from "@/lib/tenant-host";
 import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
 
 // Marketing landing for the SaaS apex (SPEC §2). Reached via the middleware rewrite
 // of `/` when not in single-repo preview mode (no PAPERVINE_CONTENT).
+// Naming a competitor is confined to THIS file on purpose. The house style everywhere else —
+// SPEC, docs/, code comments, commits — is the generic "hosted docs platforms", and that stands
+// (see AGENTS.md). Marketing is the exception: "docs platform alternative" is what people actually
+// search, and the claim behind it is real rather than positioning — Papervine reads the same
+// `docs.json`, so an existing repo migrates unchanged.
+const ALTERNATIVE_KEYWORD = "docs platform alternative";
+
+// Kept near 60 characters so the keyword survives search-result truncation, and set as
+// `absolute` below: the root layout's `%s · Papervine` template would otherwise append a second
+// "Papervine" and push this well past that budget.
+const TITLE = `Papervine — the intelligent docs platform | ${ALTERNATIVE_KEYWORD}`;
+const DESCRIPTION =
+  "A modern docs platform alternative: docs.json-native, so your existing docs repo migrates " +
+  "unchanged. Documentation built for humans and AI — API playground, instant search, and an " +
+  "AI assistant.";
+
 export const metadata: Metadata = {
-  title: "Papervine — the intelligent documentation platform",
-  description:
-    "Documentation built for humans and AI. Write, publish, and maintain world-class docs — with an API playground, instant search, and an AI assistant.",
+  title: { absolute: TITLE },
+  description: DESCRIPTION,
+  keywords: [
+    ALTERNATIVE_KEYWORD,
+    "docs platform alternatives",
+    "docs.json",
+    "documentation platform",
+    "docs as code",
+    "MDX documentation",
+    "AI documentation assistant",
+    "API documentation",
+  ],
+  // Without a metadataBase, Next resolves the relative URLs below against localhost — so
+  // og:url shipped as "/" and social crawlers had nothing absolute to follow. The apex is the
+  // canonical home; tenant docs live on separate hosts entirely.
+  metadataBase: new URL(`https://www.${domains.platform}`),
+  alternates: { canonical: "/" },
+  openGraph: {
+    type: "website",
+    siteName: "Papervine",
+    title: TITLE,
+    description: DESCRIPTION,
+    url: "/",
+  },
+  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
 };
 
 // Our own docs, dogfooded through Papervine as an ordinary site whose custom domain is a
@@ -36,6 +74,8 @@ const DOCS = "https://docs.papervine.io/";
 
 // The hero announcement pill links at the page explaining what it announces.
 const DOCS_READER_AUTH = `${DOCS}auth/reader-auth`;
+// The migrate guide backs the "alternative" claim below — it is the page that proves it.
+const DOCS_MIGRATE = `${DOCS}guides/migrate`;
 
 // The "intelligence" story (top section).
 const PILLARS = [
@@ -209,6 +249,26 @@ export default async function LandingPage() {
           drop in your <span className="text-[var(--fg)]">docs.json</span> — it
           just works
         </div>
+
+        {/* Sits under the docs.json line because it is the same claim, said the way people
+            search for it. Not keyword stuffing: reading the same config IS the migration story,
+            and the link goes to the page that proves it. */}
+        <p
+          className="db-rise mx-auto mt-5 max-w-lg text-sm leading-relaxed text-[var(--muted)]"
+          style={{ animationDelay: "360ms" }}
+        >
+          Looking for a{" "}
+          <span className="font-medium text-[var(--fg)]">docs platform alternative</span>? Papervine
+          reads the same <span className="mono text-[var(--fg)]">docs.json</span>, so your
+          existing docs repo renders unchanged —{" "}
+          <a
+            href={DOCS_MIGRATE}
+            className="underline decoration-dotted underline-offset-4 transition-colors hover:text-[var(--fg)]"
+          >
+            migrate in minutes
+          </a>
+          .
+        </p>
       </section>
 
       {/* Product mock */}

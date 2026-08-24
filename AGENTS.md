@@ -44,6 +44,13 @@ dependency name (`@mintlify/mdx`), the `mint` theme value, and internal design d
 name them where people are *searching*, not where they're already *reading*. (This reverses
 the blanket strip in SPEC's 2026-06-14 note — don't re-apply it to the discovery surfaces.)
 
+The **marketing home** (`src/app/home/page.tsx`) is one of those discovery surfaces: it says
+"docs platform alternative" in the hero copy and in the page's `title`/`description`/`keywords`
+(added 2026-08-24). Same rules as the others — the claim is factual rather than positioning
+(we read the same `docs.json`, so an existing repo migrates unchanged), it links to the migrate
+guide that proves it, and it neither uses their logo nor implies endorsement. **Don't "fix" it
+back to the generic wording.**
+
 ## Four docs directories, four jobs (don't merge them)
 
 Each of these is a folder of MDX + `docs.json`, which makes them easy to confuse. They are
