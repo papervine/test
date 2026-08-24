@@ -157,8 +157,13 @@ jobs:
           echo "Deploying with trigger.dev@${VERSION}"
           npx "trigger.dev@${VERSION}" deploy
 
-# Real-repo validation (crawling papervine/starter or papervine/docs) lives in
-# tests/crawl.mjs and is run locally — see README → Testing. It's intentionally
-# not in CI: it boots a dev server per run, which is environment-sensitive on
-# hosted runners. The fixtures smoke test above encodes the same regression cases
-# deterministically.
+# Crawling *external* docs repos still lives in tests/crawl.mjs and is run locally —
+# see README → Testing. It stays out of CI because it clones a third-party repo per
+# run, so a red build could mean their content changed rather than ours; the fixtures
+# smoke test above encodes the same regression cases deterministically.
+#
+# `examples/starter` is the exception, and is crawled in `verify` above: it's *our*
+# content, committed here, so it's as deterministic as the fixtures — and it's the repo
+# people fork and the one `db:seed` builds its dev sites from, so a page that stops
+# rendering breaks both the first impression and local development. Booting a dev server
+# on a runner is already proven by the smoke gate, which does the same thing.

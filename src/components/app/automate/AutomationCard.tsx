@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Play, Plus, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
+import { siteHref } from "@/lib/dashboard-nav";
 import { automationIcon } from "./automation-icons";
 import { AutomationConfigDialog, type AutomationView } from "./AutomationConfigDialog";
 import {
@@ -52,7 +53,22 @@ export function AutomationCard({ view, siteRef }: { view: AutomationView; siteRe
         toast.error(res.error);
         return;
       }
-      toast.success(`${view.title} queued`);
+      // A queued run is only interesting because you want to watch it, so the toast carries the
+      // way there. sonner's `action` (a real button) rather than a clickable toast body: nothing
+      // signals that a toast is clickable, and the run id was already in hand — the enqueue
+      // returned it and the action used to discard it. An intra-dashboard router.push is safe
+      // here; it's the cross-context hop that skips the app-host rewrite (AGENTS.md).
+      const runHref = res.runId
+        ? siteHref(siteRef.org, siteRef.site, `automate/automations/runs/${res.runId}`)
+        : null;
+      toast.success(`${view.title} queued`, {
+        // Longer than the 4s default: a toast you're meant to act on shouldn't expire while
+        // you're moving the mouse to it.
+        duration: 10_000,
+        action: runHref
+          ? { label: "View run", onClick: () => router.push(runHref) }
+          : undefined,
+      });
       router.refresh();
     });
   }

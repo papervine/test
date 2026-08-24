@@ -46,6 +46,16 @@ function isAuthPathReachableWhenSignedIn(pathname: string): boolean {
 const ASSET_RE =
   /\.(png|jpe?g|gif|svg|webp|avif|ico|bmp|mp4|webm|pdf|woff2?)$/i;
 
+// Sentry's tunnel route (next.config.mjs `tunnelRoute`). The browser POSTs error/perf events
+// here so they aren't blocked by ad blockers — but it is a ROOT route, and every rewritten host
+// class below would send it somewhere that doesn't exist: `/app/monitoring` on the app host,
+// `/sites/{slug}/monitoring` on a tenant subdomain, `/custom-domain/monitoring` on a custom
+// domain. All three 404, so Sentry silently dropped every report from the dashboard AND from
+// every tenant docs site — i.e. from everywhere except the marketing apex, which is the one
+// place errors matter least. It resolves the DSN itself and needs no tenant context, so it
+// passes straight through untouched.
+const SENTRY_TUNNEL = "/monitoring";
+
 /**
  * Forward the resolved tenant slug to the render as a request header, so server
  * components (the root layout especially) can pick the right content source without
@@ -126,6 +136,7 @@ export function middleware(req: NextRequest) {
       pathname.startsWith("/api/") ||
       pathname.startsWith("/app/") || // already internal (defensive; links are bare)
       pathname === "/app" ||
+      pathname === SENTRY_TUNNEL ||
       ASSET_RE.test(pathname)
     ) {
       return syncFlag(NextResponse.next());
@@ -249,6 +260,7 @@ export function middleware(req: NextRequest) {
     // /mcp server and the llms.txt index resolve the tenant from the host (and the
     // x-papervine-site header), and they log agent analytics. Stamp the slug so they
     // read the right content source, but don't rewrite them under /sites/{slug}.
+    if (pathname === SENTRY_TUNNEL) return NextResponse.next();
     if (
       pathname === "/mcp" ||
       pathname === "/llms.txt" ||
@@ -287,6 +299,7 @@ export function middleware(req: NextRequest) {
   const host = req.headers.get("host");
   if (host && !isReservedPlatformHost(host) && !process.env.PAPERVINE_CONTENT) {
     if (pathname.startsWith("/api/")) return NextResponse.next(withHost(req, host));
+    if (pathname === SENTRY_TUNNEL) return NextResponse.next();
     if (
       pathname === "/mcp" ||
       pathname === "/llms.txt" ||

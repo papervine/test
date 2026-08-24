@@ -13,7 +13,7 @@ import { spawn } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import process from "node:process";
-import { requireNoDevServer } from "./dev-lock.mjs";
+import { protectNextEnv, requireNoDevServer } from "./dev-lock.mjs";
 
 const PKG_ROOT = process.cwd();
 const PORT = Number(process.env.SMOKE_PORT ?? 4178);
@@ -230,6 +230,18 @@ const CONTROL_PLANE_CHECKS = [
     redirectTo: "/login",
   },
   {
+    // Sentry's tunnel is a ROOT route, and the app host rewrites everything else onto /app —
+    // so it became /app/monitoring, hit the auth gate, and bounced to /login. Every browser
+    // error report from the dashboard was silently dropped (and the same shape broke tenant
+    // subdomains and custom domains: /sites/{slug}/monitoring). A status assertion here would
+    // depend on whether a DSN is configured; what must always hold is that it is never dragged
+    // through the /app mount.
+    host: "app.localhost",
+    path: "/monitoring",
+    desc: "the Sentry tunnel is not rewritten onto /app (dropped error reports)",
+    rejectRedirectTo: "/login",
+  },
+  {
     host: "app.localhost",
     path: "/acme/docs",
     desc: "unauthenticated app host /:org/:site redirects to /login",
@@ -436,6 +448,9 @@ async function run() {
   // Next allows one dev server per directory, and this one needs PAPERVINE_CONTENT pointed
   // at the fixtures — so a running `npm run dev` has to be stopped, not reused.
   requireNoDevServer(PKG_ROOT, "the smoke gate", DIST_DIR);
+  // See protectNextEnv: `next dev` repoints next-env.d.ts at DIST_DIR, which would make a
+  // later typecheck validate routes against this run's frozen snapshot.
+  const restoreNextEnv = protectNextEnv(PKG_ROOT);
   log(`▶ booting renderer against ${FIXTURES} on :${PORT}`);
   const server = spawn(nextBin, ["dev", "-H", "0.0.0.0", "-p", String(PORT)], {
     cwd: PKG_ROOT,
@@ -652,6 +667,17 @@ async function run() {
             );
             if (!cleared) failures.push(`[${tag}] expected Set-Cookie clearing ${check.clearsCookie} — ${check.desc}`);
           }
+        } else if (check.rejectRedirectTo) {
+          // For a path whose EXISTENCE depends on the environment (the Sentry tunnel route only
+          // exists when a DSN is configured), asserting a status would be flaky. What holds
+          // unconditionally is that the middleware didn't route it through the /app mount —
+          // which would hit the auth gate and bounce to /login.
+          if (
+            [301, 302, 303, 307, 308].includes(res.status) &&
+            res.location.includes(check.rejectRedirectTo)
+          ) {
+            failures.push(`[${tag}] must NOT redirect to ${check.rejectRedirectTo}, got ${res.status} → "${res.location}" — ${check.desc}`);
+          }
         } else if (check.redirectTo) {
           if (![301, 302, 303, 307, 308].includes(res.status) || !res.location.includes(check.redirectTo)) {
             failures.push(`[${tag}] expected redirect to ${check.redirectTo}, got ${res.status} → "${res.location}" — ${check.desc}`);
@@ -677,6 +703,7 @@ async function run() {
     failures.push(`fatal: ${e.message}\n--- server log tail ---\n${serverLog.slice(-1500)}`);
   } finally {
     server.kill("SIGTERM");
+    restoreNextEnv();
   }
 
   if (failures.length) {

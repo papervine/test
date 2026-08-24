@@ -7,6 +7,7 @@ import {
   type NodeViewProps,
 } from "@tiptap/react";
 import { editorComponents, Mermaid } from "@papervine/renderer/components/mdx/editor-registry";
+import type { CSSProperties } from "react";
 import type { NodeViewOpts } from "./nodes";
 
 // Phase-2b node views: render the SAME components the reader-facing renderer uses, so the
@@ -70,8 +71,9 @@ function ComponentNodeView(props: NodeViewProps) {
     return (
       <NodeViewWrapper className="my-5">
         <NodeViewContent
-          className="pv-cardgrid grid gap-4"
-          style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
+          // Mirrors CardGroup's responsive collapse, so the editor shows what readers get.
+          className="pv-cardgrid grid grid-cols-1 gap-4 sm:grid-cols-[repeat(var(--pv-cols),minmax(0,1fr))]"
+          style={{ "--pv-cols": cols } as CSSProperties}
         />
       </NodeViewWrapper>
     );

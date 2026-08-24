@@ -1895,6 +1895,157 @@ ours (AGENTS.md), and the implementation keeps that contract by sharing the writ
 The **read MCP is shipped** (§9.1 Slice 1) — it was a thin wrapper over the assistant tool
 layer.
 
+> **Status 2026-08-23 — the nav tree can add structure, not just navigate it.** Each group row
+> gets a **+** (`NavAddMenu`) beside its settings cog: **New page** (creates the file *and* lists
+> it), **Add existing page** (a submenu of page files the navigation doesn't reference — computed
+> client-side from the `slugs` + `sections` the server already sends, so no extra round trip), and
+> **New group**. Both halves of a new page — the MDX file and the `docs.json` entry — land in the
+> **same draft session**, so it publishes and reverts as one unit. The mutations are pure
+> (`src/lib/nav-edit.ts`, 24 unit tests) and the actions are read → mutate → `saveDraft`, matching
+> `saveGroupSettingsAction`; the page file is written *before* `docs.json`, the same ordering
+> native publish uses, so a nav entry never points at a file that doesn't exist yet.
+>
+> The reveal rule matches the cog: `[@media(hover:hover)]:` so it's always visible on touch.
+> Menu surfaces are `bg-[var(--option-bg)]`, not `db-glass` — glass is 60% + blur ("frosted
+> sticky chrome" per its own definition), which let page text read straight through the items;
+> `popover.tsx` had already made that call and menus now follow it, so every popup surface in the
+> platform is the same opaque token.
+>
+> Two spellings of the index page cost a bug here: `listPageSlugs()` reports it as `""` (route
+> `/`) while `docs.json` says `"index"` and `buildNav` emits `/index`, so a raw-string diff of
+> "files" against "in the nav" found it in neither and offered it as an **unlabelled row** — on a
+> site where everything else was listed, that blank row *was* the whole "Add existing page"
+> submenu, which is what "empty submenu" turned out to be. `canonicalSlug` / `unlistedPageSlugs`
+> now reconcile both sides, and `addPageToGroup` writes the canonical form (an empty nav entry
+> resolves to nothing). Also in AGENTS.md — anything diffing nav hrefs against page slugs hits it.
+>
+> **The non-obvious part: `buildNav` deliberately prunes empty groups**, because a group whose
+> every page is reader-auth-gated must not render as a bare label advertising content you can't
+> reach (§11.2). That's exactly right for readers and exactly wrong for the *editor*, where the
+> tree is the authoring surface for the structure itself — a group you just created is empty by
+> definition, so "New group" appeared to do nothing and there was no way to see or fill it. Fixed
+> with an `includeEmpty` opt, symmetrical to the existing `includeHidden` the editor already
+> passes: readers keep the prune, the editor sees what's authored. It applies at both levels
+> (group and tab) and the recursion means a parent whose only child group is empty survives too.
+> `tests/unit/nav-include-empty.test.ts` pins both directions, including that a
+> fully-gated group is *still* dropped for a reader who lacks the group — the flag must never
+> become a way to leak structure.
+>
+> **New tab** landed too, and it is NOT an append — `tabs` and top-level `groups` are
+> *alternative* structures, not siblings (confirmed against the docs.json JSON Schema, and
+> `buildNav` takes one branch or the other). So on a tab-less site `addTab` **converts**: every
+> root container (`groups`/`pages`/`anchors`/`dropdowns`) moves into an implicit first tab named
+> `Documentation`, and the new tab is appended beside it. A naive `tabs = [newTab]` would have
+> made every existing group silently vanish from the rendered site — buildNav would simply stop
+> reading the root. Two details that are easy to get wrong and are pinned by tests: the
+> duplicate-name refusal happens **before** the move (bailing halfway would delete the root
+> containers without writing any tabs — i.e. wipe the navigation), and the containers are *moved,
+> not copied*, so no ignored-but-present duplicate lingers for a later edit to touch. The action
+> returns `converted` and both the dialog and the toast say what happened, rather than silently
+> restructuring someone's navigation. This is also the first thing `includeEmpty` pays for
+> twice — a brand-new tab has no pages, so without it the tab wouldn't appear either.
+>
+> **Drag-and-drop reorganizing (2026-08-23).** Rows carry a grip: a page reorders within its
+> group or moves to another; a group slides among its siblings. `@dnd-kit/core` + `sortable` +
+> `modifiers` (new deps) — chosen over HTML5 drag events, which have no touch support, and over a
+> whole-row drag, which fights both tree scrolling on touch and the click that opens a page. The
+> grip is a real `<button>`, so keyboard dragging works for free (Space, arrows, Space).
+>
+> Pages are addressed **positionally** (`{group, index}`), not by slug — the same slug may
+> legitimately appear in two groups, and the row you grabbed is the one that should move. The
+> mutators splice the entry out and back in rather than reading it as a string, so object entries
+> (an OpenAPI selector, a page with its own `href`) survive the trip.
+>
+> **Optimistic, via `useOptimistic` (revised 2026-08-23).** The first cut deliberately wasn't:
+> the tree is the server's view of `docs.json`, so it awaited the write plus a `router.refresh()`
+> to avoid a UI that could disagree with the file. Wrong trade — during that round trip the row
+> springs back to where it came from and then jumps to its new home, which is worse than the
+> risk. The move now applies locally the instant you drop (`nav-tree-move.ts` — the same move in
+> the BUILT `NavSection[]` shape, with index semantics deliberately identical to nav-edit's, or
+> the row would land in one slot and settle in another). Measured: new order visible **38ms**
+> after mouse-up, and no spring-back at any sample out to 3.2s — because `router.refresh()` runs
+> INSIDE the transition, React holds the optimistic value until the refreshed RSC payload has
+> arrived. The original concern is answered by the revert rather than by refusing to be
+> optimistic: on error we simply don't refresh, the transition ends, and React discards the
+> optimistic value — verified by aborting the action's POST (identified by its `Next-Action`
+> header; aborting *every* POST kills the RSC payload and unmounts the tree instead of testing
+> anything). That test also found a real gap: an aborted action REJECTS rather than returning
+> `{error}`, so the move calls are now wrapped — a dropped connection gets a toast instead of an
+> unhandled rejection.
+>
+> Three things this cost, all invisible except in the console or a second run:
+> 1. **`closestCenter` is type-blind.** Pages and groups share one `DndContext` and page rows are
+>    dense, so a dragged group resolved onto the nearest *page* and the drop was silently
+>    ignored — no error, no movement. `sameKindCollision` filters candidates to the dragged kind
+>    first. A dragged page still accepts both, since dropping on a group row is the only way into
+>    a group with no pages.
+> 2. **dnd-kit's a11y description id is a module counter**, so server and client disagreed
+>    (`DndDescribedBy-0` vs `-1`) — a hydration mismatch visible ONLY in the console. Fixed with a
+>    stable `useId()` passed as `DndContext id`.
+> 3. Reordering an **empty** group needed `includeEmpty` (above) to be visible at all.
+>
+> **Full-site draft preview (2026-08-23).** `/preview/{org}/{site}/site/[[...path]]` renders the
+> whole site — navbar, tabs, sidebar, search — from the draft, reusing `TenantDocsShell` +
+> `TenantDocsArticle` so it is the real renderer, not a second implementation. The editor toolbar
+> gets a **Preview** button (a plain `target="_blank"` anchor: a new tab is a hard navigation, so
+> it carries the app-host rewrite a soft nav would skip). Sibling of the pre-existing
+> `/preview/{org}/{site}`, which renders one article with no chrome for the in-pane iframe —
+> "is this page right?" vs "is the *site* right?".
+>
+> The load-bearing detail: **a draft nav must never be cached.** `buildNavCached`'s key is
+> `sha:updatedAt`, neither of which a draft changes — so a cached draft nav would be served to
+> readers of the *published* site. `buildNavCached` now takes `draftBranch` and skips
+> `unstable_cache` entirely when set, matching how `draftSource` reads live everywhere else. The
+> preview also skips `requireReaderForPage` and the `canAccess` filter (`showGated`), because the
+> route is already gated to an org member with editor access and bouncing them to the *tenant's*
+> reader login is a dead end from inside the dashboard.
+>
+> **Still not built:** anchors and dropdowns, whose schema *requires* an `href` on each entry —
+> so they need a URL field, not just a name, which is a different form rather than a fourth line
+> in this dialog. And languages / versions / products, which wrap or duplicate a whole content
+> tree rather than adding an item to one. Those belong in a structural `docs.json` editor.
+
+> **Status 2026-08-23 — Studio is usable on a phone.** `EditorShell` had **one** responsive
+> class in the whole file, and its two side panels were in-flow fixed-width columns
+> (`w-80` agent, `w-64` tree) at every viewport. Measured at 390×844: the tree left the editor
+> **38px**, one character per line, with Publish overflowing off-screen — the panel was
+> literally in the way of the thing it navigates. Below `lg` both panels are now off-canvas
+> overlays (`fixed` + a tap-to-dismiss backdrop) and in-flow columns from `lg` up, so the
+> editor keeps the full width (**294px** of 390, no horizontal overflow) and desktop is
+> byte-identical (tree 256px `static`, editor 833px — verified in both).
+>
+> Two decisions worth keeping. **The breakpoint split is CSS, not JS**: reading the viewport
+> during render is a hydration mismatch, so the drawer gets its *own* `mobileTreeOpen` state
+> while `treeOpen` keeps meaning "the desktop column is open" — one state couldn't serve both,
+> because `treeOpen` defaults open and would put a drawer over the editor on arrival. The
+> handlers *do* consult `matchMedia` (`toggleTree`), which is safe: they only run after
+> hydration. And **picking a page closes the drawer** (`selectPage`) — leaving it open hides
+> the page you just chose, which is the same "in the way" bug in miniature.
+>
+> **Hover-only controls are a touch dead end.** The per-file revert in the Publish panel and the
+> nav tree's settings cog were both unconditionally `opacity-0 group-hover:opacity-100`, so on a
+> phone they were invisible *and* unreachable — Page/Group settings had no entry point at all.
+> Both now hide-on-hover only where hover exists (`[@media(hover:hover)]:`), keyed on the
+> **capability rather than a width breakpoint**: a touch laptop at desktop width has the identical
+> problem, so a `lg:` gate would have fixed the phone and left that broken. Both also gained
+> `focus-visible:opacity-100` — on a hover device they were invisible *while keyboard-focused*.
+> The revert's tap target goes 22px → 30px on touch, capped at roughly the row height on purpose:
+> a target large enough to overlap the neighbouring row's revert would let a mis-tap revert the
+> wrong file. The e2e for this runs with `hasTouch`/`isMobile`, not merely a narrow viewport — a
+> small desktop window still reports hover support, so a viewport-only test would pass while a
+> real phone stayed broken, and the spec asserts `matchMedia("(hover: hover)")` is false before
+> trusting its own assertions.
+>
+> Found while verifying it: `CardGroup`/`Columns` set `grid-template-columns` as an **inline
+> style**, which no media query can reach, so `cols={2}` stayed two columns at 390px and
+> wrapped card headings mid-word. That's a **reader-facing renderer bug on every phone**, not
+> an editor one — and `docs/rendering/components.mdx` had been promising a grid "that reflows on
+> small screens" all along. Fixed in both the renderer (`Card.tsx`) and the Visual editor's
+> mirror of it (`NodeViews.tsx`) by passing the count as a CSS variable and letting a
+> breakpoint variant apply it (`grid-cols-1 sm:grid-cols-[repeat(var(--pv-cols),…)]`) — a
+> variant can't interpolate a runtime value, and an inline style can't hold a breakpoint, so
+> the variable is what bridges them. Measured: 1 track at 390px, 2 at 1440px.
+
 > **Status 2026-08-21 — the authoring layer is source-aware.** `publishDraft` now dispatches on
 > `site.source_kind` (§10.11): a Git site commits or opens a PR exactly as before, a
 > Papervine-hosted site writes its drafts straight to object storage (`native-publish.ts`) with
@@ -2535,6 +2686,58 @@ Minimum to operate the SaaS:
   change through the normal sync/deploy on the deploy branch (or a PR).
 
 ### 10.1 Analytics
+
+> **Status 2026-08-23 — Vercel Analytics is ours, and stops at the tenant boundary.**
+> `@vercel/analytics` (`<Analytics/>`) is mounted in the ROOT layout, which is the only place
+> that covers every surface we own — apex marketing, pricing, signup, and the app-host dashboard.
+> But that same root layout also renders **every tenant's docs site**, so it is gated on
+> `isTenant` (derived from the `requestContentSource()` the layout already resolves; false on the
+> apex and on the app host). Ungated it would put a third-party beacon on customers' pages, bill
+> their readers' traffic to our Vercel quota, and double-count against the first-party
+> `analytics_event` pipeline below — which is the tenant-facing product and stays the only thing
+> measuring tenant traffic. The two never overlap: Vercel Analytics measures *our* funnel,
+> `analytics_event` measures *their* docs.
+>
+> Pinned by a browser test (`tenant-render.spec.ts`), not the smoke gate: `<Analytics/>` injects
+> its script client-side, so there is nothing in the server-rendered HTML to assert on — a
+> markup-based `exclude` would have passed whether the gate existed or not. The test watches for
+> both the injected tag and any request to `/_vercel/insights` from a tenant page.
+>
+> **LogRocket session replay (same date) covers every surface we own, and stops there.** Init is
+> in the ROOT layout behind the same `isTenant` gate as `<Analytics/>`, so replay reaches
+> marketing, pricing, the auth pages, onboarding, `/admin` and the dashboard — but never a
+> tenant's docs site, where it would be recording our customers' *readers*. `identify` still runs
+> from the dashboard layout, the only place a session exists; the two mounts share one init via a
+> module-level promise in `logrocket-client.ts`, because React runs a child's effects BEFORE its
+> parent's and the identify call would otherwise fire first.
+>
+> Measuring this taught a lesson worth keeping: **neither obvious detector for "is LogRocket
+> running" is sound.** A Next chunk is *named* after the dependency
+> (`node_modules_logrocket_...js`), so matching request URLs on "logrocket" false-positives on
+> every page that merely bundles it; and `window.LogRocket` is only set by the UMD script build,
+> not by a module import, so it false-negatives everywhere. Both fooled an intermediate check in
+> opposite directions. The sound signal is a request to LogRocket's own hosts —
+> `cdn.logr-in.com` (recorder) and `POST r.logr-in.com/i` (ingest). Verified that way: present on
+> all seven of our surfaces, and a tenant page makes NO cross-origin requests at all.
+>
+> Originally scoped to the dashboard layout only: Replay records the DOM, network and console, so the tenant boundary matters more
+> here than for pageview counting: in the root layout it would record our customers' *readers*
+> browsing their docs. `app/[org]/layout.tsx` is both the only place it's wanted and the only
+> place there's a signed-in user to `identify` — so the mount point supplies the identity for
+> free (id, name, email, subscription status; `getBillingLookup` already fails safe).
+>
+> Two guards are the actual content of the change. The app id comes from
+> `NEXT_PUBLIC_LOGROCKET_APP_ID` and is **never a literal** — this codebase is deployable by
+> others, and a hardcoded `nnm/papervine` would stream a self-hoster's users' sessions into our
+> project; absent env var means the component renders nothing, which also keeps dev machines off
+> the quota. And `dom.inputSanitizer` is forced **on**, because dashboard forms hold real
+> credentials (the GitHub token, widget keys, the reader-auth JWT secret) and replay records input
+> values by default — masking is the only safe posture on this surface.
+>
+> Verified at runtime rather than by reading the mount point: a second dev server on its own
+> distDir with the id set (the isolated-distDir work makes that cheap) confirmed replay loads on
+> the dashboard and the editor and loads on *neither* tenant serving mode nor the apex. The
+> masking itself is configured, not verified end-to-end — that needs a real project and a replay.
 
 The control-plane **Analytics** page (hosted docs platforms: *Analytics*) — scoped to the **active site**
 (the §10 switcher), with a **Humans vs Agents** toggle (human visitors vs agent/MCP traffic,
@@ -3813,6 +4016,33 @@ Publish's PR/commit menu entries. `publishModeFor` returns `'native'` for a host
 branch, and `PublishResult` gained a third arm (`mode: 'native'`) rather than a fabricated sha
 — `publishResultRef` is what the two automation call sites use to record a commit sha, a PR
 URL, or nothing.
+
+> **Status 2026-08-23 — "no changes" was lying on every hosted automation run.** A run's status
+> chip and its **Result** row both derived from `resultRef`: `!resultRef` meant "no changes".
+> That was a safe proxy while every publish was a commit or a PR, but a hosted publish has
+> neither, so `publishResultRef` returns null **forever** — and every successful hosted run
+> rendered as *no changes* / "No changes were needed." on a page that simultaneously listed the
+> file it changed and an agent summary describing the edit. The stored row was correct
+> throughout; only the reading of it was wrong. Fixed by making the predicate mean what it says:
+> `changedFiles` is the authoritative signal (`runDidChangeNothing`, `runResultKind` in
+> `run-display.ts`), and a hosted run that changed something now reads **succeeded** /
+> "Published to the live site." A missing ref is still checked *first* so a legacy row that has
+> a sha but no recorded `changedFiles` keeps reading as a real result. Deliberately **not**
+> fixed by stamping the deployment id into `resultRef` — same reasoning as refusing a synthetic
+> `pub_<id>` in `last_synced_commit_sha`: a column named for a ref shouldn't carry a non-ref,
+> and the UI would render the UUID as though it were a sha. The lesson worth keeping: when a
+> hosted site made one field permanently null, every consumer that had been using that field as
+> a proxy for something else silently inverted its meaning — grep the consumers, don't just
+> null-guard the producer.
+>
+> Audited the sibling proxies while here. `fireContentUpdateAutomations`' skip-unchanged guard
+> (`runs.ts`) compares `siteSourceSha` against the last succeeded run's, and on a hosted site
+> both are null forever — but it's written `if (docsOnly && sourceSha)` / `if (lastSha && …)`, so
+> the nulls make it fail **open**: a hosted run proceeds instead of being skipped forever. That's
+> the safe direction and needs no fix; the cost is that hosted sites don't get the
+> skip-unchanged optimization at all. Giving them one means feeding it a content version that
+> *does* change — the `updatedAt`-based cache-version key is the obvious candidate — which is a
+> follow-up, not a defect.
 
 Branch semantics are unchanged: a hosted site keeps `branch = 'main'` as an inert label for the
 published stream. Dropping the concept would mean a nullable `editorSession.baseBranch`, a

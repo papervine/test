@@ -22,6 +22,17 @@ import {
 } from "@/lib/authoring-core";
 import type { PublishMode } from "@/lib/publish-mode";
 import { isPagePath, pathToSlug } from "@/lib/draft-source";
+import {
+  addGroup,
+  addPageToGroup,
+  addTab,
+  IMPLICIT_TAB_NAME,
+  movePage,
+  navPageSlugs,
+  newPageContent,
+  newPageSlug,
+  reorderGroup,
+} from "@/lib/nav-edit";
 
 // Frontmatter keys the Page settings panel manages (docs.json-compatible). Booleans are only
 // written when true; strings/arrays only when non-empty — keeping frontmatter clean.
@@ -179,6 +190,162 @@ export async function deletePageAction(
   if ("error" in gate) return gate;
   const { path } = await resolvePagePath(gate.site, branch, slug);
   await saveDraft(gate.site, branch, path, "", { deleted: true, actorUserId: gate.userId });
+  return { ok: true };
+}
+
+// ── The nav tree's "+" menu: New page / Add existing page / New group ────────────────────
+// Each is read docs.json → mutate via the pure helpers in nav-edit.ts → saveDraft, the same
+// shape as saveGroupSettingsAction. Both the page file and the docs.json edit land in the SAME
+// draft session, so an unpublished new page is a single reviewable/revertable unit.
+
+/** Parse the draft's docs.json, or report why not. */
+async function readDraftConfig(
+  site: Parameters<typeof saveDraft>[0],
+  branch: string,
+): Promise<{ config: unknown } | { error: string }> {
+  const raw = await resolveDraftFile(site, branch, "docs.json");
+  try {
+    return { config: JSON.parse(raw ?? "{}") };
+  } catch {
+    return { error: "docs.json isn't valid JSON." };
+  }
+}
+
+const writeConfig = (
+  site: Parameters<typeof saveDraft>[0],
+  branch: string,
+  config: unknown,
+  userId: string,
+) => saveDraft(site, branch, "docs.json", JSON.stringify(config, null, 2) + "\n", { actorUserId: userId });
+
+/**
+ * Create a page and list it in `group`. The slug is derived from the title and de-duplicated
+ * against what the nav already references, so two "Overview" pages don't collide.
+ */
+export async function createPageAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  group: string,
+  title: string,
+): Promise<{ ok: true; slug: string } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const trimmed = title.trim();
+  if (!trimmed) return { error: "Give the page a title." };
+
+  const read = await readDraftConfig(gate.site, branch);
+  if ("error" in read) return read;
+  const slug = newPageSlug(trimmed, navPageSlugs(read.config));
+
+  if (!addPageToGroup(read.config, group, slug)) {
+    return { error: `Couldn't add the page to "${group}".` };
+  }
+  // Page first, then docs.json: a nav entry pointing at a file that doesn't exist yet is the
+  // one ordering that renders broken (the same reason native publish writes pages before config).
+  const { path } = await resolvePagePath(gate.site, branch, slug);
+  await saveDraft(gate.site, branch, path, newPageContent(trimmed), { actorUserId: gate.userId });
+  await writeConfig(gate.site, branch, read.config, gate.userId);
+  return { ok: true, slug };
+}
+
+/** List an existing page in `group` — for pages that exist as files but aren't in the nav. */
+export async function addPageToNavAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  group: string,
+  slug: string,
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const read = await readDraftConfig(gate.site, branch);
+  if ("error" in read) return read;
+  if (!addPageToGroup(read.config, group, slug)) {
+    return { error: "That page is already in this group." };
+  }
+  await writeConfig(gate.site, branch, read.config, gate.userId);
+  return { ok: true };
+}
+
+/** Create an empty navigation group, optionally nested under `parent`. */
+export async function createGroupAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  name: string,
+  parent?: string,
+): Promise<{ ok: true; group: string } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Give the group a name." };
+  const read = await readDraftConfig(gate.site, branch);
+  if ("error" in read) return read;
+  if (!addGroup(read.config, trimmed, parent)) {
+    return { error: `There's already a group called "${trimmed}".` };
+  }
+  await writeConfig(gate.site, branch, read.config, gate.userId);
+  return { ok: true, group: trimmed };
+}
+
+/**
+ * Create a navigation tab. On a site that has no tabs yet this RESTRUCTURES the navigation —
+ * existing top-level groups move into an implicit first tab, because `tabs` and top-level
+ * `groups` are alternatives and buildNav would otherwise stop reading the root entirely.
+ * `converted` says whether that happened, so the UI can report it.
+ */
+export async function createTabAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  name: string,
+): Promise<{ ok: true; tab: string; converted: boolean } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const trimmed = name.trim();
+  if (!trimmed) return { error: "Give the tab a name." };
+  const read = await readDraftConfig(gate.site, branch);
+  if ("error" in read) return read;
+  const res = addTab(read.config, trimmed);
+  if (!res.ok) {
+    return {
+      error:
+        trimmed === IMPLICIT_TAB_NAME
+          ? `“${IMPLICIT_TAB_NAME}” is the name given to your existing navigation — pick another.`
+          : `There's already a tab called "${trimmed}".`,
+    };
+  }
+  await writeConfig(gate.site, branch, read.config, gate.userId);
+  return { ok: true, tab: trimmed, converted: res.converted };
+}
+
+/**
+ * Reorder the navigation by drag-and-drop: move a page entry, or slide a group among its
+ * siblings. One action for both so a drop is a single round trip and a single docs.json write.
+ */
+export async function moveNavItemAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  move:
+    | { kind: "page"; from: { group: string; index: number }; to: { group: string; index: number } }
+    | { kind: "group"; group: string; toIndex: number },
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const read = await readDraftConfig(gate.site, branch);
+  if ("error" in read) return read;
+
+  const moved =
+    move.kind === "page"
+      ? movePage(read.config, move.from, move.to)
+      : reorderGroup(read.config, move.group, move.toIndex);
+  // A refusal means the tree the browser dragged from no longer matches docs.json — someone
+  // else moved it, or the draft changed under us. Say so instead of writing a guess.
+  if (!moved) return { error: "That item moved — reload and try again." };
+
+  await writeConfig(gate.site, branch, read.config, gate.userId);
   return { ok: true };
 }
 

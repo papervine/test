@@ -126,6 +126,7 @@ async function buildNavCached(
   config: Parameters<typeof buildNav>[0],
   canAccess: PageAccess,
   src: ContentSource,
+  draftBranch?: string,
 ): Promise<Awaited<ReturnType<typeof buildNav>>> {
   const record = await getSiteBySlug(slug);
   if (!record) return buildNav(config, base, canAccess); // src exists; purely defensive
@@ -134,6 +135,10 @@ async function buildNavCached(
     record.updatedAt instanceof Date ? record.updatedAt.getTime() : 0
   }`;
   const groupKey = entitlementKey(record, cookie);
+  // A DRAFT nav must never be cached. The key below is `sha:updatedAt`, and a draft changes
+  // neither — so a cached draft nav would be handed to readers of the PUBLISHED site. Drafts
+  // read live and uncached everywhere else (draft-source.ts) for exactly this reason.
+  if (draftBranch) return contentContext.run(src, () => buildNav(config, base, canAccess));
   return unstable_cache(
     () => contentContext.run(src, () => buildNav(config, base, canAccess)),
     ["tenant-nav", record.id, version, base, groupKey],
@@ -143,22 +148,35 @@ async function buildNavCached(
 
 /** The persistent docs chrome (layout). Renders the tenant's navbar/tabs/sidebar/assistant
  *  + theme once; `children` is the per-page article, which streams independently. */
+/** Draft-preview options. Absent on every reader-facing route — see the cache note below. */
+export type DraftPreview = {
+  // Render this edit session's draft instead of published content.
+  branch: string;
+  // Skip reader-auth filtering. The preview route is already gated to org members with editor
+  // access, and an author previewing their own site must see the gated pages they're editing.
+  showGated: boolean;
+};
+
 export async function TenantDocsShell({
   slug,
   base,
   assetBase,
+  draft,
   children,
 }: {
   slug: string;
   base: string;
   assetBase: string;
+  draft?: DraftPreview;
   children: React.ReactNode;
 }) {
   // No auth gate here on purpose — see requireReaderForPage. The shell can't see which page
   // is being requested, and with per-page auth that decision needs the frontmatter. The nav
   // this shell renders is already filtered by the same access predicate, so an anonymous
   // reader sees chrome listing only the pages they can actually open.
-  const src = await requestContentSource(slug);
+  const src = draft
+    ? await requestContentSource(slug, { draftBranch: draft.branch })
+    : await requestContentSource(slug);
   if (!src) notFound();
 
   // Operational kill switch (SPEC §8.6): when the assistant is disabled for this site, don't
@@ -168,10 +186,10 @@ export async function TenantDocsShell({
   const record = await getSiteBySlug(slug);
   const assistantOn = record?.assistantEnabled ?? true;
 
-  const canAccess = await readerAccess(slug);
+  const canAccess = draft?.showGated ? () => true : await readerAccess(slug);
   return contentContext.run(src, async () => {
     const config = await loadConfig();
-    const sections = await buildNavCached(slug, base, config, canAccess, src);
+    const sections = await buildNavCached(slug, base, config, canAccess, src, draft?.branch);
 
     // Override the apex theme vars with this tenant's brand colors.
     const theme = resolveTheme(config.theme);
@@ -219,20 +237,24 @@ export async function TenantDocsArticle({
   slug,
   base,
   assetBase,
+  draft,
   path,
 }: {
   slug: string;
   base: string;
   assetBase: string;
+  draft?: DraftPreview;
   path: string[];
 }) {
-  const src = await requestContentSource(slug);
+  const src = draft
+    ? await requestContentSource(slug, { draftBranch: draft.branch })
+    : await requestContentSource(slug);
   if (!src) notFound();
 
-  const canAccess = await readerAccess(slug);
+  const canAccess = draft?.showGated ? () => true : await readerAccess(slug);
   return contentContext.run(src, async () => {
     const config = await loadConfig();
-    const sections = await buildNavCached(slug, base, config, canAccess, src);
+    const sections = await buildNavCached(slug, base, config, canAccess, src, draft?.branch);
     const slugStr = path.join("/");
     const page = await loadPage(slugStr);
     if (!page) {
@@ -258,8 +280,13 @@ export async function TenantDocsArticle({
     //  2. Signed in but not in the page's `groups` → 404, NOT 403. A 403 would confirm a
     //     protected page exists at this URL. The nav already hides it; this stops a
     //     direct-URL hit.
-    await requireReaderForPage(slug, base, page.frontmatter, slugStr);
-    if (!canAccess(page.frontmatter)) notFound();
+    // Skipped in a draft preview: the route is already gated to an org member with editor
+    // access, and this would otherwise bounce them to the *tenant's* reader login — a dead end
+    // from inside the dashboard, and wrong for an author previewing pages they're editing.
+    if (!draft?.showGated) {
+      await requireReaderForPage(slug, base, page.frontmatter, slugStr);
+      if (!canAccess(page.frontmatter)) notFound();
+    }
 
     const toc = extractToc(page.body);
     const eyebrow = findGroupLabel(sections, base + "/" + (slugStr || "index"));

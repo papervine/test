@@ -29,6 +29,16 @@ describe("public (bare) helpers", () => {
   it("builds the connect path", () => {
     expect(connectHref("acme")).toBe("/acme/connect");
   });
+
+  // The "View run" action on the run-queued toast (AutomationCard) navigates here. Pinned
+  // because the toast is the only way into a run you just triggered, and the happy path can't
+  // be covered in e2e: that suite blanks TRIGGER_SECRET_KEY by contract, so a manual trigger
+  // there always returns "executor is not configured" and never produces a run to link to.
+  it("builds an automation run's detail path", () => {
+    expect(siteHref("acme", "docs", "automate/automations/runs/abc-123")).toBe(
+      "/acme/docs/automate/automations/runs/abc-123",
+    );
+  });
 });
 
 describe("internal (/app) route helper", () => {

@@ -24,7 +24,14 @@ import {
 
 // `warning` = the action succeeded but a best-effort follow-up (schedule sync) didn't;
 // the UI toasts it without rolling anything back.
-export type AutomationActionState = { ok?: boolean; error?: string; warning?: string };
+// `runId` is set by runAutomationNow so the caller's toast can link straight to the run it
+// just queued — the enqueue already had the id and used to drop it on the floor.
+export type AutomationActionState = {
+  ok?: boolean;
+  error?: string;
+  warning?: string;
+  runId?: string;
+};
 export type SiteRef = { org: string; site: string };
 
 const automationsPath = (ref: SiteRef) => siteRoute(ref.org, ref.site, "automate/automations");
@@ -252,7 +259,7 @@ export async function runAutomationNow(ref: SiteRef, id: string): Promise<Automa
     };
   }
   revalidatePath(automationsPath(ref));
-  return { ok: true };
+  return { ok: true, runId: result.runId };
 }
 
 // A run in `review_needed` left its draft on an open session branch (SPEC §10.2 in-app

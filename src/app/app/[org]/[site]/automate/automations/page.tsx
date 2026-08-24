@@ -234,7 +234,8 @@ async function RunHistory({
         <tbody className="divide-y divide-[rgba(var(--ink-rgb),0.06)]">
           {runs.map((r) => {
             const title = r.name ?? getCatalogEntry(r.catalogKey)?.title ?? r.catalogKey;
-            const display = runDisplayStatus(r.status, r.resultRef);
+            const changed = (r.changedFiles as string[] | null) ?? [];
+            const display = runDisplayStatus(r.status, r.resultRef, changed.length);
             return (
               <tr key={r.id} className="align-top">
                 <td className="px-4 py-3">
@@ -264,7 +265,7 @@ async function RunHistory({
                       siteRef={siteRef}
                       runId={r.id}
                       reviewBranch={r.reviewBranch}
-                      changedFiles={(r.changedFiles as string[] | null) ?? []}
+                      changedFiles={changed}
                     />
                   ) : r.resultRef ? (
                     r.resultRef.startsWith("http") ? (
@@ -279,6 +280,10 @@ async function RunHistory({
                     ) : (
                       <code className="font-mono text-xs">{r.resultRef.slice(0, 7)}</code>
                     )
+                  ) : r.status === "succeeded" && changed.length > 0 ? (
+                    // Hosted site: published straight to storage, so there's no sha or PR to
+                    // link — but something definitely shipped.
+                    <span className="text-xs">Published</span>
                   ) : (
                     <span className="text-[var(--muted)]">—</span>
                   )}

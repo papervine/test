@@ -6,6 +6,7 @@ import { AppRail } from "@/components/app/AppRail";
 import { PlatformAdminBanner } from "@/components/app/PlatformAdminBanner";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Toaster } from "@/components/ui/sonner";
+import { LogRocketInit } from "@/components/platform/LogRocketInit";
 
 // Control-plane shell (SPEC §9/§10). Wraps every URL-scoped dashboard route
 // (/:org/:site/…) — resolves + authorizes the org in the path (redirects signed-out
@@ -62,6 +63,20 @@ export default async function OrgLayout({
         {/* Dashboard-wide action feedback (sonner) — the single mount for every app-host surface,
             the editor included. A second <Toaster/> inside a page renders every toast twice. */}
         <Toaster />
+        {/* Session replay, control plane ONLY — see LogRocketInit for why it is mounted here and
+            not in the root layout (which also renders tenant docs). No-ops without
+            NEXT_PUBLIC_LOGROCKET_APP_ID. */}
+        <LogRocketInit
+          appId={process.env.NEXT_PUBLIC_LOGROCKET_APP_ID}
+          user={{
+            id: session.user.id,
+            name: session.user.name,
+            email: session.user.email,
+            // Subscription status (trialing/active/past_due/canceled) is the dimension worth
+            // segmenting replays by; getBillingLookup fails safe, so a lookup error is just null.
+            plan: billing.state === "ok" ? (billing.sub?.status ?? "free") : null,
+          }}
+        />
       </div>
     </PlatformShell>
   );

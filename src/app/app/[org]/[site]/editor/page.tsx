@@ -70,7 +70,13 @@ export default async function EditorPage({
     // primed by the layout, so it reads the draft correctly; only config needs the direct read.
     const config = await src.loadConfig();
     // includeHidden: the editor keeps hidden pages/groups (dimmed) so hiding one never loses it.
-    const sections = await buildNav(config, "", undefined, { includeHidden: true });
+    // includeEmpty: the editor is where structure is authored, so a group with no pages yet
+    // must still appear — the reader-facing build prunes it (a gated group would otherwise
+    // render as a bare label), which would make a newly created group invisible.
+    const sections = await buildNav(config, "", undefined, {
+      includeHidden: true,
+      includeEmpty: true,
+    });
     // Every page slug — the "Files" view lists the raw repo tree (vs the docs.json Navigation).
     const slugs = await src.listPageSlugs();
     const initialSlug = slugParam ?? firstSlug(sections);

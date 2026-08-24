@@ -10,7 +10,7 @@ import { siteHref } from "@/lib/dashboard-nav";
 import { db } from "@/lib/db";
 import { automation, automationRun, usageEvent } from "@/lib/db/app-schema";
 import { CUSTOM_KEY, getCatalogEntry } from "@/lib/automations/catalog";
-import { runDisplayStatus, runStatusChipClass } from "@/lib/automations/run-display";
+import { runDisplayStatus, runResultKind, runStatusChipClass } from "@/lib/automations/run-display";
 
 // Run detail (SPEC §10.2, the reference's click-into-a-run view): the run's exact
 // prompt (its own copy, not the current config's), full agent summary, the files it
@@ -52,8 +52,13 @@ export default async function AutomationRunPage({
     auto?.catalogKey === CUSTOM_KEY
       ? (auto.name ?? "Custom automation")
       : (getCatalogEntry(auto?.catalogKey ?? "")?.title ?? auto?.catalogKey ?? "Automation");
-  const display = runDisplayStatus(run.status, run.resultRef);
   const changedFiles = (run.changedFiles as string[] | null) ?? [];
+  const display = runDisplayStatus(run.status, run.resultRef, changedFiles.length);
+  const resultKind = runResultKind({
+    status: run.status,
+    resultRef: run.resultRef,
+    changedFileCount: changedFiles.length,
+  });
   const durationMs =
     run.startedAt && run.finishedAt ? run.finishedAt.getTime() - run.startedAt.getTime() : null;
 
@@ -116,10 +121,10 @@ export default async function AutomationRunPage({
         <div className="col-span-2 sm:col-span-3">
           <p className="text-xs text-[var(--muted)]">Result</p>
           <p className="mt-0.5">
-            {run.resultRef ? (
-              run.resultRef.startsWith("http") ? (
+            {resultKind === "ref" ? (
+              run.resultRef!.startsWith("http") ? (
                 <a
-                  href={run.resultRef}
+                  href={run.resultRef!}
                   target="_blank"
                   rel="noreferrer"
                   className="text-emerald-300 underline underline-offset-2"
@@ -129,7 +134,11 @@ export default async function AutomationRunPage({
               ) : (
                 <code className="font-mono text-xs">{run.resultRef}</code>
               )
-            ) : run.status === "succeeded" ? (
+            ) : resultKind === "published" ? (
+              // A hosted site's publish writes straight to storage — there's no sha or PR to
+              // link, so say what happened rather than falling through to "no changes".
+              <span>Published to the live site.</span>
+            ) : resultKind === "none" ? (
               <span className="text-[var(--muted)]">No changes were needed.</span>
             ) : (
               <span className="text-[var(--muted)]">—</span>
