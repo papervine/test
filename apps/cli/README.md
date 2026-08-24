@@ -123,6 +123,17 @@ shows the change. There is no hot reload — a refresh is the update.
 By default the preview binds loopback (`127.0.0.1`) rather than every interface. Set
 `HOSTNAME=0.0.0.0` to reach it from outside the machine, e.g. from a container host.
 
+### Output
+
+`papervine --help` and `papervine --version` print the command surface and the installed
+version. Help and status output is colourised at a terminal and plain everywhere else, so
+piping or redirecting gives you clean text rather than escape codes:
+
+| Variable      | Effect                                                     |
+| ------------- | ---------------------------------------------------------- |
+| `NO_COLOR`    | Set to anything non-empty to disable colour entirely        |
+| `FORCE_COLOR` | Set to keep colour through a pipe; `0` disables it          |
+
 ### What ships in this package
 
 Just the renderer: MDX compilation, `docs.json` parsing, navigation, the component

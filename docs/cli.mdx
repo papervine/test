@@ -56,6 +56,7 @@ of the CLI that wrote it.
 | `-y, --yes` | `dev` | Create a starter site if there are no docs, without asking | — |
 | `-f, --force` | `new` | Scaffold into a directory that isn't empty | — |
 | `-h, --help` | both | Show help | — |
+| `-v, --version` | — | Print the installed version | — |
 
 Without `--port`, a busy port is skipped and the next free one is used. With an explicit
 `--port`, a busy port is an error instead — an explicit request shouldn't be quietly
@@ -64,6 +65,21 @@ redirected somewhere you weren't told about.
 The preview binds loopback (`127.0.0.1`) rather than every network interface, so it isn't
 reachable from the rest of the network by default. Set `HOSTNAME=0.0.0.0` when you need to
 reach it from outside the machine, such as from a container host.
+
+## Colour output
+
+Help and status output is colourised in the Papervine palette when the CLI is attached to a
+terminal, and **plain everywhere else** — piping or redirecting gives you clean text instead of
+escape codes, so `papervine --help | grep port` and anything parsing the output work as you'd
+expect. Terminals that don't advertise truecolor get the nearest 256-colour match rather than an
+escape they can't render.
+
+| Variable | Effect |
+| --- | --- |
+| `NO_COLOR` | Set to any non-empty value to disable colour entirely ([no-color.org](https://no-color.org)) |
+| `FORCE_COLOR` | Set to keep colour through a pipe or into a file; `0` disables colour |
+
+`NO_COLOR` wins over `FORCE_COLOR` when both are set.
 
 ## Editing your docs
 

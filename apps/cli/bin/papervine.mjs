@@ -17,12 +17,13 @@
 
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { Socket } from "node:net";
 import { createInterface } from "node:readline";
 import path from "node:path";
 
 import { parseDevArgs, parseNewArgs, validateContentDir, validateNewTarget } from "./args.mjs";
+import { bold, brand, brandLight, dim, red, rows, yellow } from "./style.mjs";
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_ENTRY = path.join(PKG_ROOT, "server", "server.js");
@@ -32,39 +33,79 @@ const SERVER_ENTRY = path.join(PKG_ROOT, "server", "server.js");
 // the container case, where the port has to be reachable from the host.
 const HOST = process.env.HOSTNAME || "127.0.0.1";
 
-const red = (s) => `\x1b[31m${s}\x1b[0m`;
-const green = (s) => `\x1b[32m${s}\x1b[0m`;
-const bold = (s) => `\x1b[1m${s}\x1b[0m`;
-const dim = (s) => `\x1b[2m${s}\x1b[0m`;
-const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
-
 function fail(msg) {
   console.error(`${red("papervine:")} ${msg}`);
   process.exit(1);
 }
 
+/** The package's own version, for the help header and `--version`. */
+function version() {
+  try {
+    return JSON.parse(readFileSync(path.join(PKG_ROOT, "package.json"), "utf8")).version;
+  } catch {
+    return "";
+  }
+}
+
+/**
+ * The help screen.
+ *
+ * Deliberately *not* grouped into categories yet. Category headers earn their keep at a dozen
+ * commands; over two they'd be more chrome than content. The roadmap commands
+ * (`broken-links`, `validate`, `openapi-check`, `build`) are what turn this into
+ * Preview / Quality / Build groups, and `rows()` already takes the shape for it.
+ */
 function printHelp() {
-  console.log(`papervine — preview a docs repo of MDX + docs.json
+  const v = version();
+  const out = [];
 
-Usage:
-  papervine new [dir]        Create a docs site in [dir] (default: current directory)
-  papervine dev [dir]        Preview the docs in [dir] (default: current directory)
+  out.push(`${bold("Papervine CLI")}${v ? ` ${dim(`v${v}`)}` : ""}`);
+  out.push("");
+  out.push(`${dim("Preview a docs site of MDX +")} ${brand("docs.json")} ${dim("on your machine.")}`);
+  out.push("");
 
-Options:
-  -p, --port <port>       Port to serve on (default: 3000)
-  -f, --force             new: scaffold into a directory that isn't empty
-  -y, --yes               dev: scaffold without asking when there are no docs yet
-  -h, --help              Show this help
+  out.push(bold("EXAMPLES"));
+  out.push(
+    rows([
+      ["papervine new my-docs", "Create a documentation site in ./my-docs"],
+      ["papervine dev", "Preview the docs in the current directory"],
+      ["papervine dev ./docs", "Preview a subfolder"],
+      ["papervine dev -p 4000", "Preview on a specific port"],
+    ]),
+  );
+  out.push("");
 
-Examples:
-  papervine new my-docs      # create a site, then: cd my-docs && papervine dev
-  papervine dev              # preview ./ (must contain docs.json)
-  papervine dev ./docs       # preview ./docs
-  papervine dev -p 4000      # preview on port 4000
+  out.push(bold("COMMANDS"));
+  out.push(
+    rows([
+      ["new [dir]", "Create a documentation site (default: .)"],
+      ["dev [dir]", "Start a local preview of your site (default: .)"],
+    ]),
+  );
+  out.push("");
 
-Note: papervine dev compiles and runs the repo's MDX, which is arbitrary
-JSX/JavaScript. Only run it on docs repos you trust.
-`);
+  out.push(bold("OPTIONS"));
+  out.push(
+    rows([
+      ["-p, --port <port>", "dev — port to serve on (default: 3000)"],
+      ["-y, --yes", "dev — create a site if there are no docs, without asking"],
+      ["-f, --force", "new — scaffold into a directory that isn't empty"],
+      ["-h, --help", "Show this help"],
+      ["-v, --version", "Print the version"],
+    ]),
+  );
+  out.push("");
+
+  // Worth saying on the help screen rather than only in the docs: `dev` executes the repo's
+  // MDX, which is arbitrary JSX. Someone about to point it at a repo they cloned should see it.
+  out.push(
+    `${dim("Note:")} ${dim("papervine dev compiles and runs the repo's MDX, which is arbitrary")}`,
+  );
+  out.push(`${dim("JSX/JavaScript. Only run it on docs repos you trust.")}`);
+  out.push("");
+  out.push(`${dim("Docs at")} ${brandLight("https://papervine.io")}`);
+
+  console.log(out.join("\n"));
 }
 
 /**
@@ -150,11 +191,11 @@ function runNew(argv) {
   const here = rel === "";
   const shown = here || rel.startsWith("..") ? plan.dir : rel;
 
-  console.log(`${green("▲ papervine")} created ${bold(shown)} ${dim(`(${count} files)`)}\n`);
-  console.log(`Next:`);
-  if (!here) console.log(`  cd ${shown}`);
-  console.log(`  papervine dev\n`);
-  console.log(dim(`Edit docs.json to set the name, colors and navigation.`));
+  console.log(`${brand("▲ papervine")} created ${bold(shown)} ${dim(`(${count} files)`)}\n`);
+  console.log(bold("Next"));
+  if (!here) console.log(`  ${brandLight(`cd ${shown}`)}`);
+  console.log(`  ${brandLight("papervine dev")}\n`);
+  console.log(dim("Edit docs.json to set the name, colors and navigation."));
 }
 
 /**
@@ -252,7 +293,7 @@ async function runDev(argv) {
 
     if (emptyish && plan.yes) {
       const count = scaffold(plan.dir);
-      console.log(`${green("▲ papervine")} created a docs site ${dim(`(${count} files)`)}\n`);
+      console.log(`${brand("▲ papervine")} created a docs site ${dim(`(${count} files)`)}\n`);
     } else if (emptyish && interactive()) {
       console.log(`${yellow("!")} no docs.json in ${bold(plan.dir)}`);
       const yes = await confirm(`  Create a starter docs site here? ${dim("[y/N]")}`);
@@ -261,7 +302,7 @@ async function runDev(argv) {
         process.exit(0);
       }
       const count = scaffold(plan.dir);
-      console.log(`${green("▲ papervine")} created a docs site ${dim(`(${count} files)`)}\n`);
+      console.log(`${brand("▲ papervine")} created a docs site ${dim(`(${count} files)`)}\n`);
     } else {
       fail(problem);
     }
@@ -277,8 +318,8 @@ async function runDev(argv) {
 
   const port = await resolvePort(plan.port, plan.portExplicit);
 
-  console.log(`${green("▲ papervine")} serving ${bold(plan.dir)}`);
-  console.log(`  ${dim("→")} http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${port}\n`);
+  console.log(`${brand("▲ papervine")} serving ${bold(plan.dir)}`);
+  console.log(`  ${dim("→")} ${brandLight(`http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${port}`)}\n`);
 
   const child = spawn(process.execPath, [SERVER_ENTRY], {
     cwd: PKG_ROOT,
@@ -307,12 +348,7 @@ if (!command || command === "-h" || command === "--help" || command === "help") 
 } else if (command === "new") {
   runNew(rest);
 } else if (command === "-v" || command === "--version" || command === "version") {
-  const { version } = JSON.parse(
-    await import("node:fs/promises").then((fs) =>
-      fs.readFile(path.join(PKG_ROOT, "package.json"), "utf8"),
-    ),
-  );
-  console.log(version);
+  console.log(version());
 } else {
   fail(`unknown command "${command}". Run \`papervine --help\`.`);
 }

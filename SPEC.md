@@ -3868,6 +3868,52 @@ the hosted API over HTTPS, they don't embed it.
 > **In-product docs prose stays neutral** — a docs page explaining a feature by reference to a
 > competitor reads worse and ages badly. So: name them where people are searching, not where
 > people are already reading.
+>
+> **Status (2026-08-24): the CLI's output is styled, in the Papervine palette.** `--help` was a
+> flat wall of text; it now has a header, aligned EXAMPLES / COMMANDS / OPTIONS blocks, and the
+> brand purple from `docs.json` `colors` (`#7C3AED`, with `#A78BFA` for URLs and next-step
+> commands) — so the CLI and the site it serves are visibly the same product. Runtime lines
+> (`▲ papervine serving …`, the port-move warning, errors) use the same palette.
+>
+> **The interesting part isn't the colours, it's the three ways they turn off.** All of it lives
+> in `apps/cli/bin/style.mjs`, which resolves a level *once* at module load:
+>
+> - **Not a TTY → no escapes at all.** Piped or redirected output is plain, so
+>   `papervine --help | grep` and anything parsing us get clean text. Same principle as the
+>   scaffold prompt: the pretty path is for the interactive case and must never be the only path.
+> - **`NO_COLOR` → off** (no-color.org), and it **wins over `FORCE_COLOR`** when both are set.
+>   `FORCE_COLOR` exists for the deliberate "colour through a pipe" case; `FORCE_COLOR=0` and
+>   `TERM=dumb` are off too.
+> - **No truecolor advertised → the 256-colour palette,** not a truecolor escape. `#7C3AED` needs
+>   `38;2;r;g;b`; a 256-only terminal renders that as garbage, so each tier carries its own
+>   escape and every colour has a hand-picked 256 near-match.
+>
+> One layout gotcha worth recording because it's silent: `rows()` measures column width on the
+> **undecorated** label. Escape codes have no display width, so padding a coloured string by
+> `String.length` counts the colour bytes and drifts every row after the first by however many
+> bytes the colour took. `Math.max` is seeded with `0` for the same class of reason — an empty
+> list would otherwise give `-Infinity` and throw in `" ".repeat()`.
+>
+> Help is deliberately **not** grouped into categories. Category headers earn their keep at a
+> dozen commands; over `new` and `dev` they'd be more chrome than content. The roadmap commands
+> (`broken-links`, `validate`, `openapi-check`, `build`) are what turn this into
+> Preview / Quality / Build groups, and `rows()` already takes the shape.
+>
+> Pinned by `tests/unit/cli-style.test.ts` (14 cases): each tier's exact escape, all four
+> off-switches including the NO_COLOR-over-FORCE_COLOR precedence, and the alignment invariant
+> asserted on escape-stripped text. The level is captured at load, so each case is a
+> `vi.resetModules()` + dynamic import with a `process.stdout.isTTY` shim — vitest runs without a
+> TTY, so without the shim every case would take the piped branch and no tier would be reachable.
+>
+> Verified: typecheck (root + CLI) clean, unit 1097, smoke 17 pages, crawls of docs/ 41/41 and
+> examples/starter 10/10 both 0×500, clean-room gate green (which is also what proves
+> `bin/style.mjs` ships — the installed binary imports it), and all four tiers confirmed by their
+> emitted bytes rather than by assertion.
+>
+> **Known cosmetic wart, not fixed:** Next's standalone server prints its own `▲ Next.js 16.3.2`
+> banner right under ours, repeating the URL. Suppressing it means piping the child's stdout and
+> filtering on version-specific strings — which risks swallowing real diagnostics — so
+> `stdio: "inherit"` stays. The `▲` glyph predates this change.
 
 ### 10.7 Error resilience (route boundaries)
 
