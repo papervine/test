@@ -3809,6 +3809,32 @@ the hosted API over HTTPS, they don't embed it.
 > a build outside the workspace fails. That's precisely the gap `mirror:cli --dry-run` closes, and
 > it's why renderer import changes now owe both gates.
 >
+> **Status (2026-08-24): the starter wears the real brand.** It shipped with a placeholder — a
+> green tile and a hand-drawn vine glyph, with a green `colors` block — which is a poor first
+> impression for the thing published to `papervine/starter`, scaffolded by `papervine new`, and
+> used as the `db:seed` source. It now uses the actual Papervine mark, and `colors` matches
+> `docs/` (`#7C3AED` / `#A78BFA` / `#5B21B6`); the placeholder preview tile was recoloured too,
+> since a purple logo over green accents reads as a mistake.
+>
+> **There was no SVG of the logo anywhere in the repo** — only `src/assets/papervine-logo.png`
+> (917KB, 1254²), which `Brand.tsx` renders through next/image. A 917KB raster is wrong for a
+> template people clone (`CONTRIBUTING-starter.md`: keep assets small, prefer SVG), so the mark
+> was **traced from the PNG** rather than eyeballed: colours sampled from the source
+> (body `#7E5ADF`, fold `#BDA4F1`, vine `#261B62`, tile `#0B0716`), the silhouette and the fold
+> boundary scanned row by row, and the vine mapped as a mask to place its stem and two leaves.
+> The reproduction was then checked *numerically* against the original — body area within 3%,
+> vine within 5%, fold geometry matching (the small area delta is a rounded fold corner) — and by
+> eye at the 32px it actually renders at, in both appearances.
+>
+> The three files have one source: `logo/light.svg` holds the mark, and `logo/dark.svg` (light
+> wordmark) plus `favicon.svg` (mark alone) are generated from it, so they cannot drift. The
+> favicon keeps the dark tile deliberately — it reads against light *and* dark browser chrome,
+> where a transparent mark would vanish in one of them.
+>
+> Worth knowing for later: `examples/starter/logo/light.svg` is now the only vector Papervine
+> mark in the repo. If the web app ever wants to stop shipping a 917KB PNG for a 32px lockup,
+> that path is the place to start.
+>
 > **Status (2026-08-24): `papervine new` shipped, and `dev` offers it.** Prompted by a
 > competitor leading with `pnpm dlx create-shiso-app my-docs` — the observation being that a
 > tool should generate a folder when the user hasn't got one. Ours dead-ended instead: `dev`
