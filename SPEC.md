@@ -3866,6 +3866,40 @@ the hosted API over HTTPS, they don't embed it.
 > tighter than the source — the original centres the mark in ~49% of the square, which reads as a
 > small glyph adrift in a box at 120px; ~72% is the usual app-icon proportion.
 >
+> **Status (2026-08-24): the CLI warms its search index, and a duplicated module cache was
+> hiding in the build.** The index was built lazily on the first query. Measured on a synthetic
+> 500-page repo: first search **269ms**, later ones ~17ms — and because the index key is file
+> count + newest mtime, *saving a file* invalidated it, so the first search after **every edit**
+> cost ~210ms again. In a previewer, editing is the whole activity, so that was the recurring
+> cost, not the one-off. (At 36 pages the build is ~5ms and none of this is visible, which is why
+> it went unnoticed.)
+>
+> Warming now happens in `apps/cli/src/instrumentation.ts` — the same deliberately-empty file
+> that shadows the web app's Sentry instrumentation, so it is worth re-reading the comment there
+> before touching it. It builds once at startup and then polls `contentVersion` (stat-only, cheap
+> by design) every 2s, rebuilding off the request path when the files change. The timer is
+> `unref`'d so Ctrl-C exits immediately instead of waiting out a poll.
+>
+> **The first attempt appeared to do nothing, and the reason is the finding worth keeping.**
+> Startup warming left the first search at 298ms while the after-edit case improved — incoherent
+> until the build was inspected: Turbopack emitted the search module into **two** server chunks.
+> The route loaded one copy, the instrumentation hook the other, and each had its own
+> module-level `indexByVersion` Map. The warmer built an index the route could never see. A
+> module-level cache silently assumes one module instance per process, and the bundler does not
+> guarantee that. The cache now hangs off `globalThis` under a `Symbol.for` key, which every copy
+> in the process shares. Entries are content-addressed, so a stale one simply never matches.
+>
+> With that fixed, first search on 500 pages went **298ms → 52ms**; the remaining ~50ms is the
+> route chunk loading plus the query itself, not the index, which is why a 36-page repo shows no
+> change (its build was already negligible). Searching *within* the 2s poll window right after a
+> save still pays one rebuild — inherent to polling, and the realistic flow (save, switch to the
+> browser, type) is longer than that. Boot is unaffected: the clean-room gate still reports ready
+> in ~1.2s, which is the guard against warming ever becoming blocking.
+>
+> `warmSearchIndex()` is a new export on the shared engine rather than a fake query, because
+> `runSearch` returns early on an empty term before it ever reaches the index — there was no way
+> to warm the cache through the existing API.
+>
 > Rendering was checked against **GitHub's own markdown API** (`POST /markdown`) rather than
 > assumed, which caught one real thing: badges on separate source lines render with `<br>` between
 > them and stack vertically. They are one line now. Also confirmed `---` under an ATX heading
