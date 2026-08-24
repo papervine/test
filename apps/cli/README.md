@@ -10,7 +10,7 @@ Preview your docs locally with the same renderer that serves them in production.
 
 [![npm](https://img.shields.io/npm/v/papervine?logo=npm&label=npm&color=7C3AED)](https://www.npmjs.com/package/papervine) [![license](https://img.shields.io/badge/license-MIT-7C3AED)](./LICENSE) [![node](https://img.shields.io/badge/node-%E2%89%A520.9-7C3AED?logo=nodedotjs&logoColor=white)](https://nodejs.org) [![docs](https://img.shields.io/badge/docs-papervine.io-7C3AED)](https://docs.papervine.io)
 
-[Quickstart](#quickstart) · [Commands](#create-a-site) · [What ships](#what-ships-in-this-package) · [Compatibility](#compatibility) · [Docs](https://docs.papervine.io)
+[Quickstart](#quickstart) · [Commands](#create-a-site) · [AI assistant](#ai-assistant) · [What ships](#what-ships-in-this-package) · [Compatibility](#compatibility) · [Docs](https://docs.papervine.io)
 
 <img src="https://raw.githubusercontent.com/papervine/cli/main/apps/cli/assets/screenshot.png" width="900" alt="A docs site rendered by papervine dev — navigation, component gallery and a copyable snippet, in dark mode" />
 
@@ -143,6 +143,39 @@ you at startup:
   Install the optional dependency with `npm i sharp` in this project.
 ```
 
+### AI assistant
+
+Ask questions about your docs and get answers with citations, from the same assistant that runs
+on hosted Papervine. It retrieves by searching and reading your pages — there is no index to
+build, no vector database, and nothing leaves your machine except the model call itself.
+
+It appears when a model is configured, and is simply absent when one isn't:
+
+```
+export ANTHROPIC_API_KEY=sk-ant-...
+export AI_ROUTING=direct
+papervine dev
+```
+
+You bring the key; the SDKs ship with the CLI. To run it **free and entirely offline**, point it
+at any OpenAI-compatible server — [Ollama](https://ollama.com), LM Studio, llama.cpp:
+
+```
+export PAPERVINE_AI_MODEL=ollama/qwen3.5
+export AI_BASE_URL=http://localhost:11434/v1
+papervine dev
+```
+
+| Variable | Effect |
+| --- | --- |
+| `PAPERVINE_AI_MODEL` | Model id, e.g. `anthropic/claude-haiku-4-5` or `ollama/qwen3.5` |
+| `AI_ROUTING` | `direct` to call the provider with your own key |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_...` | Your key, for `direct` routing |
+| `AI_BASE_URL` | An OpenAI-compatible endpoint, for a local model |
+
+<sub>Usage is billed by whoever provides the model — your key, your account. The CLI has no
+metering and reports nothing anywhere.</sub>
+
 ### Output
 
 `papervine --help` and `papervine --version` print the command surface and the installed
@@ -160,10 +193,9 @@ Just the renderer: MDX compilation, `docs.json` parsing, navigation, the compone
 set, and OpenAPI endpoint pages — the same engine that serves hosted Papervine sites,
 compiled in.
 
-It carries **none** of the hosted product: no authentication, database, object
-storage, realtime, or AI assistant. Those are services of a hosted deployment, not
-things a local previewer needs, so they are absent from the package rather than
-disabled at runtime.
+It carries **none** of the hosted control plane: no authentication, database, object
+storage, or realtime. Those are services of a hosted deployment, not things a local
+previewer needs, so they are absent from the package rather than disabled at runtime.
 
 The renderer has no runtime dependencies — it is compiled in. The one thing npm installs
 alongside it is [`sharp`](#images), an optional dependency for image optimization.
@@ -172,8 +204,7 @@ alongside it is [`sharp`](#images), an optional dependency for image optimizatio
 in-memory index built over your pages. It's built at startup and rebuilt in the background when
 you edit a file, so searching doesn't wait on it.
 
-The "Ask AI" assistant is a hosted feature and is not in the package, so a local preview
-shows the docs chrome — logo, navigation, sidebar, table of contents, search — without it.
+**The AI assistant is included too**, and appears once you configure a model — see below.
 
 ### Compatibility
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { outcomeFromText } from "@/lib/assistant-outcome";
+import { outcomeFromText } from "@papervine/renderer/lib/assistant-outcome";
 
 // The Assistant page's "Answered / Not answered" split depends on this classifier marking a
 // no-answer response as unanswered; everything else (a real answer) counts as answered.

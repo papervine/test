@@ -1,6 +1,6 @@
 import "server-only";
 import { loadPage, type Page } from "@papervine/renderer/lib/content";
-import { listPages } from "./docs-tools";
+import { listPages } from "@papervine/renderer/lib/docs-tools";
 
 /** One page in the combined export: its nav title/href plus the loaded source. */
 export type ExportPage = { title: string; href: string; page: Page };

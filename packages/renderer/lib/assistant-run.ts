@@ -1,7 +1,7 @@
 import "server-only";
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
-import { aiModel, aiModelId, aiProviderOptions } from "@/lib/ai-model";
-import { assistantTools } from "@/lib/assistant-tools";
+import { aiModel, aiModelId, aiProviderOptions } from "./ai-model";
+import { assistantTools } from "./assistant-tools";
 import {
   contentContext,
   loadConfig,
@@ -9,14 +9,45 @@ import {
   type ContentSource,
 } from "@papervine/renderer/lib/content";
 import type { PageAccess } from "@papervine/renderer/lib/nav";
-import { withReaderAccess, currentPageAccess } from "@/lib/reader-access";
-import { withSearchIndexKey } from "@/lib/search";
-import { logEvent, setEventStatus } from "@/lib/track";
-import { outcomeFromText } from "@/lib/assistant-outcome";
-import { recordAiUsage } from "@/lib/billing/store";
-import type { site } from "@/lib/db/app-schema";
+import { withReaderAccess, currentPageAccess } from "./reader-access";
+import { withSearchIndexKey } from "./search";
+import { outcomeFromText } from "./assistant-outcome";
 
-type SiteRecord = typeof site.$inferSelect;
+/**
+ * What this needs to know about a site, structurally.
+ *
+ * Deliberately not `typeof site.$inferSelect`: that would drag the Drizzle schema — and with it
+ * the database — into a package the CLI ships. The hosted caller passes its real row, which
+ * satisfies this shape; the CLI passes `null`.
+ */
+export type AssistantSite = { id: string; organizationId: string };
+
+/**
+ * The control-plane instrumentation, injected rather than imported.
+ *
+ * Analytics and credit metering are hosted concerns: they need a database, an org, and a rate
+ * table, none of which exist in the CLI. Every call was already guarded on `record` being
+ * non-null, so the CLI could have passed null and been fine — but importing `@/lib/track` and
+ * `@/lib/billing/store` at all would have pulled the control plane into the renderer's module
+ * graph, which is the boundary this package exists to hold (SPEC §10.6). So the hosted route
+ * supplies these and the CLI omits them.
+ */
+export type AssistantHooks = {
+  /** Record the question; the returned id is passed back to `setOutcome`. */
+  logQuestion?: (input: { siteId: string; query: string }) => Promise<string | null>;
+  /** Mark how the answer turned out (answered / unanswered). */
+  setOutcome?: (eventId: string, outcome: ReturnType<typeof outcomeFromText>) => void;
+  /** Meter the run against the owning org's credits. */
+  recordUsage?: (input: {
+    organizationId: string;
+    siteId: string;
+    feature: "assistant";
+    model: string;
+    tokensIn: number;
+    tokensOut: number;
+    requestId: string | null;
+  }) => void;
+};
 
 /** Pull the user's question text out of a UIMessage (its text parts). */
 function questionText(m: UIMessage | undefined): string {
@@ -38,7 +69,7 @@ function questionText(m: UIMessage | undefined): string {
  * the two callers.
  */
 export async function runAssistantConversation(params: {
-  record: SiteRecord | null;
+  record: AssistantSite | null;
   // The caller must have already checked `billing.allowed` (aiRefusalResponse handles the
   // rejection) — this only ever runs the conversation that's been cleared to happen.
   billing: { allowed: true; metered: boolean };
@@ -47,9 +78,16 @@ export async function runAssistantConversation(params: {
   contentSource: ContentSource | null;
   readerAccess: PageAccess;
   searchIndexKey: string | null;
+  /**
+   * Hosted analytics + metering. **Required, even though every use of it is guarded** — an
+   * optional field here meant a caller could simply forget and lose billing silently, with
+   * typecheck none the wiser. The CLI passes `{}` to say "deliberately none".
+   */
+  hooks: AssistantHooks;
 }): Promise<Response> {
   const { record, billing, messages, pageSlug, contentSource, readerAccess, searchIndexKey } =
     params;
+  const { hooks } = params;
 
   const run = <T,>(fn: () => Promise<T> | T): Promise<T> | T => {
     const inner = () => withReaderAccess(readerAccess, () => withSearchIndexKey(searchIndexKey, fn));
@@ -68,7 +106,7 @@ export async function runAssistantConversation(params: {
     let eventId: string | null = null;
     if (record) {
       const q = questionText(messages[messages.length - 1]);
-      if (q) eventId = await logEvent({ siteId: record.id, type: "assistant", source: "human", query: q });
+      if (q && hooks.logQuestion) eventId = await hooks.logQuestion({ siteId: record.id, query: q });
     }
 
     // Current-page context: ground answers in what the reader is looking at (SPEC §8.1).
@@ -105,12 +143,12 @@ export async function runAssistantConversation(params: {
       // Record the outcome on the logged event so the Assistant page's answered/unanswered
       // split is real. Fire-and-forget — never block or fail the stream on instrumentation.
       onFinish: ({ text, totalUsage }) => {
-        if (eventId) void setEventStatus(eventId, outcomeFromText(text));
+        if (eventId) hooks.setOutcome?.(eventId, outcomeFromText(text));
         // Meter the whole agentic run (all steps) against the owning org's credits.
         // Fire-and-forget, same rule as analytics: a metering failure drops the charge,
         // never the answer (billing/store.ts).
-        if (record && billing.metered) {
-          void recordAiUsage({
+        if (record && billing.metered && hooks.recordUsage) {
+          hooks.recordUsage({
             organizationId: record.organizationId,
             siteId: record.id,
             feature: "assistant",
@@ -122,7 +160,7 @@ export async function runAssistantConversation(params: {
         }
       },
       onError: () => {
-        if (eventId) void setEventStatus(eventId, "unanswered");
+        if (eventId) hooks.setOutcome?.(eventId, "unanswered");
       },
     });
 

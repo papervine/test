@@ -3,8 +3,8 @@ import { buildNav } from "@papervine/renderer/lib/nav";
 import { Navbar } from "@papervine/renderer/components/Navbar";
 import { NavTabs } from "@papervine/renderer/components/NavTabs";
 import { Sidebar } from "@papervine/renderer/components/Sidebar";
-import { Assistant } from "@/components/assistant/Assistant";
-import { AskAssistantButton } from "@/components/assistant/AskAssistantButton";
+import { Assistant } from "@papervine/renderer/components/assistant/Assistant";
+import { AskAssistantButton } from "@papervine/renderer/components/assistant/AskAssistantButton";
 import { SearchButton } from "@papervine/renderer/components/SearchDialog";
 import { Banner } from "@papervine/renderer/components/mdx/Banner";
 

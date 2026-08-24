@@ -131,9 +131,10 @@ for (const rel of PRUNE) {
 // copy from shadowing it: `server/node_modules` is searched before the consumer's own tree.
 //
 // This is the exception to the "leave node_modules exactly as traced" rule above, and it is safe
-// for the opposite reason `typescript` was not: nothing *imports* sharp: Next probes for it at
+// for the opposite reason `typescript` was not: nothing *imports* sharp — Next probes for it at
 // runtime and degrades when it is absent.
 const SHARP_PRUNE = ["node_modules/sharp", "node_modules/@img"];
+
 for (const rel of SHARP_PRUNE) {
   rmSync(path.join(OUT, rel), { recursive: true, force: true });
   // Next nests its own copy under `node_modules/next/node_modules` — the tracer put the real

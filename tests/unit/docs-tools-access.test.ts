@@ -3,7 +3,7 @@ import { parseDocsConfig } from "@papervine/renderer/lib/config";
 import { contentContext, parsePage, type ContentSource } from "@papervine/renderer/lib/content";
 import { canAccessPage } from "@/lib/reader-auth";
 import { withReaderAccess } from "@/lib/reader-access";
-import { searchDocs, readPage, listPages } from "@/lib/docs-tools";
+import { searchDocs, readPage, listPages } from "@papervine/renderer/lib/docs-tools";
 import { renderLlmsTxt } from "@/lib/llms";
 
 // Reader-auth gating (SPEC §11.2) must reach the RETRIEVAL surfaces, not just the renderer:

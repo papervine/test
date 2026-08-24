@@ -1,6 +1,6 @@
 import { streamText, convertToModelMessages, stepCountIs, type UIMessage } from "ai";
-import { aiModel, aiModelId, aiProviderOptions, aiProviderStatus } from "@/lib/ai-model";
-import { assistantTools } from "@/lib/assistant-tools";
+import { aiModel, aiModelId, aiProviderOptions, aiProviderStatus } from "@papervine/renderer/lib/ai-model";
+import { assistantTools } from "@papervine/renderer/lib/assistant-tools";
 import { authoringTools, draftContentSource } from "@/lib/authoring-tools";
 import { contentContext, loadConfig } from "@papervine/renderer/lib/content";
 import { findSite } from "@/lib/dashboard-context";

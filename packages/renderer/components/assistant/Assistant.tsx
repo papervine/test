@@ -15,7 +15,7 @@ import {
 import { Streamdown } from "streamdown";
 import { Sparkles, X, Maximize2, Minimize2, ArrowUp, Paperclip } from "lucide-react";
 import clsx from "clsx";
-import { assistantInternalTarget } from "@/lib/assistant-link";
+import { assistantInternalTarget } from "../../lib/assistant-link";
 
 /** Custom event other components dispatch to open the assistant (optionally with a query). */
 export const OPEN_EVENT = "papervine:open-assistant";

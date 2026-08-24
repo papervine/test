@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assistantInternalTarget } from "@/lib/assistant-link";
+import { assistantInternalTarget } from "@papervine/renderer/lib/assistant-link";
 
 const ORIGIN = "https://acme.papervine.io";
 

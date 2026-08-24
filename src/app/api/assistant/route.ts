@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
-import { aiProviderStatus } from "@/lib/ai-model";
-import { runAssistantConversation } from "@/lib/assistant-run";
+import { aiProviderStatus } from "@papervine/renderer/lib/ai-model";
+import { hostedAssistantHooks } from "@/lib/assistant-hooks";
+import { runAssistantConversation } from "@papervine/renderer/lib/assistant-run";
 import {
   requestContentSource,
   requestReaderAccess,
@@ -74,5 +75,6 @@ export async function POST(req: Request) {
     contentSource,
     readerAccess,
     searchIndexKey,
+    hooks: hostedAssistantHooks,
   });
 }

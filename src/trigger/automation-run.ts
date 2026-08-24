@@ -22,10 +22,10 @@ import { checkoutBranch, discardSession, publishDraft } from "../lib/authoring-c
 import { publishResultRef } from "../lib/publish-mode";
 import { isNativeSite, hasGitRepo } from "../lib/site-source";
 import { authoringTools, draftContentSource } from "../lib/authoring-tools";
-import { assistantTools } from "../lib/assistant-tools";
+import { assistantTools } from "@papervine/renderer/lib/assistant-tools";
 import { findOpenSession, listDraftFiles } from "../lib/draft-store";
 import { authorizeAi, recordAiUsage } from "../lib/billing/store";
-import { aiModel, aiModelId, aiProviderOptions, aiProviderStatus } from "../lib/ai-model";
+import { aiModel, aiModelId, aiProviderOptions, aiProviderStatus } from "@papervine/renderer/lib/ai-model";
 import { getInstallationToken } from "../lib/github-app";
 import { repoReadTools } from "../lib/automations/repo-tools";
 import { contentContext } from "@papervine/renderer/lib/content";

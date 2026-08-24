@@ -1,6 +1,7 @@
 import type { UIMessage } from "ai";
-import { aiProviderStatus } from "@/lib/ai-model";
-import { runAssistantConversation } from "@/lib/assistant-run";
+import { aiProviderStatus } from "@papervine/renderer/lib/ai-model";
+import { hostedAssistantHooks } from "@/lib/assistant-hooks";
+import { runAssistantConversation } from "@papervine/renderer/lib/assistant-run";
 import { requestContentSource, requestReaderAccess, requestSearchIndexKey } from "@/lib/request-source";
 import { aiRefusalResponse, authorizeAi } from "@/lib/billing/store";
 import { getSiteByWidgetId } from "@/lib/tenant";
@@ -113,6 +114,7 @@ export async function POST(
     contentSource,
     readerAccess,
     searchIndexKey,
+    hooks: hostedAssistantHooks,
   });
   const withCorsRes = withCors(res, origin!);
   withCorsRes.headers.set(

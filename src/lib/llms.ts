@@ -1,6 +1,6 @@
 import "server-only";
 import { loadConfig, loadPage } from "@papervine/renderer/lib/content";
-import { listPages } from "./docs-tools";
+import { listPages } from "@papervine/renderer/lib/docs-tools";
 
 /**
  * Render the llms.txt / llms-full.txt index for the docs site in scope (SPEC §9.1,

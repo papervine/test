@@ -3924,7 +3924,7 @@ the hosted API over HTTPS, they don't embed it.
 > The normal path is unchanged at ~10ms.
 >
 > **Design (2026-08-24): the AI assistant in the CLI — one engine, three callers, metering
-> decided by the caller. NOT YET BUILT.** The requirement: the assistant should work in the CLI
+> decided by the caller. BUILT — see the status note at the end of this entry.** The requirement: the assistant should work in the CLI
 > against the user's own key, and work hosted where it stays metered. Investigated before
 > designing, and the conclusion is that this is mostly *relocation* — the architecture already
 > separates the two. Packaging is decided (ship the SDKs, gate the UI on configuration); what
@@ -4027,6 +4027,57 @@ the hosted API over HTTPS, they don't embed it.
 > leak. A lever exists (restrict the CLI to local/BYO-key providers and keep gateway routing
 > hosted-only) but it is easily circumvented in an MIT package and sits awkwardly beside
 > no-lock-in.
+>
+> **Status (2026-08-24): SHIPPED.** The assistant runs in the CLI, and hosted stays metered.
+>
+> Moved into `packages/renderer`: `ai-model`, `docs-tools`, `assistant-tools`,
+> `assistant-outcome`, `assistant-run`, `assistant-link`, and the UI (`Assistant`,
+> `AskAssistantButton`). The access *context* (`currentPageAccess`/`withReaderAccess`) moved too
+> — the app keeps only `accessForRecord`, which is the part that genuinely needs reader-auth, and
+> re-exports the rest so no call site changed.
+>
+> **Analytics and metering became injected hooks, and the injection point is deliberately
+> required.** `hooks` is not optional: an optional field meant a hosted caller could simply forget
+> it and lose billing silently, with typecheck none the wiser. Making it required turned that into
+> two compile errors naming the exact two routes — which is how it should have failed. Both are
+> wired through one `hostedAssistantHooks` object rather than separately, preserving the reason
+> `runAssistantConversation` is shared at all: a metering mistake must not drift between the
+> in-docs and widget callers. The CLI passes `{}`, which says "deliberately none".
+> `SiteRecord` became a structural `AssistantSite = { id, organizationId }`, so the Drizzle schema
+> — and with it the database — does not follow the code into the renderer.
+>
+> **The packaging plan recorded above was wrong, and the clean-room gate caught it.** The plan was
+> to externalise the SDKs, declare them as `dependencies`, and prune the traced copy — npm
+> delivers one copy, the tarball carries none. That cannot work: Turbopack rewrites every
+> `serverExternalPackages` entry to a **content-hashed alias** (`@ai-sdk/anthropic-b7de4e186d…`)
+> which the compiled server requires *by that name*, so the pruned tree would have failed at
+> runtime. The gate reported it as control-plane code in the tarball — the SDKs shipped anyway,
+> because `dereference: true` had turned the alias symlinks into real copies.
+>
+> They are **bundled** instead, which is right for these: unlike the MDX stack — external because
+> it breaks when bundled for RSC — the AI SDKs are ordinary JavaScript. Compiled in they are
+> tree-shaken, there is no second copy to reconcile, and the published package declares no AI
+> dependency at all. **The measured cost is 4MB, not 24** (`server/` 92MB → 96MB): the earlier
+> figure was the size of the packages on disk, not of what a bundler keeps.
+>
+> **Gating.** `aiConfigured()` is evaluated on the server in the CLI's docs layout, so an unset
+> key never reaches the browser as a disabled control — the navbar renders exactly as it did
+> before the assistant existed. Verified: unconfigured, no button and `/api/assistant` returns
+> **503** naming the variable to set; configured, the button appears, the panel opens, and a real
+> POST streams `start` → `error` → `[DONE]` at HTTP 200 against a deliberately fake key, proving
+> the whole path — route, run, tools, provider call — short of a live model. No live call was made
+> (no key was configured in this environment, and spending someone's credits to prove wiring is a
+> poor trade).
+>
+> The clean-room gate now asserts the *shipped behaviour* rather than installed packages: the
+> endpoint must exist and refuse with a 503 that names what to configure. A 404 would mean the
+> route never shipped and the button would silently never appear — a failure with no error
+> message anywhere. The tarball's forbidden-package list keeps `ai-sdk` on it, with a comment
+> that "absent from the tarball" and "absent from the product" are now different claims.
+>
+> Verified: typecheck (root + CLI) clean, unit 1134, smoke 19 pages, crawls of `docs/` 42/42,
+> `mirror:cli --dry-run` typecheck outside the monorepo clean, and the clean-room tarball gate
+> green.
 >
 > Rendering was checked against **GitHub's own markdown API** (`POST /markdown`) rather than
 > assumed, which caught one real thing: badges on separate source lines render with `<br>` between

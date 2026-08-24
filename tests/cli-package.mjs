@@ -147,6 +147,11 @@ async function run() {
   //    `apps/cli/src/instrumentation.ts`; guarded here, because the next conventional
   //    file Next decides to resolve from the root would leak the same way.
   const listing = sh("tar", ["tzf", path.join(SANDBOX, cliTarball)]).split("\n");
+  // Note `ai-sdk` stays on this list even though the CLI now *ships* the assistant: the SDKs are
+  // declared `dependencies` and pruned from the packed tree, so npm delivers them and the tarball
+  // must not carry a second copy. "Absent from the tarball" and "absent from the product" are
+  // different claims now, and only the first one is what this asserts — the counterpart, that
+  // they resolve after a real install, is checked further down.
   const controlPlane = listing.filter((f) =>
     /better-auth|drizzle|aws-sdk|pusher|modelcontextprotocol|trigger\.dev|@sentry|@tiptap|ai-sdk|resend|\/stripe\//i.test(
       f,
@@ -223,6 +228,7 @@ async function run() {
     failures.push("sharp was not installed — image optimization would be silently unavailable");
   }
   log(`  ${failures.length === sharpBefore ? "✓" : "✗"} sharp resolved for this platform`);
+
 
   const bin = path.join(consumer, "node_modules", ".bin", "papervine");
 
@@ -353,6 +359,29 @@ async function run() {
       failures.push("dbasset traversal escaped the content root");
     }
     log(`  ${failures.length === readBefore ? "✓" : "✗"} dbasset serves assets only, no traversal`);
+
+    // The assistant ships compiled into the package, and the only thing a user supplies is a
+    // key. Unconfigured — which is what this clean room is — the endpoint must exist and refuse
+    // with a 503 naming what to set. A 404 would mean the route never shipped, and the Ask
+    // Assistant button would silently never appear with no error anywhere to explain why.
+    const aiBefore = failures.length;
+    const ai = await fetch(BASE + "/api/assistant", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ messages: [] }),
+    });
+    if (ai.status === 404) {
+      failures.push("/api/assistant 404s — the assistant did not ship");
+    } else if (ai.status !== 503) {
+      failures.push(`/api/assistant returned ${ai.status}, expected 503 when unconfigured`);
+    } else {
+      const body = await ai.json().catch(() => ({}));
+      // The message has to name the missing variable, or "unavailable" is unactionable.
+      if (!/API_KEY|AI_BASE_URL|OIDC/i.test(String(body.error ?? ""))) {
+        failures.push(`/api/assistant 503 did not say what to configure: ${body.error}`);
+      }
+    }
+    log(`  ${failures.length === aiBefore ? "✓" : "✗"} assistant ships, refuses cleanly without a key`);
 
     // A missing page must 404, not 500.
     const nfBefore = failures.length;

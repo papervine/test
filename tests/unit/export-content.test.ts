@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { parseDocsConfig } from "@papervine/renderer/lib/config";
 import { contentContext, parsePage, type ContentSource } from "@papervine/renderer/lib/content";
 import { collectExportPages } from "@/lib/export-content";
-import { listPages } from "@/lib/docs-tools";
+import { listPages } from "@papervine/renderer/lib/docs-tools";
 
 // Regression for Settings → Exports (SPEC §10.2): collectExportPages must return every
 // docs page IN SIDEBAR ORDER, skipping nav leaves with no loadable page (e.g. a stale

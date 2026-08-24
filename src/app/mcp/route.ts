@@ -1,7 +1,7 @@
 import { createMcpHandler } from "mcp-handler";
 import { z } from "zod";
 import { headers } from "next/headers";
-import { searchDocs, readPage, listPages, searchApi, apiEnabled } from "@/lib/docs-tools";
+import { searchDocs, readPage, listPages, searchApi, apiEnabled } from "@papervine/renderer/lib/docs-tools";
 import { contentContext } from "@papervine/renderer/lib/content";
 import {
   requestContentSource,

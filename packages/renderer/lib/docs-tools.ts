@@ -15,7 +15,11 @@ import type { DocsConfig } from "@papervine/renderer/lib/config";
  */
 
 export async function searchDocs(query: string) {
-  const hits = await runSearch(query);
+  // Gate retrieval by the reader's access. This used to be supplied by the web app's thin
+  // `runSearch` wrapper; now that these tools are shared with the CLI it is applied here, at the
+  // one place that actually retrieves. The predicate defaults to allow-all, so the CLI (which
+  // has no readers) is unaffected while a gated hosted site still cannot leak through RAG.
+  const hits = await runSearch(query, { access: currentPageAccess() });
   return hits.slice(0, 8).map((h) => ({
     title: h.title,
     heading: h.heading,

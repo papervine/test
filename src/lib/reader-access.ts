@@ -1,5 +1,4 @@
 import "server-only";
-import { AsyncLocalStorage } from "node:async_hooks";
 import type { PageAccess } from "@papervine/renderer/lib/nav";
 import type { PageFrontmatter } from "@papervine/renderer/lib/content";
 import { canAccessPage } from "./reader-auth";
@@ -16,19 +15,13 @@ import { readerSession } from "./reader-session";
  * ALLOW_ALL, so the apex, `papervine dev`, non-gated sites, and any path that doesn't set it
  * are unchanged.
  */
+// The context itself moved to the renderer, because its consumers did: `docs-tools` and the
+// assistant are shared with the CLI now. Re-exported so every existing `@/lib/reader-access`
+// call site is unchanged. What stays here is the control-plane half — deriving a predicate from
+// a site record and a reader cookie, which needs reader-auth and the session cookie.
+export { currentPageAccess, withReaderAccess } from "@papervine/renderer/lib/reader-access";
+
 const ALLOW_ALL: PageAccess = () => true;
-
-const accessContext = new AsyncLocalStorage<PageAccess>();
-
-/** The current request's access predicate, or ALLOW_ALL when none is set. */
-export function currentPageAccess(): PageAccess {
-  return accessContext.getStore() ?? ALLOW_ALL;
-}
-
-/** Run `fn` with `access` as the current predicate (nest inside `contentContext.run`). */
-export function withReaderAccess<T>(access: PageAccess, fn: () => Promise<T> | T): Promise<T> | T {
-  return accessContext.run(access, fn);
-}
 
 /**
  * Build the access predicate from a site record + reader cookie. Mirrors the renderer's

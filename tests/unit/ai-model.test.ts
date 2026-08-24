@@ -8,7 +8,7 @@ import {
   isLocalProvider,
   localBaseUrl,
   DEFAULT_AI_MODEL,
-} from "@/lib/ai-model";
+} from "@papervine/renderer/lib/ai-model";
 
 const ENV_KEYS = [
   "PAPERVINE_AI_MODEL",

@@ -127,19 +127,60 @@ component set, OpenAPI endpoint pages — compiled into the package as one self-
 application.
 
 It deliberately carries **none** of the hosted control plane — no authentication, database,
-object storage, realtime, or AI assistant. Those are services of the hosted product, not
-things a local previewer needs, so they're absent from the package entirely rather than
-disabled at runtime. Nothing to install, and nothing to audit.
+object storage, or realtime. Those are services of the hosted product, not things a local
+previewer needs, so they're absent from the package entirely rather than disabled at runtime.
 
-A practical consequence: the navbar's search palette and "Ask AI" button are control-plane
-features supplied by the host app as optional slots. The CLI leaves them empty, so a local
-preview shows the docs chrome (logo, navigation, sidebar, table of contents) without them.
+Search and the AI assistant *are* included: neither needs the control plane. Search is an
+in-memory index over the folder you're previewing, and the assistant answers by searching and
+reading those same pages. What the assistant needs from you is a model — see
+[AI assistant](#ai-assistant) below.
 
 <Note>
   Because the stylesheet is compiled when the package is built, arbitrary Tailwind utility
   classes written in your own MDX aren't in it. Use the built-in components and `docs.json`
   theming instead.
 </Note>
+
+## AI assistant
+
+The assistant that runs on hosted Papervine runs here too. It answers questions about your docs
+with citations, retrieving by searching and reading your pages — there's no index to build and no
+vector database, because retrieval is the same full-text search the `⌘K` palette uses.
+
+It appears in the navbar once a model is configured, and is absent when one isn't. Nothing to
+enable; the SDKs ship with the CLI, and you bring a model.
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export AI_ROUTING=direct
+papervine dev
+```
+
+<Note>
+  To run it **free and entirely offline**, point it at any OpenAI-compatible server — Ollama,
+  LM Studio, llama.cpp:
+
+  ```bash
+  export PAPERVINE_AI_MODEL=ollama/qwen3.5
+  export AI_BASE_URL=http://localhost:11434/v1
+  ```
+
+  Small local models are less reliable at the multi-step tool use the assistant does, so expect
+  weaker answers than a frontier model gives.
+</Note>
+
+| Variable | Effect |
+| --- | --- |
+| `PAPERVINE_AI_MODEL` | Model id, e.g. `anthropic/claude-haiku-4-5` or `ollama/qwen3.5` |
+| `AI_ROUTING` | `direct` to call the provider with your own key |
+| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, … | Your key, for `direct` routing |
+| `AI_BASE_URL` | An OpenAI-compatible endpoint, for a local model |
+
+**Usage is billed by whoever provides the model** — your key, your account, at their prices. The
+CLI meters nothing and reports nothing anywhere; it has no way to, since it carries no database
+and no telemetry. That is the one substantive difference from the hosted assistant, which is
+metered against your plan's credits and records what readers asked so you can see which questions
+went unanswered.
 
 ## Trust and execution
 
@@ -160,7 +201,9 @@ outside `/snippets/` and dynamic `import()` don't render at all.
 </Warning>
 
 The previewer is narrow by construction too: it binds loopback, serves only asset file types out
-of your content directory, and refuses remote image URLs.
+of your content directory, and refuses remote image URLs. The one thing that talks to the network
+is the assistant, and only when you have configured a model and asked it something — your
+question and the retrieved page text go to the provider you chose, and nowhere else.
 
 ## Troubleshooting
 
