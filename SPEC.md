@@ -3927,7 +3927,8 @@ the hosted API over HTTPS, they don't embed it.
 > decided by the caller. NOT YET BUILT.** The requirement: the assistant should work in the CLI
 > against the user's own key, and work hosted where it stays metered. Investigated before
 > designing, and the conclusion is that this is mostly *relocation* — the architecture already
-> separates the two.
+> separates the two. Packaging is decided (ship the SDKs, gate the UI on configuration); what
+> remains unbuilt is the module moves and the two routes.
 >
 > **Retrieval needs no database, which is the fact that makes this feasible at all.**
 > `docs-tools.ts` imports exactly four things: `runSearch` (the Orama index the CLI already ships,
@@ -3976,14 +3977,44 @@ the hosted API over HTTPS, they don't embed it.
 > run it **free and fully local against Ollama**, which is a good story for an MIT tool.
 > `aiProviderStatus()` already returns human-readable "you haven't configured X" errors.
 >
-> **Packaging is the one real cost, and it is a policy reversal rather than a technical problem.**
-> `ai` is 7.5MB and `@ai-sdk/*` is 18MB, against a 15MB tarball. §10.6's boundary says the CLI
-> carries no AI, `tests/cli-package.mjs` *asserts* `ai-sdk` is absent from the tarball, and the
-> README says so in prose. **Recommendation: make it opt-in exactly as `sharp` is** — the
-> assistant route detects whether the SDK resolves and a key is set, and absent either the navbar
-> simply does not render the button (which is today's behaviour). Users who want it pay the 25MB
-> and bring a key; everyone else keeps a lean previewer, and the boundary assertion stays
-> meaningful as "not by default" rather than "never".
+> **Packaging — DECIDED: ship the SDKs to everyone, and show the assistant only when it is
+> configured.** The alternative considered was true opt-in (optional peer dependencies the user
+> installs themselves), which npm does support — `peerDependenciesMeta.optional: true` is
+> genuinely not auto-installed, verified with a throwaway package. It was rejected because it
+> makes the good path a manual step and it breaks under `npx`, where a project-local `ai` is not
+> on the resolution path from a temp cache dir.
+>
+> Shipping them as ordinary `dependencies` removes that entirely: npm and npx both install a
+> package's own dependencies, so the SDKs are simply *there*, and the only thing a user supplies
+> is a key. Four pieces:
+>
+> 1. `dependencies: { ai, @ai-sdk/anthropic, @ai-sdk/openai, @ai-sdk/google }`. All three
+>    providers because `ai-model.ts` imports them statically — and `@ai-sdk/openai` is not
+>    optional even for the free path, since `createOpenAI` is what drives a local
+>    OpenAI-compatible server (Ollama).
+> 2. **`serverExternalPackages`** for each. This is the piece most likely to be got wrong: unlike
+>    `sharp` — which nothing imports, because Next probes for it — the assistant genuinely
+>    `import`s `ai`, and a static import is **compiled into the prebuilt server at build time**.
+>    Without externalising, the SDKs ship inlined in the bundle *and* get installed again as
+>    dependencies.
+> 3. `prepack` prunes them from `server/node_modules`, exactly as `SHARP_PRUNE` does, so the
+>    tarball does not carry a second copy.
+> 4. The gate is `aiProviderStatus()`, which already returns a human-readable reason. Configured →
+>    fill the `Navbar`'s existing "Ask AI" slot. Not configured → leave it `null`, which is
+>    today's behaviour, so there is no new empty state to design.
+>
+> **Cost, in proportion:** the CLI already installs **92MB** (`server/`). The SDKs add ~24MB —
+> `ai` 7.5, `@ai-sdk/openai` 6.1, `google` 5.3, `anthropic` 3.2, `provider*` 2.1 — so the
+> installed footprint grows about **26%**, and the tarball stays 15MB because they are pruned
+> rather than bundled.
+>
+> **The boundary assertion needs deliberate updating, not accidental passing.**
+> `tests/cli-package.mjs` forbids `ai-sdk` in the *tarball*; because these are pruned, that check
+> would keep passing while its intent silently changed. Treat the tarball rule as "not bundled"
+> and add the counterpart the sharp work established — assert the SDKs *are* resolvable after a
+> real install — so both facts are pinned on purpose. The README's "It carries none of the hosted
+> product: no authentication, database, object storage, realtime, or AI assistant" becomes false
+> at the same moment and has to change with it.
 >
 > **Recorded consequence, so it is a decision and not a surprise:** `PAPERVINE_HOST=0.0.0.0
 > papervine dev` behind a proxy is a legitimate self-host (it is why the sharp platform-lock was
