@@ -28,10 +28,18 @@ import { bold, brand, brandLight, dim, red, rows, yellow } from "./style.mjs";
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_ENTRY = path.join(PKG_ROOT, "server", "server.js");
 
-// A local preview binds loopback, not every interface — a docs previewer has no
-// business being reachable from the LAN by default. `HOSTNAME` overrides it for
-// the container case, where the port has to be reachable from the host.
-const HOST = process.env.HOSTNAME || "127.0.0.1";
+// A local preview binds loopback, not every interface — a docs previewer has no business being
+// reachable from the LAN by default. `PAPERVINE_HOST` overrides it for the container case,
+// where the port has to be reachable from the host.
+//
+// Deliberately NOT `HOSTNAME`, which is what this used to read. `HOSTNAME` is set by the
+// environment for unrelated reasons — Docker sets it to the container id, Kubernetes to the pod
+// name, and interactive shells export it — so the bind address silently became whatever that
+// was. In a container the server bound the container's own hostname, which meant
+// `curl 127.0.0.1:3000` inside it got connection-refused while the CLI cheerfully printed
+// `http://<container-id>:3000` and claimed to be ready. A variable that ubiquitous has no
+// business controlling network exposure.
+const HOST = process.env.PAPERVINE_HOST || "127.0.0.1";
 
 function fail(msg) {
   console.error(`${red("papervine:")} ${msg}`);
@@ -328,6 +336,10 @@ async function runDev(argv) {
       ...process.env,
       PAPERVINE_CONTENT: plan.dir,
       PORT: String(port),
+      // `HOSTNAME` is how Next's standalone server takes its bind address, so it stays that
+      // name here — but it's set from our own `PAPERVINE_HOST` (see HOST above), never
+      // inherited. That's the whole point: an ambient HOSTNAME from Docker or a shell must not
+      // reach the server, and an explicit HOSTNAME in the environment is overridden by this.
       HOSTNAME: HOST,
       NODE_ENV: "production",
     },

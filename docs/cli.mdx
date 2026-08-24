@@ -63,8 +63,14 @@ Without `--port`, a busy port is skipped and the next free one is used. With an 
 redirected somewhere you weren't told about.
 
 The preview binds loopback (`127.0.0.1`) rather than every network interface, so it isn't
-reachable from the rest of the network by default. Set `HOSTNAME=0.0.0.0` when you need to
+reachable from the rest of the network by default. Set `PAPERVINE_HOST=0.0.0.0` when you need to
 reach it from outside the machine, such as from a container host.
+
+<Note>
+  The variable is `PAPERVINE_HOST`, not `HOSTNAME`. Docker sets `HOSTNAME` to the container id
+  and Kubernetes to the pod name, so reading it would let an unrelated part of the environment
+  decide what the preview is reachable from.
+</Note>
 
 ## Colour output
 
@@ -114,9 +120,21 @@ preview shows the docs chrome (logo, navigation, sidebar, table of contents) wit
 
 ## Trust and execution
 
-`papervine dev` **compiles and runs the repo's MDX**, which is arbitrary JSX/JavaScript.
-That's expected for your own docs, but it means you should only run the CLI on docs repos you
-trust, the same way you'd only run `npm install` in a project you trust.
+`papervine dev` **compiles and runs the repo's MDX**, and an MDX expression is real JavaScript
+executed on your machine while the page renders. Concretely, a page in the repo you point at can
+read your environment variables, reach the network, and run commands as your user — the same
+power a `postinstall` script has.
+
+<Warning>
+  **Only preview docs repos you trust**, with the same care you'd apply before running
+  `npm install` in someone else's project. This isn't specific to Papervine — every docs
+  generator that executes MDX or JSX at build time works this way — but it is worth knowing
+  before you preview a pull request from a stranger.
+</Warning>
+
+Nothing about the previewer widens that: it binds loopback, serves only asset file types out of
+your content directory, and refuses remote image URLs. The MDX execution *is* the trust
+boundary, so the repo is the thing to be careful about.
 
 ## Troubleshooting
 

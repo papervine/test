@@ -3991,6 +3991,81 @@ the hosted API over HTTPS, they don't embed it.
 > `writeText` resolved), and no new console errors. The one console error present — "Encountered a
 > script tag while rendering React component" — is the root layout's no-flash theme script and
 > predates this work; a page with zero fences shows it too.
+>
+> **Status (2026-08-24): pre-publish security pass on the CLI.** Everything below was probed
+> against the real packed tarball and a running server, not read off the source — several of the
+> conclusions I'd have drawn from reading were wrong.
+>
+> **Clean:** traversal above the content root is refused in every encoding tried (`../`, `..%2f`,
+> double-encoded, backslash, absolute); SSRF through `/_next/image` is refused for every sink
+> (external https, `169.254.169.254` IMDS, loopback-to-self, `file://`, protocol-relative) because
+> `remotePatterns` is empty; the route surface is exactly four routes with no `/monitoring` tunnel,
+> no auth, no admin; `npm audit` over all **198 vendored packages** at shipped versions reports
+> **0 vulnerabilities**; no `postinstall`/`preinstall`, so installing runs no scripts; no
+> telemetry endpoint; the search route neither reflects input nor chokes on a pathological query;
+> a secret sweep for 14 credential shapes plus internal infra found only false positives
+> (`ta`**`sk-async`**`-storage`, `a`**`sk-user-about`**`-…` matching an `sk-` pattern); the five
+> shipped `.js.map` files are empty stubs with no `sourcesContent`; binds `127.0.0.1`, sends no
+> CORS headers.
+>
+> **FIXED — `/dbasset/*` was an arbitrary-file reader for the previewed folder.** `middleware.ts`
+> only rewrites known asset extensions, which reads like the filter — but its matcher *excludes*
+> `dbasset/`, so the route is reachable directly and had no allowlist of its own, just an
+> `application/octet-stream` fallback. `/dbasset/.env` returned the secret; so did `id_rsa`,
+> `docs.json`, `index.mdx`. Someone running `papervine dev .` at a project root was serving their
+> own secrets over loopback. The route now serves only the extensions it has a content type for —
+> the same set middleware routes there — and the fallback type is gone.
+>
+> **FIXED — a symlink in the repo escaped the content root.** The containment check was lexical,
+> so `link -> /etc` inside the previewed folder made `/dbasset/link/passwd` readable: the path is
+> inside on paper and `readFile` follows the link. Containment is now re-checked on the
+> `realpath`'d target. The subtle part is that this *needs* the root realpath'd too — `/tmp` is a
+> symlink to `/private/tmp` on macOS, so comparing a resolved target against an unresolved root
+> would 403 every asset for anyone previewing under `/tmp`. Verified both directions: a symlinked
+> `.png` pointing outside gets 403 while a real one gets 200, and serving *through* a symlinked
+> content dir still works.
+>
+> **Threat-model correction worth recording:** both of those are defence-in-depth, not holes,
+> because the MDX trust boundary is already total (below). They matter for the *benign* repo case
+> — another local process, or a browser page via DNS rebinding — not against a hostile repo,
+> which has strictly more power already.
+>
+> **FIXED — `HOSTNAME` decided the bind address.** The LAN escape hatch read `HOSTNAME`, which the
+> environment sets for unrelated reasons: Docker to the container id, Kubernetes to the pod name,
+> interactive shells export it. So in a container the server bound the container's hostname,
+> `curl 127.0.0.1:3000` was refused, and the CLI printed `http://<container-id>:3000` and said
+> Ready — found by installing the tarball in `node:22-slim`, where it looked like a total failure
+> to serve. A variable that ubiquitous has no business controlling network exposure, so the knob
+> is **`PAPERVINE_HOST`** now and an ambient `HOSTNAME` is ignored (it's still what gets *passed*
+> to Next's standalone server, since that's Next's interface — set from ours, never inherited).
+> Guarded in `tests/cli-package.mjs`, which now spawns the installed binary with a deliberately
+> unresolvable `HOSTNAME`; confirmed that value really does fail to bind (`ENOTFOUND`), so the
+> assertion has teeth rather than passing vacuously.
+>
+> **Documented, not fixable: rendering a docs repo is remote code execution.** MDX expressions are
+> real JavaScript executed server-side at render time. Confirmed concretely: `process.env` is
+> reachable and a probe rendered a secret env var's *value* into the page, and a dynamic
+> `import("node:child_process").then(m => m.execSync(...))` **created a file on disk** just from
+> loading the page. `require` is undefined (ESM) but that stops nothing. This is inherent to every
+> docs generator that executes MDX/JSX and can't be closed without sandboxing the render, so the
+> fix is honest wording: `docs/cli.mdx` and the CLI README now say a previewed page "can read your
+> environment variables, reach the network, and run commands as your user — the same power a
+> `postinstall` script has" instead of the vaguer "arbitrary JSX/JavaScript", which reads like it
+> might mean sandboxed component code.
+>
+> **OPEN, and a publish blocker — the tarball is platform-locked.** The prebuilt server vendors
+> its whole runtime, including `sharp` and libvips as **native binaries for the build machine
+> only** (17MB of the 107MB extracted / 23MB compressed). Measured on a Mac-built tarball:
+> `/_next/image?w=64` on a 220,526-byte PNG returns **3,124 bytes** on macOS and **1,512 bytes**
+> as WebP — and on `linux/amd64` returns the **full 220,526 bytes**, unchanged, `image/png` even
+> when the client sends `Accept: image/webp`. Silently: no warning, no error, `images.unoptimized`
+> is `false` so optimization is expected. A 145× regression for anyone not on the publisher's
+> platform. Note CI's clean-room gate runs on ubuntu and would pass, because it builds *there* —
+> whichever machine publishes decides which platform works. Options: declare `sharp` as an
+> optional runtime dependency and exclude the vendored copy (npm then resolves each user's
+> platform, and the tarball loses 17MB), or set `images: { unoptimized: true }` so behaviour is
+> identical everywhere and drop sharp entirely. Deliberately left as a decision rather than
+> fixed — it changes packaging strategy and product behaviour.
 
 ### 10.7 Error resilience (route boundaries)
 

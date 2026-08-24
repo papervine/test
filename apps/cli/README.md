@@ -121,7 +121,9 @@ Pages are rendered per request, so saving an `.mdx` file and refreshing the brow
 shows the change. There is no hot reload — a refresh is the update.
 
 By default the preview binds loopback (`127.0.0.1`) rather than every interface. Set
-`HOSTNAME=0.0.0.0` to reach it from outside the machine, e.g. from a container host.
+`PAPERVINE_HOST=0.0.0.0` to reach it from outside the machine, e.g. from a container host.
+(`PAPERVINE_HOST`, not `HOSTNAME` — Docker and Kubernetes set `HOSTNAME` for their own
+reasons, and that shouldn't decide what your preview is reachable from.)
 
 ### Output
 
@@ -184,9 +186,18 @@ the documented components and `docs.json` theming instead.
 
 ### Trust
 
-`papervine dev` compiles and executes the repo's MDX, which is arbitrary JSX and
-JavaScript. That's expected for your own docs, but it means you should only run it on
-docs repos you trust — the same care you'd take before `npm install` in a project.
+`papervine dev` compiles and executes the repo's MDX, and an MDX expression is real
+JavaScript run on your machine as the page renders — it can read your environment
+variables, reach the network, and run commands as your user, the same as a `postinstall`
+script.
+
+So **only preview docs repos you trust**, with the care you'd take before running
+`npm install` in someone else's project. This is true of every docs generator that
+executes MDX or JSX, not just this one, but it's worth knowing before you preview a pull
+request from a stranger.
+
+The previewer itself doesn't widen that: it binds loopback, serves only asset file types
+from your content directory, and refuses remote image URLs.
 
 ### Roadmap
 

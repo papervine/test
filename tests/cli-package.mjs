@@ -230,6 +230,13 @@ async function run() {
   const server = spawn(bin, ["dev", DOCS, "-p", String(PORT)], {
     cwd: consumer,
     stdio: ["ignore", "pipe", "pipe"],
+    // An ambient HOSTNAME must NOT become the bind address. The CLI used to read it, and
+    // Docker sets it to the container id / Kubernetes to the pod name — so in a container the
+    // server bound the container hostname, `curl 127.0.0.1` was refused, and it printed
+    // `http://<container-id>:3000` while claiming to be ready. The override is `PAPERVINE_HOST`
+    // now; this value is unresolvable, so if HOSTNAME ever leaks back in, the bind fails and
+    // waitForReady below times out instead of quietly passing.
+    env: { ...process.env, HOSTNAME: "papervine-hostname-must-be-ignored.invalid" },
   });
   let serverLog = "";
   server.stdout.on("data", (d) => (serverLog += d));
@@ -297,6 +304,31 @@ async function run() {
       }
     }
     log(`  ${failures.length === assetBefore ? "✓" : "✗"} docs-repo asset served (${asset ?? "none"})`);
+
+    // The dbasset route is reachable DIRECTLY at /dbasset/* — middleware's matcher excludes
+    // that prefix, so its asset-extension filter doesn't protect it. Without the route's own
+    // allowlist it was an arbitrary-file reader for the previewed folder: someone running
+    // `papervine dev .` at a project root served their own `.env` over loopback. These are the
+    // three shapes that matter, asserted against the *published* binary because that's the only
+    // place the route runs.
+    const readBefore = failures.length;
+    for (const [probe, why] of [
+      ["/dbasset/docs.json", "config file"],
+      ["/dbasset/.env", "dotfile secret"],
+      ["/dbasset/index.mdx", "page source"],
+    ]) {
+      const res = await fetch(BASE + probe);
+      // 404 (not an asset type) or 403 (outside the root) — anything 2xx is a file read.
+      if (res.ok) {
+        failures.push(`${probe} returned ${res.status} — dbasset is serving a ${why}`);
+      }
+    }
+    // Traversal above the content root must stay refused.
+    const up = await fetch(BASE + "/dbasset/../../../../../../etc/passwd");
+    if (up.ok && (await up.text()).includes("root:")) {
+      failures.push("dbasset traversal escaped the content root");
+    }
+    log(`  ${failures.length === readBefore ? "✓" : "✗"} dbasset serves assets only, no traversal`);
 
     // A missing page must 404, not 500.
     const nfBefore = failures.length;
