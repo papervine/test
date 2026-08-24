@@ -68,7 +68,25 @@ threw when any one component was missing.
    which asserts each one emits its own *markup* rather than merely showing its text — a
    marker alone proves nothing, since the children fallback would render it either way.
 6. ✅ Mermaid diagrams.
-7. ⏳ Three known fidelity gaps, each a deliberate trade rather than an oversight:
+7. ⏳ **`<Tree>` accepts a second input form we don't support.** Alongside
+   `<Tree.Folder>`/`<Tree.File>`, upstream also parses a **Markdown list** inside
+   `<Tree>`/`<FileTree>` — a trailing slash marks a folder, nesting marks children, and
+   folders with children expand by default:
+   ```mdx
+   <FileTree>
+   - docs/
+     - index.mdx
+     - guides/
+       - configuration.mdx
+   - docs.config.ts
+   </FileTree>
+   ```
+   A repo using that form degrades to a plain bullet list inside the tree container — not
+   broken, but not a tree. Found by visually diffing against the upstream docs, not by
+   reading the component reference, which documents only the JSX form. Fix is a remark
+   transform that rewrites a list child of `Tree`/`FileTree` into the JSX equivalent before
+   compile, the same shape as `remarkMermaid`.
+8. ⏳ Three known fidelity gaps, each a deliberate trade rather than an oversight:
    - **`Icon`** resolves Lucide names only, not Font Awesome or Tabler. Three icon libraries
      is poor weight for a package built to be light; unknown names render nothing and `src`
      accepts any file or URL as the escape hatch.
@@ -78,7 +96,7 @@ threw when any one component was missing.
    - **`Panel` / `RequestExample` / `ResponseExample`** render inline instead of moving into
      the right column. Relocating them means the page layout reaching into compiled MDX to
      extract elements before render; the layout is fixed by the route before MDX runs.
-8. ✅ `banner` — supported **both** ways. The documented form is a `docs.json` field
+9. ✅ `banner` — supported **both** ways. The documented form is a `docs.json` field
    (`content`, `dismissible`, `type`, `color`), now parsed by the config layer and rendered
    above the navbar site-wide by both the CLI and the tenant renderer. `<Banner>` also works
    as an MDX tag for a single page: upstream doesn't document one, but writing it is a

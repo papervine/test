@@ -54,8 +54,16 @@ Icons come from [Lucide](https://lucide.dev): <Icon icon="flag" size={20} /> <Ic
 
 <Note>
   Font Awesome and Tabler names aren't resolved — they render nothing rather than breaking the
-  line. Use a Lucide name, or point `src` at your own file: <Icon src="/logo/light.svg" size={20} />
+  line. Use a Lucide name, or point `src` at any file of your own.
 </Note>
+
+`src` takes a path or a URL: <Icon src="/favicon.svg" size={20} />
+
+<Warning>
+  Pick an asset that reads on both light and dark backgrounds. A single-colour logo that works
+  on one will disappear on the other — `favicon.svg` is used above because it has its own
+  background.
+</Warning>
 
 ## Tooltips
 

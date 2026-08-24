@@ -35,7 +35,13 @@ export function Update({
   return (
     <div
       id={id}
-      className="my-8 grid gap-4 border-t border-zinc-200 pt-8 first:border-t-0 first:pt-0 dark:border-zinc-800 md:grid-cols-[10rem_1fr] md:items-start"
+      // The divider trails each entry rather than leading it. A leading `border-t` with
+      // `first:border-t-0` looks right and is dead code: in MDX the first `<Update>` is a
+      // sibling of the preceding `<h2>`, never its parent's first child, so `:first-child`
+      // can't match — every entry drew a top rule, leaving a stray line and an empty band
+      // under the heading. `first:`/`last:` are unreliable for any MDX component for the
+      // same reason.
+      className="mb-8 grid gap-4 border-b border-zinc-200 pb-8 dark:border-zinc-800 md:grid-cols-[10rem_1fr] md:items-start"
     >
       <div className="not-prose md:sticky md:top-24">
         <a
