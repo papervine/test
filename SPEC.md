@@ -3900,6 +3900,29 @@ the hosted API over HTTPS, they don't embed it.
 > `runSearch` returns early on an empty term before it ever reaches the index — there was no way
 > to warm the cache through the existing API.
 >
+> **Status (2026-08-24): Ctrl-C is now bounded, after a report it "seems not to be working".**
+> Could not reproduce it: SIGINT to the process group (what a terminal actually does), SIGINT to
+> the parent only (what a wrapper like `npx` does), and SIGINT straight to `server.js` with the
+> warm timer live on a 500-page repo all exited in 7–36ms. The warming interval is genuinely
+> `unref`'d, so it does not hold the loop open.
+>
+> But reading the supervision code found a real hole worth closing regardless. Installing a
+> `SIGINT` handler **replaces** Node's default "terminate now", so the CLI was living entirely at
+> the mercy of the child: forward the signal, then wait on `exit` forever. If the server ever
+> failed to go — a hung request, a shutdown blocked on a live handle, a bug in a dependency —
+> Ctrl-C would do nothing at all, and pressing it again just re-sent the signal already being
+> ignored. The only way out was another terminal. That is a bad failure mode for the one key
+> everybody trusts.
+>
+> The wait is bounded now: forward, then `SIGKILL` if the child is still alive after 2s, and a
+> **second** Ctrl-C skips the wait entirely (which is what a person does when the first appears to
+> have done nothing). Exit codes propagate properly too — `code ?? 0` reported a clean exit for a
+> process that was killed; it maps the signal to 128+n instead.
+>
+> Proven against a deliberately stubborn child that traps and ignores both SIGINT and SIGTERM:
+> before, that hangs forever; now the CLI exits after 2.0s with code 137 and the port is freed.
+> The normal path is unchanged at ~10ms.
+>
 > Rendering was checked against **GitHub's own markdown API** (`POST /markdown`) rather than
 > assumed, which caught one real thing: badges on separate source lines render with `<br>` between
 > them and stack vertically. They are one line now. Also confirmed `---` under an ATX heading
