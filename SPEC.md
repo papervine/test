@@ -2712,6 +2712,17 @@ Minimum to operate the SaaS:
 > markup-based `exclude` would have passed whether the gate existed or not. The test watches for
 > both the injected tag and any request to `/_vercel/insights` from a tenant page.
 >
+> **Chatwoot live chat (2026-08-24)** joins them behind the same `isTenant` gate, for a sharper
+> reason than either: it's a support inbox WE staff, so on a tenant's docs site it would invite
+> THEIR readers to open conversations with us about a product they've never heard of — and it
+> would fight the tenant's own assistant launcher (§8.6) for the same corner. Installed as the
+> documented script snippet, not an npm package: the SDK is served by the Chatwoot instance
+> itself, so a package would wrap a script tag and add a dependency for nothing. Both
+> `NEXT_PUBLIC_CHATWOOT_BASE_URL` and `NEXT_PUBLIC_CHATWOOT_TOKEN` are required; either missing
+> renders nothing, which keeps local dev out of the live inbox. The mount guards on the script's
+> element id rather than a module flag, because a client-side navigation can remount the component
+> and running the SDK twice mounts two launchers — verified as exactly one SDK request per page.
+>
 > **LogRocket session replay (same date) covers every surface we own, and stops there.** Init is
 > in the ROOT layout behind the same `isTenant` gate as `<Analytics/>`, so replay reaches
 > marketing, pricing, the auth pages, onboarding, `/admin` and the dashboard — but never a

@@ -121,8 +121,14 @@ stop at the tenant boundary by design:
 | --- | --- | --- |
 | Vercel Analytics | The marketing pages and the dashboard | Any documentation site |
 | LogRocket session replay (`NEXT_PUBLIC_LOGROCKET_APP_ID`) | Marketing, sign-in, onboarding and the dashboard | Any documentation site |
+| Chatwoot live chat (`NEXT_PUBLIC_CHATWOOT_TOKEN`) | Marketing and the dashboard | Any documentation site |
 
 Session replay records the page, network activity and console, so pointing it at a documentation
 site would mean recording *your readers* — which is why it stops at that boundary. It is off unless
 you set the environment variable, and it masks every form input: these pages hold real credentials,
 from your GitHub token and reader-auth signing secret to the password on the sign-in form.
+
+The chat launcher is the operator's own support inbox, so it stops at the same boundary for a
+second reason: on a documentation site it would invite *your readers* to open conversations
+with the operator, and it would compete with your own
+[AI assistant](/features/ai-assistant) launcher for the same corner of the page.

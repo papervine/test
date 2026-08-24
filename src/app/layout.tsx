@@ -11,6 +11,7 @@ import { appearanceInitScript } from "@papervine/renderer/lib/appearance";
 import { Favicon } from "@papervine/renderer/components/Favicon";
 import { EnvBadge } from "@/components/platform/EnvBadge";
 import { LogRocketInit } from "@/components/platform/LogRocketInit";
+import { ChatwootWidget } from "@/components/platform/ChatwootWidget";
 
 // The root layout renders for every host, including tenant docs. Read config within
 // the request's tenant content source (if any) so the title/theme/favicon — and, crucially,
@@ -105,6 +106,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <>
             <Analytics />
             <LogRocketInit appId={process.env.NEXT_PUBLIC_LOGROCKET_APP_ID} />
+            {/* Our support inbox. Same gate for a sharper reason: on a tenant's docs site this
+                would invite THEIR readers to chat with US, and it would collide with the
+                tenant's own assistant launcher in the same corner. */}
+            <ChatwootWidget
+              websiteToken={process.env.NEXT_PUBLIC_CHATWOOT_TOKEN}
+              baseUrl={process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL}
+            />
           </>
         )}
       </body>
