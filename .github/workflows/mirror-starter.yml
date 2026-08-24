@@ -36,6 +36,19 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# One publish at a time. Two triggers can fire within seconds of each other — a manual dispatch
+# alongside the automatic `workflow_run` did exactly that on the first live run — and two
+# concurrent runs would race on the same push. The loser wouldn't fail cleanly either: it would
+# push a tip whose parent has moved, or trip the divergence guard on a commit its sibling just
+# made, which reads like tampering rather than a collision.
+#
+# Deliberately NOT `cancel-in-progress`. A cancelled mirror can already have pushed some of its
+# replayed commits, leaving the repo at a real-but-partial state and the stamp behind it — the
+# next run would then see a tip it doesn't recognise. Queuing is slower and always correct.
+concurrency:
+  group: mirror-starter
+  cancel-in-progress: false
+
 jobs:
   mirror:
     # Never publish something CI rejected. `workflow_dispatch` has no originating run, so allow

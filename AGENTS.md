@@ -540,7 +540,7 @@ npm run test:unit           # vitest — pure-logic unit tests
 npm run test:e2e            # playwright — authed journeys (needs docker Postgres + MinIO)
 npm run test:cli            # clean-room: packs the real papervine tarball, installs it OUTSIDE the repo, serves docs/ from it (slow — runs a full next build)
 npm run mirror:cli -- --dry-run       # build + validate the public papervine/cli snapshot without touching the remote (add --push to publish; --initial for the first import)
-npm run mirror:starter -- --dry-run   # same, for the forkable example site → papervine/starter (automated in CI once MIRROR_TOKEN exists; needs one manual `--initial --push` first)
+npm run mirror:starter -- --dry-run   # same, for the forkable example site → papervine/starter (LIVE: auto-publishes on every green CI run of main)
 node tests/crawl.mjs examples/starter # crawl the example site (a CI gate)
 npm run db:generate         # generate a versioned SQL migration from schema changes
 npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)

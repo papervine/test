@@ -3768,6 +3768,38 @@ the hosted API over HTTPS, they don't embed it.
 > both mirror targets dry-run and self-validate, and the CLI snapshot's own `test:cli` passes
 > against the starter it now ships (9 pages).
 >
+> **Status (2026-08-24): the starter mirror is LIVE.** `papervine/starter` is published
+> automatically on every green CI run of `main` — seeded by `--initial`, then four commits
+> replayed with their original authorship intact (they show as the author's commits there, not
+> a bot's), stamp at `cf8973bc`.
+>
+> **Credential: a user-owned fine-grained PAT (`MIRROR_TOKEN`) for now, scoped to
+> `papervine/starter` with Contents: write.** Worth being honest that this is the weakest of the
+> options: PATs cannot be owned by an organisation — GitHub only lets an org *approve* tokens
+> requesting access to its resources — so this one belongs to a person. If that account rotates
+> the token or leaves, publishing stops, and every mirrored push is attributed to them rather
+> than to automation. The better answers, in order: a **deploy key** on `papervine/starter`
+> (repo-owned, write to exactly one repo, no expiry — and the mirror script needs no change,
+> since only the workflow's auth step rewrites the remote), or a **GitHub App** owned by the org
+> if more repos get automated. Revisit before this becomes load-bearing.
+>
+> **The first live run failed in a way worth recording**, because it looks identical to a broken
+> token: `remote: Permission to papervine/starter.git denied to phishy` / 403. Everything else
+> had already succeeded — clone, divergence guard, replay of all four commits, validation — and
+> nothing was published, so there was no partial state. The cause was scope, not validity: the
+> secret lives in `papervine/papervine` but the write permission has to target the repo being
+> pushed *to*. Note an org can also block fine-grained PATs outright or hold them for approval,
+> which presents exactly the same 403.
+>
+> **Added a `concurrency` group** after watching a manual dispatch and the automatic
+> `workflow_run` fire 30 seconds apart on that first run. Both failed, so it didn't matter — but
+> two *successful* concurrent runs would race on the same push, and the loser wouldn't fail
+> cleanly: it would either push onto a moved parent or trip the divergence guard on a commit its
+> sibling had just made, which reads like tampering rather than a collision.
+> `cancel-in-progress` is deliberately **false**: a cancelled mirror can already have pushed
+> part of its replayed commits, leaving a real-but-partial tip the next run wouldn't recognise.
+> Queuing is slower and always correct.
+>
 > **Second undeclared dependency, found by the mirror: `mermaid`** (`components/mdx/Mermaid.tsx`).
 > It hid from the `shiki` audit because it's a **dynamic** `await import("mermaid")`, and a
 > `from "…"` grep doesn't match that — the audit command in `packages/renderer/README.md` now
