@@ -1552,6 +1552,15 @@ env, no dashboard required.
 > is exposed from this page. Search Domains remains plan-gated (enterprise). Covered by
 > `tests/e2e/assistant.spec.ts` (toggle → persist → reload round-trip).
 >
+> **Temporarily operator-only (2026-08-23).** The whole *Response handling* row — deflection,
+> its enterprise banner, Search Domains — is wrapped in a `platformAdmin` check so customers
+> don't meet controls that don't do anything yet. Gated on **platform** admin, not org role: an
+> org admin is still a customer. Verified both sides against the seed, which has exactly the
+> pair that distinguishes them (`dev@` is a platform admin, `dev2@` is an org admin and is not).
+> The wrapper comes out — not the section — when the controls reach the authoring layer; the
+> note to do so is on the JSX itself. Starter questions is scaffold too but stayed visible: it
+> reads as an empty state rather than a broken control.
+>
 > **Kill switch now enforced (2026-06-30).** Persisting the toggle wasn't enough — the docs site
 > never read `assistant_enabled`, so disabling it still showed the "Ask Assistant" launcher on
 > prod. Enforcement landed at both read points, mirroring the `authEnabled` gate: `TenantDocsShell`

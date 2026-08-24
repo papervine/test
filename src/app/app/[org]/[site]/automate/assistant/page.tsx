@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
 import { requireSite } from "@/lib/dashboard-context";
+import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { assistantMetrics } from "@/lib/analytics";
 import {
   AssistantStatusControl,
@@ -36,7 +37,12 @@ export default async function AssistantPage({
   params: Promise<{ org: string; site: string }>;
 }) {
   const { org, site } = await params;
-  const { site: activeSite } = await requireSite(org, site);
+  const { site: activeSite, session } = await requireSite(org, site);
+  // Operator, not org admin — see the Response handling section below.
+  const platformAdmin = isPlatformAdminEmail(
+    session.user.email,
+    process.env.PLATFORM_ADMIN_EMAILS,
+  );
   // Real usage from analytics_event (type='assistant'), split by outcome status.
   const usage = await assistantMetrics(activeSite.id);
   const METRICS = [
@@ -92,6 +98,12 @@ export default async function AssistantPage({
         </Card>
       </SettingRow>
 
+      {/* TEMPORARY: operator-only. Deflection and Search Domains are still scaffold (see the
+          note at the top of this file) and the enterprise-plan banner is a placeholder, so a
+          customer seeing this would find controls that don't do anything. Gated on PLATFORM
+          admin, not org admin: an org admin IS a customer. Delete the wrapper — not the
+          section — once the controls are wired to the authoring layer. */}
+      {platformAdmin && (
       <SettingRow
         title="Response handling"
         desc="Configure how your assistant handles queries and searches"
@@ -185,6 +197,7 @@ export default async function AssistantPage({
           </div>
         </Card>
       </SettingRow>
+      )}
 
       <SettingRow
         title="Bot protection"
