@@ -24,6 +24,7 @@
  */
 import { spawn, spawnSync } from "node:child_process";
 import {
+  existsSync,
   mkdtempSync,
   readFileSync,
   readdirSync,
@@ -199,8 +200,32 @@ async function run() {
   }
   log(`  ✓ installed (${installed.length} top-level entries in node_modules)`);
 
-  // 4. Serve a real docs repo through the installed binary.
   const bin = path.join(consumer, "node_modules", ".bin", "papervine");
+
+  // 4. Scaffold with the installed binary, then serve what it produced.
+  //
+  //    This is the only check that can prove `papervine new` works, because the template is
+  //    bundled by `prepack` from examples/starter — it doesn't exist in a source checkout's
+  //    `apps/cli`, so every other suite would pass while a published `new` had nothing to copy.
+  //    Serving the result matters as much as creating it: a scaffold that produces files which
+  //    don't render is worse than no scaffold, since the first thing anyone does is run `dev`.
+  const scaffoldBefore = failures.length;
+  const scaffolded = path.join(SANDBOX, "scaffolded");
+  const created = spawnSync(bin, ["new", scaffolded], { encoding: "utf8" });
+  if (created.status !== 0) {
+    failures.push(`\`papervine new\` exited ${created.status}: ${created.stderr || created.stdout}`);
+  } else if (!existsSync(path.join(scaffolded, "docs.json"))) {
+    failures.push("`papervine new` produced no docs.json");
+  }
+  // Refusing a non-empty directory is the guard against overwriting someone's work, so it's
+  // worth asserting rather than assuming.
+  const refused = spawnSync(bin, ["new", scaffolded], { encoding: "utf8" });
+  if (refused.status === 0) {
+    failures.push("`papervine new` overwrote a non-empty directory instead of refusing");
+  }
+  log(`  ${failures.length === scaffoldBefore ? "✓" : "✗"} scaffolds a site, refuses a non-empty dir`);
+
+  // 5. Serve a real docs repo through the installed binary.
   log(`▶ serving ${DOCS} via the installed binary on :${PORT}`);
   const server = spawn(bin, ["dev", DOCS, "-p", String(PORT)], {
     cwd: consumer,

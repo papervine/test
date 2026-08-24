@@ -9,12 +9,39 @@ public: true
 powers hosted Papervine sites, so what you see locally is what you ship.
 
 ```bash
+npx papervine new my-docs  # create a site from the starter template
 npx papervine dev          # preview ./ (must contain docs.json)
 npx papervine dev ./docs   # preview a subfolder
 npx papervine dev -p 4000  # preview on a specific port
 ```
 
 Requires Node 20.9 or newer.
+
+## Starting from nothing
+
+`papervine new [dir]` writes a complete working site — `docs.json`, pages, a component
+gallery, an OpenAPI example — which you then preview and trim. It refuses a directory that
+isn't empty unless you pass `--force`, because scaffolding writes files and a mistyped path
+shouldn't cost you your work. Directories holding only dotfiles (a fresh `git init`) count as
+empty.
+
+You don't have to know about `new` to find it, either. Running `papervine dev` where there
+are no docs yet offers to create them:
+
+```bash
+$ papervine dev
+! no docs.json in /Users/you/my-docs
+  Create a starter docs site here? [y/N]
+```
+
+<Note>
+  That prompt only appears in an interactive terminal. In CI or a pipe the command prints the
+  error and exits non-zero as it always has — a prompt nobody can answer is worse than a clear
+  failure. `--yes` scaffolds without asking.
+</Note>
+
+The template ships inside the package, so `new` works offline and always matches the version
+of the CLI that wrote it.
 
 <Note>
   The CLI is a previewer, not a deployer — it has **no `deploy` and no `login`**. Publishing
@@ -23,10 +50,12 @@ Requires Node 20.9 or newer.
 
 ## Options
 
-| Flag | Description | Default |
-| --- | --- | --- |
-| `-p, --port <port>` | Port to serve on | `3000` |
-| `-h, --help` | Show help | — |
+| Flag | Applies to | Description | Default |
+| --- | --- | --- | --- |
+| `-p, --port <port>` | `dev` | Port to serve on | `3000` |
+| `-y, --yes` | `dev` | Create a starter site if there are no docs, without asking | — |
+| `-f, --force` | `new` | Scaffold into a directory that isn't empty | — |
+| `-h, --help` | both | Show help | — |
 
 Without `--port`, a busy port is skipped and the next free one is used. With an explicit
 `--port`, a busy port is an error instead — an explicit request shouldn't be quietly
@@ -108,6 +137,6 @@ deploy it to a hosted site.
 
 ## Roadmap
 
-`dev` is the whole command surface today. Planned next: `broken-links` (dead internal links),
-`validate` (a strict config/frontmatter gate for CI), `openapi-check`, `new` (scaffold from
-the starter template), and `build` (static export).
+`new` and `dev` are the command surface today. Planned next: `broken-links` (dead internal
+links), `validate` (a strict config/frontmatter gate for CI), `openapi-check`, and `build`
+(static export).

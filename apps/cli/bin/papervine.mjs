@@ -17,11 +17,12 @@
 
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { existsSync, statSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
 import { Socket } from "node:net";
+import { createInterface } from "node:readline";
 import path from "node:path";
 
-import { parseDevArgs, validateContentDir } from "./args.mjs";
+import { parseDevArgs, parseNewArgs, validateContentDir, validateNewTarget } from "./args.mjs";
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SERVER_ENTRY = path.join(PKG_ROOT, "server", "server.js");
@@ -46,13 +47,17 @@ function printHelp() {
   console.log(`papervine — preview a docs repo of MDX + docs.json
 
 Usage:
+  papervine new [dir]        Create a docs site in [dir] (default: current directory)
   papervine dev [dir]        Preview the docs in [dir] (default: current directory)
 
 Options:
   -p, --port <port>       Port to serve on (default: 3000)
+  -f, --force             new: scaffold into a directory that isn't empty
+  -y, --yes               dev: scaffold without asking when there are no docs yet
   -h, --help              Show this help
 
 Examples:
+  papervine new my-docs      # create a site, then: cd my-docs && papervine dev
   papervine dev              # preview ./ (must contain docs.json)
   papervine dev ./docs       # preview ./docs
   papervine dev -p 4000      # preview on port 4000
@@ -60,6 +65,96 @@ Examples:
 Note: papervine dev compiles and runs the repo's MDX, which is arbitrary
 JSX/JavaScript. Only run it on docs repos you trust.
 `);
+}
+
+/**
+ * Where the scaffold template lives. Published packages carry it at `template/` (copied from
+ * examples/starter by prepack); a source checkout has no such copy, so fall back to the
+ * monorepo path so `new` is usable while developing the CLI itself.
+ */
+function templateDir() {
+  const packaged = path.join(PKG_ROOT, "template");
+  if (existsSync(packaged)) return packaged;
+  const fromSource = path.join(PKG_ROOT, "..", "..", "examples", "starter");
+  return existsSync(fromSource) ? fromSource : null;
+}
+
+/** Copy the template into `dir`, creating it if needed. Returns the file count. */
+function scaffold(dir) {
+  const template = templateDir();
+  if (!template) {
+    fail(
+      `no scaffold template found\n` +
+        `  A published papervine ships one at ${path.join(PKG_ROOT, "template")}.`,
+    );
+  }
+  mkdirSync(dir, { recursive: true });
+  // `dereference` for the same reason prepack needs it: npm drops symlinks, so a packaged
+  // template is real files, but a source checkout could contain links.
+  cpSync(template, dir, { recursive: true, dereference: true });
+
+  let count = 0;
+  (function walk(current) {
+    for (const entry of readdirSync(current, { withFileTypes: true })) {
+      if (entry.isDirectory()) walk(path.join(current, entry.name));
+      else count++;
+    }
+  })(dir);
+  return count;
+}
+
+/** True when we can meaningfully ask the user a question. */
+function interactive() {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
+/** Ask a yes/no question. Only call when `interactive()`. */
+function confirm(question) {
+  return new Promise((resolve) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(`${question} `, (answer) => {
+      rl.close();
+      resolve(/^y(es)?$/i.test(answer.trim()));
+    });
+  });
+}
+
+function runNew(argv) {
+  let plan;
+  try {
+    plan = parseNewArgs(argv, process.cwd());
+  } catch (err) {
+    fail(`${err.message}\n  Run \`papervine --help\`.`);
+  }
+  if (plan.help) {
+    printHelp();
+    return;
+  }
+
+  const exists = existsSync(plan.dir);
+  const problem = validateNewTarget({
+    dir: plan.dir,
+    exists,
+    isDirectory: exists && statSync(plan.dir).isDirectory(),
+    entries: exists && statSync(plan.dir).isDirectory() ? readdirSync(plan.dir) : [],
+    force: plan.force,
+  });
+  if (problem) fail(problem);
+
+  const count = scaffold(plan.dir);
+
+  // Show the relative path only when it's actually shorter and readable. `path.relative` to a
+  // target outside the tree yields a stack of `../..` that's longer than the absolute path and
+  // reads like a bug, so fall back to absolute in that case.
+  const rel = path.relative(process.cwd(), plan.dir);
+  const here = rel === "";
+  const shown = here || rel.startsWith("..") ? plan.dir : rel;
+
+  console.log(`${green("▲ papervine")} created ${bold(shown)} ${dim(`(${count} files)`)}\n`);
+  console.log(`Next:`);
+  if (!here) console.log(`  cd ${shown}`);
+  console.log(`  papervine dev\n`);
+  console.log(dim(`Edit docs.json to set the name, colors and navigation.`));
 }
 
 /**
@@ -146,7 +241,31 @@ async function runDev(argv) {
     isDirectory: existsSync(plan.dir) && statSync(plan.dir).isDirectory(),
     hasDocsJson: existsSync(path.join(plan.dir, "docs.json")),
   });
-  if (problem) fail(problem);
+  if (problem) {
+    // No docs yet is the one failure worth offering to fix rather than just reporting: someone
+    // who typed the obvious command shouldn't have to discover that a second one exists. The
+    // offer is gated on a TTY — in CI or a pipe, a prompt waiting on stdin that nobody can
+    // answer is worse than the plain error, so those keep today's behaviour exactly.
+    const emptyish =
+      !existsSync(path.join(plan.dir, "docs.json")) &&
+      (!existsSync(plan.dir) || readdirSync(plan.dir).every((n) => n.startsWith(".")));
+
+    if (emptyish && plan.yes) {
+      const count = scaffold(plan.dir);
+      console.log(`${green("▲ papervine")} created a docs site ${dim(`(${count} files)`)}\n`);
+    } else if (emptyish && interactive()) {
+      console.log(`${yellow("!")} no docs.json in ${bold(plan.dir)}`);
+      const yes = await confirm(`  Create a starter docs site here? ${dim("[y/N]")}`);
+      if (!yes) {
+        console.log(`\n  Nothing created. \`papervine new <dir>\` when you're ready.`);
+        process.exit(0);
+      }
+      const count = scaffold(plan.dir);
+      console.log(`${green("▲ papervine")} created a docs site ${dim(`(${count} files)`)}\n`);
+    } else {
+      fail(problem);
+    }
+  }
 
   if (!existsSync(SERVER_ENTRY)) {
     fail(
@@ -156,7 +275,7 @@ async function runDev(argv) {
     );
   }
 
-  const port = await resolvePort(plan.port, argv.includes("-p") || argv.includes("--port"));
+  const port = await resolvePort(plan.port, plan.portExplicit);
 
   console.log(`${green("▲ papervine")} serving ${bold(plan.dir)}`);
   console.log(`  ${dim("→")} http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${port}\n`);
@@ -185,6 +304,8 @@ if (!command || command === "-h" || command === "--help" || command === "help") 
   printHelp();
 } else if (command === "dev") {
   await runDev(rest);
+} else if (command === "new") {
+  runNew(rest);
 } else if (command === "-v" || command === "--version" || command === "version") {
   const { version } = JSON.parse(
     await import("node:fs/promises").then((fs) =>

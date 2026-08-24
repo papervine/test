@@ -38,6 +38,7 @@
   "files": [
     "bin/",
     "server/",
+    "template/",
     "README.md",
     "LICENSE"
   ],

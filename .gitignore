@@ -7,6 +7,8 @@ node_modules/
 # publish time and shipped in the tarball, never committed.
 apps/cli/build/
 apps/cli/server/
+# The scaffold template for `papervine new`, copied from examples/starter at pack time.
+apps/cli/template/
 /out
 /build
 *.tsbuildinfo

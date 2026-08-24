@@ -3497,6 +3497,7 @@ order, smallest lift first):
 | Command | Does | Reuses |
 | --- | --- | --- |
 | `papervine dev [dir]` | Local preview; edits show on refresh, no HMR (**built, prebuilt tarball**) | `bin/papervine.mjs` → the packed `server/server.js` + `PAPERVINE_CONTENT` |
+| `papervine new [dir]` | Scaffold a site from the starter (**built**); `dev` also offers it when there are no docs | the `examples/starter` template, bundled by `prepack` |
 | `papervine broken-links [dir]` | Report dead internal links / missing pages | `tests/crawl.mjs` link-graph |
 | `papervine openapi-check [dir]` | Validate referenced OpenAPI specs | `src/lib/openapi.ts` + `@scalar/openapi-parser` |
 | `papervine validate [dir]` | Strict-mode config + frontmatter + nav report (CI gate) | `src/lib/config.ts` run in *report* mode instead of its lenient warn-don't-throw default |
@@ -3807,6 +3808,56 @@ the hosted API over HTTPS, they don't embed it.
 > *inside* the monorepo, where hoisting still resolves it, so the published CLI was fine and only
 > a build outside the workspace fails. That's precisely the gap `mirror:cli --dry-run` closes, and
 > it's why renderer import changes now owe both gates.
+>
+> **Status (2026-08-24): `papervine new` shipped, and `dev` offers it.** Prompted by a
+> competitor leading with `pnpm dlx create-shiso-app my-docs` — the observation being that a
+> tool should generate a folder when the user hasn't got one. Ours dead-ended instead: `dev`
+> with no `docs.json` printed an error and stopped, which is a wall for exactly the person
+> we most want to keep.
+>
+> Two halves, and the second matters more. `papervine new [dir]` is the explicit command
+> (§10.6 already planned it; `mint new` is the parity). But the higher-value half is that
+> **`dev` offers to scaffold** when it would otherwise fail — someone who typed the obvious
+> command shouldn't have to discover a second one exists.
+>
+> **The offer is gated on a TTY.** In CI or a pipe it keeps the old behaviour exactly: plain
+> error, non-zero exit. A prompt blocking on stdin that nobody can answer is worse than a
+> dead end. `--yes` scaffolds without asking. Note `--yes`/`--port` had to become *declared*
+> `parseArgs` options rather than `argv.includes(...)` sniffing — parseArgs rejects an
+> undeclared flag before any such check can run, which is how the first attempt failed.
+>
+> **The template is bundled, not fetched.** `prepack` copies `examples/starter` into
+> `apps/cli/template/` and `files` ships it: 68K against a 24MB tarball. That buys offline
+> scaffolding and, more importantly, a template that can never drift from the CLI version
+> that wrote it — a fetch-at-scaffold-time design gets both wrong. It also gives the one
+> starter a fifth job (published to papervine/starter, the CLI's `examples/starter`, the
+> db:seed source, a CI crawl target, and now the scaffold template) with no new copy.
+>
+> **Scaffolding the full starter, not a trimmed variant**, on purpose: a newcomer landing on
+> a working site with the component gallery learns more than one with three empty pages, and
+> a "minimal template" would reintroduce exactly the second copy that was just eliminated.
+> Delete what you don't want.
+>
+> **Refuses a non-empty directory** unless `--force`. Overwriting someone's files because
+> they mistyped a path isn't recoverable, and dotfile-only directories (a fresh `git init`)
+> count as empty, since refusing there would be pedantic.
+>
+> **Held: a `create-papervine` package** for `npm create papervine@latest my-docs`, which is
+> the idiom the competitor uses. Good for discoverability, but it's a second published
+> package after deliberately getting down to one, and it's a thin wrapper over `new` whenever
+> we want it. Worth noting the zero-install path already existed (`npx papervine dev`), so
+> the gap was never distribution — only that we failed when there was nothing to render.
+>
+> Pinned by `tests/unit/cli-args.test.ts` (26 cases over the two pure cores) and by
+> `tests/cli-package.mjs`, which scaffolds *with the installed binary* and asserts the
+> non-empty refusal. That layer is the only one that can prove `new` works: the template
+> doesn't exist in a source checkout's `apps/cli`, so every other suite would pass while a
+> published `new` had nothing to copy.
+>
+> Verified: typecheck (root + CLI) clean, unit 1083, smoke 17 pages, crawl of docs/ 41/41 and
+> examples/starter 10/10 both 0×500, clean-room gate green, and a scaffolded site crawled
+> 9/9 with 0 broken images — plus `dev --yes` scaffolding then serving in one command, and
+> the non-TTY paths confirmed to error rather than hang.
 >
 > **Reversal of the 2026-06-14 "strip the incumbent from user-facing surfaces" note (below):** on
 > **discovery** surfaces the competitor names are the point — they are how people search. The npm

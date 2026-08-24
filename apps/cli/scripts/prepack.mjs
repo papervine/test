@@ -124,6 +124,19 @@ if (existsSync(publicDir)) {
   cpSync(publicDir, path.join(OUT, "public"), COPY);
 }
 
+// The scaffold template for `papervine new`, copied from the one starter site this repo keeps
+// (examples/starter — also what publishes to papervine/starter and what db:seed builds from).
+// Bundling it rather than fetching it at scaffold time costs 68K against a 24MB tarball and
+// buys two things: `new` works offline, and the template can never drift from the CLI version
+// that scaffolded it.
+const TEMPLATE_SRC = path.join(APP_DIR, "..", "..", "examples", "starter");
+const TEMPLATE_OUT = path.join(APP_DIR, "template");
+rmSync(TEMPLATE_OUT, { recursive: true, force: true });
+if (!existsSync(TEMPLATE_SRC)) {
+  fail(`no scaffold template at ${TEMPLATE_SRC} — \`papervine new\` would ship broken.`);
+}
+cpSync(TEMPLATE_SRC, TEMPLATE_OUT, COPY);
+
 if (!existsSync(path.join(OUT, "server.js"))) {
   fail(`normalization failed — no server.js in ${OUT}`);
 }

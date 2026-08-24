@@ -13,20 +13,58 @@
   </p>
 </div>
 
+### Quickstart
+
+No docs yet? Create a site and preview it:
+
+```
+npx papervine@latest new my-docs
+cd my-docs
+npx papervine@latest dev
+```
+
+Already have a folder of MDX and a `docs.json`? Skip straight to previewing it:
+
+```
+npx papervine@latest dev ./docs
+```
+
+Requires Node 20.9 or higher. The CLI ships a **prebuilt** renderer, so there's no
+toolchain to download and no first-run compile — it starts serving immediately.
+
 ### Installation
+
+Running through `npx` needs no install. To have it permanently:
 
 ```
 npm i -g papervine
 ```
 
-Requires Node 20.9 or higher. Or skip the install and run it directly:
+### Create a site
+
+#### `papervine new [dir]`
+
+Create a docs site in `[dir]`, defaulting to the current directory. The starter it writes
+is a complete, working site — `docs.json`, a few pages, a component gallery, and an OpenAPI
+example — so you can preview it immediately and delete what you don't want.
 
 ```
-npx papervine@latest dev
+papervine new my-docs
 ```
 
-The CLI ships a **prebuilt** renderer, so there's no toolchain to download and no
-first-run compile — it starts serving immediately.
+**Options**
+
+| Flag           | Description                                        |
+| -------------- | -------------------------------------------------- |
+| `-f, --force`  | Scaffold into a directory that isn't empty         |
+| `-h, --help`   | Show help                                          |
+
+A directory that isn't empty is refused unless you pass `--force`, since scaffolding writes
+files and overwriting your work because of a mistyped path isn't recoverable. Directories
+containing only dotfiles (a fresh `git init`, say) count as empty.
+
+The template is bundled in the package, so `new` works offline and always matches the
+version of the CLI that wrote it.
 
 ### Local preview
 
@@ -41,10 +79,24 @@ papervine dev
 
 **Options**
 
-| Flag                | Description                | Default |
-| ------------------- | -------------------------- | ------- |
-| `-p, --port <port>` | Port to serve on           | `3000`  |
-| `-h, --help`        | Show help                  | —       |
+| Flag                | Description                                          | Default |
+| ------------------- | ---------------------------------------------------- | ------- |
+| `-p, --port <port>` | Port to serve on                                     | `3000`  |
+| `-y, --yes`         | Create a starter site if there are no docs, no prompt | —       |
+| `-h, --help`        | Show help                                            | —       |
+
+**Nothing to preview yet?** Run in an empty folder and it offers to create a site rather
+than just failing:
+
+```
+$ papervine dev
+! no docs.json in /Users/you/my-docs
+  Create a starter docs site here? [y/N]
+```
+
+The prompt only appears in an interactive terminal. In CI or a pipe it prints the error and
+exits non-zero as before, because a prompt nobody can answer is worse than a clear failure.
+Use `--yes` to scaffold without being asked.
 
 **Preview a subfolder**
 
@@ -127,8 +179,8 @@ docs repos you trust — the same care you'd take before `npm install` in a proj
 
 ### Roadmap
 
-`dev` is the whole surface today. Next up: `broken-links`, `validate`,
-`openapi-check`, `new`, and `build` (static export).
+`new` and `dev` are the surface today. Next up: `broken-links`, `validate`,
+`openapi-check`, and `build` (static export).
 
 ### Get started
 
