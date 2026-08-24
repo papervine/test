@@ -4079,6 +4079,43 @@ the hosted API over HTTPS, they don't embed it.
 > `mirror:cli --dry-run` typecheck outside the monorepo clean, and the clean-room tarball gate
 > green.
 >
+> **Status (2026-08-24): three follow-ups from first real use, and a near-miss worth recording.**
+>
+> **The CLI ignored `.env` / `.env.local`.** The server is spawned with `cwd` set to the
+> *installed package*, not the user's project, so a key sitting next to `docs.json` did nothing —
+> silently, since the only symptom is an assistant that never appears. `bin/papervine.mjs` now
+> loads them itself, using `process.loadEnvFile` where available (Node 20.12+) and a small parser
+> below that, since `engines` allows 20.9. Two rules: an exported variable always wins, and
+> *more specific is loaded first* — which, because nothing overwrites, means the order is the
+> reverse of how it reads (`.env.local` before `.env`, content directory before cwd). Verified
+> against a project that failed before the change and works after.
+>
+> **A failed question rendered nothing at all** — reported as "asking the assistant does nothing",
+> which is exactly what it looked like. Two causes, both fixed. `useChat` reports failures on
+> `error`, which the component never destructured, so there was no branch to render. And
+> `toUIMessageStreamResponse()` masks the reason as "An error occurred." unless the route opts
+> out. The panel now shows the failure, `assistant-run` **always logs the real error server-side**
+> (free, safe, and it lands in the terminal the operator is already watching), and an
+> `exposeErrors` flag lets the caller send the real text to the client — true for the CLI, whose
+> reader *is* the operator, false for hosted sites, whose readers are not. With a deliberately
+> invalid key the panel now reads "API key is invalid." instead of sitting inert.
+>
+> **Near-miss: an API key was one `npm publish` from shipping.** `examples/starter/.env.local` is
+> correctly gitignored, so nothing upstream complained — but `prepack` copies that directory into
+> `apps/cli/template/` with a **filesystem** copy, and `files` ships `template/` wholesale. The
+> key was found sitting in `apps/cli/template/.env.local`, i.e. inside the next tarball and every
+> `papervine new` after it. Not public: the mirror builds from git-tracked files, and the public
+> repo has no `template/` at all. The copy now filters `.env*`, `.git`, `node_modules` and
+> `.DS_Store`, because a directory someone actually works in will keep accumulating exactly the
+> files that must not ship. Worth noting the clean-room gate's `suspicious` check (`/\.env|…/`)
+> would have caught it at pack time — the guard worked; the copy should not have created the
+> problem for it to catch.
+>
+> **The assistant is verified live.** Against a real key it called `searchDocs`, then `readPage`,
+> then answered with inline citations to `/components/accordions`, `/components/badges` and
+> `/components/cards` — quoting those pages' own descriptions. Agentic retrieval over the CLI's
+> own content, with citations, confirmed end to end rather than inferred.
+>
 > Rendering was checked against **GitHub's own markdown API** (`POST /markdown`) rather than
 > assumed, which caught one real thing: badges on separate source lines render with `<br>` between
 > them and stack vertically. They are one line now. Also confirmed `---` under an ATX heading
