@@ -10,6 +10,8 @@ import remarkGfm from "remark-gfm";
 import rehypeSlug from "rehype-slug";
 import rehypeAutolinkHeadings from "rehype-autolink-headings";
 import { mdxComponents } from "../components/mdx";
+import { CodeTitle } from "../components/mdx/CodeTitle";
+import { parseCodeTitle } from "./code-title";
 import type { AssetDimensions } from "./content";
 import { withBase } from "./url-base";
 
@@ -51,6 +53,9 @@ const warnedComponents = new Set<string>();
 // register it onto the same TenantImage path. (hosted docs platforms repos author images as <img>,
 // often inside <Frame> — see GAP-REPORT.) Unlikely to collide with an author component.
 const LITERAL_IMG_COMPONENT = "PvImg";
+// Synthetic name for the code-title wrapper, same rationale as PvImg: capitalized so the
+// MDX compiler routes it through the components map rather than emitting a literal element.
+const CODE_TITLE_COMPONENT = "PvCodeTitle";
 
 /**
  * Real components + a passthrough Fallback for every component the *compiled*
@@ -62,7 +67,11 @@ const LITERAL_IMG_COMPONENT = "PvImg";
 function componentsForCompiled(compiledSource: string): MDXComponents {
   // Seed our synthetic literal-<img> component so the missing-reference scan below
   // doesn't flag it as an unknown component; applyTenantUrls swaps in the real one.
-  const components: MDXComponents = { ...mdxComponents, [LITERAL_IMG_COMPONENT]: Fallback };
+  const components: MDXComponents = {
+    ...mdxComponents,
+    [LITERAL_IMG_COMPONENT]: Fallback,
+    [CODE_TITLE_COMPONENT]: CodeTitle,
+  };
   for (const m of compiledSource.matchAll(/_missingMdxReference\("([A-Za-z][\w.]*)"/g)) {
     const name = m[1].split(".")[0]; // root of member expressions (Foo.Bar -> Foo)
     if (!/^[A-Z]/.test(name) || name in components) continue;
@@ -215,18 +224,45 @@ function remarkTreeList() {
   };
 }
 
-/** hosted docs platforms' bare code-title convention (```js Label) → rehype/highlighter title="Label". */
+/**
+ * The bare code-title convention (```js Label) → a `<PvCodeTitle>` wrapper carrying the label.
+ *
+ * This used to rewrite `node.meta` to `title="Label"` and hope the highlighter rendered it.
+ * It never did: the serializer's Shiki integration emits only `class`, `style` and `language`
+ * on the `<pre>` and drops `meta` entirely, so no title ever reached the DOM and the whole
+ * transform was dead code — which is also why `<CodeGroup>` labelled every tab with the
+ * *language* ("shellscript" three times over) instead of npm/pnpm/yarn. Verified by probing the
+ * rendered HTML for every title form before changing it.
+ *
+ * So the label is carried out-of-band, as a wrapper component — the same trick `remarkMermaid`
+ * and `remarkTreeList` use to hand structured data to a real React component.
+ */
 function remarkCodeTitles() {
   return (tree: { children?: unknown[] }) => {
     const visit = (node: Record<string, unknown>) => {
-      if (node.type === "code" && typeof node.meta === "string") {
-        const meta = node.meta.trim();
-        if (meta && !meta.includes("=") && !meta.startsWith("{")) {
-          node.meta = `title="${meta}"`;
-        }
-      }
       const children = node.children as Record<string, unknown>[] | undefined;
-      if (Array.isArray(children)) children.forEach(visit);
+      if (!Array.isArray(children)) return;
+
+      for (let i = 0; i < children.length; i++) {
+        const child = children[i];
+        if (!child || child.type !== "code") {
+          visit(child as Record<string, unknown>);
+          continue;
+        }
+        // Mermaid fences become diagrams downstream (remarkMermaid); a code-title bar wrapped
+        // around a rendered diagram would be nonsense.
+        if (child.lang === "mermaid") continue;
+
+        const title = parseCodeTitle(child.meta);
+        if (!title) continue;
+
+        children[i] = {
+          type: "mdxJsxFlowElement",
+          name: CODE_TITLE_COMPONENT,
+          attributes: [{ type: "mdxJsxAttribute", name: "title", value: title }],
+          children: [child],
+        };
+      }
     };
     visit(tree as Record<string, unknown>);
   };
@@ -276,7 +312,11 @@ const compileMdx = unstable_cache(
       return { error: err instanceof Error ? err.message : String(err) };
     }
   },
-  ["mdx-compile-v3"], // bump when the compile pipeline changes (v2: remarkLiteralImg; v3: remarkMermaid)
+  // Bump when the compile pipeline changes — the key is content-addressed on the *source*, so a
+  // changed remark/rehype plugin set produces different output for identical input and would
+  // otherwise keep serving the pre-change compile until the TTL expired.
+  // v2: remarkLiteralImg; v3: remarkMermaid; v4: remarkCodeTitles emits <PvCodeTitle>
+  ["mdx-compile-v4"],
   { revalidate: 86400 },
 );
 

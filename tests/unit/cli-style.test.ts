@@ -123,7 +123,7 @@ describe("rows", () => {
     // Strip the escapes and the descriptions must line up in one column — the whole point.
     // The escaped lines differ in length by however many bytes the colour took, so the check
     // has to be made on the plain text.
-    const plain = out.split("\n").map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
+    const plain = (out as string).split("\n").map((line) => line.replace(/\x1b\[[0-9;]*m/g, ""));
     expect(plain).toHaveLength(3);
 
     // Longest label is 17 chars, indent 4, gap 2 → descriptions start at column 23.
@@ -134,10 +134,10 @@ describe("rows", () => {
 
   it("still aligns when styling is off", async () => {
     const { rows } = await loadStyle({ NO_COLOR: "1" });
-    const plain = rows([
+    const plain = (rows([
       ["a", "one"],
       ["bbbb", "two"],
-    ]).split("\n");
+    ]) as string).split("\n");
     // Widest label is 4, gap 2 → both descriptions start at column 10.
     expect(plain[0]).toBe("    a     one");
     expect(plain[1]).toBe("    bbbb  two");

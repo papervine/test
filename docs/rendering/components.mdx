@@ -78,8 +78,13 @@ signaling a different intent:
 ## CodeGroup
 
 `<CodeGroup>` wraps several code blocks into a single tabbed widget — one tab per block,
-labeled by the block's language (or title). Use it to present the same snippet across
-languages or tools.
+labeled by the block's **title**, falling back to its language. Use it to present the same
+snippet across languages or tools.
+
+<Tip>
+  Give every fence in a group a title. Without one they fall back to the language name, so three
+  `bash` blocks in a group all read "shellscript".
+</Tip>
 
 <CodeGroup>
 ```bash Terminal
@@ -91,8 +96,31 @@ export default { theme: "mint" };
 ```
 </CodeGroup>
 
-Individual code blocks get Shiki syntax highlighting (dual light/dark theme), a copy button,
-optional titles, and line highlights.
+## Code blocks
+
+Individual code blocks get Shiki syntax highlighting in a dual light/dark theme, applied at
+build time so a block follows the page's appearance with no client-side work.
+
+**Every block has a copy button.** It appears on hover, stays visible on touch devices where
+there is no hover, and copies the block's source without the highlighting.
+
+**Text after the language becomes the block's title**, shown in a header bar above the code.
+Both the bare form and an explicit `title="…"` work, and the title is what `<CodeGroup>` uses
+for its tab labels:
+
+````mdx
+```ts lib/greet.ts
+export function greet(name: string) {
+  return `Hello, ${name}`;
+}
+```
+````
+
+<Note>
+  Line-highlight ranges (```` ```js {2,4-6} ````) are parsed as "not a title" and otherwise
+  ignored — the range renders no differently from a plain block. Titles and the copy button are
+  the parts of code-block parity that are built.
+</Note>
 
 ## Accordion
 

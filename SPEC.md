@@ -935,7 +935,7 @@ Ship a styled component set resolved at compile time. Parity targets with hosted
 | `<Steps>` / `<Step>` | numbered walkthroughs |
 | `<Note>` `<Warning>` `<Info>` `<Tip>` `<Check>` | callouts |
 | `<CodeGroup>` | multi-language code tabs |
-| Code blocks | Shiki syntax highlighting, copy button, titles, line highlights |
+| Code blocks | Shiki syntax highlighting, copy button, titles (all BUILT 2026-08-24); line highlights still open |
 | `<Frame>` | image/embed framing w/ caption |
 | `<Tooltip>` `<Expandable>` `<Icon>` | inline helpers |
 | Mermaid | diagrams — ```mermaid fences → client-rendered SVG (BUILT 2026-06-29) |
@@ -3914,6 +3914,83 @@ the hosted API over HTTPS, they don't embed it.
 > banner right under ours, repeating the URL. Suppressing it means piping the child's stdout and
 > filtering on version-specific strings — which risks swallowing real diagnostics — so
 > `stdio: "inherit"` stays. The `▲` glyph predates this change.
+>
+> **Status (2026-08-24): code-block copy buttons + titles BUILT, and the starter's gallery became
+> a browsable index.** Both halves of this came out of one request — "alphabetize the components,
+> set up the index like theirs, and put a copyable snippet under each example" — and the third
+> part turned out not to exist yet.
+>
+> **The copy button (§5 parity target, previously unbuilt).** Fenced code had no copy affordance
+> at all. `pre` is now overridden in `mdxComponents` → `CodeBlock`, a **server** component that
+> recovers the block's plain text by walking the compiled children and hands it to a small
+> `"use client"` `CopyButton`. The walk stays on the server, so a page with a dozen fences ships
+> one small button each rather than a dozen token-walkers. It works because the serializer
+> compiles a fence to `<pre><code><span class="line">…</span>\n…`, with the newlines as literal
+> text nodes *between* line spans — so concatenating every string in document order reproduces
+> the source exactly, no separators to insert. Verified the override actually intercepts (a
+> temporary marker prop on `pre` showed up on all 9 fences) before building on the assumption.
+> `<Prompt>`'s internal `<pre>` is literal TSX, so it correctly keeps its own single copy action
+> instead of sprouting a second.
+>
+> **Code titles: the transform was dead code for months.** `remarkCodeTitles` rewrote a fence's
+> `meta` to `title="…"` and the serializer's Shiki integration **drops `meta` entirely** — it
+> emits only `class`, `style` and `language` — so no title ever reached the DOM. Nothing failed,
+> because nothing asserted. The visible symptom was `<CodeGroup>` labelling all three tabs of an
+> npm/pnpm/yarn group **"shellscript"**, while the starter's own prose said "the tab label comes
+> from the text after the language". Probed every title form against the rendered HTML to
+> confirm before rewriting. The label is now carried out-of-band on a `<PvCodeTitle>` wrapper —
+> the same trick `remarkMermaid`/`remarkTreeList` already use to hand structured data to a real
+> component — and `CodeGroup` reads it from `data-code-title`, hiding the bar so the label isn't
+> shown twice. Pure core extracted to `lib/code-title.ts` (`parseCodeTitle`) and unit-tested:
+> the distinction that matters is title vs. **not** a title, since a line-highlight range or a
+> `key=value` directive misread as a label becomes a tab that actively lies.
+>
+> **This required bumping the compile cache key** (`mdx-compile-v3` → `v4`). The key is
+> content-addressed on the *source*, so a changed remark plugin set produces different output for
+> identical input and the pre-change compile keeps being served until the TTL expires. The
+> comment there says "bump when the compile pipeline changes"; this is that. Worth remembering
+> that a plugin change with no visible effect is the signature of a missed bump.
+>
+> **Line highlights remain unbuilt** — and `docs/` was claiming otherwise. A ```` ```js {2} ````
+> block renders **byte-identical** to a plain one (measured, not assumed). `parseCodeTitle`
+> deliberately rejects `{…}` as a title, and nothing else consumes it. The docs page now says so
+> rather than promising it; §5's table above is corrected too.
+>
+> **The starter's gallery: one 307-line page → an index + 26 alphabetized pages.** `components.mdx`
+> is a card grid (icon, one-line blurb, link) and `components/<name>.mdx` is one page per
+> component: the thing rendered, then the **exact source that produced it** in a fence, then a
+> props table taken from the real component signature rather than from upstream docs. A new
+> **Components** tab keeps 26 entries out of the Documentation sidebar. Ordering is alphabetical
+> throughout, deliberately *unlike* the upstream index's group-by-purpose — a reader hunting for
+> "Tooltips" shouldn't have to guess which of seven purposes it was filed under.
+>
+> The pages are **generated from a single authored source** (scratch script, not committed) so
+> the live example and its snippet can't disagree at authoring time; `CONTRIBUTING-starter.md`
+> now says to keep them in step by hand thereafter. The index page lives at `components.mdx`
+> *beside* the directory, not `components/index.mdx`: the renderer has no implicit
+> directory-index mapping, so the latter serves at `/components/index` and a reader typing
+> `/components` gets a 404 (upstream's own URL is `/components/index`, so this isn't a
+> compatibility gap — just a nicer URL).
+>
+> Two real bugs fell out of the sweep: the starter's homepage card used `icon="puzzle-piece"`, a
+> **Font Awesome** name Lucide doesn't have, so it had been rendering no icon at all; and an
+> audit of every `icon=` across `examples/starter`, `docs/`, `content/` and `tests/fixtures`
+> found exactly one other, a deliberate fixture testing the degradation. `docs/` is clean.
+>
+> Pinned by `tests/unit/code-title.test.ts` (12 cases) and an extended smoke check on the
+> `components` fixture asserting both title forms, the CodeGroup tab label (`>Python</button>` —
+> a group renders only its *active* block, so the second fence's title exists solely as the tab)
+> and a copy button on the untitled fence, with an `exclude` guard that an untitled fence never
+> sprouts a language-named title bar.
+>
+> Verified: typecheck (root + CLI) clean, unit 1109, smoke 17 pages, crawls of `docs/` 41/41,
+> `examples/starter` 36/36 and the bundled scaffold template `apps/cli/template` 36/36 all
+> 0×500 and 0 degraded, `mirror:cli --dry-run` typecheck outside the monorepo clean, clean-room
+> tarball gate green, and in-browser: index + component pages screenshotted light and dark, the
+> copy button confirmed appearing on hover and reaching the `Copied` state (which only happens if
+> `writeText` resolved), and no new console errors. The one console error present — "Encountered a
+> script tag while rendering React component" — is the root layout's no-flash theme script and
+> predates this work; a page with zero fences shows it too.
 
 ### 10.7 Error resilience (route boundaries)
 

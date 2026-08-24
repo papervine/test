@@ -38,8 +38,11 @@ template versioned alongside the tests that depend on it.
 
 ## What makes a good change
 
-- **Show a component, don't describe it.** `guides/components.mdx` is a gallery — every entry
-  should be a working example someone can copy.
+- **Show a component, don't describe it.** `components/` is a gallery — one page per component,
+  each showing the thing rendered and then the exact source underneath.
+- **Keep the example and its snippet identical.** Every component page renders an example and
+  repeats it in a fenced block for copying. If you change one, change the other: a snippet that
+  doesn't produce the example above it is worse than no snippet.
 - **Keep it renderable.** Run `npx papervine@latest dev` and check the page before opening a
   PR. A template with a broken page is worse than a thin one.
 - **Every page needs to be in `docs.json`.** A page that isn't in the navigation still renders

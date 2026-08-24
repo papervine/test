@@ -40,7 +40,30 @@ const CHECKS = [
     exclude: ["Hidden Page"], // hidden:true → not in sidebar
   },
   { slug: "guide", desc: ".md files are served", include: ["PLAIN_MD_MARKER"] },
-  { slug: "components", desc: "shiki highlighting + code group", include: ["shiki", "console"] },
+  {
+    slug: "components",
+    desc: "shiki highlighting + code group + code titles + copy button",
+    // Code titles were dead code for months: remarkCodeTitles rewrote a fence's `meta` to
+    // title="…" and the serializer's Shiki integration drops `meta` entirely, so nothing ever
+    // reached the DOM — which is why CodeGroup labelled every tab with the *language*. Nothing
+    // failed, because nothing asserted. These assertions are that gap closed: both title forms
+    // (bare ```js JavaScript and explicit title="example.ts"), and the copy button on every
+    // fence including the untitled one.
+    include: [
+      "shiki",
+      "console",
+      'data-code-title="JavaScript"', // bare meta after the language
+      'data-code-title="example.ts"', // explicit title="…"
+      // A CodeGroup renders only its ACTIVE block, so the second fence's title exists solely as
+      // the tab label — which is the thing that was broken (it used to read "python").
+      ">Python</button>",
+      "UNTITLED_FENCE_MARKER",
+      'aria-label="Copy"',
+    ],
+    // An untitled fence must not sprout a title bar naming its language — the failure mode that
+    // made three `bash` blocks in one group all read "shellscript".
+    exclude: ['data-code-title="ts"', 'data-code-title="typescript"'],
+  },
   {
     slug: "cards",
     desc: "standalone + grouped cards render",

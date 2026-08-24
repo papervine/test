@@ -30,8 +30,49 @@
           {
             "group": "Guides",
             "pages": [
-              "guides/components",
               "guides/public-page"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Components",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "components"
+            ]
+          },
+          {
+            "group": "All components",
+            "pages": [
+              "components/accordions",
+              "components/badges",
+              "components/banners",
+              "components/callouts",
+              "components/cards",
+              "components/code-blocks",
+              "components/code-groups",
+              "components/colors",
+              "components/columns",
+              "components/examples",
+              "components/expandables",
+              "components/fields",
+              "components/frames",
+              "components/github",
+              "components/icons",
+              "components/mermaid",
+              "components/panels",
+              "components/prompts",
+              "components/steps",
+              "components/tabs",
+              "components/tiles",
+              "components/tooltips",
+              "components/trees",
+              "components/updates",
+              "components/views",
+              "components/visibility"
             ]
           }
         ]
