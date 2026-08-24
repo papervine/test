@@ -157,6 +157,16 @@ async function run() {
       `control-plane code in the tarball (SPEC §10.6 boundary): ${controlPlane.slice(0, 5).join(", ")}`,
     );
   }
+  // A compiled binary in the tarball means it only works on the machine that built it. The
+  // vendored `sharp` did exactly that: a Mac-built package silently served 220,526-byte images on
+  // Linux where the build platform served 3,124, because Next falls back to the original when
+  // sharp cannot load. It is an optionalDependency now, resolved per platform by npm.
+  const natives = listing.filter((f) => /\.(node|dylib|so(\.\d+)*|dll)$/i.test(f));
+  if (natives.length) {
+    failures.push(
+      `native binaries in the tarball — it would be platform-locked: ${natives.slice(0, 3).join(", ")}`,
+    );
+  }
   const suspicious = listing.filter((f) => /\.env|_private|sentry\.|\.git\//i.test(f));
   if (suspicious.length) {
     failures.push(`unexpected files in the tarball: ${suspicious.slice(0, 5).join(", ")}`);
@@ -173,7 +183,10 @@ async function run() {
   if (dsnHits) {
     failures.push(`Sentry DSN leaked into the tarball: ${dsnHits.split("\n").slice(0, 3).join(", ")}`);
   }
-  log(`  ${controlPlane.length || suspicious.length || dsnHits ? "✗" : "✓"} tarball audit (${listing.length} files)`);
+  log(
+    `  ${controlPlane.length || suspicious.length || dsnHits || natives.length ? "✗" : "✓"} ` +
+      `tarball audit (${listing.length} files, platform-agnostic)`,
+  );
 
   // 3. Install it as a real consumer would.
   const consumer = path.join(SANDBOX, "consumer");
@@ -199,6 +212,17 @@ async function run() {
     failures.push(`installed unwanted top-level deps: ${forbidden.join(", ")}`);
   }
   log(`  ✓ installed (${installed.length} top-level entries in node_modules)`);
+
+  // sharp is the one thing that cannot be vendored (native binary), so it is declared optional
+  // and npm resolves the right build per platform. If it is missing here, image optimization is
+  // off — which is legal (the CLI warns and serves originals) but not what a normal install
+  // should produce, so the gate treats it as a failure rather than letting it pass unnoticed.
+  const sharpBefore = failures.length;
+  const sharpDir = path.join(consumer, "node_modules", "sharp");
+  if (!existsSync(sharpDir)) {
+    failures.push("sharp was not installed — image optimization would be silently unavailable");
+  }
+  log(`  ${failures.length === sharpBefore ? "✓" : "✗"} sharp resolved for this platform`);
 
   const bin = path.join(consumer, "node_modules", ".bin", "papervine");
 

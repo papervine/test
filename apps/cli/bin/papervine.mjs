@@ -20,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { Socket } from "node:net";
 import { createInterface } from "node:readline";
+import { createRequire } from "node:module";
 import path from "node:path";
 
 import { parseDevArgs, parseNewArgs, validateContentDir, validateNewTarget } from "./args.mjs";
@@ -150,6 +151,27 @@ function scaffold(dir) {
     }
   })(dir);
   return count;
+}
+
+/**
+ * Is image optimization available?
+ *
+ * `sharp` is an *optional* dependency: it carries a native binary, so it is the one thing that
+ * cannot be vendored into a platform-agnostic tarball (a Mac-built package silently served
+ * full-size images on Linux — 220KB where 1.5KB would do, with no warning, because Next quietly
+ * falls back to the original when sharp is missing). npm installs the right binary per platform;
+ * when that is not possible the CLI still works, and this is what stops the difference being
+ * invisible.
+ *
+ * Resolved from the server directory because that is where Next resolves it from at runtime.
+ */
+function imageOptimizationAvailable() {
+  try {
+    createRequire(path.join(PKG_ROOT, "server", "server.js")).resolve("sharp");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** True when we can meaningfully ask the user a question. */
@@ -328,6 +350,15 @@ async function runDev(argv) {
 
   console.log(`${brand("▲ papervine")} serving ${bold(plan.dir)}`);
   console.log(`  ${dim("→")} ${brandLight(`http://${HOST === "0.0.0.0" ? "localhost" : HOST}:${port}`)}\n`);
+
+  // Worth a line, not a failure: pages render fine either way, but anyone serving this for real
+  // should know their images are going out at full size.
+  if (!imageOptimizationAvailable()) {
+    console.log(
+      `${yellow("!")} image optimization unavailable — serving images at original size.\n` +
+        `  ${dim("Install the optional dependency with `npm i sharp` in this project.")}\n`,
+    );
+  }
 
   const child = spawn(process.execPath, [SERVER_ENTRY], {
     cwd: PKG_ROOT,

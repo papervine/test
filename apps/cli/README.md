@@ -125,6 +125,21 @@ By default the preview binds loopback (`127.0.0.1`) rather than every interface.
 (`PAPERVINE_HOST`, not `HOSTNAME` — Docker and Kubernetes set `HOSTNAME` for their own
 reasons, and that shouldn't decide what your preview is reachable from.)
 
+### Images
+
+Images are optimized on the fly — resized to what the page needs and served as WebP where the
+browser accepts it. This is done by [`sharp`](https://sharp.pixelplumbing.com), an **optional
+dependency**: it contains a compiled binary specific to your OS and CPU, so npm installs the
+right one for your machine. Nothing to configure.
+
+If it can't be installed, the CLI still runs, serves images at their original size, and tells
+you at startup:
+
+```
+! image optimization unavailable — serving images at original size.
+  Install the optional dependency with `npm i sharp` in this project.
+```
+
 ### Output
 
 `papervine --help` and `papervine --version` print the command surface and the installed
@@ -186,17 +201,19 @@ the documented components and `docs.json` theming instead.
 
 ### Trust
 
-`papervine dev` compiles and executes the repo's MDX, and an MDX expression is real
-JavaScript run on your machine as the page renders — it can read your environment
-variables, reach the network, and run commands as your user, the same as a `postinstall`
-script.
+`papervine dev` **compiles** the repo's MDX on your machine but does not *execute* the
+repo's code there. Expressions, components you define, and hooks all run in your
+**browser**; the server renders only Markdown, built-in components and literal values.
 
-So **only preview docs repos you trust**, with the care you'd take before running
-`npm install` in someone else's project. This is true of every docs generator that
-executes MDX or JSX, not just this one, but it's worth knowing before you preview a pull
-request from a stranger.
+So a docs page can't read your environment variables, touch your filesystem, or run
+commands — there's no server-side step where its code runs. Imports outside `/snippets/`
+and dynamic `import()` are refused entirely.
 
-The previewer itself doesn't widen that: it binds loopback, serves only asset file types
+It's still someone else's JavaScript in your browser on the preview's origin, which is
+the trust you extend to any site you visit — so use normal judgement with an unfamiliar
+repo. But previewing one no longer hands it your machine.
+
+The previewer is narrow by construction: it binds loopback, serves only asset file types
 from your content directory, and refuses remote image URLs.
 
 ### Roadmap

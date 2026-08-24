@@ -237,8 +237,18 @@ function remarkCodeTitles() {
  */
 function remarkCollectAuthorCode(collector: AuthorCodeReport) {
   return (tree: { children?: unknown[] }) => {
+    const estreeOf = (n: unknown) =>
+      (n as { data?: { estree?: unknown } } | undefined)?.data?.estree;
+
+    /** Judge one piece of embedded JavaScript. Anything not provably inert goes to the client. */
+    const checkExpression = (estree: unknown) => {
+      if (estree === undefined) return;
+      collector.violations.push(...findDynamicImports(estree));
+      if (!isServerSafeExpression(estree)) collector.hasAuthorCode = true;
+    };
+
     const visit = (node: Record<string, unknown>) => {
-      const estree = (node.data as { estree?: unknown } | undefined)?.estree;
+      const estree = estreeOf(node);
 
       if (node.type === "mdxjsEsm") {
         const { bindings, violations } = inspectEsm(estree);
@@ -246,20 +256,23 @@ function remarkCollectAuthorCode(collector: AuthorCodeReport) {
         collector.violations.push(...violations, ...findDynamicImports(estree));
         // Any author binding means author logic — the page goes to the browser.
         if (bindings.length) collector.hasAuthorCode = true;
-      } else if (node.type === "mdxFlowExpression" || node.type === "mdxTextExpression") {
-        collector.violations.push(...findDynamicImports(estree));
-        if (!isServerSafeExpression(estree)) collector.hasAuthorCode = true;
+      } else if (estree !== undefined) {
+        // Every other node that carries an ESTree is embedded JavaScript: the flow and text
+        // expressions, and whatever the parser adds later. Checked by *shape* rather than by a
+        // list of node type names, because enumerating the list is how things get missed — the
+        // first version tested `mdxJsxAttribute` only, and a JSX **spread** attribute
+        // (`<Card {...process.env} />`) is a different node, so it sailed through and leaked a
+        // real env var into server HTML.
+        checkExpression(estree);
       }
 
-      // JSX attribute values are expressions too: `cols={2}` is inert, `n={someVar}` is not.
+      // Attributes carry JavaScript two ways, and both must be judged:
+      //   `cols={2}`            → mdxJsxAttribute whose *value* holds the ESTree
+      //   `{...props}`          → mdxJsxExpressionAttribute, which holds it *itself*
       for (const raw of (node.attributes as Record<string, unknown>[] | undefined) ?? []) {
-        const attr = raw as { type?: string; value?: Record<string, unknown> };
-        if (attr.type !== "mdxJsxAttribute") continue;
-        const value = attr.value;
-        if (!value || value.type !== "mdxJsxAttributeValueExpression") continue;
-        const attrEstree = (value.data as { estree?: unknown } | undefined)?.estree;
-        collector.violations.push(...findDynamicImports(attrEstree));
-        if (!isServerSafeExpression(attrEstree)) collector.hasAuthorCode = true;
+        const attr = raw as { type?: string; value?: unknown };
+        checkExpression(estreeOf(attr));
+        checkExpression(estreeOf(attr.value));
       }
 
       for (const child of (node.children as Record<string, unknown>[] | undefined) ?? []) {
@@ -329,8 +342,14 @@ const compileMdx = unstable_cache(
   // changed remark/rehype plugin set produces different output for identical input and would
   // otherwise keep serving the pre-change compile until the TTL expired.
   // v2: remarkLiteralImg; v3: remarkMermaid; v4: remarkCodeTitles emits <PvCodeTitle>;
-  // v5: remarkCollectAuthorCode + the cached value gained `report`
-  ["mdx-compile-v5"],
+  // v5: remarkCollectAuthorCode + the cached value gained `report`;
+  // v6: the classifier judges JSX spread attributes (mdxJsxExpressionAttribute)
+  //
+  // Note the *classification* is cached too, not just the compiled string — so tightening the
+  // classifier without bumping this keeps serving the old verdict, and a page that should now go
+  // to the client keeps being evaluated on the server. That is exactly how the spread-attribute
+  // fix appeared not to work.
+  ["mdx-compile-v6"],
   { revalidate: 86400 },
 );
 

@@ -4053,7 +4053,8 @@ the hosted API over HTTPS, they don't embed it.
 > `postinstall` script has" instead of the vaguer "arbitrary JSX/JavaScript", which reads like it
 > might mean sandboxed component code.
 >
-> **OPEN, and a publish blocker — the tarball is platform-locked.** The prebuilt server vendors
+> **RESOLVED 2026-08-24 (see the sharp/optionalDependency note below) — was: a publish blocker,
+> the tarball is platform-locked.** The prebuilt server vendors
 > its whole runtime, including `sharp` and libvips as **native binaries for the build machine
 > only** (17MB of the 107MB extracted / 23MB compressed). Measured on a Mac-built tarball:
 > `/_next/image?w=64` on a 220,526-byte PNG returns **3,124 bytes** on macOS and **1,512 bytes**
@@ -4231,6 +4232,71 @@ the hosted API over HTTPS, they don't embed it.
 > **Still open:** step 3 (worker-backed SSR) remains unbuilt by design, per the C4 decision above.
 > Snippet *resolution* is unchanged (GAP-REPORT) — the import is allowed, resolving it is separate.
 > The `pageerror`-failing e2e for the client island is still owed.
+>
+> **Status (2026-08-24): the classifier missed JSX spread attributes — found by probing, fixed.**
+> The first version checked `mdxJsxAttribute` and its value expression, which is a list of node
+> *type names* — and enumerating that list is how things get missed. A JSX **spread**
+> (`<Card {...process.env} />`) is a different node (`mdxJsxExpressionAttribute`), so it was never
+> judged: it classified as server-safe and **leaked a real env var into server HTML**, verified
+> with a live probe. The fix judges embedded JavaScript by **shape** — any node carrying
+> `data.estree` is an expression to check — rather than by a name list, so a node type added later
+> is caught by default. Pinned by a spread case in the `author-code` fixture, asserted with the
+> same concatenation trick (`{..."SPREAD" + "_EVALUATED"}`) whose result exists nowhere in the
+> source.
+>
+> **And the fix appeared not to work, because the *classification* is cached.** `compileMdx`
+> caches the report alongside the compiled string, so tightening the classifier without bumping
+> the key keeps serving the old verdict and a page that should now go to the client keeps being
+> evaluated on the server. Key `v5 -> v6`. Second time this trap has bitten in one day; the
+> comment at the cache key now says the classification is cached too, not just the source.
+>
+> **Status (2026-08-24): `sharp` moved to an optionalDependency — the platform-locked tarball is
+> fixed.** Recorded above as the one open publish blocker; the resolution reverses the earlier
+> lean toward `images: { unoptimized: true }`. The argument that changed it: **people will run
+> this in production.** "Previewer, not a deployer" is about publishing (no `deploy`, no `login`),
+> not about whether it can serve — it runs a prebuilt production Next server, and
+> `PAPERVINE_HOST=0.0.0.0 papervine dev ./docs` behind a proxy is a natural self-host, consistent
+> with the no-lock-in posture. For a self-hosted site, serving a 220KB image where 1.5KB would do
+> is a real bandwidth and Core Web Vitals problem, not a missing nicety — so crippling
+> optimization for everyone to make behaviour uniform was the wrong trade.
+>
+> `sharp` is the **only** platform-specific thing in the package: an audit of the packed tarball
+> for native code returned exactly two files, both libvips/sharp binaries for the build machine.
+> Everything else is portable JavaScript. So rather than change the distribution model (per-platform
+> packages, Docker, a standalone binary — each costing the `npx papervine` entry point that the
+> README, docs and marketing all lead with), the fix removes the one non-portable thing from the
+> tarball and lets npm resolve it per platform through sharp's own mechanism:
+>
+> - `prepack` prunes `node_modules/sharp` and `node_modules/@img` (including the copies Next
+>   nests under `node_modules/next/`, where the tracer actually put them — pruning only the top
+>   level would have left the lock in place). This is the deliberate exception to the "leave
+>   node_modules exactly as traced" rule, and it is safe for the opposite reason `typescript` was
+>   not: nothing *imports* sharp, Next probes for it and degrades when it is absent.
+> - A new prepack guard **fails the build if any `.node`/`.dylib`/`.so`/`.dll` survives**, in the
+>   same spirit as the symlink guard — the platform lock cannot come back silently.
+> - `optionalDependencies: { sharp: "^0.35.3" }`, so npm installs the right build per platform and
+>   an install that cannot get one still succeeds.
+> - The CLI **says so at startup** when optimization is unavailable. The original objection was
+>   never that optimization might be missing; it was that it failed *silently and differently per
+>   machine*.
+>
+> **Measured, cross-platform.** A **Mac-built** tarball installed on `linux/amd64` in Docker now
+> resolves `@img/sharp-linux-x64` + `libvips-cpp.so`, ships zero binaries inside the vendored
+> server tree, and returns **3,124 bytes** for `/_next/image?w=64` on a 220,526-byte PNG —
+> **1,512 as WebP** — which are the same numbers macOS produces. Before: the full 220,526 bytes,
+> silently. Installed with `--no-optional`, it still serves and prints the warning. Tarball
+> **23MB -> 15MB**; `server/` 107MB -> 89MB.
+>
+> Guarded in `tests/cli-package.mjs`: the tarball audit now fails on any native binary, and the
+> install step asserts `sharp` resolved for the running platform. Both hold on macOS and ubuntu,
+> so CI catches a regression wherever it runs.
+>
+> **Consequence for the trust story:** with author code no longer executing server-side, the
+> README/`docs/cli.mdx` claim that previewing a repo can "read your environment variables and run
+> commands as your user" is no longer true, and both now say so accurately — the RCE payload that
+> previously created a file on disk is refused outright (dynamic `import()` is a contract
+> violation), and the env probe renders `unreachable`. What remains, and is stated, is that it is
+> still someone else's JavaScript in your browser on the preview's origin.
 
 ### 10.7 Error resilience (route boundaries)
 

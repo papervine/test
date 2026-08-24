@@ -11,6 +11,12 @@ server's HTML would prove the server evaluated author code.
 
 Concatenated: {"SERVER" + "_EVALUATED"}
 
+A JSX **spread** attribute is a different mdast node from an attribute value
+(`mdxJsxExpressionAttribute`), and the first version of the classifier checked only the latter —
+so a spread sailed through and evaluated on the server. Same concatenation trick as above.
+
+<Card {...{ title: "SPREAD" + "_EVALUATED" }} />
+
 export const Greeting = () => <b>AUTHOR_COMPONENT_OUTPUT</b>
 
 <Greeting />

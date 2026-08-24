@@ -78,7 +78,7 @@ const CHECKS = [
     // "SERVER_EVALUATED" in this HTML would mean the server evaluated an author expression --
     // which is exactly how `{process.env.DATABASE_URL}` once rendered a live connection string.
     include: ["AUTHOR_PAGE_MARKER"],
-    exclude: ["SERVER_EVALUATED", "<b>AUTHOR_COMPONENT_OUTPUT</b>"],
+    exclude: ["SERVER_EVALUATED", "SPREAD_EVALUATED", "<b>AUTHOR_COMPONENT_OUTPUT</b>"],
   },
   {
     slug: "author-violation",
