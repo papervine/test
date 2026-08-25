@@ -4259,6 +4259,55 @@ the hosted API over HTTPS, they don't embed it.
 > in the new page resolves, README anchors resolve, and the page was checked in a real browser
 > in both appearances with a clean console.
 >
+> **Status (2026-08-24): the assistant's provider setup is documented, after confirming it fails
+> silently.** Reported as "right now it just says direct". New page
+> `docs/features/assistant-providers` with a copy-paste recipe per provider, plus self-contained
+> recipes in the CLI README.
+>
+> **The docs weren't merely thin, they set a trap — reproduced before writing anything.** Exporting
+> `OPENAI_API_KEY` and running `papervine dev`: the assistant button never renders (0 occurrences
+> in the HTML) and `POST /api/assistant` returns 503 with *"model
+> `anthropic/claude-haiku-4-5` routes via the AI Gateway but neither `AI_GATEWAY_API_KEY` nor
+> `VERCEL_OIDC_TOKEN` is set"*. `AI_ROUTING` defaults to **`gateway`**, and the old table described
+> `direct` without ever naming the default. Nothing prints at startup, so the user is told nothing,
+> anywhere.
+>
+> **There is a second trap behind the first**, also reproduced: adding `AI_ROUTING=direct` to an
+> `OPENAI_API_KEY` still fails, because `PAPERVINE_AI_MODEL` defaults to `anthropic/…` — *"ANTHROPIC_API_KEY
+> is not configured (AI_ROUTING=direct, model=anthropic/claude-haiku-4-5)"*. The model prefix and
+> the key must match. That is precisely why the page is organised as **whole recipes** rather than a
+> variable table: every block sets routing and model together, so neither half can be missed. The
+> table is still there, underneath, for reference.
+>
+> **Recipes were run, not transcribed.** Ollama end to end on real hardware
+> (`PAPERVINE_AI_MODEL=ollama/qwen3.5`, no key, no `AI_ROUTING`) → panel renders, a tool call fires,
+> a cited answer streams back. `openai/gpt-5-nano` + `AI_ROUTING=direct` + a key → panel renders and
+> the stream reaches the model. And every error string quoted in the troubleshooting section is the
+> literal output of `aiProviderStatus()`, so searching the message finds the fix — a quoted message
+> that doesn't match reality is worse than none.
+>
+> **One canonical page, referenced from four surfaces** (`docs/cli.mdx`, `features/ai-assistant`,
+> `guides/self-hosting`, `local-ai`), because the alternative is four copies drifting. The README is
+> the deliberate exception: it repeats the recipes in full, since a README cannot rely on links.
+> `local-ai` keeps the deep operator material (Compose profile, model choice, scheduled-run reach)
+> and is cross-linked rather than duplicated.
+>
+> Two stale references fixed in passing: `docs/features/ai-assistant.mdx` and `.env.example` both
+> pointed at `src/lib/ai-model.ts`, which moved to `packages/renderer/lib/ai-model.ts` in the §10.6
+> extraction. Also a dangling `#starter-questions` anchor on the assistant page, pointing at a bold
+> list item rather than a heading.
+>
+> **Not done, and it is the real fix:** the CLI still prints nothing about AI at startup, though it
+> warns about `sharp`. `aiProviderStatus()` already returns the exact sentence a startup line would
+> need. Documentation cannot fix a failure that announces itself nowhere — left out only because the
+> ask was explicitly documentation.
+>
+> Verified: crawl `docs` 44/44 at 0×500, every internal link and anchor in the five edited pages
+> resolves, the README round-tripped through GitHub's markdown API (17 headings, 4 tables, 18 code
+> blocks, the `[!WARNING]` alert), and the new page checked in a real browser in both appearances
+> with a clean console — including clicking a `CodeGroup` tab and asserting the recipe actually
+> changed.
+>
 > **Status (2026-08-24): `papervine new` shipped, and `dev` offers it.** Prompted by a
 > competitor leading with `pnpm dlx create-shiso-app my-docs` — the observation being that a
 > tool should generate a folder when the user hasn't got one. Ours dead-ended instead: `dev`

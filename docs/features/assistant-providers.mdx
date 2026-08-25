@@ -1,0 +1,183 @@
+---
+title: Connecting a model
+description: Point the assistant at Claude, ChatGPT, Gemini, a local Ollama or LM Studio model, or any OpenAI-compatible server — with a copy-paste recipe for each.
+public: true
+---
+
+The [AI assistant](/features/ai-assistant) needs a model. The SDKs ship with Papervine, so there
+is nothing to install — you supply a model id and, for hosted providers, a key.
+
+Two variables do the work:
+
+- **`PAPERVINE_AI_MODEL`** — a `provider/model` id, e.g. `openai/gpt-5-nano`.
+- **`AI_ROUTING`** — `direct` to call the provider with your own key, or `gateway` (the
+  **default**) to go through the Vercel AI Gateway.
+
+For a hosted provider they **always travel together** — setting one without the other is the
+most common way to end up with no assistant. A local model needs only the model id, since it
+has nowhere else it could be routed.
+
+<Warning>
+  Setting a provider key on its own does nothing. `AI_ROUTING` defaults to `gateway`, so
+  exporting `OPENAI_API_KEY` and starting the server leaves the assistant hidden — it is looking
+  for a gateway key it hasn't got. Set the **model and the routing together**, as every recipe
+  below does.
+</Warning>
+
+## Recipes
+
+<CodeGroup>
+
+```bash Claude
+AI_ROUTING=direct
+PAPERVINE_AI_MODEL=anthropic/claude-haiku-4-5
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+```bash ChatGPT
+AI_ROUTING=direct
+PAPERVINE_AI_MODEL=openai/gpt-5-nano
+OPENAI_API_KEY=sk-...
+```
+
+```bash Gemini
+AI_ROUTING=direct
+PAPERVINE_AI_MODEL=google/gemini-3.1-flash-lite
+GOOGLE_GENERATIVE_AI_API_KEY=...
+```
+
+```bash AI Gateway
+AI_ROUTING=gateway
+PAPERVINE_AI_MODEL=anthropic/claude-haiku-4-5
+AI_GATEWAY_API_KEY=...
+```
+
+```bash Ollama
+PAPERVINE_AI_MODEL=ollama/qwen3.5
+```
+
+```bash LM Studio
+PAPERVINE_AI_MODEL=lmstudio/qwen3.5
+```
+
+```bash Other local
+PAPERVINE_AI_MODEL=local/qwen3.5
+AI_BASE_URL=http://gpu-box.lan:8000/v1
+```
+
+</CodeGroup>
+
+Put these in your docs project's `.env.local` (the CLI reads `.env.local` and `.env` from the docs
+directory and the working directory), or export them in the environment of whatever runs the
+server.
+
+### Note the Google variable name
+
+Anthropic and OpenAI use the obvious `ANTHROPIC_API_KEY` and `OPENAI_API_KEY`. Google's is
+**`GOOGLE_GENERATIVE_AI_API_KEY`** — not `GOOGLE_API_KEY`, and not `GEMINI_API_KEY`. It is the
+name the provider SDK expects.
+
+### Which model to pick
+
+The assistant is **agentic** — it searches, reads pages, and often takes several turns before
+answering. So the constraint is not raw quality but *reliable tool use* at a rate limit you won't
+hit. A small, fast, tool-capable model generally beats a large one here, which is why the default
+is `anthropic/claude-haiku-4-5`.
+
+## Running against your own hardware
+
+An `ollama/`, `lmstudio/`, or `local/` prefix sends requests to a server on your own machine or
+network, and pays nobody.
+
+<Steps>
+  <Step title="Install a runtime and pull a model">
+    ```bash
+    brew install ollama
+    ollama serve
+    ollama pull qwen3.5
+    ```
+  </Step>
+  <Step title="Point Papervine at it">
+    ```bash
+    PAPERVINE_AI_MODEL=ollama/qwen3.5
+    ```
+    `ollama/` defaults to `http://localhost:11434/v1` and `lmstudio/` to
+    `http://localhost:1234/v1`. `AI_BASE_URL` overrides either, and is **required** for the
+    generic `local/` prefix — use that one for vLLM, llama.cpp, LiteLLM, or a remote GPU box.
+  </Step>
+</Steps>
+
+No key is needed: local servers don't authenticate. Set `AI_LOCAL_API_KEY` only if yours does.
+
+<Note>
+  A local model **always takes the direct path, whatever `AI_ROUTING` says** — a hosted gateway
+  can't reach an endpoint on your own network, so there is no configuration in which routing it
+  through one would work.
+</Note>
+
+<Warning>
+  **Reasoning is off by default for local models.** Modern open models think before answering, and
+  on laptop hardware that dominates everything: measured at 40 seconds versus 1.9 seconds for the
+  same one-sentence answer, with the thinking sometimes crowding out the reply entirely. Set
+  `AI_LOCAL_REASONING=1` to opt back in. Hosted routes are unaffected either way.
+</Warning>
+
+Small local models are also less reliable at multi-step tool use than a frontier model, so expect
+weaker answers and occasional wrong citations. For a deeper treatment — choosing a model, running
+Ollama in Compose, what scheduled runs can and can't reach — see [Local AI models](/local-ai).
+
+## Every variable
+
+| Variable | Effect |
+| --- | --- |
+| `PAPERVINE_AI_MODEL` | The `provider/model` id. Defaults to `anthropic/claude-haiku-4-5`. |
+| `AI_ROUTING` | `direct` (your own provider key) or `gateway` (default; via the Vercel AI Gateway). |
+| `ANTHROPIC_API_KEY` | Key for `anthropic/*` models on the direct route. |
+| `OPENAI_API_KEY` | Key for `openai/*` models on the direct route. |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Key for `google/*` models on the direct route. |
+| `AI_GATEWAY_API_KEY` | Key for the gateway route. Automatic on Vercel deployments via OIDC. |
+| `AI_BASE_URL` | Endpoint for a local model. Overrides the default; required for `local/`. |
+| `AI_LOCAL_API_KEY` | Only if your local server demands a key. |
+| `AI_LOCAL_REASONING` | Set to `1` to let a local thinking model think. Off by default. |
+
+## The assistant isn't showing up
+
+It is hidden rather than broken whenever the model can't be reached — the panel only appears once
+the configuration resolves. To see why, ask the API directly:
+
+```bash
+curl -s -X POST localhost:3000/api/assistant \
+  -H 'content-type: application/json' -d '{"messages":[]}'
+```
+
+A misconfigured server answers `503` with the reason:
+
+<AccordionGroup>
+  <Accordion title="routes via the AI Gateway but neither AI_GATEWAY_API_KEY nor VERCEL_OIDC_TOKEN is set">
+    You set a provider key but not `AI_ROUTING=direct`, so it is still trying the default gateway
+    route. Add `AI_ROUTING=direct` **and** a `PAPERVINE_AI_MODEL` matching your key's provider.
+  </Accordion>
+  <Accordion title="ANTHROPIC_API_KEY is not configured (AI_ROUTING=direct, model=anthropic/claude-haiku-4-5)">
+    Routing is direct, but the model id still names a different provider than your key. The model
+    prefix and the key must match — an `OPENAI_API_KEY` does not satisfy an `anthropic/` model.
+    Set `PAPERVINE_AI_MODEL=openai/…`.
+  </Accordion>
+  <Accordion title="needs AI_BASE_URL (the URL of your OpenAI-compatible server)">
+    The generic `local/` prefix doesn't know where to send requests. Set `AI_BASE_URL`, or use the
+    `ollama/` or `lmstudio/` prefix, which have default endpoints.
+  </Accordion>
+  <Accordion title="no direct SDK for provider '…'">
+    `AI_ROUTING=direct` supports `anthropic`, `google`, and `openai`. For anything else, use the
+    gateway route, or reach it as an OpenAI-compatible endpoint with the `local/` prefix and
+    `AI_BASE_URL`.
+  </Accordion>
+</AccordionGroup>
+
+## Who pays
+
+On a self-hosted site or the CLI, **usage is billed by whoever provides the model** — your key,
+your account, at their prices. Papervine meters nothing and reports nothing anywhere; running
+locally costs nothing at all.
+
+On [hosted Papervine](/control-plane/billing) the assistant is metered against your plan's
+credits instead, and you configure none of this — the model is chosen for you.

@@ -56,20 +56,14 @@ Why tools instead of pure top-`k`:
 ### Model & routing
 
 The model and how it's reached are **configuration, not code** — set via environment,
-resolved in one place (`src/lib/ai-model.ts`) that both the assistant and the editor agent
-use. Papervine isn't tied to any single provider:
+resolved in one place (`packages/renderer/lib/ai-model.ts`) that the assistant, the editor
+agent and automation runs all share. Papervine isn't tied to any single provider: Claude,
+ChatGPT, Gemini, the Vercel AI Gateway, and any model running on your own hardware are all
+a `PAPERVINE_AI_MODEL` id and an `AI_ROUTING` value apart.
 
-- **`PAPERVINE_AI_MODEL`** — a `provider/model` id (e.g. `anthropic/claude-haiku-4-5`,
-  `google/gemini-3.1-flash-lite`, `openai/gpt-5-nano`).
-- **`AI_ROUTING=gateway`** (default) — route through the **Vercel AI Gateway**: one key
-  (`AI_GATEWAY_API_KEY`, or Vercel OIDC when deployed there) unlocks nearly every provider
-  and model without per-provider SDKs.
-- **`AI_ROUTING=direct`** — bypass the gateway and call a provider's SDK **directly** with
-  that provider's own key (`ANTHROPIC_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`,
-  `OPENAI_API_KEY`). Use this to bring your own keys or avoid the gateway entirely.
-- **A local endpoint** — an `ollama/`, `lmstudio/`, or `local/` model id runs
-  against your own hardware and pays nobody. See
-  [Local AI models](/local-ai).
+<Card title="Connecting a model" icon="plug" href="/features/assistant-providers">
+  A copy-paste recipe per provider, every variable, and what each error message means.
+</Card>
 
 Individual surfaces can override the model: **`PAPERVINE_AI_MODEL_AUTOMATIONS`** applies
 only to [automation runs](/control-plane/automate), which write documentation that lands
@@ -77,8 +71,7 @@ in Git — worth a stronger model than the high-volume assistant needs. Anything
 override falls back to `PAPERVINE_AI_MODEL`.
 
 Because the assistant is agentic (it makes several model calls per question), pick a model
-that's both capable at tool use and not rate-limited by your provider tier. See
-`.env.example` for the documented defaults and trade-offs.
+that's both capable at tool use and not rate-limited by your provider tier.
 
 ### Current-page context
 
@@ -103,7 +96,7 @@ site so it matches the surrounding theme:
 - **Response** — streaming markdown, including code blocks.
 - **Sources** — the cited pages and `#anchors` under each answer, navigable.
 - **PromptInput** — the "Ask a question…" box, with file/image attach for multi-modal input.
-- **Suggestions** — starter and follow-up questions (see [starter questions](#starter-questions)).
+- **Suggestions** — starter and follow-up questions (see [assistant settings](#assistant-settings-control-plane)).
 - **Reasoning / Chain of Thought** — optional, to surface the tool-call and search steps.
 
 The panel slides out from the right (expand + close), opened by an **Ask Assistant** button

@@ -57,6 +57,7 @@
             "pages": [
               "features/search",
               "features/ai-assistant",
+              "features/assistant-providers",
               "features/assistant-widget",
               "features/api-playground",
               "features/mcp-servers"

@@ -185,33 +185,35 @@ with citations, retrieving by searching and reading your pages — there's no in
 vector database, because retrieval is the same full-text search the `⌘K` palette uses.
 
 It appears in the navbar once a model is configured, and is absent when one isn't. Nothing to
-enable; the SDKs ship with the CLI, and you bring a model.
+enable; the SDKs ship with the CLI, and you bring a model. The model id and the routing always
+travel together:
 
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-export AI_ROUTING=direct
-papervine dev
+<CodeGroup>
+
+```bash Claude
+AI_ROUTING=direct
+PAPERVINE_AI_MODEL=anthropic/claude-haiku-4-5
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-<Note>
-  To run it **free and entirely offline**, point it at any OpenAI-compatible server — Ollama,
-  LM Studio, llama.cpp:
+```bash Free and offline
+PAPERVINE_AI_MODEL=ollama/qwen3.5
+```
 
-  ```bash
-  export PAPERVINE_AI_MODEL=ollama/qwen3.5
-  export AI_BASE_URL=http://localhost:11434/v1
-  ```
+</CodeGroup>
 
-  Small local models are less reliable at the multi-step tool use the assistant does, so expect
-  weaker answers than a frontier model gives.
-</Note>
+Put them in your docs project's `.env.local` — the CLI loads it — or export them before running.
 
-| Variable | Effect |
-| --- | --- |
-| `PAPERVINE_AI_MODEL` | Model id, e.g. `anthropic/claude-haiku-4-5` or `ollama/qwen3.5` |
-| `AI_ROUTING` | `direct` to call the provider with your own key |
-| `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, … | Your key, for `direct` routing |
-| `AI_BASE_URL` | An OpenAI-compatible endpoint, for a local model |
+<Warning>
+  A provider key on its own does nothing. `AI_ROUTING` defaults to `gateway`, so exporting
+  `ANTHROPIC_API_KEY` and starting the server leaves the assistant hidden while it looks for a
+  gateway key. Always set the model *and* the routing.
+</Warning>
+
+<Card title="Connecting a model" icon="plug" href="/features/assistant-providers">
+  Copy-paste recipes for Claude, ChatGPT, Gemini, the AI Gateway, Ollama, LM Studio and any
+  OpenAI-compatible server — plus every variable, and what each 503 message means.
+</Card>
 
 **Usage is billed by whoever provides the model** — your key, your account, at their prices. The
 CLI meters nothing and reports nothing anywhere; it has no way to, since it carries no database

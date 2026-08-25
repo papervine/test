@@ -205,9 +205,14 @@ docker run -d -p 3000:3000 \
   my-docs
 ```
 
-Point `AI_BASE_URL` at any OpenAI-compatible server to run it against a local model instead.
-Usage is billed by whoever provides the model — the CLI has no metering and reports nothing
-anywhere.
+Point `PAPERVINE_AI_MODEL` at an `ollama/` or `local/` model to run against your own hardware
+instead, paying nobody. Usage on a hosted provider is billed by whoever provides the model — the
+CLI has no metering and reports nothing anywhere.
+
+<Card title="Connecting a model" icon="plug" href="/features/assistant-providers">
+  Recipes for Claude, ChatGPT, Gemini, the AI Gateway, Ollama, LM Studio and any
+  OpenAI-compatible server.
+</Card>
 
 ## What you give up
 
