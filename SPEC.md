@@ -4173,6 +4173,43 @@ the hosted API over HTTPS, they don't embed it.
 > them and stack vertically. They are one line now. Also confirmed `---` under an ATX heading
 > becomes a `<hr>` rather than being eaten as a setext underline.
 >
+> **Status (2026-08-24): the CLI mirror is automated too, and the reasoning that kept it manual
+> was wrong.** `mirror-starter.yml` became `mirror.yml` with a matrix over both targets, so
+> `papervine/cli` and `papervine/starter` publish on the same trigger — CI completing
+> successfully on `main`.
+>
+> **The prior note said the CLI stayed manual because "pushing it moves the source that
+> papervine/cli's own publish workflow builds an npm package from, and a human gate in front of
+> an immutable npm publish is worth keeping."** The premise is false in the detail that matters.
+> `publish.yml` fires only on `tags: ["v*"]` or `workflow_dispatch`, and `mirror-cli.mjs` pushes
+> `git push origin main` — it never pushes tags. So mirroring moves the source and *cannot* ship
+> it; the human gate was always the tag, not the mirror. The caution was real, it was just
+> guarding a door that wasn't the one it thought.
+>
+> What automation buys is that a release tag then describes code that is already public, instead
+> of a snapshot someone remembered to push. The failure mode being removed is the one that had
+> already happened: an entire session of CLI work — the assistant, `.env` loading, the Ctrl-C
+> fix, the README, the security pass — sat unmirrored while `.mirror-source` still stamped
+> `2deeb95`.
+>
+> **A matrix rather than a second file**, because the two workflows would have been ~60
+> identical lines whose only difference is the npm script name. `concurrency` moves to the job
+> and keys on `mirror-${{ matrix.target }}`, so the per-target serialisation the 2026-08-24 note
+> added is preserved while the two mirrors — which push to different repos — never queue behind
+> each other. `fail-fast: false`, since a CLI validation failure should not cancel a starter
+> publish that would have succeeded.
+>
+> **The gate is stronger for the CLI than for the starter**, which is the other half of why this
+> is safe: CI's `verify` job runs `test:cli`, the clean-room test that packs the real tarball and
+> installs it outside the repo. So "CI green" for the CLI means the published snapshot survives
+> being installed elsewhere, not merely that it parses.
+>
+> **Unverified, and it is the likely first failure:** `MIRROR_TOKEN` is the fine-grained PAT
+> scoped to `papervine/starter`. If its scope wasn't widened to `papervine/cli`, the CLI leg
+> fails at the push step with the same `403 ... denied to <user>` that the starter's first live
+> run produced — everything up to and including validation succeeds, and nothing is published.
+> The token's scope can't be read from here; the first run will say.
+>
 > **Status (2026-08-24): `papervine new` shipped, and `dev` offers it.** Prompted by a
 > competitor leading with `pnpm dlx create-shiso-app my-docs` — the observation being that a
 > tool should generate a folder when the user hasn't got one. Ours dead-ended instead: `dev`

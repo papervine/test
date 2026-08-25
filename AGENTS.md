@@ -546,8 +546,9 @@ npm test                    # smoke: renderer + control-plane gate (zero-dep, no
 npm run test:unit           # vitest — pure-logic unit tests
 npm run test:e2e            # playwright — authed journeys (needs docker Postgres + MinIO)
 npm run test:cli            # clean-room: packs the real papervine tarball, installs it OUTSIDE the repo, serves docs/ from it (slow — runs a full next build)
-npm run mirror:cli -- --dry-run       # build + validate the public papervine/cli snapshot without touching the remote (add --push to publish; --initial for the first import)
-npm run mirror:starter -- --dry-run   # same, for the forkable example site → papervine/starter (LIVE: auto-publishes on every green CI run of main)
+npm run mirror:cli -- --dry-run       # build + validate the public papervine/cli snapshot without touching the remote (add --push to publish)
+npm run mirror:starter -- --dry-run   # same, for the forkable example site → papervine/starter
+# BOTH mirrors are LIVE: .github/workflows/mirror.yml publishes each on every green CI run of main. The dry runs are for checking a change before it lands, not for publishing. Shipping to npm is still a separate, deliberate act — tag `v*` in papervine/cli; the mirror never pushes tags.
 node tests/crawl.mjs examples/starter # crawl the example site (a CI gate)
 npm run db:generate         # generate a versioned SQL migration from schema changes
 npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
