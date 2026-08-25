@@ -42,6 +42,23 @@ This is a *visual* bug — it passes the DOM check and only shows in a screensho
 why [definition of done](/contributing/working-on-papervine#definition-of-done) requires a
 real-browser screenshot for UI changes.
 
+### A literal HTML element in MDX bypasses the components map
+
+<Warning>
+  `<video src="/x.mp4">` written in a page compiles to a bare `_jsx("video", …)`, so a components-map
+  override for `video` is never consulted — and it fails *silently*. Only markdown-emitted elements
+  and capitalized components go through the map. **Fix:** a remark plugin retags the element to a
+  capitalized synthetic name (`PvImg`, `PvVideo`) and the map renders the real tag back.
+</Warning>
+
+Two traps when adding one. Register the override **unconditionally** — a renamed element with no
+map entry falls through to the unknown-component fallback and disappears from the page. And bump
+the `mdx-compile-vN` cache key: it's content-addressed on the page source, so a cached compile
+keeps emitting the old output and the change looks like it did nothing.
+
+This is why video 404'd on every surface that sets an asset base — path-based serving and the
+editor's draft preview — while a markdown image on the same page worked.
+
 ### Never hand a mutable handle to a TipTap `configure()`
 
 <Warning>

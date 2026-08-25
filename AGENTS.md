@@ -378,6 +378,18 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   (`PlatformShell`); a `dark:` utility on an element *outside* `.db` (e.g. on `<body>` itself)
   won't see the platform theme. This is why the editor chrome once rendered all-white on the
   dark platform. Don't add a global `.dark` sync — it would flip light-appearance docs pages.
+- **A literal HTML element in MDX bypasses the components map.** `<video src="/x.mp4">` written in a
+  page compiles to a bare `_jsx("video", …)`, not `_jsx(_components.video, …)` — so an override
+  registered as `out.video` in `applyTenantUrls` is never consulted, and it fails *silently*
+  (typechecks, reads correctly, does nothing). Only markdown-emitted elements (`![]()` → `img`) and
+  capitalized components go through the map. The fix is always the same rename trick: a remark
+  plugin retags the element to a capitalized synthetic name (`remarkLiteralImg` → `PvImg`,
+  `remarkLiteralMedia` → `PvVideo`/`PvSource`/`PvAudio`/`PvIframe`) and the map holds an override
+  that renders the real tag back. Two traps when you add one: register it **unconditionally**, or a
+  renamed element with no entry hits the unknown-component Fallback and vanishes from the page; and
+  **bump the `mdx-compile-vN` cache key**, because the key is content-addressed on the source and a
+  cached compile keeps emitting the old output. This is how video 404'd on every surface with an
+  `assetBase` (path-based serving, the editor's draft preview) while the image beside it worked.
 - **Never hand a mutable handle to a TipTap `configure()` — pass a getter.** `Extension.configure()`
   merges options with `mergeDeep`, which **recurses whenever the default and the supplied value are
   both plain objects**. A React ref is `{ current }`, so it gets *copied*: the extension reads its

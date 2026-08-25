@@ -2813,6 +2813,38 @@ layer.
 > replaying it proves nothing either way. The error-surfacing above is what closes this: the next
 > attempt says which of the two it is.
 >
+> **Video 404'd in the draft preview (2026-08-25).** Reported as "the editor renders the video URLs
+> without the tenant parts," and it was broader than the editor: **any** surface with a non-empty
+> `assetBase` — path-based tenant serving (`/sites/{slug}`) as well as the draft preview — rendered
+> `<video src="/videos/x.mp4">` unrewritten, so it resolved against whatever host was serving and
+> 404'd. The markdown image directly beside it worked, which is the tell: an intrinsic `<video>`
+> compiles to a bare `_jsx("video", …)` and **bypasses the MDX components map entirely**, so
+> `applyTenantUrls` never saw it. This is exactly the literal-`<img>` problem `remarkLiteralImg`
+> already exists to solve, and it needed the same trick: `remarkLiteralMedia` renames
+> `video`/`source`/`audio`/`iframe` to `PvVideo`/`PvSource`/… so the compiler emits
+> `_jsx(_components.PvVideo, …)`, and the map holds overrides that put the real tag back with `src`
+> and `poster` run through `withBase`.
+>
+> The first attempt was wrong in an instructive way: registering `out.video` directly. It
+> typechecked, read correctly, and did nothing — the map is only consulted for names the compiler
+> routes through it, which an intrinsic never is. Measured rather than assumed: the preview still
+> emitted `/videos/sample-clip.mp4` with the image beside it already rewritten.
+>
+> Three things this had to get right. `<source>` is renamed too, since the src-less form puts every
+> URL on the children and rewriting only the parent fixes nothing. The overrides are registered
+> **unconditionally**, before the `!linkBase && !assetBase` early return — by then the element has
+> been renamed, so a map that didn't hold the name would hit the unknown-component Fallback and the
+> video would *silently vanish* on the published site; `withBase` is a no-op with an empty base, so
+> host mode stays byte-identical. And the compile cache is bumped to **v7**: the key is
+> content-addressed on the source, so without it a cached compile keeps emitting the bare intrinsic
+> and the fix appears not to work — the trap that file's own comment already warns about. Guards:
+> `tenant-media-urls.test.ts` (8, including that host mode still renders the element and that the
+> synthetic name renders back as the real tag), verified failing without the fix, plus the existing
+> `/media` smoke fixture covering host mode where the rename must change nothing. Confirmed in the
+> browser: the preview's video src went from `/videos/sample-clip.mp4` (404) to
+> `/api/tenant-asset/starter/videos/sample-clip.mp4` (200, playing), poster and `<source>` rewritten
+> with it, and the external YouTube iframe left alone.
+>
 > One test debt logged rather than hidden: the e2e does **not** assert that an editor can read the
 > draft copy back over HTTP. It works (it's what makes the thumbnail and the inserted player show an
 > unpublished upload, verified in a browser, and the reader-404 half IS asserted), but in that
