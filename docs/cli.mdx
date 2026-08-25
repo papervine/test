@@ -9,8 +9,9 @@ Papervine renderer — the same renderer that powers hosted Papervine sites, so 
 locally is what you ship.
 
 It is a **production build**, not a development server: `NODE_ENV=production`, no dev-mode
-compile step, no hot reload. That makes it equally suitable for previewing as you write and
-for serving the finished site, which is why the command is the same either way. See
+compile step, no hot reload. Two commands run it — `papervine dev` while you write, and
+`papervine serve` on anything serving real traffic. They are the same server; `serve` just binds
+every interface and refuses to scaffold. See
 [Serving a site in production](#serving-a-site-in-production).
 
 ```bash
@@ -132,12 +133,15 @@ Because the CLI runs a production build of the same renderer behind hosted Paper
 serving your own docs from it is supported rather than a workaround. Four things change when
 you do.
 
-**Bind an interface.** The default is loopback, which is right for a command on your laptop
-and wrong for a server. Set the host explicitly:
+**Use `serve`.** It binds every interface, so nothing else is needed to be reachable:
 
 ```bash
-PAPERVINE_HOST=0.0.0.0 papervine dev ./docs --port 3000
+papervine serve ./docs --port 3000
 ```
+
+`dev` stays on loopback, which is right for a command on your laptop and wrong for a server.
+Either can be pinned with `--host` (or `PAPERVINE_HOST`) — and pinning `serve` back to
+`127.0.0.1` is the right move behind a reverse proxy, since only the proxy can then reach it.
 
 **Terminate TLS in front of it.** The CLI serves plain HTTP and does no `Host` routing, so put
 nginx, Caddy, or a cloud load balancer in front and proxy to that port.

@@ -555,7 +555,7 @@ npm run db:migrate          # apply migrations to the local dev DB (reads .env.l
 node bin/papervine.mjs dev <dir>     # preview any docs repo (docs dev analogue)
 node apps/cli/bin/papervine.mjs dev <dir>  # the PUBLISHED CLI's bin — serves a PREBUILT server, so renderer/theme edits are invisible until you rebuild
 npm run prepack --workspace papervine     # rebuild that server (the bin now warns when it's stale)
-#   the published CLI also has `papervine new <dir>` — scaffolds from examples/starter, bundled into the tarball by prepack
+#   the published CLI also has `papervine new <dir>` (scaffolds from examples/starter) and `papervine serve <dir>` (same server, production defaults: binds 0.0.0.0, never scaffolds)
 node tests/crawl.mjs <dir>        # crawl a real repo, report rendered/degraded/500
 npm run widget:playground         # serve the embeddable widget on a real cross-origin test page
 npm run worktree:setup            # a fresh worktree: symlink .env.local to main (share one env), then npm ci

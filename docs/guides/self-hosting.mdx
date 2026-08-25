@@ -5,9 +5,17 @@ public: true
 ---
 
 The `papervine` CLI is a production server, not only a previewer. It runs a prebuilt Next.js
-app with `NODE_ENV=production`, so the same command you use while writing is the one that can
-serve the finished site. Self-hosting is pointing it at a folder of MDX and putting a reverse
-proxy in front.
+app with `NODE_ENV=production`, so serving a finished site is a first-class command rather than a
+repurposed one:
+
+```bash
+papervine serve ./docs
+```
+
+`serve` is the same server `dev` runs — same prebuilt app, same rendering — with two defaults
+changed for production: it binds **every interface** rather than loopback, and it refuses to
+scaffold a starter site when it finds no `docs.json`, because a server that invents content hides
+the real problem. Self-hosting is that command plus a reverse proxy in front.
 
 <Info>
   This is an alternative to [hosted Papervine](/guides/publishing), not a lesser version of it.
@@ -50,10 +58,8 @@ RUN npm i -g papervine
 
 COPY docs /docs
 
-# Bind every interface — the CLI defaults to loopback, which a container cannot expose.
-ENV PAPERVINE_HOST=0.0.0.0
 EXPOSE 3000
-CMD ["papervine", "dev", "/docs", "--port", "3000"]
+CMD ["papervine", "serve", "/docs", "--port", "3000"]
 ```
 
 ```bash
@@ -68,9 +74,11 @@ images. If it can't be installed the CLI still runs and says so at startup, serv
 their original size.
 
 <Tip>
-  `PAPERVINE_HOST`, not `HOSTNAME`. Docker sets `HOSTNAME` to the container id, so a server
-  that read it would bind the container's own hostname — and `curl localhost:3000` inside the
-  container would be refused while the logs claimed everything was fine.
+  `serve` binds `0.0.0.0` on its own, so a container needs no environment variable to be
+  reachable. Override it with `--host` or `PAPERVINE_HOST` — **not** `HOSTNAME`. Docker sets
+  `HOSTNAME` to the container id, so a server that read it would bind the container's own
+  hostname, and `curl localhost:3000` inside the container would be refused while the logs
+  claimed everything was fine.
 </Tip>
 
 ### Mounting content instead of copying it
@@ -92,7 +100,7 @@ No container required. Install the CLI and run it:
 
 ```bash
 npm i -g papervine
-PAPERVINE_HOST=0.0.0.0 papervine dev /srv/docs --port 3000
+papervine serve /srv/docs --port 3000
 ```
 
 For a machine that should keep it running, a systemd unit is enough:
@@ -103,8 +111,7 @@ Description=Docs site
 After=network.target
 
 [Service]
-ExecStart=/usr/bin/papervine dev /srv/docs --port 3000
-Environment=PAPERVINE_HOST=0.0.0.0
+ExecStart=/usr/bin/papervine serve /srv/docs --port 3000
 Restart=always
 User=www-data
 
@@ -126,9 +133,9 @@ Fly.io, Railway, Render, Cloud Run, ECS, a Kubernetes Deployment. The requiremen
 in each:
 
 <Steps>
-  <Step title="Bind every interface">
-    Set `PAPERVINE_HOST=0.0.0.0`. The loopback default is correct on a laptop and makes the
-    container unreachable in production.
+  <Step title="Use `serve`, not `dev`">
+    `serve` binds every interface, so a container is reachable with no extra configuration.
+    `dev`'s loopback default is correct on a laptop and makes a container unreachable.
   </Step>
   <Step title="Serve on the port the platform expects">
     Pass `--port` to match whatever the platform routes to.
@@ -175,8 +182,8 @@ docs.example.com {
 }
 ```
 
-With a proxy handling TLS you can drop `PAPERVINE_HOST` entirely and leave the server on
-loopback, which is the tighter arrangement: only the proxy can reach it.
+With a proxy handling TLS, pin the server back to loopback — `papervine serve ./docs --host
+127.0.0.1` — which is the tighter arrangement: only the proxy can reach it.
 
 ## Publishing an update
 
@@ -235,8 +242,8 @@ that is a loss. If you need gated docs or non-technical authors editing in a bro
 ## Checklist
 
 <Steps>
-  <Step title="`PAPERVINE_HOST` is set (or a proxy shares the host)">
-    The most common reason a deployed site is unreachable is the loopback default.
+  <Step title="You ran `serve`, not `dev`">
+    The most common reason a deployed site is unreachable is `dev`'s loopback default.
   </Step>
   <Step title="TLS terminates somewhere">
     The CLI does not serve HTTPS.

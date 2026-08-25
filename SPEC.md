@@ -4378,6 +4378,57 @@ the hosted API over HTTPS, they don't embed it.
 > Also fixed: three references to `src/lib/theme.ts`, which moved to `packages/renderer/` in the
 > §10.6 extraction.
 >
+> **Status (2026-08-25): `papervine serve` — the production command gets its own name.** Asked
+> as "shouldn't we have a `papervine serve` that calls `next start` instead of `next dev`?" The
+> premise about the implementation was already false — `dev` spawns the standalone `server.js`
+> with `NODE_ENV=production`, so it has always been the `next start` equivalent and never a dev
+> server. But the instinct was right about the thing that matters: **nobody should have to type
+> `dev` on a box serving real traffic**, and the previous fix for that was a paragraph in a README
+> explaining that the name lies. A second name is the better answer, because the name is the
+> documentation.
+>
+> **One implementation, two names, exactly two differing defaults.** `runServer(argv, mode)`
+> serves both:
+>
+> - **Bind address.** `dev` keeps loopback — a command you run on your laptop has no business
+>   being on the LAN. `serve` binds `0.0.0.0`, because being reachable is the whole point of the
+>   word, and making the production command require an environment variable to do its job is its
+>   own kind of footgun. Both now **print which address they bound**, since "intended" and
+>   "understood by the person who typed it" are different things.
+> - **The scaffold offer.** `dev` offers to create a starter site when there is no `docs.json`;
+>   `serve` fails. A production server that invents content hides the actual fault — a wrong
+>   path, an unmounted volume — behind a site that looks fine and says nothing true.
+>
+> Everything else is identical: same prebuilt app, same rendering, same signal handling.
+>
+> **A `--host` flag, not only `PAPERVINE_HOST`.** Precedence is `--host` → `PAPERVINE_HOST` →
+> the mode default. A flag is self-documenting in a Dockerfile `CMD` in a way an env var isn't,
+> and it makes the reverse-proxy arrangement a one-liner: `papervine serve ./docs --host
+> 127.0.0.1` pins it back to loopback so only the proxy can reach it. Still never `HOSTNAME` —
+> that gotcha stands.
+>
+> **What this simplifies:** the self-hosting guide previously had to teach
+> `PAPERVINE_HOST=0.0.0.0 papervine dev` in four places — Dockerfile, systemd unit, container
+> platforms, checklist. All four are now plain `papervine serve`, and the Dockerfile lost an
+> `ENV` line.
+>
+> **Verified end to end rather than by inspection.** `serve` reachable on the machine's real LAN
+> address (192.168.x.x → 200) while `dev` on the same content is refused there and 200 on
+> loopback; `--host 127.0.0.1` pins `serve` back to refused-off-loopback; `serve` on an empty
+> directory exits 1 with the `docs.json` error rather than prompting. Then in the clean room,
+> from the *installed tarball*: `serve` boots, answers, states its bind address, and refuses an
+> empty directory.
+>
+> **A bug of mine worth recording, because its symptom lied.** The new clean-room check called
+> `waitForReady(servePort)` — but that function's first parameter was a *timeout*, so a port
+> number became a 4.2-second budget against the other server's URL. It reported "`serve` never
+> became ready" while the captured log plainly showed the server ready. `waitForReady` now takes
+> a base URL first. An argument that plausibly type-checks as another one is worth removing the
+> ambiguity from, rather than remembering the order.
+>
+> Also: `validateContentDir` now names the command that was run, so typing `papervine serve` no
+> longer gets you a hint that says `papervine dev`.
+>
 > **Status (2026-08-24): `papervine new` shipped, and `dev` offers it.** Prompted by a
 > competitor leading with `pnpm dlx create-shiso-app my-docs` — the observation being that a
 > tool should generate a folder when the user hasn't got one. Ours dead-ended instead: `dev`
