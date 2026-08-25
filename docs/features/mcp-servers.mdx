@@ -23,12 +23,21 @@ Every published site gets a read MCP server automatically — no authoring step.
 `search_api` — over Streamable HTTP at `https://{tenant}/mcp`. One implementation, two
 transports (in-docs chat and MCP).
 
+<Note>
+  This is not hosted-only. The [CLI](/cli) serves the same four tools at `/mcp`, so
+  `papervine dev` gives your editor's AI a live view of the docs you are writing, and
+  [`papervine serve`](/guides/self-hosting) gives a self-hosted site the same endpoint a hosted
+  one has. The tool names, descriptions and schemas are shared code, so a client sees the same
+  server either way — what the hosted version adds is tenant routing, the reader-auth gate, and
+  agent analytics.
+</Note>
+
 Connect any MCP-capable tool to `https://<host>/mcp`:
 
 <Steps>
   <Step title="Point your tool at the endpoint">
     Add `https://<your-docs-host>/mcp` as a Streamable HTTP MCP server in Claude, Cursor, or
-    Windsurf.
+    Windsurf — or `http://localhost:3000/mcp` against a running `papervine dev`.
   </Step>
   <Step title="The model lists and calls tools">
     It sees `search_docs`, `read_page`, `list_pages`, and — only when the site references an

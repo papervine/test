@@ -1,4 +1,5 @@
-import { createMcpHandler } from "mcp-handler";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { z } from "zod";
 import { headers } from "next/headers";
 import { searchDocs, readPage, listPages } from "@papervine/renderer/lib/docs-tools";
@@ -31,8 +32,26 @@ const json = (data: unknown) => ({
 });
 const err = (message: string) => json({ error: message });
 
-const handler = createMcpHandler(
-  async (server) => {
+/**
+ * Transport note: this uses the SDK's Web-standard Streamable HTTP transport directly rather than
+ * `mcp-handler`. That package exists to bridge the SDK's Node-`IncomingMessage` transport to a
+ * Fetch handler, and it declares `redis` as a runtime dependency which it imports eagerly —
+ * `handleRequest(req: Request): Promise<Response>` is already a route handler's contract, so there
+ * was nothing to bridge and a 4MB Redis client left the tree with it.
+ *
+ * The tool bodies below are unchanged, including their `server.tool(...)` calls. That overload is
+ * marked `@deprecated` in favour of `registerTool`, and converting them is worth doing — but not
+ * in the same change as a transport swap, on an authenticated surface that writes to Git.
+ */
+export const dynamic = "force-dynamic";
+
+async function handle(req: Request): Promise<Response> {
+  const server = new McpServer(
+    { name: "Papervine Authoring", version: "0.1.0" },
+    { capabilities: { tools: {} } },
+  );
+
+  {
     const h = await headers();
     const org = h.get("x-papervine-org");
     const siteSlug = h.get("x-papervine-site");
@@ -127,9 +146,19 @@ const handler = createMcpHandler(
         return json(await publishDraft(site, branch, { mode, message }));
       },
     );
-  },
-  { serverInfo: { name: "Papervine Authoring", version: "0.1.0" } },
-  { basePath: "/authoring" },
-);
+  }
 
-export { handler as GET, handler as POST, handler as DELETE };
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+
+  await server.connect(transport);
+  try {
+    return await transport.handleRequest(req);
+  } finally {
+    await server.close();
+  }
+}
+
+export { handle as GET, handle as POST, handle as DELETE };

@@ -230,10 +230,15 @@ is in the CLI package:
 | --- | --- |
 | Reader authentication | Every page is public. There is no per-page gating and no group check. |
 | The browser editor | No visual editing, no collaboration, no draft workflow. |
-| Analytics | No page views, no search analytics, no assistant transcripts. |
+| Analytics | No page views, no search analytics, no assistant transcripts — including for MCP tool calls, which a hosted site attributes to an agent. |
 | Automations | No scheduled or content-triggered AI runs. |
 | Managed TLS and CDN | Yours to provide, via the proxy above. |
 | Multi-site hosting | One process per site. |
+
+The [assistant](/features/assistant-providers) and the
+[read MCP server](/features/mcp-servers) are **not** on that list — a self-hosted site serves
+`/mcp` with the same four tools a hosted one does, so an editor's AI can search and read your docs
+either way.
 
 If your docs are public, your team writes in Git, and you already run a reverse proxy, none of
 that is a loss. If you need gated docs or non-technical authors editing in a browser, that's

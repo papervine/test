@@ -4429,6 +4429,55 @@ the hosted API over HTTPS, they don't embed it.
 > Also: `validateContentDir` now names the command that was run, so typing `papervine serve` no
 > longer gets you a hint that says `papervine dev`.
 >
+> **Status (2026-08-25): the MCP server ships in the CLI, and `mcp-handler` left the repo.**
+> Asked as a feasibility question, with the deciding observation supplied by the user: people can
+> and will host this CLI in production, so an HTTP `/mcp` endpoint is the case that matters — a
+> remote client cannot spawn a local stdio process. My first answer had ranked stdio first on the
+> reasoning that the CLI is mainly local, which stopped being true the day `papervine serve` and
+> the self-hosting guide shipped.
+>
+> **The blocker dissolved on inspection.** `mcp-handler` declares `redis` as a runtime dependency
+> and imports it **eagerly** (`dist/index.js:7`), which would have dragged 4.4MB of `@redis/*`
+> into a documentation previewer. But that package exists only to bridge the SDK's
+> Node-`IncomingMessage` transport to a Fetch handler — and the SDK ships
+> `WebStandardStreamableHTTPServerTransport`, whose signature is literally
+> `handleRequest(req: Request): Promise<Response>`, which *is* a route handler's contract. With
+> nothing to bridge, the dependency had no job.
+>
+> **So it was removed from the monorepo entirely**, not just avoided in the CLI: both hosted
+> routes (`/mcp` and `/authoring/mcp`) now use the Web-standard transport directly, and
+> `mcp-handler` + the whole Redis tree are out of `package.json` and the lockfile. The hosted
+> `/mcp` was already documented as "stateless (no Redis)" — it just still carried the client.
+>
+> **Measured cost of shipping MCP in the CLI: +0.5MB packed** (17.0 → 17.5MB), +1.3MB unpacked,
+> +15 files. The tarball listing contains **zero** paths matching `modelcontextprotocol`, `redis`
+> or `mcp-handler` — all compiled in — so the §10.6 packaging-boundary grep passes unchanged.
+>
+> **One registration, two transports, per the `AssistantHooks` template.**
+> `packages/renderer/lib/mcp-tools.ts` owns the tool names, descriptions and schemas, because a
+> tool description is a **prompt** an external client reads to decide what to call, and two copies
+> of a prompt become two different products. The hosted route keeps what only it has: tenant
+> routing, the anonymous reader gate (SPEC §11.2 — an external agent carries no reader session, so
+> a gated site exposes only its public subset), and agent analytics via a required `McpHooks` bag
+> the CLI passes `{}` to. `McpServer` is a **type-only** import in the renderer, so nothing that
+> doesn't serve MCP takes a runtime dependency on the SDK.
+>
+> **Verified as a protocol, not a status code.** A real JSON-RPC exchange against the built
+> server: `initialize` → correct `serverInfo`; `tools/list` → four tools; `search_docs` → 4 hits
+> with `#anchors`; `read_page` → 932 characters of markdown; `search_api` → 4 operations. The
+> clean-room test now runs that same exchange **from the installed tarball**, where it reports
+> three tools rather than four — `docs/` has no OpenAPI spec, so the conditional `search_api`
+> correctly does not register, which is the conditional working rather than a gap.
+>
+> Noted in passing: the SDK marks `server.tool(...)` **`@deprecated`** in favour of `registerTool`.
+> The shared registration uses the current API; the authoring route's six tool bodies were left on
+> the old one deliberately — converting them is worth doing, but not in the same change as a
+> transport swap, on an authenticated surface that writes to Git.
+>
+> Verified: typecheck (root + CLI), unit 1162, smoke 19 pages, `next build` of the web app (both
+> hosted MCP routes compile), crawl `docs` 44/44 at 0×500, `mirror:cli --dry-run` (the renderer
+> typechecks outside the monorepo with the new dependency declared), and `npm run test:cli` green.
+>
 > **Status (2026-08-24): `papervine new` shipped, and `dev` offers it.** Prompted by a
 > competitor leading with `pnpm dlx create-shiso-app my-docs` — the observation being that a
 > tool should generate a folder when the user hasn't got one. Ours dead-ended instead: `dev`

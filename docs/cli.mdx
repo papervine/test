@@ -155,7 +155,8 @@ served directory updates the site — no rebuild and no restart. The costly half
 the search index is fingerprinted by content and rebuilt only when the files change.
 
 **Know what isn't included.** One site per process, no caching layer or CDN, no reader
-authentication, no analytics. Those are the control plane, and none of it is in this package —
+authentication, no analytics. The assistant and the [MCP server](/features/mcp-servers) *are*
+included — a self-hosted site serves `/mcp` with the same tools a hosted one does. Those are the control plane, and none of it is in this package —
 see [How it relates to the hosted product](#how-it-relates-to-the-hosted-product). A process
 behind a reverse proxy is a complete deployment when you don't need them.
 
