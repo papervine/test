@@ -239,6 +239,27 @@ CI (`.github/workflows/ci.yml`): `verify` job runs typecheck + unit + build + sm
 (no services); `e2e` job runs Playwright against a Postgres service (skipping `@external`).
 Keep both green.
 
+### Deploys are gated on the tests
+
+**Production deploys from CI, not from the push.** Vercel's Git integration used to deploy the
+instant it saw a commit, in parallel with this workflow and with no knowledge of it — so a red
+run and a live production deploy of the same commit could coexist, and `next build` failing was
+the only thing that ever stopped a bad one (type and compile errors; not unit, not smoke, not
+e2e). So `vercel.json` sets `git.deploymentEnabled: { main: false }` and the
+**`deploy-production`** job — `needs: [verify, e2e]` — is the only path to prod.
+
+Consequences worth knowing:
+
+- **Branch and PR previews still auto-deploy.** Only `main` is gated; gating previews would
+  remove the thing they're for.
+- **An e2e flake blocks the deploy.** That's the deliberate trade. If it becomes the common
+  case, drop `e2e` from that job's `needs` — never `continue-on-error`, which would make the
+  job green while shipping the failure it exists to catch.
+- **A missing Vercel secret fails the job loudly**, unlike `deploy-trigger`, which exits 0 when
+  unconfigured. A skip here would mean production silently stops receiving deploys.
+- The build still runs **on Vercel**, so `vercel.json`'s `buildCommand` stays the one definition
+  of how prod is built. Don't move it onto the runner.
+
 ## Driving the app to test it (seeded login + browser)
 
 When a change needs hands-on verification (DoD #4, or the user says "go test this"), don't
@@ -609,8 +630,10 @@ The schema is **versioned**: every change is a committed SQL migration, never a 
 3. `npm run db:migrate` applies it locally. CI's e2e rebuilds `papervine_test` from these
    same files (`tests/e2e/global-setup.ts`), so a broken migration fails CI.
 4. **Prod applies on deploy**: `vercel.json`'s build command runs `drizzle-kit migrate`
-   before `next build`, so pushing the migration *is* shipping it (and each Vercel
-   preview migrates its own Neon branch). No manual prod steps, no `push --force`.
+   before `next build`, so merging the migration ships it — **once CI is green**, since
+   production now deploys from the `deploy-production` job rather than on push (see
+   "Deploys are gated on the tests" below). Previews still auto-deploy, each migrating its
+   own Neon branch. No manual prod steps, no `push --force`.
 
 drizzle's journal lives in a separate `drizzle` schema — a full reset is
 `DROP SCHEMA public CASCADE; DROP SCHEMA drizzle CASCADE; CREATE SCHEMA public;` then

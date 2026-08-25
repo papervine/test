@@ -178,6 +178,9 @@ The schema is **versioned** — every change is a committed SQL migration, never
   <Step title="Prod applies on deploy">
     `vercel.json`'s build command runs `drizzle-kit migrate` before `next build`, so each
     Vercel preview migrates its own Neon branch. No manual prod steps, no `push --force`.
+
+    Production deploys from CI once the tests pass, not on the push itself — see
+    [the CI gate](/contributing/testing#the-ci-gate).
   </Step>
 </Steps>
 

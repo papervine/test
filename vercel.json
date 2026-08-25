@@ -1,6 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "npx drizzle-kit migrate && node scripts/sync-billing.mjs && next build",
+  "git": { "deploymentEnabled": { "main": false } },
   "crons": [
     { "path": "/api/reconcile/domains", "schedule": "*/10 * * * *" },
     { "path": "/api/billing/expire-trials", "schedule": "0 * * * *" }
