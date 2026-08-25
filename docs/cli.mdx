@@ -1,12 +1,17 @@
 ---
 title: CLI
-description: The papervine CLI is a local docs previewer that renders any MDX + docs.json repo on your machine.
+description: The papervine CLI serves any MDX + docs.json repo with the Papervine renderer — on your machine while you write, or in production.
 public: true
 ---
 
-`papervine` is a **local development tool**. You run it inside a folder of MDX + a
-`docs.json` and it serves that folder with the Papervine renderer — the same renderer that
-powers hosted Papervine sites, so what you see locally is what you ship.
+`papervine` runs inside a folder of MDX + a `docs.json` and serves that folder with the
+Papervine renderer — the same renderer that powers hosted Papervine sites, so what you see
+locally is what you ship.
+
+It is a **production build**, not a development server: `NODE_ENV=production`, no dev-mode
+compile step, no hot reload. That makes it equally suitable for previewing as you write and
+for serving the finished site, which is why the command is the same either way. See
+[Serving a site in production](#serving-a-site-in-production).
 
 ```bash
 npx papervine new my-docs  # create a site from the starter template
@@ -62,14 +67,15 @@ Without `--port`, a busy port is skipped and the next free one is used. With an 
 `--port`, a busy port is an error instead — an explicit request shouldn't be quietly
 redirected somewhere you weren't told about.
 
-The preview binds loopback (`127.0.0.1`) rather than every network interface, so it isn't
+The server binds loopback (`127.0.0.1`) rather than every network interface, so it isn't
 reachable from the rest of the network by default. Set `PAPERVINE_HOST=0.0.0.0` when you need to
-reach it from outside the machine, such as from a container host.
+reach it from outside the machine — from a container host, or when
+[serving in production](#serving-a-site-in-production).
 
 <Note>
   The variable is `PAPERVINE_HOST`, not `HOSTNAME`. Docker sets `HOSTNAME` to the container id
   and Kubernetes to the pod name, so reading it would let an unrelated part of the environment
-  decide what the preview is reachable from.
+  decide what the site is reachable from.
 </Note>
 
 ## Images
@@ -119,6 +125,32 @@ That's a consequence of how the CLI ships: the renderer is **prebuilt** into the
 Nothing is compiled on your machine, so there's no build toolchain to install and no
 first-run compile — the preview starts serving in about a second. The tradeoff is the
 missing hot reload.
+
+## Serving a site in production
+
+Because the CLI runs a production build of the same renderer behind hosted Papervine sites,
+serving your own docs from it is supported rather than a workaround. Four things change when
+you do.
+
+**Bind an interface.** The default is loopback, which is right for a command on your laptop
+and wrong for a server. Set the host explicitly:
+
+```bash
+PAPERVINE_HOST=0.0.0.0 papervine dev ./docs --port 3000
+```
+
+**Terminate TLS in front of it.** The CLI serves plain HTTP and does no `Host` routing, so put
+nginx, Caddy, or a cloud load balancer in front and proxy to that port.
+
+**Publish by replacing files.** Pages read from disk per request, so writing new MDX into the
+served directory updates the site — no rebuild and no restart. The costly half of rendering
+(MDX compilation and syntax highlighting) is cached, so repeat requests don't recompile, and
+the search index is fingerprinted by content and rebuilt only when the files change.
+
+**Know what isn't included.** One site per process, no caching layer or CDN, no reader
+authentication, no analytics. Those are the control plane, and none of it is in this package —
+see [How it relates to the hosted product](#how-it-relates-to-the-hosted-product). A process
+behind a reverse proxy is a complete deployment when you don't need them.
 
 ## What ships in the CLI
 
@@ -200,7 +232,7 @@ outside `/snippets/` and dynamic `import()` don't render at all.
   but previewing one no longer gives it your machine.
 </Warning>
 
-The previewer is narrow by construction too: it binds loopback, serves only asset file types out
+The surface is narrow by construction too: it binds loopback by default, serves only asset file types out
 of your content directory, and refuses remote image URLs. The one thing that talks to the network
 is the assistant, and only when you have configured a model and asked it something — your
 question and the retrieved page text go to the provider you chose, and nowhere else.
