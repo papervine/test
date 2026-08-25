@@ -19,6 +19,7 @@ npx papervine new my-docs  # create a site from the starter template
 npx papervine dev          # preview ./ (must contain docs.json)
 npx papervine dev ./docs   # preview a subfolder
 npx papervine dev -p 4000  # preview on a specific port
+papervine serve ./docs     # serve it for real (binds 0.0.0.0)
 ```
 
 Requires Node 20.9 or newer.
@@ -58,20 +59,22 @@ of the CLI that wrote it.
 
 | Flag | Applies to | Description | Default |
 | --- | --- | --- | --- |
-| `-p, --port <port>` | `dev` | Port to serve on | `3000` |
+| `-p, --port <port>` | `dev`, `serve` | Port to serve on | `3000` |
+| `--host <addr>` | `dev`, `serve` | Bind address | `127.0.0.1` for `dev`, `0.0.0.0` for `serve` |
 | `-y, --yes` | `dev` | Create a starter site if there are no docs, without asking | — |
 | `-f, --force` | `new` | Scaffold into a directory that isn't empty | — |
-| `-h, --help` | both | Show help | — |
+| `-h, --help` | all | Show help | — |
 | `-v, --version` | — | Print the installed version | — |
 
 Without `--port`, a busy port is skipped and the next free one is used. With an explicit
 `--port`, a busy port is an error instead — an explicit request shouldn't be quietly
 redirected somewhere you weren't told about.
 
-The server binds loopback (`127.0.0.1`) rather than every network interface, so it isn't
-reachable from the rest of the network by default. Set `PAPERVINE_HOST=0.0.0.0` when you need to
-reach it from outside the machine — from a container host, or when
-[serving in production](#serving-a-site-in-production).
+`--host` sets the bind address, and its default depends on which command you ran: `dev` binds
+loopback (`127.0.0.1`), so a command you run on your laptop isn't on the network; `serve` binds
+every interface (`0.0.0.0`), because being reachable is the point. Both print which address they
+bound at startup. `PAPERVINE_HOST` is equivalent to `--host`, for when an environment variable is
+easier to set than an argument.
 
 <Note>
   The variable is `PAPERVINE_HOST`, not `HOSTNAME`. Docker sets `HOSTNAME` to the container id
@@ -283,6 +286,6 @@ deploy it to a hosted site.
 
 ## Roadmap
 
-`new` and `dev` are the command surface today. Planned next: `broken-links` (dead internal
-links), `validate` (a strict config/frontmatter gate for CI), `openapi-check`, and `build`
-(static export).
+`new`, `dev` and `serve` are the command surface today. Planned next: `broken-links` (dead
+internal links), `validate` (a strict config/frontmatter gate for CI), `openapi-check`, and
+`build` (static export).

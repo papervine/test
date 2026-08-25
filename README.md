@@ -51,6 +51,7 @@ Run `papervine dev` inside any folder of MDX + `docs.json`:
 papervine dev              # preview the current directory
 papervine dev ./docs       # preview ./docs
 papervine dev -p 4000      # custom port
+papervine serve ./docs     # serve it for real — same server, production defaults
 ```
 
 Under the hood it sets `PAPERVINE_CONTENT` to the target folder, so the env var works directly too:
