@@ -479,6 +479,45 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
 .pv-visual .ProseMirror:focus {
   outline: none;
 }
+/* GFM task items. A task item is an ordinary `listItem` carrying `checked` (see nodes.ts), so the
+   checkbox is drawn here rather than by a node view — it's decoration, and a node view per list
+   item would be a React root per bullet. `data-checked` is only present on task items, so a plain
+   list is untouched: no marker swap, no indent change. */
+.pv-visual .ProseMirror li[data-checked] {
+  list-style: none;
+  position: relative;
+}
+.pv-visual .ProseMirror li[data-checked]::before {
+  content: "";
+  position: absolute;
+  left: -1.4em;
+  top: 0.35em;
+  width: 1em;
+  height: 1em;
+  border-radius: 0.25em;
+  border: 1.5px solid rgba(var(--ink-rgb), 0.35);
+}
+.pv-visual .ProseMirror li[data-checked="true"]::before {
+  background: var(--blue);
+  border-color: var(--blue);
+}
+/* The tick, drawn as a rotated corner so it needs no icon font or SVG. */
+.pv-visual .ProseMirror li[data-checked="true"]::after {
+  content: "";
+  position: absolute;
+  left: -1.1em;
+  top: 0.5em;
+  width: 0.3em;
+  height: 0.55em;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.pv-visual .ProseMirror li[data-checked="true"] > p {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+
 .pv-visual .ProseMirror > * + * {
   margin-top: 0.65em;
 }

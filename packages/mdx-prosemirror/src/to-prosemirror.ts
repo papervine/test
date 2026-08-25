@@ -125,7 +125,15 @@ function blockToPM(node: Any, source: string): PMNode | PMNode[] | null {
         content: childrenBlock(node, source),
       };
     case "listItem":
-      return { type: "listItem", content: childrenBlock(node, source) };
+      return {
+        type: "listItem",
+        // GFM task items carry `checked: true | false`; a plain bullet carries null. Dropping it
+        // was silent DATA LOSS: opening a page with `- [ ] thing` in the Visual editor and saving
+        // rewrote it as `- thing`, losing every checkbox on the page. Null stays absent so an
+        // ordinary list round-trips byte-identically.
+        attrs: node.checked === null || node.checked === undefined ? {} : { checked: node.checked },
+        content: childrenBlock(node, source),
+      };
     case "code": {
       const content = node.value ? [{ type: "text", text: node.value }] : [];
       return {

@@ -3,6 +3,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import CodeBlock from "@tiptap/extension-code-block";
+import { ListItem } from "@tiptap/extension-list";
 import { COMPONENTS } from "@papervine/mdx-prosemirror";
 import { SelectAllScope } from "./select-all-scope";
 import { EdgeGuard } from "./edge-guard";
@@ -114,6 +115,62 @@ function codeBlockExt(nodeView?: NodeViewRenderer) {
     ...(nodeView ? { addNodeView: () => nodeView } : {}),
   });
 }
+/**
+ * A GFM task item — `- [ ]` / `- [x]` — is StarterKit's ordinary `listItem` carrying a `checked`
+ * attr, not a separate node type.
+ *
+ * Deliberately NOT @tiptap/extension-task-list, which introduces its own `taskList`/`taskItem`
+ * node pair. The converter emits `bulletList` > `listItem` because that's what the markdown IS:
+ * a bullet list whose items happen to be checked. A second node type would need converting to and
+ * from the same markdown, and a list mixing checked and plain items — legal GFM — couldn't be
+ * represented at all.
+ *
+ * The checkbox is rendered by CSS off `data-checked` rather than by a node view: it's decoration,
+ * and a node view per list item is a React root per bullet.
+ */
+const TaskListItem = ListItem.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      checked: {
+        default: null,
+        parseHTML: (element) => {
+          const raw = element.getAttribute("data-checked");
+          return raw === null ? null : raw === "true";
+        },
+        // Absent for a plain bullet, so nothing marks an ordinary list as a task list.
+        renderHTML: (attrs) =>
+          typeof attrs.checked === "boolean" ? { "data-checked": String(attrs.checked) } : {},
+      },
+    };
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      ...this.parent?.(),
+      // Toggle the item under the cursor. Mod-Enter is what every editor with checkboxes uses,
+      // and it means the list is usable without reaching for the mouse.
+      "Mod-Enter": () => {
+        const { state, view } = this.editor;
+        const { $from } = state.selection;
+        for (let depth = $from.depth; depth > 0; depth--) {
+          const node = $from.node(depth);
+          if (node.type.name !== "listItem") continue;
+          // Only toggles an item that IS a task item; Mod-Enter in a plain list stays free for
+          // whatever else wants it.
+          if (typeof node.attrs.checked !== "boolean") return false;
+          const pos = $from.before(depth);
+          view.dispatch(
+            state.tr.setNodeMarkup(pos, undefined, { ...node.attrs, checked: !node.attrs.checked }),
+          );
+          return true;
+        }
+        return false;
+      },
+    };
+  },
+});
+
 const LinkWithTitle = Link.extend({
   addAttributes() {
     return { ...this.parent?.(), title: { default: null } };
@@ -135,7 +192,9 @@ export function buildMdxExtensions(opts: NodeViewOpts = {}): Extensions {
     ...(imageNodeView ? { addNodeView: () => imageNodeView() } : {}),
   });
   return [
-    StarterKit.configure({ horizontalRule: false, codeBlock: false, link: false }),
+    // listItem comes from TaskListItem below instead, so it can carry GFM's `checked`.
+    StarterKit.configure({ horizontalRule: false, codeBlock: false, link: false, listItem: false }),
+    TaskListItem,
     codeBlockExt(opts.codeBlockNodeView?.()),
     LinkWithTitle.configure({ openOnClick: false }),
     ImageWithAttrs.configure({ inline: true, allowBase64: true }),

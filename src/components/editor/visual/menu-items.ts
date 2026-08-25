@@ -5,6 +5,7 @@ import {
   Heading3,
   List,
   ListOrdered,
+  ListTodo,
   Quote,
   Code,
   Minus,
@@ -86,6 +87,12 @@ const heading = (level: number) => ({ type: "heading", attrs: { level } });
 const blockquote = () => ({ type: "blockquote", content: [paragraph()] });
 const bulletList = () => ({ type: "bulletList", content: [{ type: "listItem", content: [paragraph()] }] });
 const orderedList = () => ({ type: "orderedList", attrs: { start: 1 }, content: [{ type: "listItem", content: [paragraph()] }] });
+// A task list is a bullet list whose items carry GFM's `checked` — not a separate node type, so
+// one list can mix checked items with plain bullets exactly as the markdown allows.
+const taskList = () => ({
+  type: "bulletList",
+  content: [{ type: "listItem", attrs: { checked: false }, content: [paragraph()] }],
+});
 const codeBlock = () => ({ type: "codeBlock", attrs: { language: null, meta: null }, content: [] });
 const divider = () => ({ type: "thematicBreak" });
 const table = () => ({
@@ -246,6 +253,14 @@ export const SLASH_ITEMS: SlashItem[] = [
     make: orderedList,
     command: ({ editor, range }) => editor.chain().focus().deleteRange(range).toggleOrderedList().run(),
   },
+  insertItem(
+    "Task list",
+    "Checklist with checkboxes",
+    "Lists & tables",
+    ListTodo,
+    ["task", "todo", "checkbox", "check", "checklist"],
+    taskList,
+  ),
   insertItem("Table", "2×2 table", "Lists & tables", Table, ["table", "grid", "rows"], table),
 
   // ── Media ───────────────────────────────────────────────────────────────

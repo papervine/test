@@ -2902,6 +2902,33 @@ layer.
 > rather than as unfinished work in the tests above it. And the media tests choose their slash-menu item with **Enter, not a click**: the menu
 > re-renders on every keystroke, so a click lands on a node React has already replaced ("element was
 > detached from the DOM").
+>
+> **Task lists, and the checkboxes the converter was eating (2026-08-25).** Reported as "editor is
+> missing a task list component." It was missing, but looking for where to add it turned up
+> something worse: `mdxToProseMirror` **dropped `checked` entirely**. A page containing
+> `- [ ] thing` opened in the Visual editor and saved came back as `- thing` — every checkbox on
+> the page gone, silently, with no error and nothing in the diff to suggest the editor had done it
+> rather than the author. The reader side was always fine (remark-gfm renders the boxes), so this
+> only ever bit people who opened an existing checklist in Studio. Both directions now carry it,
+> and `undefined` stays `undefined` in each — a plain bullet that became `checked: false` would
+> grow an empty `[ ]` on every ordinary list in the product.
+>
+> The editor models a task item as a **`listItem` carrying `checked`**, not as the separate
+> `taskList`/`taskItem` node pair `@tiptap/extension-task-list` supplies. GFM has no such split:
+> `- [x] done` and `- plain` are both list items in one list, and a schema with two node types
+> can't represent a list that mixes them — it would have to either refuse the document or silently
+> re-shape it, which is the class of bug this note is about. So `StarterKit`'s `listItem` is
+> replaced with a `TaskListItem` that adds one attribute (rendered as `data-checked`), the
+> checkbox is drawn in CSS off that attribute rather than as an interactive widget, and
+> <kbd>Mod-Enter</kbd> toggles the item under the cursor. `/task` inserts one.
+>
+> Guards at three layers, because the bug was invisible at two of them. The round-trip suite's
+> idempotency check would have passed with the checkboxes dropped — `- thing` is perfectly stable
+> once you've lost the `[ ]` — so task lists get a **byte-exact** block asserting the MDX comes
+> back identical, not merely stable. `/media`'s smoke fixture gains a task list so the reader path
+> stays pinned. And an `editor.spec.ts` case opens a page that **already has** one (the data-loss
+> path was about existing content, not insertion), types into it, and asserts both states survive
+> the autosave while the plain bullet beside them stays plain.
 
 ---
 

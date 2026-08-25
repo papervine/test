@@ -26,6 +26,13 @@ describe("markdown round-trip is idempotent", () => {
     "bullet list": "- one\n- two\n- three\n",
     "ordered list": "1. first\n2. second\n3. third\n",
     "nested list": "- parent\n  - child\n  - child two\n",
+    // GFM task lists. These used to round-trip as PLAIN bullets — the checkboxes were dropped
+    // silently, so opening a page with them in Visual mode and saving destroyed every one.
+    "task list": "- [ ] not done\n- [x] done\n",
+    // Legal GFM, and the reason `checked` is an attr on listItem rather than a separate node
+    // type: one list can hold both kinds.
+    "mixed task and plain list": "- [ ] task\n- plain bullet\n- [x] done\n",
+    "nested task list": "- [ ] parent\n  - [x] child\n",
     blockquote: "> a quote\n>\n> second line\n",
     "code fence": "```ts\nconst x = 1;\n```\n",
     "thematic break": "before\n\n---\n\nafter\n",
@@ -35,6 +42,35 @@ describe("markdown round-trip is idempotent", () => {
   for (const [name, mdx] of Object.entries(cases)) {
     it(name, () => expectStable(mdx));
   }
+});
+
+// Idempotency alone would NOT have caught the task-list bug: dropping every checkbox produces a
+// plain bullet list, which is perfectly stable. These assert the output still equals the input —
+// the property that actually says "your content came back".
+describe("GFM task lists survive byte-for-byte", () => {
+  const cases: Record<string, string> = {
+    "unchecked and checked": "- [ ] not done\n- [x] done\n",
+    "mixed with plain bullets": "- [ ] task\n- plain bullet\n- [x] done\n",
+    nested: "- [ ] parent\n  - [x] child\n",
+  };
+  for (const [name, mdx] of Object.entries(cases)) {
+    it(name, () => expect(norm(mdx)).toBe(mdx));
+  }
+
+  it("leaves an ordinary bullet list without checkboxes", () => {
+    // The other half: `checked` must stay ABSENT for a plain item, or every list in every page
+    // would sprout an empty box.
+    expect(norm("- one\n- two\n")).toBe("- one\n- two\n");
+    const doc = mdxToProseMirror("- one\n");
+    const item = doc.content[0].content?.[0];
+    expect(item?.attrs?.checked).toBeUndefined();
+  });
+
+  it("carries the checked state onto the node, not just the text", () => {
+    const doc = mdxToProseMirror("- [x] done\n");
+    expect(doc.content[0].content?.[0]?.attrs?.checked).toBe(true);
+    expect(mdxToProseMirror("- [ ] todo\n").content[0].content?.[0]?.attrs?.checked).toBe(false);
+  });
 });
 
 describe("known components parse to typed nodes and round-trip", () => {

@@ -55,6 +55,7 @@ test.describe("web editor @external", () => {
             "mediapage",
             "slashpage",
             "edgepage",
+            "taskpage",
             "uploadpage",
             "failpage",
           ],
@@ -110,6 +111,12 @@ test.describe("web editor @external", () => {
         '  <Tab title="Alpha">\n\n    Alpha body text.\n\n  </Tab>\n' +
         '  <Tab title="Beta">\n\n    Beta body text.\n\n  </Tab>\n' +
         "</Tabs>\n",
+    );
+    // A page that ALREADY has a task list: the bug was about opening existing content, not about
+    // inserting new. The plain bullet is there to prove it doesn't grow a checkbox.
+    await put(
+      `${prefix}taskpage.mdx`,
+      "---\ntitle: Tasks\n---\n\n- [ ] not done\n- [x] done\n- plain bullet\n",
     );
     await put(`${prefix}uploadpage.mdx`, "---\ntitle: Upload\n---\n\nUpload anchor line.\n");
     await put(`${prefix}failpage.mdx`, "---\ntitle: Fail\n---\n\nFail anchor line.\n");
@@ -502,6 +509,39 @@ test.describe("web editor @external", () => {
     expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
 
     await clearDrafts(["tabby.mdx"]);
+  });
+
+  // GFM task lists (SPEC §9.2). The converter used to DROP `checked` — a page with `- [ ] thing`
+  // opened in Visual mode and saved came back as `- thing`, losing every checkbox on it. Silent,
+  // and invisible to the idempotency tests, since a plain bullet list is perfectly stable.
+  test("task lists keep their checkboxes through the editor", async ({ page }) => {
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=taskpage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    // Loaded with their state, and a plain bullet stays a plain bullet.
+    await expect(pm.locator('li[data-checked="false"]')).toHaveCount(1);
+    await expect(pm.locator('li[data-checked="true"]')).toHaveCount(1);
+    await expect(pm.locator("li:not([data-checked])")).toHaveCount(1);
+
+    // The data-loss path: open, type, let autosave land.
+    await pm.locator("li").first().click();
+    await page.keyboard.type("X");
+    const draft = async () => {
+      const rows = await sql<{ content: string }[]>`
+        select content from draft_file d
+        join editor_session s on s.id = d.session_id
+        where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'taskpage.mdx'`;
+      return rows[0]?.content ?? "";
+    };
+    // Clicking the item puts the caret at the end of its text, so the X lands there.
+    await expect.poll(draft, { timeout: 10_000 }).toContain("- [ ] not doneX");
+
+    const saved = await draft();
+    expect(saved, "the checked item lost its state").toContain("- [x] done");
+    expect(saved, "a plain bullet grew a checkbox").toContain("\n- plain bullet");
+
+    await clearDrafts(["taskpage.mdx"]);
   });
 
   // Backspace stops at a component's edge (SPEC §9.2). ProseMirror's default joins the block with

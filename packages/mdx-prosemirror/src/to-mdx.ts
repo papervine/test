@@ -138,8 +138,17 @@ function blockToMdast(node: PMNode): Any {
         spread: false,
         children: blockList(node.content),
       };
-    case "listItem":
-      return { type: "listItem", spread: false, children: blockList(node.content) };
+    case "listItem": {
+      // `checked` back out as GFM's `[ ]` / `[x]`. Undefined (a plain bullet) must stay undefined
+      // rather than become false, or every ordinary list item would grow an empty checkbox.
+      const checked = node.attrs?.checked;
+      return {
+        type: "listItem",
+        ...(typeof checked === "boolean" ? { checked } : {}),
+        spread: false,
+        children: blockList(node.content),
+      };
+    }
     case "codeBlock":
       return {
         type: "code",

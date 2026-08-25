@@ -260,6 +260,15 @@ The numbers renumber themselves as you add, and they're never written into your 
 counted at render time, so reordering steps in Source mode needs no renumbering either.
 <kbd>⌘Z</kbd> takes a step back out.
 
+## Task lists
+
+`/task` inserts a checklist. Each item is a real checkbox — <kbd>⌘Enter</kbd> / <kbd>Ctrl Enter</kbd>
+toggles the one your cursor is in, and a checked item is struck through.
+
+It's ordinary Markdown underneath (`- [ ] todo`, `- [x] done`), which means one list can mix
+checked items with plain bullets, exactly as Markdown allows, and a checklist written by hand or
+by another tool opens here with its state intact.
+
 ## Deleting stops at a component's edge
 
 Empty a tab and keep pressing <kbd>Backspace</kbd> and nothing further happens — it won't reach

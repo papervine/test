@@ -142,6 +142,11 @@ const CHECKS = [
       "playsInline",
       "MEDIA_EMBED_MARKER",
       "aspect-video",
+      // GFM task lists render as real checkbox inputs, and the checked one is checked. The
+      // editor used to drop these on round-trip; this is the reader half of that story.
+      "TASK_LIST_MARKER",
+      'type="checkbox"',
+      "checked",
     ],
   },
   { slug: "badfrontmatter", desc: "malformed frontmatter doesn't crash", include: ["BAD_FRONTMATTER_MARKER"] },
