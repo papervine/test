@@ -31,7 +31,8 @@ A single `docs.json` at the repo root configures a Papervine site. It matches th
   "navbar": { "links": [], "primary": { "type": "button", "label": "Dashboard", "href": "..." } },
   "footer": { "socials": { "github": "https://..." } },
   "search": { "prompt": "Search docs..." },
-  "ai": { "assistant": true }
+  "ai": { "assistant": true },
+  "seo": { "metatags": { "og:image": "/social.png", "twitter:site": "@acme" } }
 }
 ```
 
@@ -155,6 +156,25 @@ there. `type` is `info`, `warning`, or `critical`; `color` takes a hex override 
 button, and dismissal is not remembered between page loads.
 
 For a notice on a single page, use the [`<Banner>` component](/rendering/components) instead.
+
+## Site-wide meta tags
+
+`seo.metatags` is an open name → content map emitted in the `<head>` of every page:
+
+```json
+"seo": {
+  "metatags": {
+    "og:image": "/images/social-card.png",
+    "twitter:site": "@acme",
+    "google-site-verification": "abc123"
+  }
+}
+```
+
+Tags Papervine models itself (`og:image`, `twitter:card`, `og:title`, …) are folded into the
+metadata it already builds; anything else is passed through verbatim. A page's own frontmatter
+overrides the site-wide value. See [Social cards & SEO](/guides/social-cards) for what a page
+emits by default and how the generated card is built.
 
 ## Related
 

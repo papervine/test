@@ -17,7 +17,8 @@ import {
 import { cookies, headers } from "next/headers";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Brand } from "@/components/Brand";
-import { appHostFor, domains } from "@/lib/tenant-host";
+import { appHostFor } from "@/lib/tenant-host";
+import { marketingMetadata } from "@/lib/marketing-seo";
 import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
 
 // Marketing landing for the SaaS apex (SPEC §2). Reached via the middleware rewrite
@@ -38,9 +39,14 @@ const DESCRIPTION =
   "unchanged. Documentation built for humans and AI — API playground, instant search, and an " +
   "AI assistant.";
 
-export const metadata: Metadata = {
-  title: { absolute: TITLE },
+// Canonical host, `og:`/`twitter:` tags and our X handle come from the shared marketing helper
+// — see marketing-seo.ts for why they can't live in the root layout (it renders for tenant docs
+// too, and would attribute a customer's card to us). The card image itself is the sibling
+// `opengraph-image.tsx`, which Next merges in.
+export const metadata: Metadata = marketingMetadata({
+  title: TITLE,
   description: DESCRIPTION,
+  path: "/",
   keywords: [
     ALTERNATIVE_KEYWORD,
     "docs platform alternatives",
@@ -51,20 +57,7 @@ export const metadata: Metadata = {
     "AI documentation assistant",
     "API documentation",
   ],
-  // Without a metadataBase, Next resolves the relative URLs below against localhost — so
-  // og:url shipped as "/" and social crawlers had nothing absolute to follow. The apex is the
-  // canonical home; tenant docs live on separate hosts entirely.
-  metadataBase: new URL(`https://www.${domains.platform}`),
-  alternates: { canonical: "/" },
-  openGraph: {
-    type: "website",
-    siteName: "Papervine",
-    title: TITLE,
-    description: DESCRIPTION,
-    url: "/",
-  },
-  twitter: { card: "summary_large_image", title: TITLE, description: DESCRIPTION },
-};
+});
 
 // Our own docs, dogfooded through Papervine as an ordinary site whose custom domain is a
 // host on our own domain (SPEC §2 — operator-claimable, gated by PLATFORM_ADMIN_EMAILS).

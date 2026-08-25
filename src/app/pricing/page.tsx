@@ -5,6 +5,7 @@ import { Plus, Check, ArrowRight, Sparkles } from "lucide-react";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Brand } from "@/components/Brand";
 import { appHostFor } from "@/lib/tenant-host";
+import { marketingMetadata } from "@/lib/marketing-seo";
 import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
 import {
   PLAN_TIERS,
@@ -21,11 +22,17 @@ import { PlanMatrix } from "@/components/billing/PlanMatrix";
 // category's flagship with a bigger credit pool, and a 30-day everything trial on
 // every account. Numbers mirror src/lib/billing/catalog.json — change them THERE
 // (catalog is the source of truth; this page is marketing copy over it).
-export const metadata: Metadata = {
+// Shared marketing metadata: canonical host, `og:`/`twitter:` tags and our X handle (see
+// marketing-seo.ts). It also fixes the title, which the root layout's `%s · Papervine` template
+// was turning into "Pricing — Papervine · Papervine". The card image is the sibling
+// `opengraph-image.tsx`; unlike this description it carries no prices, so a reprice can't
+// strand a stale image on timelines that already scraped it.
+export const metadata: Metadata = marketingMetadata({
   title: "Pricing — Papervine",
   description:
     "Every new account starts with 30 days of everything. Free for small docs sites; Team at $50/mo with SSO, RBAC, and AI credits; Pro at $300/mo for production docs; Enterprise for SCIM, SLAs, and migration.",
-};
+  path: "/pricing",
+});
 
 const GITHUB = "https://github.com/phishy/papervine";
 const CONTACT = CONTACT_HREF;

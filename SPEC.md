@@ -884,7 +884,8 @@ Single config file at repo root. Mirror hosted docs platforms' schema so migrati
   "navbar": { "links": [...], "primary": { "type": "button", "label": "Dashboard", "href": "..." } },
   "footer": { "socials": { "github": "https://..." } },
   "search": { "prompt": "Search docs..." },
-  "ai": { "assistant": true }
+  "ai": { "assistant": true },
+  "seo": { "metatags": { "og:image": "/social.png", "twitter:site": "@acme" } }
 }
 ```
 
@@ -920,6 +921,8 @@ of the theme.
 > `image/*`) and a temporarily-strict config dropped the toggle. Real hosted docs platforms repo (string
 > favicon) + dogfood docs crawl clean (0 × HTTP 500). Still unapplied (parsed-only):
 > `fonts`, `icons`, `background`, `styling`, `logo.href`, `thumbnails`.
+> **Update 2026-08-25:** `seo` joined the schema and `seo.metatags` is now applied — see the
+> social-cards note in §5. `seo.indexing` remains parsed-only.
 
 ---
 
@@ -1018,7 +1021,7 @@ Ship a styled component set resolved at compile time. Parity targets with hosted
 > component page browser-checked with a clean console.
 
 - **Theming:** named theme presets (`theme` in docs.json — `mint`/`maple`/`palm`/`willow`/`linden`/`almond`/`aspen`/`sequoia`/`luma`, hosted docs platforms' set) defined as token bundles in `src/lib/theme.ts` and applied as CSS variables on `<html data-theme="…">`, so the whole UI re-skins from one config value. Adding/tuning a theme = one registry entry (+ optional CSS keyed on `[data-theme="…"]`). Brand accent from `docs.json` `colors`; light/dark default from `appearance.default`.
-- **Markdown features:** GFM, footnotes, auto-linked headings, frontmatter (title, description, icon, sidebar overrides), `og:` image generation per page.
+- **Markdown features:** GFM, footnotes, auto-linked headings, frontmatter (title, description, icon, sidebar overrides), `og:` image generation per page (BUILT 2026-08-25 — see the social-cards note at the end of this section).
 - **Page chrome (docs platform parity):**
   - Top-level `navigation.tabs` render as a horizontal **tab bar**; the sidebar is **scoped
     to the active tab** (the one containing the current page). Nested groups are collapsible.
@@ -1030,6 +1033,107 @@ Ship a styled component set resolved at compile time. Parity targets with hosted
     unless the reader toggles.
   - **Prose links** use the default text color with a primary-colored underline (not
     colored text); heading auto-link anchors keep the heading's own color.
+
+> **Social cards + page SEO metadata — landed 2026-08-25.** Sharing any docs page produced a
+> bare URL: nothing emitted an `og:`/`twitter:` tag anywhere, and on a *tenant* route the
+> `<title>` was the site name on every page (both tenant routes' `generateMetadata` returned
+> only `{ title: { default: record.name } }`, overriding nothing per-page). Fixed in one shared
+> pure module, `packages/renderer/lib/seo.ts` — `pageMetadata()` builds title, description,
+> canonical, `og:*` and `twitter:*` for a page — called from all four docs routes (apex
+> single-repo, `/sites/{slug}`, custom domain, and the published CLI), which previously each
+> emitted a different subset.
+>
+> **The image is generated, not required.** `GET /api/og/{slug}` renders a 1200×630 PNG via
+> `next/og` from the site's own `colors.primary` and `appearance.default` plus the page's title
+> and description (`packages/renderer/lib/og-card.tsx`). Three decisions worth keeping:
+>
+> - **Under `/api/`, resolved from the Host.** That's the one path space middleware passes
+>   through untouched on every host class, so ONE route answers for tenant subdomains, custom
+>   domains and the apex, resolving its tenant exactly the way the page render does
+>   (`requestContentSource`). Apex path mode is the only case the Host can't answer, and it
+>   carries `?site=` — the convention `/api/search` already uses.
+> - **Content-derived, never parameterised.** Title/description come from the page, not the
+>   query string, so nobody can mint `…/api/og?title=<anything>` and serve arbitrary text as an
+>   image from a *customer's* domain. It costs a content read per card (version-cached), which
+>   is the right trade against an image-defacement surface on someone else's brand.
+> - **Font-free.** `next/og` ships one bundled face and we pass no `fonts` option, so hierarchy
+>   is size/color/spacing rather than weight. That keeps a font file out of the CLI tarball,
+>   where §10.6 has already been bitten twice by things that only break once installed.
+>
+> `metadataBase` comes from the request Host (`packages/renderer/lib/origin.ts`), not from
+> config — one deployment answers on the apex, every tenant subdomain and every vanity domain,
+> and X drops a card whose image URL isn't absolute. The card URL carries the tenant's synced
+> `updatedAt` as `?v=`, because X/Slack cache a card by URL and a re-synced page would otherwise
+> unfurl its old title indefinitely.
+>
+> **Precedence** (docs.json-compatible): page frontmatter meta tags → `docs.json` `seo.metatags`
+> → the generated card. `seo` is now parsed (leniently, like every other field) and `metatags`
+> is an open map emitted verbatim; in frontmatter, a key counts as a meta tag when it contains a
+> `:`, so ordinary fields (`icon`, `mode`, `sidebarTitle`) can never leak into `<head>`.
+> Dimensions are declared only for OUR card, whose size we know — guessing them for an authored
+> image makes X letterbox it.
+>
+> **Reader-auth interaction:** a card is fetched by crawlers with no session, so on a gated site
+> (§11.2) a non-`public` page's card degrades to the site name alone. Emitting the title would
+> unfurl exactly what the 404-not-403 rule withholds.
+>
+> **A loop this closes.** The editor's page settings (§10) has shipped an "OG Image URL" field
+> whose placeholder reads *"auto generated by default"* since it was built — it wrote `og:image`
+> into frontmatter that nothing then read, so both halves of that sentence were false. Both are
+> true now.
+>
+> **Verified:** typecheck clean; unit 1186/1186 including 23 new (`tests/unit/seo.test.ts`); smoke green with
+> a new `social` fixture (authored override beats the generated card) and three card renders
+> asserted as real PNGs — PNG magic + a size floor, since `ImageResponse` *streams* and a satori
+> throw yields a 200 with the right header and a truncated body; crawls of `docs/` 45/45 and
+> `examples/starter` 36/36 with 0×500; clean-room `test:cli` green with a new assertion that the
+> card renders **from the installed tarball** (the wasm + bundled font live inside `next` behind
+> a dynamic import — the shape that broke the Turbopack externals). Browser-checked against the
+> seeded tenant on all three host modes: subdomain, apex path mode and a gated site, plus the
+> long-title / no-description / no-title edge cases and the dark-appearance variant.
+> `mirror:cli --dry-run` was NOT run — it refuses an uncommitted tree, and `git stash create`
+> omits untracked files, so it would have typechecked a renderer missing the three new modules.
+> Its specific risk (an undeclared renderer dependency) is nil here: the audit grep in
+> `packages/renderer/README.md` shows no new external import — the additions pull only `next`
+> and `react` types, both already peer deps — and `test:cli`, the stronger gate, is green.
+>
+> **Not done:** no `logo` on the card (fetching a tenant asset mid-render adds a failure mode
+> for marginal gain), no sitemap/`robots.txt`, and `seo.indexing` is parsed but not acted on —
+> only per-page `noindex` is.
+
+> **The platform's own cards + the `@papervine_io` handle — landed 2026-08-25.** The marketing
+> apex declared `twitter:card: summary_large_image` with **no image**, the one combination that
+> unfurls as nothing at all, and `/pricing` carried no `og:`/`twitter:` tags whatsoever. Both now
+> go through `src/lib/marketing-seo.ts` (`marketingMetadata()`), which supplies the canonical
+> host, the `og:`/`twitter:` set, and `twitter:site`/`twitter:creator` = **`@papervine_io`** —
+> without it X renders the card anonymously.
+>
+> **The handle is deliberately NOT in the root layout.** That layout renders for every host,
+> tenant docs included, so anything it stamped would attribute a *customer's* docs card to us. A
+> tenant that wants its own handle sets `seo.metatags` in its `docs.json` — which our dogfood
+> docs site now does, so `docs.{platform}` is itself the proof the feature works.
+>
+> The artwork is `src/lib/marketing-og-card.tsx`, shared by `home/opengraph-image.tsx` and
+> `pricing/opengraph-image.tsx`: the landing page's near-black ground and blue→violet gradient
+> (satori does support `background-clip: text`, which is how "grows" is painted). It's a separate
+> component from the tenant card on purpose — that one renders a customer's `docs.json`, and the
+> apex has none. The pricing card is **price-free**: prices live in the billing catalog and ship
+> via `billing:sync` (§10), so baking "$50" into a PNG would strand a stale image on every
+> timeline that had already scraped it, with nothing to signal it.
+>
+> **`metadataBase` for a static image route, verified in Next's source rather than guessed**
+> (`next/dist/lib/metadata/resolvers/resolve-url.js`): for a file-convention `opengraph-image`
+> Next *always* overrides the base — dev → `localhost:PORT`, `VERCEL_ENV=preview` → the preview
+> deployment URL, otherwise → your `metadataBase`, else `VERCEL_PROJECT_PRODUCTION_URL`. So the
+> dev-only mismatch between `og:image` (localhost) and `og:url` (`www.{platform}`) is expected
+> and correct in every environment — but only because `marketingMetadata` sets `metadataBase`.
+> Don't remove it on the grounds that the root layout already provides one: the root layout's is
+> what makes *tenant* `og:image` absolute (a relative string, a different code path), and it is
+> ignored here.
+>
+> **Verified:** typecheck clean; unit + smoke green (the `/home` smoke check now asserts
+> `twitter:image` and the handle — a card type with no image is exactly the silent failure this
+> guards); both cards rendered and eyeballed; `docs/` crawl 45/45 with the new `seo.metatags`.
 
 ---
 

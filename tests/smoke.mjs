@@ -36,6 +36,14 @@ const CHECKS = [
       "Fixtures Home", "Components &amp; Code", "Guide (md)", 'data-theme="mint"', "--db-radius",
       'rel="icon"', 'href="/favicon.ico"', "prefers-color-scheme: dark",
       'aria-label="Toggle theme"',
+      // Social card (SPEC §5): with no authored image, a page advertises the generated one as
+      // a large-image Twitter card, ABSOLUTE (metadataBase from the request Host — X drops a
+      // relative image URL). The index is the site itself, so og:type is website.
+      'name="twitter:card" content="summary_large_image"',
+      `content="${BASE}/api/og"`,
+      'property="og:type" content="website"',
+      // docs.json `seo.metatags` applies site-wide.
+      '@SITEWIDE_HANDLE',
     ],
     exclude: [
       "Hidden Page", // hidden:true → not in sidebar
@@ -250,6 +258,41 @@ const CHECKS = [
       "VISIBILITY_AGENT_MARKER",
     ],
   },
+  {
+    slug: "social",
+    desc: "authored og:image / twitter:card beat the generated card; unknown metatags pass through",
+    include: [
+      // Frontmatter `og:image` wins over the auto-generated card, and `twitter:image` inherits it.
+      "SOCIAL_OVERRIDE.png",
+      // An explicit `twitter:card` beats the summary_large_image default.
+      'name="twitter:card" content="summary"',
+      // A namespaced key we don't model is emitted verbatim — the compatibility half of seo.metatags.
+      "SOCIAL_PASSTHROUGH_MARKER",
+      // Site-wide tags still apply on a page that overrides its own.
+      "@SITEWIDE_HANDLE",
+      // An inner page is an article, and advertises its canonical URL.
+      'property="og:type" content="article"',
+      'rel="canonical"',
+    ],
+    exclude: [
+      // The whole point of the override: no generated card is referenced on this page.
+      "/api/og",
+      // `twitter:card: summary` must not leave the default alongside it.
+      "summary_large_image",
+    ],
+  },
+];
+
+// The generated social card itself (SPEC §5) — `/api/og/{slug}` renders a real PNG through
+// next/og. Asserted as an image rather than a status alone: satori fails by *throwing* on an
+// unsupported style, and a 200 with an error body would sail past a status check.
+const OG_CHECKS = [
+  { path: "/api/og", desc: "the index card renders" },
+  { path: "/api/og/components", desc: "an inner page's card renders" },
+  {
+    path: "/api/og/no/such/page",
+    desc: "an unknown slug still renders the site-level card (never a broken unfurl)",
+  },
 ];
 
 // Full-text search (SPEC.md §6) via /api/search. Backed by search-fixture.mdx
@@ -404,7 +447,20 @@ const CONTROL_PLANE_CHECKS = [
     // `db-vine` + `pv-sprouts` prove the landing uses the "home" PlatformShell variant (the
     // animated VineField + ambient SproutField) rather than the static `.db-grid` other
     // "full" surfaces use.
-    include: ['href="/login"', 'href="/signup"', "db-vine", "pv-sprouts"],
+    include: [
+      'href="/login"',
+      'href="/signup"',
+      "db-vine",
+      "pv-sprouts",
+      // The apex declared `summary_large_image` with NO image for a long time — the one
+      // combination that unfurls as nothing at all. `opengraph-image.tsx` supplies it, and
+      // Next mirrors it onto twitter:image; assert the image, not just the card type.
+      'name="twitter:image"',
+      "opengraph-image",
+      // Our handle, which is what makes X attribute the card instead of rendering it
+      // anonymously. Deliberately absent from tenant docs — see marketing-seo.ts.
+      'name="twitter:site" content="@papervine_io"',
+    ],
     // Guards the session-aware swap: a signed-out visitor must never see the
     // Dashboard link (which only renders when getSession() resolves). And the landing
     // must not fall back to the static grid backdrop.
@@ -418,6 +474,10 @@ const CONTROL_PLANE_CHECKS = [
     // anchors (SPEC §10 Billing; mirrors billing/catalog.json), "billed annually" the
     // annual notes, and the 30-day trial banner replaces the old 90-day SSO promo.
     include: [
+      // The apex's second-most-shared URL had no og:/twitter: tags at all, so it unfurled
+      // bare. Same shared helper as the landing page, so the handle rides along.
+      'name="twitter:site" content="@papervine_io"',
+      "opengraph-image",
       "Pricing on",
       "db-glow",
       "Free",
@@ -533,6 +593,27 @@ async function run() {
         failures.push(`[${check.slug || "/"}] request failed: ${e.message}`);
       }
       log(`  ${failures.length === before ? "✓" : "✗"} /${check.slug}  (${check.desc})`);
+    }
+
+    for (const check of OG_CHECKS) {
+      const before = failures.length;
+      const tag = `og ${check.path}`;
+      try {
+        const res = await fetch(`${BASE}${check.path}`, { signal: AbortSignal.timeout(30_000) });
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        if (res.status !== 200) {
+          failures.push(`[${tag}] expected 200, got ${res.status} — ${check.desc}`);
+        } else if (!(res.headers.get("content-type") ?? "").startsWith("image/png")) {
+          failures.push(`[${tag}] expected image/png, got "${res.headers.get("content-type")}" — ${check.desc}`);
+        } else if (bytes.length < 1000 || bytes[0] !== 0x89 || bytes[1] !== 0x50) {
+          // The PNG magic + a floor on the size: ImageResponse streams, so a satori throw
+          // mid-render yields a 200 with a truncated (or empty) body and the right header.
+          failures.push(`[${tag}] body is not a plausible PNG (${bytes.length} bytes) — ${check.desc}`);
+        }
+      } catch (e) {
+        failures.push(`[${tag}] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} ${tag}  (${check.desc})`);
     }
 
     for (const check of SEARCH_CHECKS) {
@@ -760,7 +841,7 @@ async function run() {
     process.exit(1);
   }
   log(
-    `\n✓ all ${CHECKS.length} pages + ${SEARCH_CHECKS.length} search + ${CONTROL_PLANE_CHECKS.length} control-plane checks passed`,
+    `\n✓ all ${CHECKS.length} pages + ${OG_CHECKS.length} social cards + ${SEARCH_CHECKS.length} search + ${CONTROL_PLANE_CHECKS.length} control-plane checks passed`,
   );
   process.exit(0);
 }

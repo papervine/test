@@ -6,6 +6,7 @@ import { platformFontVars } from "@/lib/fonts";
 import type { DocsConfig } from "@papervine/renderer/lib/config";
 import { contentContext, loadConfig } from "@papervine/renderer/lib/content";
 import { requestContentSource, requestAssetBase } from "@/lib/request-source";
+import { requestOrigin } from "@/lib/request-origin";
 import { resolveTheme, themeCssVars } from "@papervine/renderer/lib/theme";
 import { appearanceInitScript } from "@papervine/renderer/lib/appearance";
 import { Favicon } from "@papervine/renderer/components/Favicon";
@@ -41,7 +42,13 @@ const brandFont = Space_Grotesk({
 
 export async function generateMetadata(): Promise<Metadata> {
   const { config } = await loadRequestConfig();
+  // `metadataBase` is what turns the root-relative `og:image` / canonical URLs each docs page
+  // returns into the ABSOLUTE ones crawlers require — X drops a card whose image URL is
+  // relative. It has to be the request's own origin: one deployment answers on the apex,
+  // every tenant subdomain and every customer vanity domain (see request-origin.ts).
+  const origin = await requestOrigin();
   return {
+    ...(origin ? { metadataBase: new URL(origin) } : {}),
     title: { default: config.name, template: `%s · ${config.name}` },
   };
 }

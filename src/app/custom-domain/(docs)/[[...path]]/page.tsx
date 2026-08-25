@@ -1,7 +1,5 @@
 import type { Metadata } from "next";
-import { headers } from "next/headers";
-import { getSiteByCustomDomain } from "@/lib/tenant";
-import { TenantDocsArticle } from "@/lib/render-tenant";
+import { TenantDocsArticle, tenantPageMetadata } from "@/lib/render-tenant";
 import { resolveCustomDomainPage } from "../resolve";
 
 // Custom-domain docs (docs.example.com). The middleware can't DB-resolve a vanity host at the
@@ -13,10 +11,15 @@ export const dynamic = "force-dynamic";
 
 type Params = { path?: string[] };
 
-export async function generateMetadata(): Promise<Metadata> {
-  const h = await headers();
-  const record = await getSiteByCustomDomain(h.get("x-papervine-host") ?? h.get("host") ?? "");
-  return record ? { title: { default: record.name, template: `%s · ${record.name}` } } : {};
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<Params>;
+}): Promise<Metadata> {
+  const { record, base, assetBase, path } = await resolveCustomDomainPage((await params).path ?? []);
+  // Not path mode: the vanity Host resolves the tenant, even in "Host at /docs" serving
+  // (where `base` is "/docs" but still host-scoped).
+  return tenantPageMetadata({ slug: record.slug, base, assetBase, path });
 }
 
 export default async function CustomDomainDocsPage({ params }: { params: Promise<Params> }) {

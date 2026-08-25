@@ -118,6 +118,14 @@ threw when any one component was missing.
    above the navbar site-wide by both the CLI and the tenant renderer. `<Banner>` also works
    as an MDX tag for a single page: upstream doesn't document one, but writing it is a
    reasonable expectation and rendering it costs less than degrading it to bare text.
+10. ✅ **Social/SEO metadata.** A shared page unfurled as a bare URL: no `og:`/`twitter:` tag
+   was emitted anywhere, and on a tenant route the `<title>` was the site name on *every*
+   page. Every docs route now emits the full set from one shared builder
+   (`packages/renderer/lib/seo.ts`), with a generated 1200×630 card at `/api/og/{slug}` when
+   the repo supplies no image of its own. `docs.json` `seo.metatags` and per-page frontmatter
+   meta tags (any key containing a `:`) are honored, page-over-site. Still absent: a sitemap /
+   `robots.txt`, and `seo.indexing` is parsed but not acted on — only per-page `noindex` is.
+   See SPEC §5.
 
 ## Renderer Decision
 

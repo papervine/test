@@ -1,0 +1,127 @@
+---
+title: Social cards & SEO
+description: How a docs page looks when it's shared on X, Slack or LinkedIn — and how to replace the generated image with your own.
+public: true
+---
+
+Every page of your site advertises itself. Share a link on X, Slack, LinkedIn, Discord or
+iMessage and it unfurls as a card: the page's title, its description, and a wide image
+generated from your `docs.json` — your site name and your brand color, no setup.
+
+You don't have to do anything to get this. The rest of this page is about changing it.
+
+## What every page emits
+
+Each rendered page carries a full set of tags in its `<head>`:
+
+| Tag | Comes from |
+|---|---|
+| `<title>` | the page's frontmatter `title`, suffixed with your site name |
+| `description` / `og:description` / `twitter:description` | frontmatter `description` |
+| `og:image` / `twitter:image` | the generated card, or your own image (below) |
+| `twitter:card` | `summary_large_image` — the wide card |
+| `og:url` + `<link rel="canonical">` | the page's own absolute URL |
+| `og:site_name` | `name` in `docs.json` |
+
+The URLs are absolute and built from the host the request arrived on, so a page served at
+`docs.acme.com` advertises `docs.acme.com` — not a subdomain of ours. X drops a card whose
+image URL is relative, which is why this matters.
+
+## The generated card
+
+The card is 1200 × 630 — the size X and Facebook expect — and is drawn from your config:
+
+- **Your primary color** (`colors.primary`) as the rule across the top and the mark beside
+  your site name.
+- **Your appearance** (`appearance.default`): a dark-by-default site unfurls a dark card.
+- **The page's title and description**, clamped on a word boundary so a long title still fits.
+
+The index page has no title above the site name, so the site name becomes the headline there.
+
+You can look at any page's card directly — it's a real URL. Append the page's path to
+`/api/og`:
+
+```
+https://docs.acme.com/api/og                 # the index
+https://docs.acme.com/api/og/guides/auth     # /guides/auth
+```
+
+<Note>
+  On a site with [reader authentication](/auth/reader-auth) turned on, a card shows only your
+  site name — never the title or description of a page a reader would have to sign in to
+  read. Cards are fetched by crawlers with no session, so anything on them is public.
+</Note>
+
+## Use your own image
+
+Set `og:image` in a page's frontmatter to replace the generated card for that page:
+
+```mdx
+---
+title: Introducing v2
+description: What changed, and what to do about it.
+og:image: /images/v2-announcement.png
+---
+```
+
+The path is relative to your repo, the same as any other image you reference. An absolute
+`https://` URL works too.
+
+To replace it for the **whole site**, put it in `docs.json` under `seo.metatags`:
+
+```json
+{
+  "seo": {
+    "metatags": {
+      "og:image": "/images/social-card.png",
+      "twitter:site": "@acme"
+    }
+  }
+}
+```
+
+`seo.metatags` applies to every page; a page's own frontmatter overrides it. So a site-wide
+image plus a custom one on your launch announcement is two lines in two places.
+
+## Any other meta tag
+
+`seo.metatags` is an open map — whatever you put in it is emitted verbatim on every page:
+
+```json
+{
+  "seo": {
+    "metatags": {
+      "google-site-verification": "abc123",
+      "twitter:creator": "@ada"
+    }
+  }
+}
+```
+
+In page frontmatter, the same applies to any key containing a `:` — `og:title`,
+`twitter:card`, `article:author`. Ordinary frontmatter fields (`title`, `icon`,
+`sidebarTitle`) are never emitted as stray meta tags, so the colon is what marks a key as
+"this is a meta tag."
+
+## Keeping a page out of search
+
+```mdx
+---
+title: Internal runbook
+noindex: true
+---
+```
+
+`noindex: true` keeps a page out of both your site's search index and search engines. The
+page still renders and is still reachable by URL — see
+[reader authentication](/auth/reader-auth) if you need it actually restricted.
+
+## Cards look stale after an edit
+
+X, Slack and LinkedIn cache a card by its image URL, sometimes for days. Papervine works
+around this: the generated card's URL carries a version that changes on every sync, so a
+re-published page mints a new URL and gets re-scraped rather than unfurling last week's
+title forever.
+
+If you supplied your **own** image and then replaced the file at the same path, that
+version doesn't change — the fix is to give the new image a new filename.

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { cookies, headers } from "next/headers";
 import { unstable_cache } from "next/cache";
@@ -16,6 +17,7 @@ import {
   type ContentSource,
 } from "@papervine/renderer/lib/content";
 import { buildNav, findGroupLabel } from "@papervine/renderer/lib/nav";
+import { pageMetadata, ogImagePath } from "@papervine/renderer/lib/seo";
 import { loadApiCatalog } from "@papervine/renderer/lib/openapi";
 import { EndpointReference } from "@papervine/renderer/components/api/EndpointReference";
 import { Mdx, extractToc } from "@papervine/renderer/lib/mdx";
@@ -54,6 +56,67 @@ export async function sitesTenantTarget(slug: string): Promise<{ base: string; a
   const hostSlug = resolveTenantSlug((await headers()).get("host"));
   if (hostSlug && hostSlug !== slug) notFound();
   return { base: hostSlug ? "" : `/sites/${slug}`, assetBase: `/api/tenant-asset/${slug}` };
+}
+
+/**
+ * A tenant page's `<head>` metadata — title, description, canonical, and the `og:`/`twitter:`
+ * tags that make a shared link unfurl as a card (SPEC §5).
+ *
+ * Shared by both tenant routes (`/sites/{slug}` and `/custom-domain`) because they differ only
+ * in how they resolve the tenant, never in what they should advertise. Before this, both
+ * returned only the *site* name — so every page of a site shared as the same bare title and no
+ * image at all.
+ *
+ * The title is returned bare, not suffixed: the root layout owns the `%s · {site}` template
+ * (and reads the same tenant config), so the suffix has exactly one definition.
+ */
+export async function tenantPageMetadata({
+  slug,
+  base,
+  assetBase,
+  path,
+  pathMode = false,
+}: {
+  slug: string;
+  base: string;
+  assetBase: string;
+  path: string[];
+  /**
+   * True only for apex path-mode serving (`/sites/{slug}/…`), where the request Host names no
+   * tenant so the card route needs the slug as `?site=`. NOT the same as a non-empty `base`:
+   * a custom domain served at `/docs` also has one, but its Host does resolve the tenant.
+   */
+  pathMode?: boolean;
+}): Promise<Metadata> {
+  const src = await requestContentSource(slug);
+  if (!src) return {};
+  const record = await getSiteBySlug(slug);
+  // The card URL carries the content version so a re-synced page re-scrapes instead of
+  // unfurling its old title forever. `updatedAt` alone is enough: the sync runner bumps it on
+  // every success, including a re-sync of the same commit (see requestContentSource).
+  const version = record?.updatedAt instanceof Date ? String(record.updatedAt.getTime()) : undefined;
+  const slugStr = path.join("/");
+
+  return contentContext.run(src, async () => {
+    const config = await loadConfig();
+    const page = await loadPage(slugStr);
+    // A generated OpenAPI endpoint page (SPEC §7) has no frontmatter but is a real, shareable
+    // URL, so it advertises the operation instead.
+    const op = page ? undefined : (await loadApiCatalog(config)).get(slugStr);
+    return pageMetadata({
+      config,
+      frontmatter: page?.frontmatter,
+      title: op ? (op.summary ?? `${op.method} ${op.path}`) : undefined,
+      description: op?.description,
+      // Root-absolute and tenant-scoped: `base` is "" on a host of the site's own and
+      // `/sites/{slug}` in apex path mode. `metadataBase` (root layout) makes it absolute.
+      path: `${base}/${slugStr}`.replace(/\/+$/, ""),
+      assetBase,
+      // `?site=` only in path mode — on a tenant host (subdomain or custom domain) the card
+      // route resolves the tenant from the Host header, the same way this render did.
+      ogImage: ogImagePath(slugStr, { site: pathMode ? slug : undefined, version }),
+    });
+  });
 }
 
 /**

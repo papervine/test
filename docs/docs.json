@@ -11,6 +11,11 @@
     "light": "#A78BFA",
     "dark": "#5B21B6"
   },
+  "seo": {
+    "metatags": {
+      "twitter:site": "@papervine_io"
+    }
+  },
   "navigation": {
     "tabs": [
       {
@@ -39,6 +44,7 @@
             "group": "Publish",
             "pages": [
               "guides/publishing",
+              "guides/social-cards",
               "guides/custom-domain",
               "guides/self-hosting",
               "control-plane/exports"
