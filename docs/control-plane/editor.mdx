@@ -260,6 +260,16 @@ The numbers renumber themselves as you add, and they're never written into your 
 counted at render time, so reordering steps in Source mode needs no renumbering either.
 <kbd>⌘Z</kbd> takes a step back out.
 
+## Deleting stops at a component's edge
+
+Empty a tab and keep pressing <kbd>Backspace</kbd> and nothing further happens — it won't reach
+back out and take the tab with it. The same at the other end: <kbd>Delete</kbd> at the end of a
+component won't pull the next block into it. This holds for every component, not just tabs.
+
+Removing a component is something you do deliberately: the **✕** on a tab, or **Delete** in the
+block handle's menu. Selecting content and deleting it still works exactly as you'd expect — the
+stop only applies to the single keypress that would otherwise escape the component.
+
 ## Select All works outward from where you are
 
 <kbd>⌘A</kbd> / <kbd>Ctrl A</kbd> selects **the component you're inside**, not the whole page.

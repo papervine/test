@@ -2813,6 +2813,27 @@ layer.
 > replaying it proves nothing either way. The error-surfacing above is what closes this: the next
 > attempt says which of the two it is.
 >
+> **Backspace stops at a component's edge (2026-08-25).** Reported as "pressing backspace until
+> there are no more characters should just stop — it should not keep going and destroy the tab."
+> ProseMirror's default Backspace at the start of a block joins it with what precedes it, and
+> inside a `<Tab>` the thing that precedes it is the tab's own opening — so emptying a tab and
+> holding the key a beat longer lifted the content out and took the tab with it. Reproduced
+> exactly: with the guard removed, the browser run reports "the tabs were destroyed — 1 left".
+>
+> `EdgeGuard` swallows Backspace on a component's leading edge and Delete on its trailing edge —
+> the latter is the same damage from the other side (it pulls the FOLLOWING block into the
+> component), and fixing only the reported half would leave the mirror-image bug in place. A real
+> selection is never blocked: selecting content and deleting it is deliberate, and so is deleting
+> a component via a tab's × or the block handle's menu. Applies to every component node, sharing
+> `COMPONENT_NODES` with scoped Select All — the container lookup both need is now one
+> `enclosingContainers` helper rather than two copies, with the same `TextSelection.between`
+> normalization (a node's raw content boundary is usually one short of the first place a cursor
+> can sit, so comparing against it would mean the edges never match). Guards: `edge-guard-plan`
+> (6 unit tests, including that the blocked direction is the one that would escape and that a
+> selection deletes normally) and an `editor.spec.ts` case that hammers Backspace twelve times
+> past empty and asserts both tabs survive — on its own fixture page, since it asserts on what is
+> and isn't left in a document.
+>
 > **The whole-site preview became an overlay (2026-08-25).** It was `<a target="_blank">`, which
 > put the preview in a window with no relationship to the editor: getting back meant hunting for a
 > tab, and the two drifted — the tab kept showing the draft as of when it opened while you carried

@@ -54,6 +54,7 @@ test.describe("web editor @external", () => {
             "steppy",
             "mediapage",
             "slashpage",
+            "edgepage",
             "uploadpage",
             "failpage",
           ],
@@ -101,8 +102,15 @@ test.describe("web editor @external", () => {
     // declaration order, so a page an earlier test typed into carries that draft over — and the
     // slash assertions are about what is and isn't in the document.
     await put(`${prefix}slashpage.mdx`, "---\ntitle: Slash\n---\n\nSlash anchor line.\n");
-    // The two upload tests get their own pages for the same reason: each leaves a draft, and
-    // sharing one page made which test failed depend on the order they happened to run in.
+    // The edge-guard and upload tests each get their own page for the same reason: they assert on
+    // what is and isn't in a document, so sharing one made the result depend on run order.
+    await put(
+      `${prefix}edgepage.mdx`,
+      "---\ntitle: Edge\n---\n\n<Tabs>\n" +
+        '  <Tab title="Alpha">\n\n    Alpha body text.\n\n  </Tab>\n' +
+        '  <Tab title="Beta">\n\n    Beta body text.\n\n  </Tab>\n' +
+        "</Tabs>\n",
+    );
     await put(`${prefix}uploadpage.mdx`, "---\ntitle: Upload\n---\n\nUpload anchor line.\n");
     await put(`${prefix}failpage.mdx`, "---\ntitle: Fail\n---\n\nFail anchor line.\n");
     await put(
@@ -494,6 +502,42 @@ test.describe("web editor @external", () => {
     expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
 
     await clearDrafts(["tabby.mdx"]);
+  });
+
+  // Backspace stops at a component's edge (SPEC §9.2). ProseMirror's default joins the block with
+  // what precedes it, and inside a <Tab> that's the tab's own opening — so emptying a tab and
+  // holding Backspace a beat longer lifted the content out and destroyed the tab. Only a browser
+  // shows this: it's about who consumes the keystroke.
+  test("Backspace stops at a tab's edge instead of destroying the tab", async ({ page }) => {
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=edgepage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    const block = page.locator('[data-node-view-wrapper]:has(> [data-pv-tabs])');
+    const labels = block.locator('button[title="Double-click to rename"]');
+    await expect(labels).toHaveText(["Alpha", "Beta"]);
+
+    const pane = block.locator("[data-pv-tab]").first();
+    await expect(pane).toContainText("Alpha body text.");
+    await pane.click();
+    await page.keyboard.press("ControlOrMeta+a");
+    await page.keyboard.press("Backspace"); // clear the pane — a selection delete, allowed
+    await expect(pane).toHaveText("");
+
+    // Well past empty: the "held it a beat too long" case that used to eat the tab.
+    for (let i = 0; i < 12; i++) await page.keyboard.press("Backspace");
+
+    await expect(labels).toHaveText(["Alpha", "Beta"]);
+    await expect(block).toHaveCount(1);
+    // Still a real Tabs block, not lifted-out prose.
+    await expect(block.locator("[data-pv-tab]")).toHaveCount(2);
+
+    // Ordinary editing is untouched — the guard only swallows the press at the very edge.
+    await page.keyboard.type("abc");
+    await page.keyboard.press("Backspace");
+    await expect(pane).toHaveText("ab");
+
+    await clearDrafts(["edgepage.mdx"]);
   });
 
   // The Steps/Step node views (SPEC §9.2): the "add a step" control on the end of the rail, and

@@ -5,6 +5,7 @@ import Link from "@tiptap/extension-link";
 import CodeBlock from "@tiptap/extension-code-block";
 import { COMPONENTS } from "@papervine/mdx-prosemirror";
 import { SelectAllScope } from "./select-all-scope";
+import { EdgeGuard } from "./edge-guard";
 
 // The TipTap schema for the Visual editor. Every node/mark name here matches the converter's
 // ProseMirror JSON (@papervine/mdx-prosemirror) exactly, so mdxToProseMirror output loads and
@@ -144,6 +145,7 @@ export function buildMdxExtensions(opts: NodeViewOpts = {}): Extensions {
     TableCell,
     ...componentNodes,
     SelectAllScope,
+    EdgeGuard,
     atomNode("mdxUnknownFlow", false, opts.atomNodeView?.("mdxUnknownFlow", false)),
     atomNode("mdxUnknownText", true, opts.atomNodeView?.("mdxUnknownText", true)),
   ];
