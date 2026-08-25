@@ -94,11 +94,36 @@ empty sidebar even though its config parsed fine.
 
 ## Themes and appearance
 
-`theme` selects a named visual preset — `mint` (default), `maple`, `palm`, `willow`,
-`linden`, `almond`, `aspen`, `sequoia`, or `luma`. Each preset is a small
-token bundle (font stack, corner radius, …) defined in `src/lib/theme.ts` and applied as CSS
-variables on `<html data-theme="…">`, so the whole UI re-skins from one config value. An
-unknown theme name falls back to `mint`.
+`theme` selects a named visual preset. Each one changes typography, density and layout
+proportions together, so a single config value re-skins the whole site:
+
+| Theme | Character | What sets it apart |
+| --- | --- | --- |
+| `mint` | Classic (**default**) | The baseline — sans type, moderate radii, open chrome |
+| `maple` | Modern SaaS | Rounder surfaces, a wide navigation column with a divider |
+| `palm` | Enterprise | Dense and rectilinear: tight radii, heavy headings, uppercase group labels |
+| `willow` | Stripped back | Serif headings over a sans body, a narrower measure, airy leading |
+| `linden` | Retro terminal | Monospace throughout, square corners, letterspaced uppercase labels |
+| `almond` | Card-based | Rounded type, fully-pill navigation, generous surfaces |
+| `aspen` | Deep navigation | The widest nav column, a divider, softly rounded surfaces |
+| `sequoia` | Editorial | Serif body *and* headings, light weights, the airiest leading |
+| `luma` | Clean and wide | The narrowest nav, the widest content, the lightest headings |
+
+An unknown or misspelled theme name falls back to `mint` rather than failing — the same
+warn-don't-throw rule the rest of the config follows.
+
+A theme is **entirely** a set of CSS custom properties, generated in
+`packages/renderer/lib/theme.ts` and applied on `<html data-theme="…">`. Components read the
+variables rather than hard-coding, so adding or tuning a theme means editing one entry there.
+The tokens cover font stacks (body, mono, heading), corner radii, heading weight and tracking,
+body leading, the sidebar, table-of-contents and shell widths, the sidebar divider, and group
+label casing.
+
+<Note>
+  Themes use **system font stacks only** — no webfont is fetched. A themed site therefore
+  renders identically offline and never shifts layout on a cold cache, which is what
+  [`papervine dev`](/cli) needs and what keeps first paint honest.
+</Note>
 
 - **`colors`** (`primary` / `light` / `dark`) drives the brand accent independently of the
   theme preset.

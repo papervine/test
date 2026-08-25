@@ -88,7 +88,7 @@ tables). Brand accent is the blue→violet gradient; status colors
 (green = live/success, red = failed) stay semantic. Pages compose the shared `Button`
 and `Field` primitives — they don't redefine the look. This theme is deliberately
 **separate from the docs renderer**, which is light-first and themed per tenant from
-`docs.json` (`src/lib/theme.ts`, `globals.css`); the two must never leak into each other.
+`docs.json` (`packages/renderer/lib/theme.ts`, `globals.css`); the two must never leak into each other.
 
 **Apex nav is session-aware.** The marketing landing (`src/app/home/page.tsx`) reads the
 session: a signed-in visitor gets a single **Dashboard** link instead of **Log in / Sign
@@ -4336,6 +4336,47 @@ the hosted API over HTTPS, they don't embed it.
 >
 > Verified: the README round-tripped through GitHub's markdown API with all five images resolving
 > to mirror URLs and its 17 headings, 4 tables and 18 code blocks unchanged.
+>
+> **Status (2026-08-24): the nine themes are now actually nine themes.** They had the right
+> names and near-identical output: every entry carried a font stack and two radii, so seven of
+> the nine differed only in a corner radius. The comments described "retro terminal" and
+> "card-based" looks that nothing implemented, and `data-theme` was set on `<html>` with **no
+> CSS anywhere keying off it** — the four variables were the entire mechanism.
+>
+> **Measured the real ones rather than guessing.** Each named theme has a live preview site;
+> driving a browser over all nine and reading computed styles showed the actual differentiators
+> are font family, heading weight and tracking, sidebar width (224–304px), sidebar divider,
+> header height, content width, and the active-link treatment — not radius. Ours are built to
+> the same *character* rather than copied: different proportions, different type, our own take
+> on each brief.
+>
+> **A theme is now entirely CSS custom properties emitted from `theme.ts`.** This is the load-
+> bearing decision. The hosted app and the CLI keep separate `globals.css` files, so per-theme
+> CSS would have to be written twice and would drift; generated variables give both apps
+> identical values for free and keep the original promise that adding a theme is one registry
+> entry. The corollary is that components consume variables instead of hard-coding —
+> `w-[var(--db-sidebar-w)]`, not `w-64` — and the rule going forward is that wanting a
+> `[data-theme=…]` rule means adding a token instead. Fourteen tokens now: three font stacks,
+> two radii, heading weight/tracking, leading, three widths, the divider, and label casing.
+>
+> **System font stacks only, and there is a test for it.** A webfont fetch would make a theme
+> render differently offline and shift layout on a cold cache; `papervine dev` can't negotiate
+> either. `ui-rounded` gives almond its softer face on Apple platforms and falls through
+> elsewhere, which is the right shape for this — an enhancement, not a dependency.
+>
+> **Verified by measurement, not screenshots alone.** A script cycled `docs.json` through all
+> nine against a live server and read back computed geometry: sidebar 224–288px, dividers 0/1px,
+> four font families, weights 500–700, nav radii 0–999px, content 584–664px, leading 25–28px.
+> All nine render distinctly. The first run reported one sidebar width for every theme, which
+> was the *measurement* selecting the full-width tab bar rather than the sidebar — worth
+> recording, because a bad selector reads exactly like a broken feature.
+>
+> Pinned by `tests/unit/theme.test.ts`, including a pair-wise check that no two themes differ in
+> fewer than two tokens — the regression that started this — and an assertion that every stack
+> is offline-safe and ends in a generic family.
+>
+> Also fixed: three references to `src/lib/theme.ts`, which moved to `packages/renderer/` in the
+> §10.6 extraction.
 >
 > **Status (2026-08-24): `papervine new` shipped, and `dev` offers it.** Prompted by a
 > competitor leading with `pnpm dlx create-shiso-app my-docs` — the observation being that a

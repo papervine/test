@@ -41,7 +41,7 @@ deployments later for scaling, but v1 is a single app with different route group
 The two planes are deliberately **themed apart and must never leak into each other**:
 
 - The **docs renderer** is light-first and themed *per tenant* from `docs.json`
-  (`src/lib/theme.ts`, `globals.css`) — see [config](/rendering/config).
+  (`packages/renderer/lib/theme.ts`, `globals.css`) — see [config](/rendering/config).
 - The **control plane** shares one dark, luminous design language codified in
   `src/styles/platform.css` (scoped under `.db`) and applied via `<PlatformShell>`. Its UI
   primitives are [shadcn/ui](https://ui.shadcn.com) mapped onto the `.db` palette. The
