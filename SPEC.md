@@ -1552,6 +1552,15 @@ env, no dashboard required.
 > is exposed from this page. Search Domains remains plan-gated (enterprise). Covered by
 > `tests/e2e/assistant.spec.ts` (toggle → persist → reload round-trip).
 >
+> **Temporarily operator-only (2026-08-23).** The whole *Response handling* row — deflection,
+> its enterprise banner, Search Domains — is wrapped in a `platformAdmin` check so customers
+> don't meet controls that don't do anything yet. Gated on **platform** admin, not org role: an
+> org admin is still a customer. Verified both sides against the seed, which has exactly the
+> pair that distinguishes them (`dev@` is a platform admin, `dev2@` is an org admin and is not).
+> The wrapper comes out — not the section — when the controls reach the authoring layer; the
+> note to do so is on the JSX itself. Starter questions is scaffold too but stayed visible: it
+> reads as an empty state rather than a broken control.
+>
 > **Kill switch now enforced (2026-06-30).** Persisting the toggle wasn't enough — the docs site
 > never read `assistant_enabled`, so disabling it still showed the "Ask Assistant" launcher on
 > prod. Enforcement landed at both read points, mirroring the `authEnabled` gate: `TenantDocsShell`
@@ -2702,6 +2711,17 @@ Minimum to operate the SaaS:
 > its script client-side, so there is nothing in the server-rendered HTML to assert on — a
 > markup-based `exclude` would have passed whether the gate existed or not. The test watches for
 > both the injected tag and any request to `/_vercel/insights` from a tenant page.
+>
+> **Chatwoot live chat (2026-08-24)** joins them behind the same `isTenant` gate, for a sharper
+> reason than either: it's a support inbox WE staff, so on a tenant's docs site it would invite
+> THEIR readers to open conversations with us about a product they've never heard of — and it
+> would fight the tenant's own assistant launcher (§8.6) for the same corner. Installed as the
+> documented script snippet, not an npm package: the SDK is served by the Chatwoot instance
+> itself, so a package would wrap a script tag and add a dependency for nothing. Both
+> `NEXT_PUBLIC_CHATWOOT_BASE_URL` and `NEXT_PUBLIC_CHATWOOT_TOKEN` are required; either missing
+> renders nothing, which keeps local dev out of the live inbox. The mount guards on the script's
+> element id rather than a module flag, because a client-side navigation can remount the component
+> and running the SDK twice mounts two launchers — verified as exactly one SDK request per page.
 >
 > **LogRocket session replay (same date) covers every surface we own, and stops there.** Init is
 > in the ROOT layout behind the same `isTenant` gate as `<Analytics/>`, so replay reaches
@@ -4743,6 +4763,37 @@ Deliberately *not* editable here: the **slug** (the stable URL id) and the **ren
 reflects in the switcher); typecheck + unit (`normalizeSiteName`) + smoke + crawl green.
 
 ### 10.10 Platform superadmin (`/admin`)
+
+> **Status 2026-08-24 — split into a real console.** It was one page: four stat cards followed by
+> an unbounded stack of org cards, each inlining that org's members and sites. Fine at three
+> customers, unusable at thirty — and there was no way to answer "which sites are stuck in
+> draft?" or "is anything failing across tenants?" because sites only existed nested inside their
+> org's card. Now a list → detail console with its own subnav, deliberately the same two-mode
+> shape as `SettingsNav` (mobile pill strip / desktop grouped sidebar) so it reads as part of the
+> product: **Overview** (counts + newest orgs/sites/recent deploys), **Organizations** (searchable
+> table → per-org detail carrying the members, impersonate controls and sites), **Sites**
+> (cross-tenant, the view that didn't exist), **Deploys** (cross-tenant activity, with the error
+> inline — a run of failures spanning customers means something of *ours* broke), and the existing
+> **Billing**. `ADMIN_NAV` in `src/lib/admin-nav.ts` is the single source of truth; its one piece
+> of real logic is `activeAdminSlug`, longest-prefix rather than equality, so a detail route keeps
+> its parent tab lit.
+>
+> Every query is now bounded — counts are aggregates, lists are `LIMIT`ed, and rollups are
+> computed only for the ids on the current page. The old page fetched every org, member, site,
+> deploy aggregate and analytics aggregate to render one screen.
+>
+> Two SQL dead ends worth not repeating, both recorded in `admin/data.ts`. Joining four GROUPED
+> subqueries failed because each aliased its count `"n"`, so drizzle rendered every reference as a
+> bare `coalesce("n", 0)` — ambiguous, query rejected. Rewriting them as correlated scalar
+> subqueries failed differently: drizzle renders columns inside a `sql` template UNQUALIFIED,
+> giving `(select count(*) from "member" where "organization_id" = "id")`, which Postgres can't
+> resolve either. The working shape is aggregate-in-SQL, join-in-JS, bounded by the page's ids.
+>
+> The allowlist gate moved to the layout (it can't be forgotten when a section is added) and is
+> ALSO called per page: Next renders a layout and its page concurrently, so a layout-only gate
+> still lets a cross-tenant query run before the 404 wins. `getSession` is per-request cached, so
+> the second check is ~free. Still read-only apart from the pre-existing impersonate and billing
+> actions.
 
 The operator's cross-tenant overview, at **`app.papervine.io/admin`**: every customer org with
 its members (email + role), sites (status, repo, custom domain), deploy counts + last-deploy

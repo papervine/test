@@ -1,6 +1,5 @@
-import Link from "next/link";
 import { desc, eq, max, sql } from "drizzle-orm";
-import { ArrowLeft, CreditCard } from "lucide-react";
+import { CreditCard } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/dashboard-context";
 import { db } from "@/lib/db";
 import { organization } from "@/lib/db/schema";
@@ -14,7 +13,7 @@ import {
   creditRateVersion,
   stripeEvent,
 } from "@/lib/db/app-schema";
-import { PlatformShell } from "@/components/platform/PlatformShell";
+import { AdminPage } from "../ui";
 import { AdjustCreditsForm, GrantPlanForm, PublishButton } from "./AdminBillingActions";
 
 // Platform-admin billing console (SPEC §10 Billing, Phase 4; same §10.10 gate as
@@ -76,16 +75,10 @@ export default async function AdminBillingPage() {
   ]);
 
   return (
-    <PlatformShell variant="lite">
-      <div className="mx-auto max-w-6xl px-6 py-10">
-        <Link
-          href="/admin"
-          className="inline-flex items-center gap-1.5 text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
-        >
-          <ArrowLeft className="h-4 w-4" /> Platform Admin
-        </Link>
-        <h1 className="mt-4 flex items-center gap-2 text-2xl font-semibold">
-          <CreditCard className="h-6 w-6" /> Billing console
+    <AdminPage>
+      <div>
+        <h1 className="flex items-center gap-2 text-xl font-semibold">
+          <CreditCard className="h-5 w-5" /> Billing
         </h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
           Catalog is edited in <code>src/lib/billing/catalog.json</code> +{" "}
@@ -241,6 +234,6 @@ export default async function AdminBillingPage() {
           </table>
         </div>
       </div>
-    </PlatformShell>
+    </AdminPage>
   );
 }
