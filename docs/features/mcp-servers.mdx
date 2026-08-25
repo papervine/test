@@ -32,6 +32,13 @@ transports (in-docs chat and MCP).
   agent analytics.
 </Note>
 
+<Warning>
+  Because the CLI has no reader auth, its MCP server applies **no gate**: `list_pages` returns
+  every page and `read_page` will read one marked `groups: [...]`. On a hosted site the same tools
+  see only the public subset. So if you self-host a repo with gated pages, the MCP endpoint
+  enumerates them — see [self-hosting](/guides/self-hosting).
+</Warning>
+
 Connect any MCP-capable tool to `https://<host>/mcp`:
 
 <Steps>

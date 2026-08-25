@@ -1,5 +1,9 @@
 {
   "mcpServers": {
+    "papervine-docs": {
+      "type": "http",
+      "url": "http://127.0.0.1:3000/mcp"
+    },
     "Sentry": {
       "type": "http",
       "url": "https://mcp.sentry.dev/mcp/newnewmedia/papervine"
