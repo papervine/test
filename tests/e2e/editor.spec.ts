@@ -524,6 +524,15 @@ test.describe("web editor @external", () => {
     await expect(pm.locator('li[data-checked="true"]')).toHaveCount(1);
     await expect(pm.locator("li:not([data-checked])")).toHaveCount(1);
 
+    // The box is a real control you can click. The first version drew it as a CSS ::before, which
+    // screenshotted perfectly and could not be clicked at all.
+    const boxes = pm.locator('input[type="checkbox"]');
+    await expect(boxes).toHaveCount(2);
+    await boxes.first().click();
+    await expect(pm.locator('li[data-checked="true"]')).toHaveCount(2);
+    await boxes.first().click();
+    await expect(pm.locator('li[data-checked="false"]')).toHaveCount(1);
+
     // The data-loss path: open, type, let autosave land.
     await pm.locator("li").first().click();
     await page.keyboard.type("X");

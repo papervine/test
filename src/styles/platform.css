@@ -479,41 +479,39 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
 .pv-visual .ProseMirror:focus {
   outline: none;
 }
-/* GFM task items. A task item is an ordinary `listItem` carrying `checked` (see nodes.ts), so the
-   checkbox is drawn here rather than by a node view — it's decoration, and a node view per list
-   item would be a React root per bullet. `data-checked` is only present on task items, so a plain
-   list is untouched: no marker swap, no indent change. */
+/* GFM task items. A task item is an ordinary `listItem` carrying `checked` (see nodes.ts), whose
+   node view renders `<li data-checked><label><input></label><div>content</div></li>`. Only task
+   items get `data-checked`, so a plain list is untouched: no marker swap, no indent change. */
 .pv-visual .ProseMirror li[data-checked] {
   list-style: none;
   position: relative;
 }
-.pv-visual .ProseMirror li[data-checked]::before {
-  content: "";
+/* The checkbox sits in the marker gutter rather than in the flow, so a task item's text lines up
+   with a plain bullet's — a list that mixes the two shouldn't look ragged. */
+.pv-visual .ProseMirror li[data-checked] > label {
   position: absolute;
-  left: -1.4em;
-  top: 0.35em;
+  left: -1.5em;
+  top: 0.3em;
+  line-height: 1;
+}
+/* A native control, not a drawn box: it has to be clickable and keyboard-reachable, and the
+   platform sets `color-scheme: dark` (globals.css) so the UA paints it to match the theme. */
+.pv-visual .ProseMirror .pv-task-check {
   width: 1em;
   height: 1em;
-  border-radius: 0.25em;
-  border: 1.5px solid rgba(var(--ink-rgb), 0.35);
+  margin: 0;
+  accent-color: var(--blue);
+  cursor: pointer;
 }
-.pv-visual .ProseMirror li[data-checked="true"]::before {
-  background: var(--blue);
-  border-color: var(--blue);
+/* The content div breaks Typography's `li > p` selector, so the paragraph falls back to the
+   generic 1.25em `p` margin and the item grows a blank line above its own checkbox. */
+.pv-visual .ProseMirror li[data-checked] > div > :first-child {
+  margin-top: 0;
 }
-/* The tick, drawn as a rotated corner so it needs no icon font or SVG. */
-.pv-visual .ProseMirror li[data-checked="true"]::after {
-  content: "";
-  position: absolute;
-  left: -1.1em;
-  top: 0.5em;
-  width: 0.3em;
-  height: 0.55em;
-  border: solid #fff;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+.pv-visual .ProseMirror li[data-checked] > div > :last-child {
+  margin-bottom: 0;
 }
-.pv-visual .ProseMirror li[data-checked="true"] > p {
+.pv-visual .ProseMirror li[data-checked="true"] > div > p {
   color: var(--muted);
   text-decoration: line-through;
 }

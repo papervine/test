@@ -2913,6 +2913,23 @@ layer.
 > and `undefined` stays `undefined` in each — a plain bullet that became `checked: false` would
 > grow an empty `[ ]` on every ordinary list in the product.
 >
+> **The checkbox has to be a real `<input>`** — the first version drew it in CSS as an `::before`
+> on `li[data-checked]`, which screenshotted perfectly, matched both themes, and could not be
+> clicked, because a pseudo-element is not a thing you can put a pointer on. It shipped and came
+> straight back as "not able to check the checkboxes." A plain-DOM node view (not
+> `ReactNodeViewRenderer` — a React root per bullet is the cost the CSS version was avoiding, and
+> that part of the reasoning was right) builds
+> `<li><label contenteditable=false><input></label><div>content</div></li>`; a plain bullet gets
+> `contentDOM === li` and the default rendering, so ordinary lists are untouched. Three things it
+> had to get right, each found by driving it: the change handler re-reads the node at `getPos()`
+> from the **current** doc rather than closing over stale attrs; `ignoreMutation` rejects
+> everything outside `contentDOM`, or toggling — which mutates `data-checked` on the `<li>` —
+> reads as a content change and ProseMirror re-parses the label and content div into a stray empty
+> paragraph on every click; and the checkbox is positioned in the **marker gutter**, so a task
+> item's text lines up with a plain bullet's in a mixed list. `accent-color` plus the platform's
+> existing `color-scheme: dark` means the UA paints it correctly in both themes with no bespoke
+> box. Verified clicking it in a browser, light and dark.
+>
 > The editor models a task item as a **`listItem` carrying `checked`**, not as the separate
 > `taskList`/`taskItem` node pair `@tiptap/extension-task-list` supplies. GFM has no such split:
 > `- [x] done` and `- plain` are both list items in one list, and a schema with two node types
@@ -2927,8 +2944,10 @@ layer.
 > once you've lost the `[ ]` — so task lists get a **byte-exact** block asserting the MDX comes
 > back identical, not merely stable. `/media`'s smoke fixture gains a task list so the reader path
 > stays pinned. And an `editor.spec.ts` case opens a page that **already has** one (the data-loss
-> path was about existing content, not insertion), types into it, and asserts both states survive
-> the autosave while the plain bullet beside them stays plain.
+> path was about existing content, not insertion), clicks a checkbox, types into it, and asserts
+> both states survive the autosave while the plain bullet beside them stays plain. The jsdom
+> schema test grew three node-view cases in the same spirit: they assert on the **input** rather
+> than on `data-checked`, since the whole failure was a correct attribute nobody could reach.
 
 ---
 

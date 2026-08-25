@@ -4,6 +4,7 @@ import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import CodeBlock from "@tiptap/extension-code-block";
 import { ListItem } from "@tiptap/extension-list";
+import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { COMPONENTS } from "@papervine/mdx-prosemirror";
 import { SelectAllScope } from "./select-all-scope";
 import { EdgeGuard } from "./edge-guard";
@@ -125,8 +126,12 @@ function codeBlockExt(nodeView?: NodeViewRenderer) {
  * from the same markdown, and a list mixing checked and plain items — legal GFM — couldn't be
  * represented at all.
  *
- * The checkbox is rendered by CSS off `data-checked` rather than by a node view: it's decoration,
- * and a node view per list item is a React root per bullet.
+ * The checkbox is a real `<input>`, built by a plain-DOM node view — the first version drew it in
+ * CSS as an `::before`, which looked right and could not be clicked, because a pseudo-element is
+ * not a thing you can put a pointer on. A plain bullet gets `contentDOM === li` (the default
+ * rendering, no wrapper), so an ordinary list is untouched; only a task item grows the label and
+ * the content div the input needs to sit outside of. Plain DOM rather than
+ * `ReactNodeViewRenderer`, since a React root per bullet is exactly the cost worth avoiding.
  */
 const TaskListItem = ListItem.extend({
   addAttributes() {
@@ -142,6 +147,69 @@ const TaskListItem = ListItem.extend({
         renderHTML: (attrs) =>
           typeof attrs.checked === "boolean" ? { "data-checked": String(attrs.checked) } : {},
       },
+    };
+  },
+
+  addNodeView() {
+    return ({ node, getPos, editor }) => {
+      const li = document.createElement("li");
+      const isTask = (n: ProseMirrorNode) => typeof n.attrs.checked === "boolean";
+
+      // A plain bullet renders exactly as it would without a node view.
+      if (!isTask(node)) {
+        return { dom: li, contentDOM: li, update: (updated: ProseMirrorNode) => !isTask(updated) };
+      }
+
+      li.setAttribute("data-checked", String(node.attrs.checked));
+      const label = document.createElement("label");
+      // The input must live OUTSIDE contentDOM, or ProseMirror treats it as document content and
+      // tries to map positions onto it. contentEditable=false also stops its clicks and its DOM
+      // from being read back as edits.
+      label.contentEditable = "false";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.className = "pv-task-check";
+      input.checked = node.attrs.checked;
+      // Without this the mousedown moves the selection into the label before the click lands,
+      // which blurs the editor and makes the caret jump on every toggle.
+      input.addEventListener("mousedown", (event) => event.preventDefault());
+      input.addEventListener("change", () => {
+        const pos = typeof getPos === "function" ? getPos() : undefined;
+        if (pos === undefined || !editor.isEditable) {
+          input.checked = !input.checked;
+          return;
+        }
+        // Read the node back out of the CURRENT doc: the position is stale the moment anything
+        // above this item changes, and writing `node.attrs` would resurrect the old attributes.
+        const { state, view } = editor;
+        const current = state.doc.nodeAt(pos);
+        if (!current) return;
+        view.dispatch(
+          state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, checked: input.checked }),
+        );
+      });
+      label.append(input);
+
+      const content = document.createElement("div");
+      li.append(label, content);
+      return {
+        dom: li,
+        contentDOM: content,
+        // Everything outside contentDOM is chrome. Without this, toggling — which mutates
+        // `data-checked` on the <li> — reads as a content change, and ProseMirror re-parses the
+        // node view's DOM: the label and the content div come back as two blocks and the doc
+        // grows a stray empty paragraph on every click.
+        ignoreMutation: (mutation) =>
+          mutation.type !== "selection" && !content.contains(mutation.target),
+        update: (updated: ProseMirrorNode) => {
+          // Becoming (or ceasing to be) a task item changes the DOM shape, so let ProseMirror
+          // rebuild it rather than trying to morph one into the other.
+          if (!isTask(updated)) return false;
+          li.setAttribute("data-checked", String(updated.attrs.checked));
+          input.checked = updated.attrs.checked;
+          return true;
+        },
+      };
     };
   },
 
