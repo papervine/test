@@ -4308,6 +4308,35 @@ the hosted API over HTTPS, they don't embed it.
 > with a clean console — including clicking a `CodeGroup` tab and asserting the recipe actually
 > changed.
 >
+> **Status (2026-08-24): three feature screenshots in the CLI README.** The API reference pages,
+> the search palette and the assistant panel now appear beside the prose that describes them,
+> rather than each being a sentence the reader has to take on faith.
+>
+> **Placed with their prose, not gathered into a gallery.** A screenshot next to the paragraph it
+> illustrates is read; a strip of thumbnails is scrolled past. This also exposed a real gap:
+> OpenAPI support was a subordinate clause in a list ("…and OpenAPI endpoint pages") for the one
+> feature that most needs showing — generated endpoint pages with parameters, schemas, a
+> language-tabbed request sample and a working **Try it** console. It has its own paragraph now.
+>
+> **Downscaled and palette-quantized to match the existing convention** (`screenshot.png` is
+> 1200px / 53KB, not a retina dump). The three arrived as @2x captures totalling 1.3MB; resampled
+> to 1200px they were 576KB, and a 256-colour quantization took them to **202KB** — 62–68% off
+> each, and visually indistinguishable, because a dark UI screenshot is flat panels and text
+> rather than photographic gradient. No `pngquant`/`oxipng` on the machine; PIL's median-cut did
+> it, keeping the original whenever quantization failed to win.
+>
+> **They cost the npm tarball nothing.** `apps/cli/package.json`'s `files` allowlist is
+> `bin/ server/ template/ README.md LICENSE` — `assets/` is not in it, and the README references
+> them by absolute `raw.githubusercontent.com` URL against the public mirror, where
+> `MIRRORED_PATHS` carries all of `apps/cli`. So the images live in the public repo that serves
+> them and never enter the package a user installs.
+>
+> Every image carries real alt text: the README is the npm page, and a described screenshot is
+> also the fallback when raw.githubusercontent is blocked or slow.
+>
+> Verified: the README round-tripped through GitHub's markdown API with all five images resolving
+> to mirror URLs and its 17 headings, 4 tables and 18 code blocks unchanged.
+>
 > **Status (2026-08-24): `papervine new` shipped, and `dev` offers it.** Prompted by a
 > competitor leading with `pnpm dlx create-shiso-app my-docs` — the observation being that a
 > tool should generate a folder when the user hasn't got one. Ours dead-ended instead: `dev`
