@@ -169,12 +169,23 @@ jobs:
   # and this job is the only path to production. Branch and PR previews are untouched —
   # they still auto-deploy, and gating them would remove the thing they're for.
   #
-  # Gated on BOTH test jobs. That is a deliberate trade: an e2e flake now blocks a deploy
-  # rather than letting a real failure through. If that becomes the common case, drop `e2e`
-  # from `needs` — don't reach for `continue-on-error`, which would make this job green
-  # while shipping the failure it was added to catch.
+  # Gated on `verify` — typecheck, unit, build, smoke, the example-site crawl and the
+  # clean-room CLI package. Deterministic, and every one of them is a real signal.
+  #
+  # `e2e` was in this list for exactly one push and had to come out. It is not stable enough
+  # to gate a deploy: run 32896746146 passed WITH 3 flaky tests (failed, passed on retry),
+  # and run 32897972504 — a commit touching only vercel.json and three markdown files —
+  # failed `widget-settings.spec.ts:31` on both attempts with
+  # `ERR_ABORTED; maybe frame was detached?`. Same code, opposite verdicts twelve minutes
+  # apart. Gating on that doesn't mean "don't ship broken code", it means "shipping is a coin
+  # flip", and the first thing it blocked was a docs-only commit.
+  #
+  # So e2e still has to be green to merge — it just doesn't hold the deploy. Put it back the
+  # day that spec is fixed; the gap until then is the authed dashboard journeys. What is NOT
+  # the answer is `continue-on-error`, which would make this job green while shipping the
+  # failure it exists to catch.
   deploy-production:
-    needs: [verify, e2e]
+    needs: [verify]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

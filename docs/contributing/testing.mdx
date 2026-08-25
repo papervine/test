@@ -112,7 +112,7 @@ CI lives in `.github/workflows/ci.yml` and has two jobs — keep both green. A t
 | --- | --- | --- |
 | `verify` | typecheck + unit + build + smoke + example-site crawl + clean-room CLI package | none |
 | `e2e` | Playwright (skipping `@external`) | Postgres |
-| `deploy-production` | deploys the app to Vercel — only on a push to `main`, only after both jobs above pass | none |
+| `deploy-production` | deploys the app to Vercel — only on a push to `main`, only after `verify` passes | none |
 | `mirror` | publishes the CLI and the example docs site to their public repos, once per target, gated on CI passing | none |
 
 **Deploying is one of the gates.** Vercel's Git integration used to deploy the moment it saw a
@@ -121,6 +121,14 @@ the same commit could coexist, and a failed `next build` was the only thing that
 bad one. Automatic deploys are now off for `main` (`vercel.json` → `git.deploymentEnabled`), and
 `deploy-production` is the only route to prod. Branch and PR previews still deploy on push, which
 is what previews are for.
+
+<Note>
+  `e2e` has to be green to merge, but it deliberately doesn't hold the deploy — it isn't reliable
+  enough yet, and a suite that fails intermittently turns shipping into a coin flip rather than
+  stopping bad code. It goes back in the gate once it's stable. Until then the deploy gate is
+  everything in `verify`: typecheck, unit, build, smoke, the example-site crawl, and the
+  clean-room CLI package test.
+</Note>
 
 Releases are gated too, by a publish workflow that reruns these checks before shipping so a
 version tag can never publish a broken package.

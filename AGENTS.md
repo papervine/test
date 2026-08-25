@@ -246,19 +246,27 @@ instant it saw a commit, in parallel with this workflow and with no knowledge of
 run and a live production deploy of the same commit could coexist, and `next build` failing was
 the only thing that ever stopped a bad one (type and compile errors; not unit, not smoke, not
 e2e). So `vercel.json` sets `git.deploymentEnabled: { main: false }` and the
-**`deploy-production`** job — `needs: [verify, e2e]` — is the only path to prod.
+**`deploy-production`** job — `needs: [verify]` — is the only path to prod.
 
 Consequences worth knowing:
 
 - **Branch and PR previews still auto-deploy.** Only `main` is gated; gating previews would
   remove the thing they're for.
-- **An e2e flake blocks the deploy.** That's the deliberate trade. If it becomes the common
-  case, drop `e2e` from that job's `needs` — never `continue-on-error`, which would make the
-  job green while shipping the failure it exists to catch.
+- **`e2e` is deliberately NOT in the gate**, and this was measured rather than assumed. It held
+  the deploy for exactly one push: run `32896746146` passed *with 3 flaky tests* (failed, passed
+  on retry), then run `32897972504` — a commit touching only `vercel.json` and three markdown
+  files — failed `widget-settings.spec.ts:31` on both attempts. Same code, opposite verdicts
+  twelve minutes apart. Gating on that isn't "don't ship broken code", it's "shipping is a coin
+  flip". e2e still has to be green to merge; it just doesn't hold the deploy. **Put it back once
+  that spec is fixed** — the gap until then is the authed dashboard journeys. Never
+  `continue-on-error`: that would make the job green while shipping the failure it exists to
+  catch.
 - **A missing Vercel secret fails the job loudly**, unlike `deploy-trigger`, which exits 0 when
   unconfigured. A skip here would mean production silently stops receiving deploys.
 - The build still runs **on Vercel**, so `vercel.json`'s `buildCommand` stays the one definition
   of how prod is built. Don't move it onto the runner.
+- **If a deploy is ever stuck**, `gh run rerun <id> --failed` re-runs just the failed jobs and
+  lets `deploy-production` proceed — no empty commit needed.
 
 ## Driving the app to test it (seeded login + browser)
 
