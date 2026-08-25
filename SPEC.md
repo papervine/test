@@ -4210,6 +4210,55 @@ the hosted API over HTTPS, they don't embed it.
 > run produced — everything up to and including validation succeeds, and nothing is published.
 > The token's scope can't be read from here; the first run will say.
 >
+> **Status (2026-08-24): self-hosting is documented as a supported deployment, and the
+> Dockerfile was tested before it was written down.** New page `docs/guides/self-hosting` in the
+> Publish group, plus a section and a Dockerfile in the CLI README.
+>
+> **The premise came from the user: the CLI is a bona fide production server, not a previewer.**
+> That is simply true and the docs had it wrong — `bin/papervine.mjs` spawns Next's standalone
+> server with `NODE_ENV: "production"` against a prebuilt app. There is no other server. The
+> word "dev" in the command name describes the occasion, not the software, and every surface
+> that said "preview" was describing a use case as if it were a limit. Fixed across the README
+> tagline and headings, the npm `description`, `docs/cli.mdx`, and the CLI's own `--help`.
+>
+> **Structure borrowed from a competitor's deployment page, but not its content** — theirs is a
+> static-hosting guide (GitHub Pages, Netlify, Cloudflare) because their build emits a static
+> bundle. Ours cannot be that page: `papervine build` (static export) is roadmap, not shipped,
+> so every static host is a *wrong* answer and the page says so in a Warning rather than
+> leaving someone to discover it. What transfers is the shape: overview → one section per
+> method → checklist.
+>
+> **Everything asserted was verified in Docker first**, because a deployment guide with an
+> untested Dockerfile costs a reader an afternoon. Packed the real 17MB tarball, installed it
+> globally in `node:22-slim`, and confirmed: the site serves (home, a nested page, the search
+> API all 200), `sharp` installs on glibc so image optimization is available with no warning,
+> `docker stop` returns in under a second (SIGTERM is forwarded, no kill-timeout wait), and a
+> **read-only** bind mount publishes edits live — both a frontmatter change and an appended
+> body paragraph appeared on the next request with no restart. That last one is the claim the
+> page is built around, so it was the one worth proving.
+>
+> A false alarm worth recording, since it looked exactly like a bug: the first live-edit test
+> appeared to fail. The cause was the test, not the server — the frontmatter is
+> `title: "Introduction"` with quotes and the edit searched for it without them, so no edit ever
+> reached the file. The lesson is the cheap one: confirm the input changed before concluding the
+> system ignored it.
+>
+> **The Trust sections needed reconciling, not just extending.** Both the README and
+> `docs/cli.mdx` stated the surface "binds loopback" as a flat security property. That stops
+> being true the moment a reader follows the new instructions, so both now say *by default* and
+> name `PAPERVINE_HOST=0.0.0.0` as the setting you knowingly relax. A doc that contradicts its
+> own deployment guide is worse than one that omits it.
+>
+> **"What you give up" is a table, deliberately.** Reader auth, the browser editor, analytics,
+> automations, managed TLS/CDN, multi-site — naming what the control plane does is what makes
+> the hosted product legible, and burying it would make the guide feel like a trap. The honest
+> framing is that self-hosting is an alternative for public docs written in Git, not a lesser
+> tier.
+>
+> Verified: crawl `docs` 43/43 at 0×500 (was 42 pages), every internal link and in-page anchor
+> in the new page resolves, README anchors resolve, and the page was checked in a real browser
+> in both appearances with a clean console.
+>
 > **Status (2026-08-24): `papervine new` shipped, and `dev` offers it.** Prompted by a
 > competitor leading with `pnpm dlx create-shiso-app my-docs` — the observation being that a
 > tool should generate a folder when the user hasn't got one. Ours dead-ended instead: `dev`

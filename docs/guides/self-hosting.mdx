@@ -1,0 +1,247 @@
+---
+title: Self-hosting
+description: Run your docs site on your own infrastructure with the papervine CLI — Docker, a Node process, or a container platform, behind your own reverse proxy.
+public: true
+---
+
+The `papervine` CLI is a production server, not only a previewer. It runs a prebuilt Next.js
+app with `NODE_ENV=production`, so the same command you use while writing is the one that can
+serve the finished site. Self-hosting is pointing it at a folder of MDX and putting a reverse
+proxy in front.
+
+<Info>
+  This is an alternative to [hosted Papervine](/guides/publishing), not a lesser version of it.
+  You get the same renderer and the same pages. What you don't get is the control plane —
+  see [What you give up](#what-you-give-up) before choosing.
+</Info>
+
+## What you're deploying
+
+One long-running Node process that reads MDX from a directory and serves HTML.
+
+<CardGroup cols={2}>
+  <Card title="No build step">
+    The renderer ships prebuilt inside the package. There is nothing to compile on your
+    server and no build toolchain to install.
+  </Card>
+  <Card title="No database">
+    Content is read from disk. There is no Postgres, no object storage, and no migration
+    to run.
+  </Card>
+  <Card title="No static export">
+    This is a server, not a bundle of files. `papervine build` (static export) is on the
+    [roadmap](/roadmap) and not shipped, so a static host is not an option yet.
+  </Card>
+  <Card title="One site per process">
+    There is no multi-tenancy here. Two sites means two processes on two ports.
+  </Card>
+</CardGroup>
+
+Requires Node 20.9 or newer.
+
+## Docker
+
+The shortest complete deployment. This installs the CLI, copies your docs in, and serves them:
+
+```dockerfile Dockerfile
+FROM node:22-slim
+
+RUN npm i -g papervine
+
+COPY docs /docs
+
+# Bind every interface — the CLI defaults to loopback, which a container cannot expose.
+ENV PAPERVINE_HOST=0.0.0.0
+EXPOSE 3000
+CMD ["papervine", "dev", "/docs", "--port", "3000"]
+```
+
+```bash
+docker build -t my-docs .
+docker run -d -p 3000:3000 my-docs
+```
+
+Use a **glibc** base image (`node:22-slim`, `node:22`) rather than Alpine unless you have a
+reason to prefer musl. Image optimization comes from [`sharp`](https://sharp.pixelplumbing.com),
+which ships a compiled binary per platform; npm picks the right one automatically on Debian-based
+images. If it can't be installed the CLI still runs and says so at startup, serving images at
+their original size.
+
+<Tip>
+  `PAPERVINE_HOST`, not `HOSTNAME`. Docker sets `HOSTNAME` to the container id, so a server
+  that read it would bind the container's own hostname — and `curl localhost:3000` inside the
+  container would be refused while the logs claimed everything was fine.
+</Tip>
+
+### Mounting content instead of copying it
+
+Copying content into the image means an image rebuild per docs change. Mounting it means the
+files are the deploy:
+
+```bash
+docker run -d -p 3000:3000 -v /srv/docs:/docs:ro my-docs
+```
+
+Pages are read from disk per request, so writing new MDX into that directory publishes it —
+**no rebuild and no restart**. Read-only (`:ro`) is deliberate: the server never writes to your
+content.
+
+## A plain Node process
+
+No container required. Install the CLI and run it:
+
+```bash
+npm i -g papervine
+PAPERVINE_HOST=0.0.0.0 papervine dev /srv/docs --port 3000
+```
+
+For a machine that should keep it running, a systemd unit is enough:
+
+```ini /etc/systemd/system/docs.service
+[Unit]
+Description=Docs site
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/papervine dev /srv/docs --port 3000
+Environment=PAPERVINE_HOST=0.0.0.0
+Restart=always
+User=www-data
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+systemctl enable --now docs
+```
+
+The CLI forwards `SIGTERM` to the server and exits promptly, so `systemctl stop` and
+`docker stop` shut down cleanly rather than waiting out a kill timeout.
+
+## Container platforms
+
+Anything that runs a container and routes to a port works without special configuration —
+Fly.io, Railway, Render, Cloud Run, ECS, a Kubernetes Deployment. The requirements are the same
+in each:
+
+<Steps>
+  <Step title="Bind every interface">
+    Set `PAPERVINE_HOST=0.0.0.0`. The loopback default is correct on a laptop and makes the
+    container unreachable in production.
+  </Step>
+  <Step title="Serve on the port the platform expects">
+    Pass `--port` to match whatever the platform routes to.
+  </Step>
+  <Step title="Health check `/`">
+    There is no dedicated health endpoint. The home page returns 200 once the server is
+    ready, which is what a check should look at.
+  </Step>
+</Steps>
+
+<Warning>
+  Platforms that host **static files** — GitHub Pages, Netlify, Cloudflare Pages, Vercel's
+  static output — cannot run this. There is no static export yet, so those need a container
+  or a Node runtime instead.
+</Warning>
+
+## Reverse proxy and TLS
+
+The CLI serves plain HTTP on one port and does no `Host` routing. Put a proxy in front of it
+for certificates, compression, and any host-based routing you need.
+
+```nginx nginx
+server {
+  listen 443 ssl;
+  server_name docs.example.com;
+
+  ssl_certificate     /etc/letsencrypt/live/docs.example.com/fullchain.pem;
+  ssl_certificate_key /etc/letsencrypt/live/docs.example.com/privkey.pem;
+
+  location / {
+    proxy_pass http://127.0.0.1:3000;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+  }
+}
+```
+
+Caddy is two lines and gets certificates itself:
+
+```caddyfile Caddyfile
+docs.example.com {
+  reverse_proxy 127.0.0.1:3000
+}
+```
+
+With a proxy handling TLS you can drop `PAPERVINE_HOST` entirely and leave the server on
+loopback, which is the tighter arrangement: only the proxy can reach it.
+
+## Publishing an update
+
+There is no deploy step. Replace the files:
+
+```bash
+rsync -a --delete ./docs/ /srv/docs/
+```
+
+The next request renders the new content. Compilation and syntax highlighting are cached, so
+unchanged pages don't pay to re-render, and the search index is fingerprinted by your content
+and rebuilt only when files actually change.
+
+A `git pull` in the served directory works the same way, which makes a cron job or a webhook
+into a complete continuous-deployment setup.
+
+## The AI assistant
+
+The [assistant](/features/ai-assistant) appears when a model is configured and is absent when
+one isn't — so it's opt-in on a self-hosted site. Pass the same variables you'd use locally:
+
+```bash
+docker run -d -p 3000:3000 \
+  -e ANTHROPIC_API_KEY=sk-ant-... \
+  -e AI_ROUTING=direct \
+  my-docs
+```
+
+Point `AI_BASE_URL` at any OpenAI-compatible server to run it against a local model instead.
+Usage is billed by whoever provides the model — the CLI has no metering and reports nothing
+anywhere.
+
+## What you give up
+
+Self-hosting gives you the renderer. The rest of Papervine is the control plane, and none of it
+is in the CLI package:
+
+| Not included | What that means |
+| --- | --- |
+| Reader authentication | Every page is public. There is no per-page gating and no group check. |
+| The browser editor | No visual editing, no collaboration, no draft workflow. |
+| Analytics | No page views, no search analytics, no assistant transcripts. |
+| Automations | No scheduled or content-triggered AI runs. |
+| Managed TLS and CDN | Yours to provide, via the proxy above. |
+| Multi-site hosting | One process per site. |
+
+If your docs are public, your team writes in Git, and you already run a reverse proxy, none of
+that is a loss. If you need gated docs or non-technical authors editing in a browser, that's
+[hosted Papervine](/guides/publishing).
+
+## Checklist
+
+<Steps>
+  <Step title="`PAPERVINE_HOST` is set (or a proxy shares the host)">
+    The most common reason a deployed site is unreachable is the loopback default.
+  </Step>
+  <Step title="TLS terminates somewhere">
+    The CLI does not serve HTTPS.
+  </Step>
+  <Step title="The content path is right">
+    The directory must contain `docs.json` at its root. The CLI fails with a clear message
+    if it doesn't.
+  </Step>
+  <Step title="A deep link works, not just the home page">
+    Request a nested page directly (`/guides/authoring`, not just `/`) to confirm the proxy
+    passes the full path through.
+  </Step>
+</Steps>

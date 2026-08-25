@@ -40,6 +40,7 @@
             "pages": [
               "guides/publishing",
               "guides/custom-domain",
+              "guides/self-hosting",
               "control-plane/exports"
             ]
           },
