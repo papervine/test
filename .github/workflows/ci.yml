@@ -157,6 +157,61 @@ jobs:
           echo "Deploying with trigger.dev@${VERSION}"
           npx "trigger.dev@${VERSION}" deploy
 
+  # Deploy the Next app to Vercel production.
+  #
+  # Vercel's Git integration deploys the instant it sees a push, in parallel with this
+  # workflow and with no knowledge of it — so a commit that fails the tests below still
+  # went live, and a red CI run sat next to a green production deploy. `next build` failing
+  # was the only thing that ever stopped a bad deploy, which catches type and compile
+  # errors and nothing else: not the unit tests, not the smoke gate, not the e2e journeys.
+  #
+  # So automatic deploys are turned OFF for `main` (vercel.json → git.deploymentEnabled)
+  # and this job is the only path to production. Branch and PR previews are untouched —
+  # they still auto-deploy, and gating them would remove the thing they're for.
+  #
+  # Gated on BOTH test jobs. That is a deliberate trade: an e2e flake now blocks a deploy
+  # rather than letting a real failure through. If that becomes the common case, drop `e2e`
+  # from `needs` — don't reach for `continue-on-error`, which would make this job green
+  # while shipping the failure it was added to catch.
+  deploy-production:
+    needs: [verify, e2e]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # No `npm ci`: the build runs on Vercel (remote build), which is what keeps
+      # vercel.json's buildCommand — `drizzle-kit migrate && sync-billing && next build` —
+      # the single definition of how production is built. Building here instead would fork it.
+      - name: Deploy to Vercel (production)
+        env:
+          VERCEL_ACCESS_TOKEN: ${{ secrets.VERCEL_ACCESS_TOKEN }}
+          # The CLI reads these two from the environment to know what it's deploying, in
+          # place of a checked-in .vercel/project.json. ORG_ID is the team id for a
+          # team-scoped project (which this is — the secret already exists for the
+          # Trigger.dev env sync above).
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_TEAM_ID }}
+        run: |
+          # Fail LOUD, never skip. The Trigger.dev job above exits 0 when unconfigured
+          # because a missing executor deploy degrades to "prod keeps running the old
+          # tasks". Here a skip would mean production silently stops receiving deploys at
+          # all — strictly worse than the auto-deploy this replaces.
+          for var in VERCEL_ACCESS_TOKEN VERCEL_PROJECT_ID VERCEL_ORG_ID; do
+            if [ -z "${!var}" ]; then
+              echo "::error::$var is not set, and production deploys now go through this job — so this cannot be skipped. Add it under Settings → Secrets and variables → Actions (VERCEL_ORG_ID comes from the VERCEL_TEAM_ID secret)."
+              exit 1
+            fi
+          done
+          # Pinned to a major: this is the production deploy path, and `@latest` would let a
+          # CLI release change how it behaves without a commit here.
+          npx vercel@59 deploy --prod --yes --token="$VERCEL_ACCESS_TOKEN"
+
 # Crawling *external* docs repos still lives in tests/crawl.mjs and is run locally —
 # see README → Testing. It stays out of CI because it clones a third-party repo per
 # run, so a red build could mean their content changed rather than ours; the fixtures
