@@ -17,6 +17,7 @@ import type { NavSection } from "@papervine/renderer/lib/nav";
 import { NavTree } from "./NavTree";
 import { FileTree } from "./FileTree";
 import { BranchSwitcher } from "./BranchSwitcher";
+import { PreviewOverlay } from "./PreviewOverlay";
 import { PublishButton } from "./PublishButton";
 import { EditorAgentPanel } from "./EditorAgentPanel";
 import { MdxEditorPane, type Mode, type MdxEditorHandle } from "./MdxEditorPane";
@@ -88,6 +89,7 @@ export function EditorShell({
   // writing — and revealed on demand via the "Ask agent" button or ⌘/Ctrl-I. We toggle visibility
   // (not mount) so the chat history survives a close→reopen.
   const [agentOpen, setAgentOpen] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   // Shortcut glyph: ⌘ on mac, Ctrl elsewhere. Defaults to ⌘ (matches SSR) and corrects on mount,
   // so there's no hydration mismatch.
   const [modKey, setModKey] = useState("⌘");
@@ -209,6 +211,14 @@ export function EditorShell({
   // Awaitable so the pane can flush a pending save before loading the preview iframe.
   const save = async (md: string): Promise<void> => {
     await saveDraftAction(org, site, branch, path, md);
+  };
+
+  // Flush before showing the preview, for the same reason page settings does: the preview renders
+  // the DRAFT, and autosave is debounced — without this the last thing you typed is the one thing
+  // it doesn't show, which reads as the preview being broken.
+  const openPreview = async () => {
+    await paneRef.current?.flush();
+    setPreviewOpen(true);
   };
 
   // Settings panels. Flush the editor before opening page settings so it reads the latest draft.
@@ -516,20 +526,18 @@ export function EditorShell({
               </kbd>
             </button>
             {/* The WHOLE site from the draft — navbar, tabs, sidebar, links between pages — as
-                opposed to the in-pane Preview, which renders just the page you're editing. A
-                plain <a target="_blank">, not a router push: a new tab is a hard navigation, so
-                it carries the app-host rewrite that a soft nav into a rewritten path skips
-                (AGENTS.md), and leaving the editor open beside it is the point. */}
-            <a
-              href={`/preview/${org}/${site}/site`}
-              target="_blank"
-              rel="noreferrer"
+                opposed to the in-pane Preview, which renders just the page you're editing.
+                Opens over the editor rather than in a second tab: closing is one Escape, and a
+                tab left open beside the editor went stale as you kept typing. */}
+            <button
+              type="button"
+              onClick={openPreview}
               title="Preview the whole site as it will publish"
               className="flex shrink-0 items-center gap-1.5 rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
             >
               <Eye className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Preview</span>
-            </a>
+            </button>
             <span className="hidden min-w-0 items-center gap-1 text-sm text-neutral-500 lg:flex">
               <ChevronRight className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">{slug || "index"}</span>
@@ -607,6 +615,20 @@ export function EditorShell({
           />
         )}
       </main>
+      {previewOpen && (
+        <PreviewOverlay
+          org={org}
+          site={site}
+          slug={slug}
+          onClose={() => setPreviewOpen(false)}
+          // Close before summoning the agent: the composer lives in the editor's own layout, so
+          // leaving the preview on top would put the agent behind an opaque full-screen frame.
+          onAskAgent={() => {
+            setPreviewOpen(false);
+            setAgentOpen(true);
+          }}
+        />
+      )}
     </div>
   );
 }

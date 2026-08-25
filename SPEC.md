@@ -2813,6 +2813,27 @@ layer.
 > replaying it proves nothing either way. The error-surfacing above is what closes this: the next
 > attempt says which of the two it is.
 >
+> **The whole-site preview became an overlay (2026-08-25).** It was `<a target="_blank">`, which
+> put the preview in a window with no relationship to the editor: getting back meant hunting for a
+> tab, and the two drifted — the tab kept showing the draft as of when it opened while you carried
+> on typing. Now a full-screen overlay with its own header (Site settings · Ask agent · reload ·
+> close), Escape to dismiss. The frame points at the same `/preview/{org}/{site}/site` route the
+> tab used, so it's still the real renderer reading the real draft rather than a second rendering
+> path that could disagree with what publishes.
+>
+> Two details that only showed up by driving it. It opens on the **page you're editing**, not the
+> site root — the first attempt framed the root, and the test caught it because a marker typed into
+> `guides/components` wasn't there. `previewHref` normalizes the index page's two spellings (`""`
+> and `"index"`), the same trap the nav tree has. And `openPreview` **flushes the pending edit
+> first**, for the reason page settings already does: the preview renders the draft and autosave is
+> debounced, so without it the last thing you typed is the one thing missing — which reads as the
+> preview being broken. Pinned by typing and opening the preview immediately, with no wait, so the
+> keystroke is still inside the debounce window. "Ask agent" closes the overlay before summoning
+> the composer, which lives in the editor's layout and would otherwise be behind an opaque frame.
+> Guard: an `editor.spec.ts` case asserting no tab opens, the four header controls, the framed URL
+> is the current page, its content renders, and Escape returns to the editor. Verified in both
+> platform themes.
+>
 > **Video 404'd in the draft preview (2026-08-25).** Reported as "the editor renders the video URLs
 > without the tenant parts," and it was broader than the editor: **any** surface with a non-empty
 > `assetBase` — path-based tenant serving (`/sites/{slug}`) as well as the draft preview — rendered

@@ -882,6 +882,47 @@ test.describe("web editor @external", () => {
     await clearDrafts(["failpage.mdx"]);
   });
 
+  // The live-preview overlay (SPEC §9.2). Two things a screenshot wouldn't catch: that it opens
+  // over the editor rather than in a second tab, and that it opens on the page you're EDITING —
+  // it renders the draft through the real route, so landing on the site's front page would mean
+  // navigating back to what you were just looking at, every time.
+  test("Preview opens an overlay on the current page, and closes back to the editor", async ({
+    page,
+    context,
+  }) => {
+    // A new tab would mean the old `<a target="_blank">` behaviour survived.
+    const popups: string[] = [];
+    context.on("page", (p) => popups.push(p.url()));
+
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=second`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    await page.getByRole("button", { name: "Preview" }).click();
+    const overlay = page.getByRole("dialog", { name: "Live preview" });
+    await expect(overlay).toBeVisible({ timeout: 15_000 });
+    expect(popups, "Preview opened a tab instead of an overlay").toEqual([]);
+
+    // The header's controls, per the design: settings, agent, reload, close.
+    await expect(overlay.getByRole("link", { name: "Site settings" })).toBeVisible();
+    await expect(overlay.getByRole("button", { name: "Ask agent" })).toBeVisible();
+    await expect(overlay.getByRole("button", { name: "Reload preview" })).toBeVisible();
+
+    // Framed on the page being edited, not the site root.
+    await expect(overlay.locator("iframe")).toHaveAttribute(
+      "src",
+      `/preview/${ORG_SLUG}/${SLUG}/site/second`,
+    );
+    await expect(
+      page.frameLocator('iframe[title="Live preview"]').getByText("The second page body."),
+    ).toBeVisible({ timeout: 20_000 });
+
+    // Escape is the way back — the whole reason this isn't a tab.
+    await page.keyboard.press("Escape");
+    await expect(overlay).toHaveCount(0);
+    await expect(pm).toBeVisible();
+  });
+
   // Publish panel: the file-changes list + per-file revert (SPEC §9.2). Edit one page, open the
   // Publish dropdown, and confirm it lists exactly that file with the right title (from
   // frontmatter) and "Modified" status — then revert it via the hover-revealed icon and confirm
