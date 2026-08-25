@@ -814,11 +814,20 @@ export const WIDGET_EMBED_SCRIPT = `
       // showing just the final synthesized answer, not a run-on of every step's prose.
       var segment = "";
       var segmentHasText = false;
+      var streamError = "";
       var meta = {};
 
       try {
         await streamEvents(widgetId, messages, function (event) {
-          if (event.type === "start-step") {
+          if (event.type === "error") {
+            // A failure that happens AFTER the response has started arrives as an event
+            // *inside* the stream, not as a non-2xx status — so streamEvents resolves
+            // normally and this is the only place a mid-stream model or credit failure
+            // surfaces. Dropping it left the assistant bubble empty, and an empty element
+            // has no size, so the reader got no feedback whatsoever that their question had
+            // been received and thrown away.
+            streamError = event.errorText || "";
+          } else if (event.type === "start-step") {
             segmentHasText = false;
           } else if (event.type === "tool-input-start" && !segmentHasText) {
             while (answerBubble.firstChild) answerBubble.removeChild(answerBubble.firstChild);
@@ -832,6 +841,14 @@ export const WIDGET_EMBED_SCRIPT = `
             messagesEl.scrollTop = messagesEl.scrollHeight;
           }
         }, meta);
+        // Re-raise both no-answer cases through the catch below, so there is exactly one
+        // place that turns a failure into a visible bubble.
+        if (streamError) throw new Error(streamError);
+        if (!segmentHasText) {
+          // A stream that ends with neither text nor an error is still nothing to read.
+          // Saying so beats leaving a blank bubble that looks like the widget hung.
+          throw new Error("No answer came back. Please try again.");
+        }
         messages.push({ role: "assistant", parts: [{ type: "text", text: segment }] });
         upgradeMermaidDiagrams(answerBubble, theme);
       } catch (err) {

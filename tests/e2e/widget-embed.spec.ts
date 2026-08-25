@@ -1,6 +1,6 @@
 import http from "node:http";
 import type { AddressInfo } from "node:net";
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import postgres from "postgres";
 import { TEST_USER, APEX_ORIGIN } from "./constants";
 import { TEST_DB_URL } from "./global-setup";
@@ -427,6 +427,72 @@ test("neutralizes a malicious link scheme and HTML in the AI's own output", asyn
   expect(html).not.toContain("javascript:");
   expect(html).not.toContain("<script>alert(2)</script>"); // escaped as text, not executed
   expect(html).toContain("&lt;script&gt;");
+});
+
+/**
+ * Stub the chat endpoint with a fixed SSE body, so the widget's failure handling can be tested
+ * without an AI provider. The two tests below cover the shapes a *successful* HTTP response can
+ * take while still carrying no answer — which is what the widget used to handle badly.
+ */
+async function stubChatStream(page: Page, body: string) {
+  await page.route("**/api/widget/*/chat", async (route) => {
+    if (route.request().method() === "OPTIONS") {
+      return route.fulfill({
+        status: 204,
+        headers: {
+          "access-control-allow-origin": "*",
+          "access-control-allow-headers": "content-type",
+          "access-control-allow-methods": "POST, OPTIONS",
+        },
+      });
+    }
+    return route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      headers: { "access-control-allow-origin": "*" },
+      body,
+    });
+  });
+}
+
+async function ask(page: Page) {
+  await page.goto(hostOrigin);
+  await page.locator(".pv-launcher").click();
+  await page.locator(".pv-input").fill("What is this docs site about?");
+  await page.locator(".pv-send").click();
+}
+
+test("surfaces an error that arrives inside the stream, not as a status code", async ({ page }) => {
+  // Regression: a failure that happens AFTER the response has started is delivered as an event
+  // *in* the stream with a 200 status — the AI SDK's shape for a mid-flight model or credit
+  // failure. The widget only converted its bubble to an error when `fetch` rejected or the
+  // status was non-2xx, so it dropped these events and left an empty `.pv-msg.assistant`. An
+  // empty element has no size, so the reader saw no feedback at all: their question vanished.
+  await stubChatStream(
+    page,
+    'data: {"type":"start"}\n\n' +
+      'data: {"type":"error","errorText":"The model provider is over quota."}\n\n' +
+      "data: [DONE]\n\n",
+  );
+  await ask(page);
+
+  const bubble = page.locator(".pv-msg.error");
+  await expect(bubble).toBeVisible();
+  await expect(bubble).toHaveText("The model provider is over quota.");
+  // The empty assistant bubble must be gone, not merely joined by an error one.
+  await expect(page.locator(".pv-msg.assistant")).toHaveCount(0);
+});
+
+test("says something when a stream ends with no answer and no error", async ({ page }) => {
+  // The other way to end up with a blank bubble: a well-formed stream that simply never emits
+  // any text. Nothing failed, so there is no error to report — but there is also nothing to
+  // read, and silence is indistinguishable from the widget having hung.
+  await stubChatStream(page, 'data: {"type":"start"}\n\ndata: [DONE]\n\n');
+  await ask(page);
+
+  const bubble = page.locator(".pv-msg.error");
+  await expect(bubble).toBeVisible();
+  await expect(bubble).not.toHaveText("");
 });
 
 test("rejects a request from an origin outside the allowlist", async ({ request }) => {
