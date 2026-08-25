@@ -33,11 +33,10 @@ const ALTERNATIVE_KEYWORD = "docs platform alternative";
 // Kept near 60 characters so the keyword survives search-result truncation, and set as
 // `absolute` below: the root layout's `%s · Papervine` template would otherwise append a second
 // "Papervine" and push this well past that budget.
-const TITLE = `Papervine — the intelligent docs platform | ${ALTERNATIVE_KEYWORD}`;
+const TITLE = `Papervine — the AI platform | ${ALTERNATIVE_KEYWORD}`;
 const DESCRIPTION =
-  "A modern docs platform alternative: docs.json-native, so your existing docs repo migrates " +
-  "unchanged. Documentation built for humans and AI — API playground, instant search, and an " +
-  "AI assistant.";
+  "Self-updating documentation for AI agents and humans. " +
+  "Open source alternative to the incumbent, ReadMe, and GitBook.";
 
 // Canonical host, `og:`/`twitter:` tags and our X handle come from the shared marketing helper
 // — see marketing-seo.ts for why they can't live in the root layout (it renders for tenant docs

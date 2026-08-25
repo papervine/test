@@ -11,7 +11,7 @@ import { MarketingOgCard, MARKETING_OG_SIZE } from "@/lib/marketing-og-card";
  * this file's content, so the card re-scrapes when the art or the copy changes.
  */
 
-export const alt = "Papervine — the intelligent docs platform";
+export const alt = "Papervine — the AI docs platform";
 export const size = MARKETING_OG_SIZE;
 export const contentType = "image/png";
 
@@ -21,8 +21,8 @@ export default async function Image() {
       <MarketingOgCard
         headline={[["Documentation"], ["that ", { accent: "grows" }, " itself."]]}
         sublines={[
-          "docs.json-native — your existing docs repo migrates unchanged.",
-          "Built for your readers and the AI agents they rely on.",
+          "Self-updating documentation for AI agents and humans.",
+          "Open source alternative to the incumbent, ReadMe, and GitBook.",
         ]}
       />
     ),
