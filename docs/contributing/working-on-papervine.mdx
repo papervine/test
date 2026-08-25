@@ -214,8 +214,16 @@ npm run test:e2e            # playwright — authed journeys (needs docker Postg
 npm run db:generate         # generate a versioned SQL migration from schema changes
 npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
 node bin/papervine.mjs dev <dir>     # preview any docs repo locally
+npm run prepack --workspace papervine     # rebuild the published CLI's prebuilt server
 node tests/crawl.mjs <dir>           # crawl a real repo, report rendered/degraded/500
 ```
+
+<Warning>
+  `apps/cli` serves a **prebuilt** server, so a change to the renderer — a component, a theme
+  token, a stylesheet — is invisible to `papervine dev` until you rebuild it. The CLI warns when
+  its build is older than your sources, but the rebuild is yours to run.
+</Warning>
+
 
 ## Conventions
 

@@ -553,6 +553,8 @@ node tests/crawl.mjs examples/starter # crawl the example site (a CI gate)
 npm run db:generate         # generate a versioned SQL migration from schema changes
 npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
 node bin/papervine.mjs dev <dir>     # preview any docs repo (docs dev analogue)
+node apps/cli/bin/papervine.mjs dev <dir>  # the PUBLISHED CLI's bin — serves a PREBUILT server, so renderer/theme edits are invisible until you rebuild
+npm run prepack --workspace papervine     # rebuild that server (the bin now warns when it's stale)
 #   the published CLI also has `papervine new <dir>` — scaffolds from examples/starter, bundled into the tarball by prepack
 node tests/crawl.mjs <dir>        # crawl a real repo, report rendered/degraded/500
 npm run widget:playground         # serve the embeddable widget on a real cross-origin test page
