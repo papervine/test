@@ -15,7 +15,8 @@ import {
   deleteDraftFile,
   type EditorSessionRow,
 } from "./draft-store";
-import { getObjectText } from "./storage";
+import { getObjectText, getObjectBytes, headObject, deleteKeys } from "./storage";
+import { draftAssetKey } from "./media-upload";
 import { runSync } from "./sync-runner";
 import { isNativeSite } from "./site-source";
 import { publishNative } from "./native-publish";
@@ -178,8 +179,12 @@ export async function listSessionChanges(site: SiteRow, branch: string): Promise
   return Promise.all(
     drafts.map(async (d): Promise<SessionChange> => {
       if (d.deleted) return { path: d.path, content: null, status: "deleted" };
-      const base = await getObjectText(`sites/${site.id}/${d.path}`);
-      return { path: d.path, content: d.content, status: base === null ? "added" : "modified" };
+      // An uploaded asset is classified by whether the live key EXISTS, not by reading it — the
+      // text path would pull a whole video into memory just to decide "added" vs "modified".
+      const exists = d.binary
+        ? (await headObject(`sites/${site.id}/${d.path}`)) !== null
+        : (await getObjectText(`sites/${site.id}/${d.path}`)) !== null;
+      return { path: d.path, content: d.content, status: exists ? "modified" : "added" };
     }),
   );
 }
@@ -193,6 +198,11 @@ export async function revertDraftFile(
 ): Promise<{ ok: boolean }> {
   const session = await findOpenSession(site.id, branch);
   if (!session) return { ok: false };
+  // Reverting an uploaded asset drops the bytes too, not just the row — otherwise the object sits
+  // in the draft prefix forever, invisible and unreferenced, and a re-upload of the same name
+  // would find the path "taken" by something nothing points at.
+  const draft = await getDraftFile(session.id, path);
+  if (draft?.binary) await deleteKeys([draftAssetKey(session.id, path)]);
   await deleteDraftFile(session.id, path);
   return { ok: true };
 }
@@ -256,10 +266,27 @@ export async function publishDraft(
 
   const drafts = await listDraftFiles(session.id);
   if (drafts.length === 0) return { ok: false, error: "No changes to publish." };
-  const files: FileChange[] = drafts.map((d) => ({
-    path: repoPath(site, d.path),
-    content: d.deleted ? null : d.content,
-  }));
+  // Uploaded assets have no text content — their bytes are in storage under the session's draft
+  // prefix, so they're read back and committed as base64 blobs. Sequential reads: a publish
+  // carrying several videos shouldn't hold all of them in memory at once.
+  const files: FileChange[] = [];
+  for (const d of drafts) {
+    const path = repoPath(site, d.path);
+    if (d.deleted) {
+      files.push({ path, content: null });
+      continue;
+    }
+    if (d.binary) {
+      const obj = await getObjectBytes(draftAssetKey(session.id, d.path));
+      // Skip rather than commit an empty file: a missing object means the upload never landed,
+      // and a zero-byte video in the repo is worse than one that isn't there yet.
+      if (!obj) continue;
+      files.push({ path, content: null, base64: Buffer.from(obj.body).toString("base64") });
+      continue;
+    }
+    files.push({ path, content: d.content });
+  }
+  if (files.length === 0) return { ok: false, error: "No changes to publish." };
   const message = opts.message?.trim() || `docs: edits via Papervine editor`;
 
   if (opts.mode === "commit") {

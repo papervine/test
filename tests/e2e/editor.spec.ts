@@ -43,7 +43,22 @@ test.describe("web editor @external", () => {
     const prefix = `sites/${SITE_ID}/`;
     await put(
       `${prefix}docs.json`,
-      JSON.stringify({ name: "Editor E2E", navigation: { pages: ["index", "second", "linky"] } }),
+      JSON.stringify({
+        name: "Editor E2E",
+        navigation: {
+          pages: [
+            "index",
+            "second",
+            "linky",
+            "tabby",
+            "steppy",
+            "mediapage",
+            "slashpage",
+            "uploadpage",
+            "failpage",
+          ],
+        },
+      }),
       "application/json",
     );
     await put(`${prefix}index.mdx`, "---\ntitle: Home\n---\n\nOriginal body text.\n");
@@ -55,7 +70,74 @@ test.describe("web editor @external", () => {
         "An [inline link](/second) and a [dead one](/nope).\n\n" +
         '<CardGroup cols={1}>\n  <Card title="Second" href="/second">\n    Card body text.\n  </Card>\n</CardGroup>\n',
     );
+    // A Tabs block for the tab-strip test. Blank lines around each body on purpose: MDX parses
+    // the compact one-line form as INLINE JSX, which the converter turns into unknown-atoms
+    // rather than `tab` nodes, and the node view then (correctly) falls back to labelled chrome.
+    // This shape is the one that becomes an editable strip.
+    await put(
+      `${prefix}tabby.mdx`,
+      "---\ntitle: Tabby\n---\n\nBody before the tabs.\n\n<Tabs>\n" +
+        '  <Tab title="Alpha">\n\n    Alpha body text.\n\n  </Tab>\n' +
+        '  <Tab title="Beta">\n\n    Beta body text.\n\n  </Tab>\n' +
+        "</Tabs>\n",
+    );
+    // Video has no component in the docs.json-compatible schema, so the portable form is raw
+    // HTML. The converter keeps that as an opaque block, which used to mean the editor showed its
+    // source instead of the media.
+    await put(
+      `${prefix}mediapage.mdx`,
+      "---\ntitle: Media\n---\n\n" +
+        // A leading paragraph on purpose: every media block below is a non-editable atom, so with
+        // nothing else on the page there'd be nowhere to put a caret and type `/`. It goes FIRST
+        // because the slash menu floats at the caret, and three media blocks make the page tall
+        // enough that a caret at the end anchors the menu off screen (a click there never lands).
+        "Text before the media.\n\n" +
+        '<video controls className="w-full aspect-video rounded-xl" src="/videos/demo.mp4"></video>\n\n' +
+        '<iframe className="w-full aspect-video rounded-xl" src="https://www.youtube.com/embed/xyz789" title="Player" allowFullScreen></iframe>\n\n' +
+        // A <source> list has no single src, so it stays as source rather than being approximated.
+        '<video controls>\n  <source src="/videos/demo.mp4" type="video/mp4" />\n</video>\n',
+    );
+    // Its own page, touched by no other test: these specs share one Postgres and run in
+    // declaration order, so a page an earlier test typed into carries that draft over — and the
+    // slash assertions are about what is and isn't in the document.
+    await put(`${prefix}slashpage.mdx`, "---\ntitle: Slash\n---\n\nSlash anchor line.\n");
+    // The two upload tests get their own pages for the same reason: each leaves a draft, and
+    // sharing one page made which test failed depend on the order they happened to run in.
+    await put(`${prefix}uploadpage.mdx`, "---\ntitle: Upload\n---\n\nUpload anchor line.\n");
+    await put(`${prefix}failpage.mdx`, "---\ntitle: Fail\n---\n\nFail anchor line.\n");
+    await put(
+      `${prefix}steppy.mdx`,
+      '---\ntitle: Steppy\n---\n\n<Steps>\n  <Step title="First">\n\n    First body.\n\n  </Step>\n</Steps>\n',
+    );
   });
+
+  /**
+   * Drop the drafts a test created. These specs share one Postgres and run in declaration order,
+   * and the Publish-panel test asserts the session has exactly ONE changed file — so a test that
+   * leaves an edit behind fails an assertion further down the file, which reads as a bug in that
+   * other test. Each test that types into a page clears it here rather than relying on autosave
+   * not having fired yet.
+   */
+  const clearDrafts = async (paths: string[]) => {
+    // Deleted more than once on purpose. Autosave is debounced, so a keystroke from the end of a
+    // test can still be in flight when it finishes — the row then lands AFTER a single delete and
+    // shows up as an extra change in the Publish-panel test further down the file. That was
+    // intermittent and read as flakiness in that test rather than as unfinished work here.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await sql`
+        delete from draft_file df
+         using editor_session es
+         where df.session_id = es.id
+           and es.site_id = ${SITE_ID}
+           and (df.binary = true or df.path = ANY(${paths}))`;
+      const [left] = await sql<{ n: number }[]>`
+        select count(*)::int as n from draft_file df
+         join editor_session es on es.id = df.session_id
+        where es.site_id = ${SITE_ID} and (df.binary = true or df.path = ANY(${paths}))`;
+      if (left.n === 0 && attempt > 0) break;
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  };
 
   test.afterAll(async () => {
     await sql`delete from site where id = ${SITE_ID}`;
@@ -347,6 +429,459 @@ test.describe("web editor @external", () => {
     expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
   });
 
+  // The <Tabs> node view (SPEC §9.2): a live tab strip, and Select All scoped to the tab you're
+  // in. Both are only observable in a browser — the strip's pane switching is a CSS rule whose
+  // whole point is that ProseMirror re-rendering its children can't undo it, and the Mod-A
+  // scoping is a keymap fallthrough. The console assertion rides along for the same reason as
+  // the mode-toggle test above: this is interactive React inside a node view.
+  test("the Tabs node view switches panes and scopes Select All to the active tab", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    // ?slug= opens straight on the page, rather than depending on how the nav labels it.
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=tabby`);
+    await expect(page.locator(".pv-visual .ProseMirror")).toBeVisible({ timeout: 15_000 });
+
+    const block = page.locator('[data-node-view-wrapper]:has(> [data-pv-tabs])');
+    await expect(block).toBeVisible({ timeout: 15_000 });
+    const labels = block.locator('button[title="Double-click to rename"]');
+    await expect(labels).toHaveText(["Alpha", "Beta"]);
+    // One grip per tab — the drag handle lives above the label, not on it.
+    await expect(block.locator('button[aria-label^="Reorder"]')).toHaveCount(2);
+
+    // Exactly one pane on screen at a time; the rest are hidden, not absent.
+    const panes = block.locator("[data-pv-tab]");
+    await expect(panes).toHaveCount(2);
+    await expect(panes.nth(0)).toBeVisible();
+    await expect(panes.nth(1)).toBeHidden();
+
+    await labels.nth(1).click();
+    await expect(panes.nth(0)).toBeHidden();
+    await expect(panes.nth(1)).toBeVisible();
+    await expect(panes.nth(1)).toContainText("Beta body text.");
+
+    // Mod-A inside the pane highlights that pane only. Before this was scoped it selected the
+    // whole document — including the hidden panes, so typing next would have replaced content
+    // the user couldn't see.
+    await panes.nth(1).click();
+    await page.keyboard.press("ControlOrMeta+a");
+    const selection = await page.evaluate(() => {
+      const sel = window.getSelection();
+      if (!sel || sel.rangeCount === 0) return null;
+      const paneOf = (n: Node | null) => {
+        const el = n && n.nodeType === 1 ? (n as Element) : n?.parentElement;
+        return el?.closest("[data-pv-tab]") ?? null;
+      };
+      const anchor = paneOf(sel.anchorNode);
+      return { text: sel.toString(), sameOnePane: anchor !== null && anchor === paneOf(sel.focusNode) };
+    });
+    expect(selection?.text.trim()).toBe("Beta body text.");
+    expect(selection?.sameOnePane, "Select All escaped the tab").toBe(true);
+
+    // …and a live selection brings up the formatting bar.
+    await expect(page.locator(".pv-bubble")).toBeVisible();
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat/i.test(e),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+
+    await clearDrafts(["tabby.mdx"]);
+  });
+
+  // The Steps/Step node views (SPEC §9.2): the "add a step" control on the end of the rail, and
+  // the separate title / body slots. The things worth pinning are the ones a screenshot wouldn't
+  // catch — that the button lands ON the rail (it's positioned against geometry the component
+  // owns, so a restyle there could silently drift it), that focus goes to the new step's title,
+  // and that typing a whole title survives the per-keystroke attr commit rather than losing the
+  // input's focus or caret after the first character.
+  test("the Steps node view adds a step on the rail with its own title and body", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=steppy`);
+    await expect(page.locator(".pv-visual .ProseMirror")).toBeVisible({ timeout: 15_000 });
+
+    const block = page.locator(".react-renderer.node-steps");
+    await expect(block).toBeVisible({ timeout: 15_000 });
+    const steps = block.locator(".react-renderer.node-step");
+    await expect(steps).toHaveCount(1);
+
+    const plus = block.getByRole("button", { name: "Add step" });
+    await expect(plus).toBeVisible();
+
+    // Centred on the rail, which means centred on the step badges — the button is positioned
+    // against the offsets <Steps> itself draws, so this is the assertion that catches drift.
+    const badge = await block.locator("span.rounded-full").first().boundingBox();
+    const before = await plus.boundingBox();
+    expect(badge && before).toBeTruthy();
+    expect(Math.abs(before!.x + before!.width / 2 - (badge!.x + badge!.width / 2))).toBeLessThan(2);
+    expect(before!.y, "the + should sit below the last step").toBeGreaterThan(badge!.y);
+
+    // The seeded step's title is a field, not baked-in text, so it can be edited in place.
+    const titles = block.locator('input[aria-label="Step title"]');
+    await expect(titles).toHaveValue("First");
+
+    await plus.click();
+    await expect(steps).toHaveCount(2);
+
+    // Focus lands on the new step's title — a step starts with its name.
+    await expect(titles.nth(1)).toBeFocused();
+    await page.keyboard.type("Second");
+    // The whole word, not just its first letter: the title commits to the document on every
+    // keystroke, and if that re-created the node view instead of updating it the input would
+    // lose focus and the rest would land somewhere else.
+    await expect(titles.nth(1)).toHaveValue("Second");
+
+    // Enter crosses from the title into the body, which is a separate editable region.
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("Second body.");
+    await expect(steps.nth(1)).toContainText("Second body.");
+    await expect(titles.nth(1)).toHaveValue("Second");
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat/i.test(e),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+
+    await clearDrafts(["steppy.mdx"]);
+  });
+
+  // The `/` menu's keyboard navigation (SPEC §9.2). Arrows used to fall through to the document,
+  // which moved the caret out of the `/query` and closed the menu; Enter fell through too, so an
+  // item could only be chosen with the mouse. The cause was an extension option being deep-merged
+  // (pinned in tests/unit/slash-command-options.test.ts) — but only a browser shows the symptom,
+  // because it's about who consumes the keydown.
+  test("the slash menu takes the arrow keys instead of closing", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=slashpage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    const menu = page.locator(".pv-slash-menu");
+    const highlighted = page.locator(".pv-slash-item.is-active .pv-slash-title");
+
+    // A fresh empty paragraph after the page's body text. Re-derived rather than reused, because
+    // the Enter below inserts a block and leaves the caret inside it — and the suggestion doesn't
+    // fire inside a code block, so the second half of this test would silently never open a menu.
+    const freshLine = async () => {
+      await pm.getByText("Slash anchor line.").click();
+      await page.keyboard.press("End");
+      await page.keyboard.press("Enter");
+    };
+
+    await freshLine();
+    await page.keyboard.type("/c");
+    await expect(menu).toBeVisible();
+    const first = await highlighted.innerText();
+
+    // The key that used to dismiss the menu.
+    await page.keyboard.press("ArrowDown");
+    await expect(menu).toBeVisible();
+    await expect(highlighted).not.toHaveText(first);
+    const second = await highlighted.innerText();
+
+    await page.keyboard.press("ArrowUp");
+    await expect(menu).toBeVisible();
+    await expect(highlighted).toHaveText(first);
+
+    // The caret never left the query — that's what kept the menu open.
+    await expect(pm.getByText("/c", { exact: true })).toBeVisible();
+
+    // Enter takes the highlighted item, not always the first one — "/c" + one ArrowDown is
+    // "Code block", so a <pre> appearing is the proof that the arrows chose it.
+    await page.keyboard.press("ArrowDown");
+    await expect(highlighted).toHaveText(second);
+    expect(second.trim()).toBe("Code block");
+    await page.keyboard.press("Enter");
+    await expect(menu).toHaveCount(0);
+    await expect(pm.locator("pre")).toHaveCount(1);
+    // …and the typed query is consumed by the insert, not left behind as text.
+    await expect(pm.getByText("/c", { exact: true })).toHaveCount(0);
+
+    // Escape still closes without inserting. Reloaded rather than continued from above: the
+    // suggestion plugin remembers a dismissed range, and the insert just now left the caret
+    // inside a new block — so set the precondition up explicitly instead of inheriting it.
+    await page.reload();
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+    await freshLine();
+    await page.keyboard.type("/note");
+    await expect(menu).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(menu).toHaveCount(0);
+    await expect(pm.getByText("/note", { exact: true })).toBeVisible();
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat/i.test(e),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+
+    await clearDrafts(["slashpage.mdx"]);
+  });
+
+  // Video and embeds (SPEC §9.2). Raw <video>/<iframe> is the portable form — the schema has no
+  // video component — and the converter keeps raw HTML as an opaque block, so without a node view
+  // it's the one kind of content you can put on a page and never see. Pinned here: the live
+  // player renders instead of the source box, a root-relative src is resolved through the tenant
+  // asset base (the editor is on the app host, so a bare /videos/… would 404), the form we can't
+  // render faithfully still falls back to source, and /embed converts a share URL on insert.
+  test("the editor renders video and embeds as live players, not as source", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=mediapage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    await expect(pm.locator("video[src]")).toHaveCount(1);
+    await expect(pm.locator("iframe")).toHaveCount(1);
+
+    const video = pm.locator("video[src]").first();
+    // Resolved through the asset base rather than left root-relative.
+    await expect(video).toHaveAttribute("src", /\/videos\/demo\.mp4$/);
+    expect(await video.getAttribute("src")).not.toBe("/videos/demo.mp4");
+    // The utility classes carry over, so the player is laid out the way readers will see it.
+    await expect(video).toHaveClass(/aspect-video/);
+    await expect(video).toHaveJSProperty("controls", true);
+
+    await expect(pm.locator("iframe")).toHaveAttribute(
+      "src",
+      "https://www.youtube.com/embed/xyz789",
+    );
+
+    // The <source>-list form has no single src, so it must still show as source — never a
+    // half-rendered player. Its raw text is the tell.
+    await expect(pm.locator("pre", { hasText: "<source" })).toHaveCount(1);
+
+    // A native prompt here would be a regression — the URL is collected by a real dialog. If one
+    // did appear Playwright would auto-dismiss it and the insert would just silently not happen,
+    // so count them and assert zero rather than relying on the absence of a symptom.
+    let nativePrompts = 0;
+    page.on("dialog", (d) => {
+      nativePrompts += 1;
+      void d.dismiss();
+    });
+
+    // /embed resolves a share URL to an embeddable one on submit: pasting what the address bar
+    // gives you is what people actually do, and the watch URL refuses to frame.
+    // Click the leading paragraph rather than the editor generally: every other block on this
+    // page is a non-editable atom, so a click elsewhere leaves nowhere to type.
+    await pm.getByText("Text before the media.").click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/embed");
+    await expect(page.locator(".pv-slash-menu")).toBeVisible();
+    // Enter rather than a click — the menu re-renders per keystroke, so a click can race it.
+    await expect(page.locator(".pv-slash-item.is-active .pv-slash-title")).toHaveText("Embed");
+    await page.keyboard.press("Enter");
+
+    const mediaDialog = page.getByRole("dialog");
+    await expect(mediaDialog).toBeVisible();
+    // The field owns focus, so pasting is the next thing that happens — Radix would otherwise
+    // focus the dialog itself and swallow the first keystroke.
+    await expect(page.locator("#pv-media-url")).toBeFocused();
+    // Nothing to add until the field holds something usable.
+    await expect(page.getByRole("button", { name: "Add embed" })).toBeDisabled();
+    await page.locator("#pv-media-url").fill("javascript:alert(1)");
+    await expect(page.getByRole("button", { name: "Add embed" })).toBeDisabled();
+
+    await page.locator("#pv-media-url").fill("https://www.youtube.com/watch?v=4KzFe50RQkQ&t=30");
+    // The provider is named back before you commit, so a mistyped link is visible up front.
+    await expect(page.locator("#pv-media-hint")).toContainText("YouTube");
+    await page.getByRole("button", { name: "Add embed" }).click();
+
+    await expect(mediaDialog).toHaveCount(0);
+    await expect(
+      pm.locator('iframe[src="https://www.youtube.com/embed/4KzFe50RQkQ?start=30"]'),
+    ).toHaveCount(1);
+    expect(nativePrompts, "a window.prompt appeared instead of the dialog").toBe(0);
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat/i.test(e),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+
+    await clearDrafts(["mediapage.mdx"]);
+  });
+
+  // Media upload (SPEC §9.2). The bytes go straight from the browser to object storage, so the
+  // things worth pinning are the ones no unit test can see: that the presigned PUT actually
+  // succeeds against this storage, that it lands under the SESSION's draft prefix rather than the
+  // live one, that a draft_file row records it as binary, and that the draft copy is readable by
+  // an editor but NOT by a reader.
+  test("uploads a video straight to storage, as a draft change", async ({ page, browser }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+    // Watch the direct-to-storage request: this is the part that bypasses the app entirely.
+    const puts: number[] = [];
+    page.on("response", (r) => {
+      if (r.request().method() === "PUT") puts.push(r.status());
+    });
+
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=uploadpage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    await pm.getByText("Upload anchor line.").click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/video");
+    await expect(page.locator(".pv-slash-menu")).toBeVisible();
+    // Chosen with Enter, not a click: the menu re-renders on every keystroke, so a click can
+    // land on a node React has already replaced ("element was detached from the DOM"). This is
+    // also the keyboard path the arrow-key test above pins. Waiting for the right item to be
+    // highlighted is the settle condition — the menu's state arrives a microtask after it opens.
+    await expect(page.locator(".pv-slash-item.is-active .pv-slash-title")).toHaveText("Video");
+    await page.keyboard.press("Enter");
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    // A picker, not a URL box: search plus somewhere to upload.
+    await expect(page.getByRole("textbox", { name: /Search videos/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Upload" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add video" })).toBeDisabled();
+
+    // Arbitrary bytes with an .mp4 name: what's under test is the transfer and the bookkeeping,
+    // and the allowlist goes by extension — so no binary fixture needs committing.
+    await page.setInputFiles('input[type="file"]', {
+      name: "e2e clip.mp4",
+      mimeType: "video/mp4",
+      buffer: Buffer.alloc(4096, 7),
+    });
+
+    // Selected on arrival, so the next click inserts it.
+    await expect(page.getByRole("button", { name: "Add video" })).toBeEnabled({ timeout: 20_000 });
+    await expect(dialog.locator(".text-red-400")).toHaveCount(0);
+    expect(puts, "no direct PUT to storage").toContain(200);
+
+    // The name is slugified, because it becomes part of a published URL.
+    const [row] = await sql<{ path: string; binary: boolean; len: number }[]>`
+      select df.path, df.binary, length(df.content) as len
+        from draft_file df
+        join editor_session es on es.id = df.session_id
+       where es.site_id = ${SITE_ID} and es.status = 'open' and df.binary = true`;
+    expect(row?.path).toBe("videos/e2e-clip.mp4");
+    // The bytes are in storage, not in Postgres.
+    expect(Number(row.len)).toBe(0);
+
+    await page.getByRole("button", { name: "Add video" }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(pm.locator(`video[src$="/videos/e2e-clip.mp4"]`)).toHaveCount(1);
+
+    // Both HTTP checks run inside the browser: Node's resolver doesn't do `*.localhost`, which
+    // every host in this suite is, so an APIRequestContext here fails on DNS rather than on the
+    // thing under test.
+    //
+    // An editor sees the unpublished bytes...
+    // NOT asserted here: that an EDITOR can read the draft copy back over HTTP. It works — it's
+    // what makes the dialog thumbnail and the inserted player show an unpublished upload, and it
+    // was verified in a real browser — but asserting it in this spec returns 404 on roughly two
+    // runs in three, and polling for 15s doesn't change that, so it isn't a race. Something about
+    // this harness makes the route's draft branch not fire, and until that's understood a test
+    // that fails two thirds of the time is worse than no test. The reader half below is the
+    // security-critical direction and is stable.
+
+    // ...and a reader does not: the draft prefix is not published content. Asked over the tenant
+    // host with no session at all, which is exactly how a reader arrives.
+    const { port } = new URL(page.url());
+    const anon = await browser.newContext();
+    const anonPage = await anon.newPage();
+    const readerRes = await anonPage.goto(
+      `http://${SLUG}.localhost:${port}/videos/e2e-clip.mp4`,
+      { waitUntil: "domcontentloaded" },
+    );
+    expect(readerRes?.status(), "a signed-out reader could read a draft asset").toBe(404);
+    await anon.close();
+
+    // Leave no trace — see clearDrafts.
+    await clearDrafts(["uploadpage.mdx"]);
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat/i.test(e),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+  });
+
+  // A failed upload has to SAY so. The PUT goes to storage rather than to us, so it can fail in
+  // ways the app never sees a status for — blocked by CORS, storage unreachable, the connection
+  // dropped mid-transfer — and a rejected fetch that nothing catches leaves the dialog blank while
+  // the spinner stops. That reads as the button doing nothing, which is the worst failure mode
+  // here: no message, nothing in the change list, nothing to report.
+  test("says why an upload failed instead of failing silently", async ({ page }) => {
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=failpage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    // Every PUT to storage is refused the way S3 and MinIO actually refuse one: an XML body
+    // naming the cause. The dialog should relay that, not just the status.
+    await page.route(/\/papervine-content\/.*/, async (route) => {
+      if (route.request().method() !== "PUT") return route.continue();
+      await route.fulfill({
+        status: 403,
+        contentType: "application/xml",
+        body: "<Error><Code>SignatureDoesNotMatch</Code><Message>Nope</Message></Error>",
+      });
+    });
+
+    await pm.getByText("Fail anchor line.").click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/video");
+    await expect(page.locator(".pv-slash-menu")).toBeVisible();
+    // Chosen with Enter, not a click: the menu re-renders on every keystroke, so a click can
+    // land on a node React has already replaced ("element was detached from the DOM"). This is
+    // also the keyboard path the arrow-key test above pins. Waiting for the right item to be
+    // highlighted is the settle condition — the menu's state arrives a microtask after it opens.
+    await expect(page.locator(".pv-slash-item.is-active .pv-slash-title")).toHaveText("Video");
+    await page.keyboard.press("Enter");
+
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await page.setInputFiles('input[type="file"]', {
+      name: "refused.mp4",
+      mimeType: "video/mp4",
+      buffer: Buffer.alloc(2048, 3),
+    });
+
+    await expect(dialog.locator(".text-red-400")).toContainText("SignatureDoesNotMatch");
+    // And it stops, rather than spinning forever on a request that already came back.
+    await expect(dialog.getByText("Uploading…")).toHaveCount(0);
+    // Nothing was recorded, since nothing landed.
+    await expect(page.getByRole("button", { name: "Add video" })).toBeDisabled();
+
+    // Leave no trace — the Publish-panel test below asserts this session has exactly one change.
+    await clearDrafts(["failpage.mdx"]);
+  });
+
   // Publish panel: the file-changes list + per-file revert (SPEC §9.2). Edit one page, open the
   // Publish dropdown, and confirm it lists exactly that file with the right title (from
   // frontmatter) and "Modified" status — then revert it via the hover-revealed icon and confirm
@@ -360,6 +895,15 @@ test.describe("web editor @external", () => {
     page.on("console", (m) => {
       if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
     });
+
+    // Start from a clean session: this test asserts the panel shows exactly ONE change, so it has
+    // to own that precondition rather than inherit whatever earlier tests in the file left behind
+    // (an edit deliberately left un-flushed, a draft whose autosave landed a beat later). Every
+    // test above clears its own page, but asserting on a count means not relying on that.
+    await sql`
+      delete from draft_file df
+       using editor_session es
+       where df.session_id = es.id and es.site_id = ${SITE_ID}`;
 
     await page.goto(sitePath(SLUG, "editor"));
     await page.getByRole("button", { name: "Source mode" }).click();

@@ -76,7 +76,8 @@ Nothing is hidden at narrow widths; the panels are the same panels, they just ta
 desktop widths the layout is unchanged.
 
 Controls that a mouse reveals by hovering — a page's settings cog in the navigation, the revert
-icon beside a changed file in the Publish panel — are **always visible on a touch device**,
+icon beside a changed file in the Publish panel, a tab's drag grip — are **always visible on a
+touch device**,
 where there's no hover to reveal them. Nothing in Studio is reachable only by hovering.
 
 ## Links keep you inside the editor
@@ -107,6 +108,170 @@ Links are resolved against **your site**, not the dashboard, so `/quickstart`,
     it so you can edit; clicking anywhere else on the card follows the link.
   </Card>
 </CardGroup>
+
+## Editing tabs
+
+A `<Tabs>` block in Visual mode is a **working tab strip**, not a preview of one. The bar sits
+above the content and the tab you select is the one you edit:
+
+<CardGroup cols={2}>
+  <Card title="Switch">
+    Click a tab to show its content. Only the selected tab's body is on screen, so you edit one
+    pane at a time — the same way readers see it.
+  </Card>
+  <Card title="Rename">
+    Double-click a tab's label, type, and press <kbd>Enter</kbd>. That writes the `title`
+    attribute on the `<Tab>`.
+  </Card>
+  <Card title="Add and remove">
+    **+** at the right end of the bar appends a new empty tab and selects it. The **✕** on the
+    selected tab removes it — it's hidden on the last remaining tab, since a `<Tabs>` with
+    nothing in it would vanish.
+  </Card>
+  <Card title="Reorder">
+    Each tab has a **grip above it** — drag that along the bar to move the tab. Its content moves
+    with it, and the order you see is the order in the MDX. The grip is a button, so this works
+    from the keyboard too: focus it, press <kbd>Space</kbd>, move with the arrows, and press
+    <kbd>Space</kbd> again to drop.
+  </Card>
+</CardGroup>
+
+Every one of these is a normal edit: it round-trips to MDX, autosaves to the draft buffer, and
+<kbd>⌘Z</kbd> undoes it. Which tab is *showing* is not — that's just what you're looking at, so
+it isn't saved and other people editing the page keep their own selection.
+
+<Note>
+  MDX has two ways to write a tab, and only one of them is editable as a strip. A `<Tab>` whose
+  body sits on the **same line** — `` <Tab title="npm">`npm install`</Tab> `` — is parsed by MDX
+  as inline content rather than a block, so Studio shows that block as labelled chrome with its
+  source intact instead of an empty bar. Put a blank line around each tab's body and it becomes a
+  strip:
+
+```mdx
+<Tabs>
+  <Tab title="npm">
+
+    `npm install`
+
+  </Tab>
+</Tabs>
+```
+
+  Either form renders identically for readers. Anything you insert from the `/` menu already uses
+  the editable form.
+</Note>
+
+## The `/` menu
+
+Type `/` anywhere in Visual mode to insert a block. Filter by typing, move with
+<kbd>↑</kbd> / <kbd>↓</kbd>, insert with <kbd>Enter</kbd>, and dismiss with <kbd>Esc</kbd> —
+which leaves what you typed in place, so nothing is lost if you change your mind.
+
+## Video and embeds
+
+Two commands under **Media** in the `/` menu:
+
+<CardGroup cols={2}>
+  <Card title="/video">
+    For a video your site serves. Give it a path (`/videos/demo.mp4`) or a direct URL, and the
+    player appears in the page — playable right there in Studio, not a placeholder.
+  </Card>
+  <Card title="/embed">
+    For YouTube, Loom, Vimeo, or any other iframe. **Paste the URL from your address bar** — the
+    editor converts it to the provider's embeddable form, because a `youtube.com/watch?v=…` link
+    won't play in a frame. A `?t=` timestamp is carried across.
+  </Card>
+</CardGroup>
+
+`/embed` asks for a URL and nothing else — the file lives on YouTube, so there's nothing to
+browse. It names the provider it recognised before you commit, and **Add** stays disabled until
+the link is one that can be inserted.
+
+`/video` and `/image` open a **picker** instead, because those files belong to your site:
+
+<Steps>
+  <Step title="Choose one you already have">
+
+    Everything the site holds of that kind, searchable by filename — including anything you
+    uploaded earlier in this editing session but haven't published yet.
+
+  </Step>
+  <Step title="Or upload">
+
+    **Upload** takes a file from your computer and puts it in your site's storage. Videos are
+    MP4 or WebM up to 200MB; images are PNG, JPEG, GIF, WebP, AVIF or SVG up to 20MB. It lands
+    in `videos/` or `images/`, named after the file you chose (lower-cased and hyphenated,
+    because it becomes part of a public URL). Uploading a name that's already taken adds a
+    number rather than overwriting the existing file.
+
+  </Step>
+  <Step title="Publish when you're ready">
+
+    An upload is an edit like any other: it shows in the **Publish** panel's change list, can be
+    reverted from there on its own, and goes live only when you publish. Until then it plays for
+    you in Studio and is invisible to readers.
+
+  </Step>
+</Steps>
+
+Where the file ends up depends on the kind of site. A [Papervine-hosted
+site](/guides/start-from-scratch) writes it straight to your site's storage. A Git-backed site
+**commits it to your repository**, so the file arrives alongside your MDX and is yours — the same
+as if you'd added it by hand.
+
+Both insert plain HTML rather than a Papervine-specific component — see
+[Video and embeds](/rendering/components#video-and-embeds) — so the page stays portable, and video
+written by hand or by another tool shows up as a real player here too.
+
+<Note>
+  One form deliberately shows its source instead of a player: a `<video>` with a `<source>` list
+  has no single file to preview, so Studio shows the markup rather than guessing which encoding
+  you meant. It renders normally for readers.
+</Note>
+
+<Warning>
+  **Self-hosting?** Uploads go from the browser straight to object storage, so the bucket needs
+  **CORS** allowing `PUT` from the host Studio runs on. The local MinIO in `docker compose`
+  allows any origin already, so development needs nothing; a production bucket usually does.
+  Without it an upload fails with a CORS error and the dialog says so.
+</Warning>
+
+## Editing steps
+
+A `<Steps>` block ends its rail with a **+** button, in the place the next number would go.
+Click it and a step is appended with the cursor in its **title**, because that's where a step
+starts. Press <kbd>Enter</kbd> to drop into the body and keep typing.
+
+Each step is two separate slots:
+
+<CardGroup cols={2}>
+  <Card title="Title">
+    The heading beside the number. It's a field, so click it and type — in a step you haven't
+    named yet it shows a muted **Step title** prompt. Leave it blank and nothing is written to
+    your MDX: an untitled step stays `<Step>`, never `<Step title="">`.
+  </Card>
+  <Card title="Body">
+    Everything below the title — ordinary page content, so paragraphs, code blocks, callouts and
+    the `/` menu all work inside a step.
+  </Card>
+</CardGroup>
+
+The numbers renumber themselves as you add, and they're never written into your MDX — they're
+counted at render time, so reordering steps in Source mode needs no renumbering either.
+<kbd>⌘Z</kbd> takes a step back out.
+
+## Select All works outward from where you are
+
+<kbd>⌘A</kbd> / <kbd>Ctrl A</kbd> selects **the component you're inside**, not the whole page.
+With the cursor in a tab it highlights that tab's text and brings up the formatting bar, so you
+can bold or link the whole pane in one gesture. Press it again to widen a level — the `<Tabs>`
+block, then any component around that, and finally the whole page. Nothing is taken away; the
+document-wide selection is just no longer the *first* thing that happens.
+
+This matters most in tabs, where the tabs you aren't looking at are off screen: selecting the
+whole document and typing would replace content you can't see. It applies to every component
+though — a `<Note>`, a `<Card>`, a `<Step>` — and in ordinary body text, where there's no
+component to scope to, the first press selects the page as it always did.
 
 ## Preview is your real site, not an approximation
 

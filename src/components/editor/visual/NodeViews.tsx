@@ -9,13 +9,18 @@ import {
 import { editorComponents, Mermaid } from "@papervine/renderer/components/mdx/editor-registry";
 import type { CSSProperties } from "react";
 import type { NodeViewOpts } from "./nodes";
+import { TabPaneNodeView, TabsNodeView } from "./TabsNodeView";
+import { StepNodeView, StepsNodeView } from "./StepsNodeView";
+import { parseMediaElement } from "@/lib/media-embed";
 
 // Phase-2b node views: render the SAME components the reader-facing renderer uses, so the
 // Visual editor looks like the published page. The component's own markup (card grid, callout
 // colour + icon, step rail) wraps an editable content hole (NodeViewContent) — you edit the
-// body in place. Props come from the node's attrs (title/icon/href/…); editing those attrs is
-// a follow-up (do it in Source mode for now). Tabs/CodeGroup, which pick apart their children
-// structurally, fall back to labelled chrome. Unknown MDX renders its raw source, read-only.
+// body in place. Props come from the node's attrs (title/icon/href/…), which are generally still
+// a Source-mode job — the exceptions are the ones where the attr IS the thing you edit: tab and
+// step titles have purpose-built views with real fields (TabsNodeView, StepsNodeView), and Tabs
+// gets a whole tab strip. CodeGroup, which also picks its children apart structurally, still
+// falls back to labelled chrome. Unknown MDX renders its raw source, read-only.
 
 function cleanAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -35,7 +40,7 @@ function attrBadges(attrs: Record<string, unknown>): string[] {
     .map(([k, v]) => (v === true ? k : `${k}=${String(v)}`));
 }
 
-/** Labelled editor chrome — for components we don't render live (Tabs, CodeGroup). */
+/** Labelled editor chrome — for components we don't render live (CodeGroup, Frame, …). */
 function ChromeNodeView({ node }: NodeViewProps) {
   const name = (node.attrs.mdxName as string) || node.type.name;
   return (
@@ -59,9 +64,37 @@ function ChromeNodeView({ node }: NodeViewProps) {
   );
 }
 
+function hasPaneChildren(node: NodeViewProps["node"]): boolean {
+  let found = false;
+  node.forEach((child) => {
+    if (child.type.name === "tab") found = true;
+  });
+  return found;
+}
+
 /** Live render of a real MDX component wrapping an editable content hole. */
 function ComponentNodeView(props: NodeViewProps) {
   const name = props.node.attrs.mdxName as string;
+
+  // Tabs is structural rather than presentational: the strip is chrome that has to know about
+  // its siblings, so it owns both halves of the pair — the parent renders the tab bar, the child
+  // renders a bare pane the parent can show or hide.
+  //
+  // Only when the panes are real `tab` NODES, though. MDX parses the compact form —
+  // `<Tab title="npm">…</Tab>` with its body on the same line — as inline JSX inside a paragraph,
+  // so the converter yields mdxUnknownText atoms and there is nothing for a strip to switch
+  // between. Rendering an empty tab bar over them would hide that the content is there; the
+  // labelled chrome that has always handled this shape still shows it.
+  if (name === "Tabs") {
+    return hasPaneChildren(props.node) ? <TabsNodeView {...props} /> : <ChromeNodeView {...props} />;
+  }
+  if (name === "Tab") return <TabPaneNodeView />;
+
+  // Steps/Step render live from the registry like any other component, but both need a control
+  // the generic view can't supply: a button to add a step, and a title slot to type into (the
+  // title is an attr, so it can't be part of the editable content hole).
+  if (name === "Steps") return <StepsNodeView {...props} />;
+  if (name === "Step") return <StepNodeView {...props} />;
 
   // Layout containers apply their grid/flex to their DIRECT children — but ProseMirror's
   // content hole is a single element, so wrapping the real component around it collapses the
@@ -114,14 +147,54 @@ function makeImageNodeView(assetBase: string) {
   };
 }
 
-function BlockAtomView({ node }: NodeViewProps) {
-  return (
-    <NodeViewWrapper className="my-2" contentEditable={false}>
-      <pre className="overflow-x-auto rounded-md border border-dashed border-amber-300 bg-amber-50 px-3 py-2 font-mono text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-        {node.attrs.raw as string}
-      </pre>
-    </NodeViewWrapper>
-  );
+/** Raw MDX we couldn't map to a node: shown as its own source, read-only — EXCEPT video and
+ *  iframe, which are raw HTML on purpose (the schema has no video component) and would otherwise
+ *  be the one kind of content you can put on a page and never see. `parseMediaElement` returns
+ *  null for anything it can't render faithfully, so the source box stays the fallback. */
+function makeBlockAtomView(assetBase: string) {
+  return function BlockAtomView({ node }: NodeViewProps) {
+    const raw = node.attrs.raw as string;
+    const media = parseMediaElement(raw);
+    if (media) {
+      // Same base resolution as the image node view: a root-relative path belongs to the tenant's
+      // assets, and the editor is served from the app host, so it would 404 unresolved.
+      const src =
+        assetBase && media.src.startsWith("/") && !media.src.startsWith("//")
+          ? assetBase + media.src
+          : media.src;
+      const has = (flag: string) => media.flags.includes(flag);
+      return (
+        <NodeViewWrapper className="my-4" contentEditable={false}>
+          {media.tag === "video" ? (
+            <video
+              src={src}
+              poster={media.poster}
+              controls={has("controls")}
+              muted={has("muted")}
+              loop={has("loop")}
+              autoPlay={has("autoplay")}
+              playsInline={has("playsinline")}
+              className={media.className}
+            />
+          ) : (
+            <iframe
+              src={src}
+              title={media.title ?? "Embedded content"}
+              allowFullScreen={has("allowfullscreen")}
+              className={media.className}
+            />
+          )}
+        </NodeViewWrapper>
+      );
+    }
+    return (
+      <NodeViewWrapper className="my-2" contentEditable={false}>
+        <pre className="overflow-x-auto rounded-md border border-dashed border-amber-300 bg-amber-50 px-3 py-2 font-mono text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+          {raw}
+        </pre>
+      </NodeViewWrapper>
+    );
+  };
 }
 
 function InlineAtomView({ node }: NodeViewProps) {
@@ -160,6 +233,7 @@ function CodeBlockNodeView({ node }: NodeViewProps) {
 
 export function makeNodeViewOpts(assetBase: string): NodeViewOpts {
   const ImageNodeView = makeImageNodeView(assetBase);
+  const BlockAtomView = makeBlockAtomView(assetBase);
   return {
     componentNodeView: () => ReactNodeViewRenderer(ComponentNodeView),
     atomNodeView: (_type, inline) => ReactNodeViewRenderer(inline ? InlineAtomView : BlockAtomView),

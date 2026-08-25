@@ -1,4 +1,5 @@
 import { TEXT_CONTENT_TYPE } from "./sync-plan";
+import { draftAssetPrefix } from "./media-upload";
 
 /**
  * The pure brain of a Papervine-hosted publish (SPEC §10.11) — the storage counterpart to
@@ -9,14 +10,22 @@ import { TEXT_CONTENT_TYPE } from "./sync-plan";
  * that's actually easy to get wrong — is unit-testable without mocking storage.
  */
 
-/** A draft-buffer row, reduced to what planning needs. Paths are docs-root-relative. */
-export type DraftInput = { path: string; content: string; deleted: boolean };
+/** A draft-buffer row, reduced to what planning needs. Paths are docs-root-relative.
+ *  `binary` means the bytes are already in storage under the session's draft prefix and
+ *  `content` is empty — publishing one is a copy, not a write. */
+export type DraftInput = { path: string; content: string; deleted: boolean; binary?: boolean };
 
 export type NativeWrite = { key: string; content: string; contentType: string };
+
+/** An uploaded asset going live: the same object, one prefix over. */
+export type NativeCopy = { from: string; to: string };
 
 export type NativePlan = {
   /** Page and asset writes. Excludes the config, which must land after these. */
   puts: NativeWrite[];
+  /** Uploaded assets, copied server-side from the draft prefix. Same phase as `puts` — an
+   *  asset is content a page may already reference. */
+  copies: NativeCopy[];
   /** The `docs.json` write, if this batch touches it. Written AFTER `puts`. */
   configPuts: NativeWrite[];
   /** Storage keys to remove (draft tombstones). Deleted LAST. */
@@ -51,10 +60,13 @@ export function planNativePublish(
   siteId: string,
   drafts: readonly DraftInput[],
   existingKeys: ReadonlySet<string>,
+  /** Session id — needed only to address uploaded bytes at `drafts/{sessionId}/{path}`. */
+  sessionId?: string,
 ): NativePlan {
   const prefix = `sites/${siteId}/`;
   const plan: NativePlan = {
     puts: [],
+    copies: [],
     configPuts: [],
     deletes: [],
     added: 0,
@@ -69,6 +81,19 @@ export function planNativePublish(
       // Only count a removal that was actually published — deleting a page the reader
       // never saw isn't a change to the live site.
       if (existingKeys.has(key)) plan.removed += 1;
+      continue;
+    }
+    if (draft.binary) {
+      // An uploaded asset. Its bytes never entered Postgres, so there's nothing to write — the
+      // object is copied from the session's draft prefix, keeping the content type it was
+      // uploaded under. Skipped entirely without a sessionId, since the source is then
+      // unaddressable and writing an EMPTY object over a real asset would be far worse than
+      // leaving the previous one in place.
+      if (sessionId) {
+        plan.copies.push({ from: `${draftAssetPrefix(sessionId)}${draft.path}`, to: key });
+        if (existingKeys.has(key)) plan.modified += 1;
+        else plan.added += 1;
+      }
       continue;
     }
     // The draft buffer's `content` column is text, so every hosted publish writes text —

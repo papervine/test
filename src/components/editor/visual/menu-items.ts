@@ -29,8 +29,21 @@ import {
   TextCursorInput,
   MessageSquare,
   FileCode2,
+  Video,
+  CodeXml,
   type LucideIcon,
 } from "lucide-react";
+import {
+  embedMarkup,
+  isSafeMediaUrl,
+  toEmbedUrl,
+  videoMarkup,
+  type MediaInputKind,
+} from "@/lib/media-embed";
+
+/** Collect a URL from the user, then insert. Supplied by whoever hosts the menu (VisualEditor),
+ *  which owns the dialog — the menu itself stays free of React. */
+export type RequestInput = (kind: MediaInputKind, onSubmit: (value: string) => void) => void;
 
 export type SlashCategory =
   | "Basic blocks"
@@ -46,9 +59,14 @@ export interface SlashItem {
   icon: LucideIcon;
   searchTerms: string[];
   /** Slash-menu behavior: operates on the typed `/query` range (toggle in place, or insert). */
-  command: (ctx: { editor: Editor; range: Range }) => void;
-  /** Picker ("+") behavior: the fresh node to insert at a block boundary. null = user cancelled. */
-  make: () => object | null;
+  command: (ctx: { editor: Editor; range: Range; requestInput: RequestInput }) => void;
+  /**
+   * Picker ("+") behavior: the fresh node to insert at a block boundary. null = nothing to insert.
+   * Items with `input` set receive the collected URL; the rest ignore the argument.
+   */
+  make: (input?: string) => object | null;
+  /** Needs a URL first, collected through the media dialog rather than inserted straight away. */
+  input?: MediaInputKind;
 }
 
 export const SLASH_CATEGORIES: SlashCategory[] = [
@@ -78,10 +96,26 @@ const table = () => ({
   ],
 });
 const mermaid = () => ({ type: "codeBlock", attrs: { language: "mermaid", meta: null }, content: [{ type: "text", text: "graph TD;\n  A --> B;" }] });
-const image = () => {
-  const src = window.prompt("Image URL (e.g. /img/hero.png)", "/");
-  return src ? { type: "paragraph", content: [{ type: "image", attrs: { mdxTag: "img", src, alt: null, title: null } }] } : null;
-};
+const image = (src?: string) =>
+  src
+    ? { type: "paragraph", content: [{ type: "image", attrs: { mdxTag: "img", src, alt: null, title: null } }] }
+    : null;
+// Video and embeds are raw HTML, not a component: the docs.json-compatible schema has no video
+// component, and its own guidance is a plain `<video>` / `<iframe>` with utility classes. The
+// converter keeps raw HTML as an opaque block whose `raw` attr is the source text, so this
+// round-trips byte-exact and stays portable — and NodeViews renders it as a live player rather
+// than the read-only source it would otherwise show. The URL is collected by the media dialog
+// (see `input` on the items below); browsing or uploading files needs an asset pipeline that
+// doesn't exist yet.
+//
+// The URL is re-checked here rather than trusted from the dialog: `make` is also reachable from
+// the "+" picker, and a validity check that only lives in one caller is one refactor from gone.
+const rawBlock = (raw: string) => ({ type: "mdxUnknownFlow", attrs: { raw } });
+const video = (src?: string) =>
+  src && isSafeMediaUrl(src) ? rawBlock(videoMarkup(src.trim())) : null;
+const embed = (url?: string) =>
+  // Resolve the share link people actually paste into the one the provider allows framing.
+  url && isSafeMediaUrl(url) ? rawBlock(embedMarkup(toEmbedUrl(url.trim()).url)) : null;
 const callout = (mdxName: string) => ({ type: "callout", attrs: { mdxName }, content: [paragraph()] });
 const card = () => ({ type: "card", attrs: { mdxName: "Card", title: "Card title" }, content: [paragraph()] });
 const cardGroup = (n: number) => ({ type: "cardGroup", attrs: { mdxName: "CardGroup", cols: n }, content: Array.from({ length: n }, card) });
@@ -103,12 +137,24 @@ const paramField = () => ({ type: "apiField", attrs: { mdxName: "ParamField", na
 const responseField = () => ({ type: "apiField", attrs: { mdxName: "ResponseField", name: "field", type: "string" }, content: [paragraph()] });
 
 // Slash command that inserts the node returned by `make` in place of the typed `/query`.
-const insertCmd = (make: () => object | null) => ({ editor, range }: { editor: Editor; range: Range }) => {
-  const node = make();
-  const chain = editor.chain().focus().deleteRange(range);
-  if (node) chain.insertContent(node);
-  chain.run();
-};
+const insertCmd =
+  (make: (input?: string) => object | null, input?: MediaInputKind) =>
+  ({ editor, range, requestInput }: { editor: Editor; range: Range; requestInput: RequestInput }) => {
+    if (input) {
+      // Drop the typed `/query` before opening the dialog, so it isn't sitting behind it as
+      // stray text — and if the dialog is dismissed, that's the whole effect.
+      editor.chain().focus().deleteRange(range).run();
+      requestInput(input, (value) => {
+        const node = make(value);
+        if (node) editor.chain().focus().insertContent(node).run();
+      });
+      return;
+    }
+    const node = make();
+    const chain = editor.chain().focus().deleteRange(range);
+    if (node) chain.insertContent(node);
+    chain.run();
+  };
 
 // Helper to define an item whose slash + picker behavior both come from a node factory.
 function insertItem(
@@ -117,9 +163,10 @@ function insertItem(
   category: SlashCategory,
   icon: LucideIcon,
   searchTerms: string[],
-  make: () => object | null,
+  make: (input?: string) => object | null,
+  input?: MediaInputKind,
 ): SlashItem {
-  return { title, description, category, icon, searchTerms, make, command: insertCmd(make) };
+  return { title, description, category, icon, searchTerms, make, input, command: insertCmd(make, input) };
 }
 
 export const SLASH_ITEMS: SlashItem[] = [
@@ -202,7 +249,25 @@ export const SLASH_ITEMS: SlashItem[] = [
   insertItem("Table", "2×2 table", "Lists & tables", Table, ["table", "grid", "rows"], table),
 
   // ── Media ───────────────────────────────────────────────────────────────
-  insertItem("Image", "Embed an image", "Media", Image, ["image", "img", "picture", "photo"], image),
+  insertItem("Image", "Embed an image", "Media", Image, ["image", "img", "picture", "photo"], image, "image"),
+  insertItem(
+    "Video",
+    "Add video media",
+    "Media",
+    Video,
+    ["video", "mp4", "webm", "movie", "media"],
+    video,
+    "video",
+  ),
+  insertItem(
+    "Embed",
+    "YouTube, Loom, Vimeo, or any iframe",
+    "Media",
+    CodeXml,
+    ["embed", "iframe", "youtube", "loom", "vimeo"],
+    embed,
+    "embed",
+  ),
   insertItem("Mermaid", "Diagram", "Media", GitBranch, ["mermaid", "diagram", "graph", "flow"], mermaid),
 
   // ── Callouts ────────────────────────────────────────────────────────────

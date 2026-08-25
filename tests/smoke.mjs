@@ -124,6 +124,26 @@ const CHECKS = [
       "https://example.com/remote.png",
     ],
   },
+  {
+    slug: "media",
+    desc: "raw <video>/<iframe> reach the page as real elements (there is no video component to match)",
+    // Video has no component in the docs.json-compatible schema — the documented form is raw HTML,
+    // so the guard is that MDX passes these through as intrinsic elements rather than swallowing
+    // them into the unknown-component fallback. The boolean attributes are asserted because those
+    // are what make an autoplay video work, and `<source>` because the src-less form must render
+    // for readers even though the editor declines to preview it. The `aspect-video` CLASS being
+    // present is a separate matter — see the CSS check below; it is purged unless safelisted.
+    include: [
+      "MEDIA_PAGE_MARKER",
+      "<video",
+      "<iframe",
+      "<source",
+      "controls",
+      "playsInline",
+      "MEDIA_EMBED_MARKER",
+      "aspect-video",
+    ],
+  },
   { slug: "badfrontmatter", desc: "malformed frontmatter doesn't crash", include: ["BAD_FRONTMATTER_MARKER"] },
   {
     slug: "with-snippet",
@@ -614,6 +634,39 @@ async function run() {
         failures.push(`[${tag}] request failed: ${e.message}`);
       }
       log(`  ${failures.length === before ? "✓" : "✗"} ${tag}  (${check.desc})`);
+    }
+
+    // Tenant MDX is fetched at request time, so Tailwind's content scanner never sees it and a
+    // class used ONLY in someone's docs page gets purged. That is invisible in the page HTML —
+    // the class attribute is right there — so it can only be caught by reading the stylesheet
+    // the page actually links. `aspect-video` is the one that mattered: the documented markup
+    // for a video carries it, nothing in our own source does, and without it every migrated
+    // repo's video rendered with no aspect ratio. Kept alive by tailwind.config's safelist.
+    {
+      const before = failures.length;
+      const tag = "docs CSS";
+      try {
+        const res = await fetch(`${BASE}/media`, { signal: AbortSignal.timeout(30_000) });
+        const html = await res.text();
+        const href = html.match(/href="([^"]+\.css[^"]*)"/)?.[1];
+        if (!href) {
+          failures.push(`[${tag}] no stylesheet linked from /media`);
+        } else {
+          const css = await (
+            await fetch(new URL(href, BASE), { signal: AbortSignal.timeout(30_000) })
+          ).text();
+          for (const cls of ["aspect-video", "object-cover", "h-96"]) {
+            if (!css.includes(cls)) {
+              failures.push(`[${tag}] ".${cls}" purged — tenant MDX using it renders unstyled`);
+            }
+          }
+        }
+      } catch (e) {
+        failures.push(`[${tag}] request failed: ${e.message}`);
+      }
+      log(
+        `  ${failures.length === before ? "✓" : "✗"} ${tag}  (media classes used only in tenant MDX survive purging)`,
+      );
     }
 
     for (const check of SEARCH_CHECKS) {

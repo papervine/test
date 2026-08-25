@@ -148,6 +148,51 @@ reader expands it.
 `<Frame>` wraps an image or embed in a bordered container with an optional caption. Use it to
 present screenshots and diagrams consistently, with framing and centering handled for you.
 
+## Video and embeds
+
+There is **no video component** — video is plain HTML, and that is deliberate: it's what the
+`docs.json` schema this renderer follows uses, so a page written this way moves between platforms
+untouched. Both tags below are ordinary MDX, so they reach the page as real elements.
+
+A video the site serves itself:
+
+```mdx
+<video controls className="w-full aspect-video rounded-xl" src="/videos/demo.mp4"></video>
+```
+
+Add `autoPlay muted loop playsInline` for a silent looping clip — browsers block autoplay with
+sound, so `muted` is what makes it start. A `<source>` list works too, when you want to offer
+more than one encoding:
+
+```mdx
+<video controls className="w-full aspect-video rounded-xl">
+  <source src="/videos/demo.webm" type="video/webm" />
+  <source src="/videos/demo.mp4" type="video/mp4" />
+</video>
+```
+
+Anything hosted elsewhere — YouTube, Loom, Vimeo, a sandbox, another docs site — is an iframe:
+
+```mdx
+<iframe
+  className="w-full aspect-video rounded-xl"
+  src="https://www.youtube.com/embed/4KzFe50RQkQ"
+  title="YouTube video player"
+  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+  allowFullScreen
+></iframe>
+```
+
+<Note>
+  Use the **embed** URL, not the one in your browser's address bar. A `youtube.com/watch?v=…` link
+  won't play in a frame. Studio's `/embed` command does this conversion for you, and its `/video`
+  command uploads a file and writes the `<video>` tag — see [Studio](/control-plane/editor).
+</Note>
+
+`aspect-video` gives a 16:9 box that scales with the page, which is what you want for almost every
+video; `h-96` (or any height utility) suits a non-video embed that isn't 16:9. Wrapping either in
+[`<Frame>`](#frame) adds a border and caption.
+
 ## Mermaid diagrams
 
 A fenced code block tagged `mermaid` renders as a diagram, not as highlighted code:

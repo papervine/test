@@ -1,0 +1,1 @@
+ALTER TABLE "draft_file" ADD COLUMN "binary" boolean DEFAULT false NOT NULL;

@@ -1,6 +1,6 @@
 import { Extension, type Editor, type Range } from "@tiptap/core";
 import Suggestion, { type SuggestionProps, type SuggestionKeyDownProps } from "@tiptap/suggestion";
-import { filterSlashItems, type SlashItem } from "./menu-items";
+import { filterSlashItems, type RequestInput, type SlashItem } from "./menu-items";
 
 // State the extension reports up to React so the palette can render as a CONTROLLED component.
 export interface SlashState {
@@ -12,8 +12,22 @@ export interface SlashState {
 export interface SlashOptions {
   onOpen: (state: SlashState) => void;
   onClose: () => void;
-  // React registers the open menu's key handler here so the suggestion can drive arrow/enter nav.
-  keyHandlerRef: { current: ((props: SuggestionKeyDownProps) => boolean) | null };
+  /**
+   * Arrow/Enter navigation inside the open menu. Returns true when the menu consumed the key, so
+   * ProseMirror leaves the caret alone.
+   *
+   * This is a FUNCTION, and it has to be. It used to be a `{ current }` ref box that React wrote
+   * the menu's handler into — which silently never worked: `Extension.configure()` merges options
+   * with a deep merge that RECURSES whenever the default and the supplied value are both plain
+   * objects. A ref box is a plain object, so it got cloned, and the extension spent its life
+   * reading a different object than React was writing to. Arrows fell through to the document,
+   * which moved the caret out of the `/query` and closed the menu; Enter fell through too, so
+   * items could only be chosen with the mouse. A function value is copied by reference and cannot
+   * be re-broken this way — the same reason CollabCarets takes `getAwareness()`.
+   */
+  onKeyDown: (props: SuggestionKeyDownProps) => boolean;
+  /** Opens the media dialog for items that need a URL first. A function, for the reason above. */
+  requestInput: RequestInput;
 }
 
 // The Notion-style `/` command. We deliberately do NOT use @tiptap/react's ReactRenderer to
@@ -27,7 +41,8 @@ export const SlashCommand = Extension.create<SlashOptions>({
     return {
       onOpen: () => {},
       onClose: () => {},
-      keyHandlerRef: { current: null },
+      onKeyDown: () => false,
+      requestInput: () => {},
     };
   },
 
@@ -45,7 +60,7 @@ export const SlashCommand = Extension.create<SlashOptions>({
         allowedPrefixes: null,
         startOfLine: false,
         command: ({ editor, range, props }: { editor: Editor; range: Range; props: SlashItem }) => {
-          props.command({ editor, range });
+          props.command({ editor, range, requestInput: opts.requestInput });
         },
         items: ({ query }) => filterSlashItems(query),
         render: () => ({
@@ -63,7 +78,7 @@ export const SlashCommand = Extension.create<SlashOptions>({
               opts.onClose();
               return true;
             }
-            return opts.keyHandlerRef.current?.(props) ?? false;
+            return opts.onKeyDown(props);
           },
           onExit: () => opts.onClose(),
         }),

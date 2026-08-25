@@ -3,7 +3,7 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "./db";
 import { site as siteTable, deployment } from "./db/app-schema";
 import { findOpenSession, listDraftFiles, closeSession } from "./draft-store";
-import { putObject, deleteKeys, listKeys } from "./storage";
+import { putObject, deleteKeys, listKeys, copyObject } from "./storage";
 import { planNativePublish } from "./native-publish-plan";
 import { openDeployment, resolveDeployment, markSiteLive } from "./deployment-log";
 import { revalidateSite } from "./s3-source";
@@ -79,13 +79,17 @@ export async function publishNative(
     // One list call to classify added-vs-modified for the feed, rather than a getObjectText
     // per file the way listSessionChanges does.
     const existingKeys = new Set(await listKeys(`sites/${site.id}/`));
-    const plan = planNativePublish(site.id, drafts, existingKeys);
+    const plan = planNativePublish(site.id, drafts, existingKeys, session.id);
 
     // Phase 1: pages and assets. Phase 2: the config, so nav never precedes its pages.
     // Phase 3: removals, which the new config has already stopped referencing — so a crash
     // between phases leaves orphaned objects (invisible to the renderer) rather than
     // sidebar entries that 404.
-    await Promise.all(plan.puts.map((w) => putObject(w.key, w.content, w.contentType)));
+    await Promise.all([
+      ...plan.puts.map((w) => putObject(w.key, w.content, w.contentType)),
+      // Uploaded assets: a server-side copy, so the bytes never travel through this process.
+      ...plan.copies.map((c) => copyObject(c.from, c.to)),
+    ]);
     for (const w of plan.configPuts) await putObject(w.key, w.content, w.contentType);
     if (plan.deletes.length) await deleteKeys(plan.deletes);
 

@@ -242,7 +242,31 @@ export async function createBranch(
 // A single file change in a commit. `content: null` deletes the path (tree entry with a
 // null sha); otherwise the full new text. MDX/JSON are text, so content is inlined into
 // the tree (no separate blob POST).
-export type FileChange = { path: string; content: string | null };
+/**
+ * One file in a commit. `content` is UTF-8 text, or null to DELETE the path.
+ *
+ * `base64` carries bytes instead — an uploaded video or image. The tree API's inline `content`
+ * field is text-only, so binary has to become a blob first and be referenced by sha; passing raw
+ * bytes through `content` would corrupt the file rather than fail, which is the worst outcome.
+ */
+export type FileChange = { path: string; content: string | null; base64?: string };
+
+/** Upload raw bytes as a git blob and return its sha, for a tree entry that can't inline text. */
+async function createBlob(
+  owner: string,
+  name: string,
+  base64: string,
+  token?: string,
+): Promise<{ sha: string } | { error: string }> {
+  const res = await fetch(`${API}/repos/${owner}/${name}/git/blobs`, {
+    method: "POST",
+    headers: jsonHeaders(token),
+    body: JSON.stringify({ content: base64, encoding: "base64" }),
+  });
+  if (!res.ok) return { error: `createBlob: ${res.status} ${await res.text()}` };
+  const json = (await res.json()) as { sha?: string };
+  return json.sha ? { sha: json.sha } : { error: "createBlob: no sha in response" };
+}
 
 // Build one commit bearing N file changes on top of `baseCommitSha`/`baseTreeSha`.
 // Returns the new commit sha. Does NOT move any ref — call updateRef next.
@@ -268,11 +292,26 @@ export async function commitFiles(
   if (baseTreeSha === null && files.some((f) => f.content === null)) {
     return { error: "commitFiles: cannot delete paths in an initial commit" };
   }
-  const tree = files.map((f) =>
-    f.content === null
-      ? { path: f.path, mode: "100644", type: "blob", sha: null }
-      : { path: f.path, mode: "100644", type: "blob", content: f.content },
-  );
+  // Binary files become blobs first: the tree API takes bytes only by sha. Sequential rather
+  // than parallel — a batch of large uploads hitting the blob endpoint at once is what secondary
+  // rate limits are for, and a publish is not a latency-critical path.
+  const blobShas = new Map<string, string>();
+  for (const f of files) {
+    if (f.base64 === undefined) continue;
+    const blob = await createBlob(owner, name, f.base64, token);
+    if ("error" in blob) return { error: blob.error };
+    blobShas.set(f.path, blob.sha);
+  }
+
+  const tree = files.map((f) => {
+    if (f.content === null && f.base64 === undefined) {
+      return { path: f.path, mode: "100644", type: "blob", sha: null };
+    }
+    const sha = blobShas.get(f.path);
+    return sha
+      ? { path: f.path, mode: "100644", type: "blob", sha }
+      : { path: f.path, mode: "100644", type: "blob", content: f.content };
+  });
   const treeRes = await fetch(`${API}/repos/${owner}/${name}/git/trees`, {
     method: "POST",
     headers: jsonHeaders(token),

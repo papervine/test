@@ -2504,6 +2504,330 @@ layer.
 > that an unrelated unique-violation or non-DB error still propagates) plus a manual run against
 > real local Postgres reproducing the exact sequence (create → publish → create again for the
 > same branch) to confirm the live fix, not just the mock.
+>
+> **`<Tabs>` is a real tab strip in Visual mode (2026-08-24).** Tabs and CodeGroup were the two
+> components deliberately left as *labelled chrome* (a bordered box with attr badges) because they
+> "pick apart their children structurally" and ProseMirror gives a node view exactly **one**
+> content hole — you can't split one hole into per-tab panes. `<Tabs>` now gets the strip anyway:
+> the parent renders the tab bar, still emits one hole containing every `<Tab>`, and **hides the
+> inactive panes in CSS** via a `<style>` scoped to that instance. Declarative, so it survives
+> ProseMirror re-rendering its children (an effect toggling classes would not), and the active
+> index is React view state — never in the doc, so typing, undo and the collab sync are untouched.
+> Click to switch, double-click to rename, `+` appends, `×` removes the active tab (never the
+> last one), and a **grip above each tab** reorders via dnd-kit — each mutating through a real
+> ProseMirror transaction so it round-trips to MDX and is undoable. A dedicated handle rather than
+> a draggable label, for `NavTree`'s reason: a distance-activated drag on the label competes with
+> the click that selects and the double-click that renames. It reuses that file's affordance rule
+> verbatim — `[@media(hover:hover)]` reveal-on-hover, always visible where hover doesn't exist,
+> `focus-visible` for the keyboard — and toggles opacity rather than display so the strip never
+> shifts. The position arithmetic lives in a pure
+> `visual/tabs-plan.ts` (`insertTargetForMove` / `activeAfterRemove` / `hiddenPaneRule`, 11 unit
+> tests) following the `caret-plan.ts` precedent.
+>
+> Three things the browser found that reading the code would not have. **(1) The selector needs
+> every hop spelled out**: TipTap inserts a `[data-node-view-content-react]` element between a
+> React node view's hole and its child views (the same wrapper `.pv-cardgrid` flattens) **and**
+> wraps each child view in a `.react-renderer` div — so the element that takes `display: none` is
+> the *wrapper*, and a rule targeting the pane itself hid nothing. **(2) `useId()` is not unique
+> across node views.** TipTap mounts each one in its own React root and `useId()` restarts its
+> counter per root, so every `<Tabs>` on a page got `":r0:"`, their scoped rules matched each
+> other's panes, and between them they hid *every* tab — a module counter replaces it (node views
+> are browser-only, so there's no SSR sequence to match). This is the opposite lesson from the
+> `NavTree` hydration fix, where `useId()` was the *cure*: it's right for one SSR'd React tree,
+> wrong for N client-only roots. **(3) The compact MDX form doesn't produce `tab` nodes.** MDX
+> parses `<Tab title="npm">…</Tab>` with its body on the same line as *inline* JSX inside a
+> paragraph, so the converter yields `mdxUnknownText` atoms — and that's what real repos write,
+> including our own starter. Rather than normalize on load (which would reformat every compact
+> Tabs block on round-trip and break the fidelity gate), the node view **falls back to the
+> labelled chrome when it finds no `tab` children**, so that shape is exactly as good as before
+> and never renders an empty tab bar over content that's still there. Making the converter lift
+> inline `<Tab>`s into real nodes is the open follow-up; it's the only thing standing between
+> this strip and every existing Tabs block. Verified in a real browser end to end (insert via
+> `/tabs` → switch → type → add → drag → rename → remove → serialize), console clean, both
+> platform themes.
+>
+> **Select All is scoped to the component you're in (2026-08-25).** Fell out of the strip above,
+> and it's the more consequential half. ProseMirror's default `Mod-a` selects the whole document;
+> measured in a browser with the caret inside a `<Tab>`, that highlighted **604 characters — the
+> entire page, including the hidden panes** — so Select-All-then-type silently replaced content
+> the user couldn't see. `visual/select-all-scope.ts` makes `Mod-a` select the enclosing component
+> node's content first and **widen one level per further press** (tab → tabs → … → document), so
+> the built-in behavior is never taken away, just no longer first. Progressive rather than a hard
+> override because the alternative is stealing a shortcut people rely on. The rule is one line and
+> pure — `nextSelectAllRange` (`visual/select-all-plan.ts`, 8 tests): *the innermost container that
+> **strictly** contains the current selection*. Strictly, because equality is what makes a second
+> press widen instead of re-selecting forever, and containment is what stops a selection already
+> dragged across two tabs from being silently **shrunk** to whichever one the anchor sits in.
+> Applies to every component node (derived from `COMPONENTS`, so a new component is scopable with
+> no second list) and deliberately not to lists, blockquotes or table cells — whole-document is
+> the standard editor behavior there, and nothing in them is hidden. Two implementation notes:
+> candidates are normalized through `TextSelection.between` before comparing, since a node's raw
+> content bounds aren't always valid text positions *and* the normalized range is what the previous
+> press left behind (compare anything else and widening never fires); and the handler returns
+> `false` rather than swallowing the key, which is what lets the base keymap's `selectAll` run.
+> The bubble toolbar needed no change — it already showed for the selection; it now shows for the
+> right one. Guard: a new `editor.spec.ts` case (pane switching, one grip per tab, `ControlOrMeta+a`
+> selects only the active pane's text, toolbar visible) carrying the file's console-clean assertion,
+> reached via the editor's `?slug=` param rather than a nav click.
+>
+> **`<Steps>` gets an "add a step" control on its rail (2026-08-25).** Unlike Tabs, Steps already
+> rendered correctly in Visual mode — it's in `editorComponents`, its CSS counter survives the
+> extra wrapper TipTap inserts, and the numbered badges land on the rail — so this is purely the
+> missing affordance: a `+` at the end of the rail, where the next number would be. Clicking it
+> appends a `step` and **puts the caret in its body**, so the click is immediately followed by
+> typing rather than by hunting for where to type. The `+` is rendered as a **child of `<Steps>`,
+> alongside the content hole**, not as a sibling: the badges are absolutely positioned against the
+> rail the component itself draws (`border-l` inset by its own margin/padding), so a child inherits
+> that geometry and centres on the line, while anything outside would have to re-derive the offsets
+> and drift the day the component's styling changes. A useful side effect — the button row becomes
+> the container's last child, so the last real step stops matching `last:mb-0` and gets its margin
+> back, which is exactly the gap you want above the button. `Steps` is now re-exported by name from
+> `editor-registry.tsx` for this, following the `Mermaid` precedent.
+>
+> The new step is created with **no `title`**: the attr defaults to null and serializes away, so an
+> unnamed step round-trips as `<Step>` rather than a `title=""` someone has to clean up — verified
+> against the real draft row.
+>
+> **A step is two slots, and the title one is real (2026-08-25).** Shipping the `+` alone was the
+> wrong call and the user said so immediately: a step you can add but not *name* isn't an editable
+> step, because the title is an **attr** and attrs weren't editable in Visual mode. `Step` now has
+> its own node view with a permanent title field above its content hole — an untitled step shows a
+> muted "Step title" prompt rather than nothing, so the slot is discoverable instead of implied.
+> `+` focuses that field (via `view.nodeDOM(at)`, addressing the inserted node rather than guessing
+> that the last input on the page is the right one), and Enter crosses into the body, so the whole
+> gesture is click → name → Enter → describe.
+>
+> Two things make it work. **The control is passed INTO the real component, not around it**: `Step`'s
+> `title` prop is now `ReactNode` (from MDX it's always a string), so the input renders inside the
+> component's own `<h3>` and inherits its styling — the same reasoning as the `+` living inside
+> `<Steps>`. Copying the classes into the node view would have drifted the day either is restyled.
+> And **the attr commits on every keystroke, not on blur**, so the title reaches the autosaved draft
+> even if the page is switched mid-word. That's the move that looks risky and isn't: an attrs-only
+> change lets TipTap `update()` the existing node view instead of recreating it, so the input keeps
+> its DOM node and caret, and `setNodeMarkup` moves no selection. Pinned by typing a whole word and
+> then appending to it — a lost caret shows up as a scrambled value on the *next* keystroke, which
+> a single-character test would miss entirely. Empty commits back to `null`, so clearing a title
+> removes the attribute rather than leaving `title=""`.
+>
+> Guard: the `editor.spec.ts` Steps case now covers the button being centred on the rail within 2px
+> of a badge (the assertion that catches geometry drift) and below the last step, focus landing on
+> the new step's title, a multi-character title surviving, and Enter reaching the body — plus the
+> file's console-clean assertion. Verified in a browser both ways, both platform themes, with the
+> serialized MDX read back from the draft row.
+>
+> **Video and embeds — and a purged-CSS bug found on the way in (2026-08-25).** Asked for "a video
+> component," and the first thing to check was whether there should be one: the docs.json-compatible
+> schema has **no video component**. Its own guidance is
+> `<video controls className="w-full aspect-video rounded-xl" src="…">` and the equivalent iframe.
+> So building a `<Video>` would have created a page that only renders here — against the no-lock-in
+> posture — for no compatibility gain. We emit exactly the documented raw HTML instead, which the
+> converter already keeps as an opaque block: verified byte-exact round-trip for the self-closing
+> form, the `<source>`-list form, iframes, and inside `<Frame>`.
+>
+> **The real bug was in CSS, and nothing about video would have found it.** `aspect-video` appears
+> nowhere in our own source, and Tailwind can only scan source — tenant MDX is fetched from Git or
+> object storage at request time. So the documented markup arrived with **no aspect ratio**: an
+> iframe fell back to the 150px intrinsic default. Measured against the served stylesheet rather
+> than inferred: `aspect-video`, `h-96` and `object-cover` were absent, while `w-full` and
+> `rounded-xl` survived *only because our own UI happens to use them* — which media classes worked
+> was an accident. `tailwind.config.ts` now safelists the media set, and `tests/smoke.mjs` fetches
+> the stylesheet the page links and fails if any are purged. That check is the point: the page HTML
+> is byte-identical either way, so no page-content assertion can see this. Confirmed the guard fails
+> without the safelist, then confirmed the fix by measuring a rendered iframe — 833×469, ratio 1.778.
+> Note one trap the guard also covers: `aspect-video` is currently kept alive a second time by the
+> `MEDIA_CLASSES` string in `src/lib/media-embed.ts`, i.e. by exactly the accident being removed —
+> move that constant and the class vanishes from the CSS while every page still asks for it.
+>
+> Editor side: **Video** and **Embed** join the existing Media group in the `/` menu. `/embed`
+> resolves the share URL people actually paste into the framable one — every provider serves a
+> different URL for framing, and a `youtube.com/watch?v=…` iframe renders a refusal — carrying a
+> `?t=` timestamp across as `?start=` rather than dropping the one thing the author chose. And
+> because raw HTML is an opaque block, video was the one content type you could put on a page and
+> never see: the block atom node view now renders a live player for `<video>`/`<iframe>`, resolving
+> a root-relative src through the tenant asset base (the editor is on the app host, so `/videos/…`
+> would 404 — same fix as the image node view). `parseMediaElement` returns null for anything it
+> can't render faithfully — a `<source>` list, a fallback message, an unsafe scheme — so the source
+> box stays the fallback and the editor never shows a half-rendered player. `isSafeMediaUrl` gates
+> the insert path to http(s)/protocol-relative/site-relative: not a security boundary (Source mode
+> writes anything) but the one path where a *pasted* string becomes markup unread, and a
+> `javascript:` iframe src would run for every reader.
+>
+> **Upload is deliberately not in this**, and it's the gap worth naming: the reference UX offers
+> "Select video → Search / Upload", and we have neither, because there is no asset pipeline at all.
+> `draft_file.content` is Postgres `text`, so a binary can't enter the draft buffer; publishing one
+> would need new paths for both site kinds (base64 blob commit for Git-backed, storage copy for
+> hosted), plus draft-asset serving and the `.dimensions.json` merge already flagged in §10.11.
+> That's a subsystem, not a control. Guards: `media-embed.test.ts` (14 — every YouTube share shape,
+> timestamp carry-through, refused schemes, quote escaping, and each shape `parseMediaElement`
+> declines), a `media` smoke fixture, the stylesheet check, and an `editor.spec.ts` case for the
+> live player, the resolved asset src, the source-box fallback, and `/embed`'s URL conversion. Two
+> incidental notes from writing that spec: the fixture needs a **leading** paragraph, because every
+> media block is a non-editable atom (nowhere to put a caret) and because the slash menu floats at
+> the caret — with the caret at the end of a tall page the menu anchors off screen and the click
+> never lands, which is the below-the-fold trap already in this file's gotcha list.
+>
+> **The `/` menu's keyboard navigation never worked — `configure()` deep-merges your ref away
+> (2026-08-25).** Reported as "arrow keys should work within the menu, not close it," and the
+> mechanism is worth writing down because nothing about it fails loudly. `SlashCommand` took a
+> `keyHandlerRef: { current }` option that React wrote the open menu's key handler into. But
+> `Extension.configure()` merges options with `mergeDeep`, which **recurses whenever the default
+> and the supplied value are both plain objects** — and a React ref is exactly that. So the
+> extension got a *copy*: it read `{ current: null }` forever while React wrote to the original.
+> Nothing errored, nothing warned. Arrows fell through to ProseMirror, which moved the caret out of
+> the `/query`, which deactivated the suggestion and closed the menu; Enter fell through too, so an
+> item could only be chosen with the mouse — which is why the browser passes earlier in this
+> session had to click menu items instead of pressing Enter, a symptom I worked around without
+> recognizing. Measured, not guessed: a temporary probe in `onKeyDown` printed
+> `handlerRegistered=false` while the menu was visible on screen.
+>
+> Fix: the option is a **function** (`onKeyDown(props): boolean`), read through the ref by the
+> caller. A function is copied by reference and can't be re-broken this way — the same reason
+> `CollabCarets` already takes `getAwareness()`, so SlashCommand was the outlier rather than the
+> pattern. The ref callback also became a `useCallback` so React stops detaching and re-attaching
+> the handle on every render of a menu that re-renders per keystroke.
+>
+> **The general rule: never hand a mutable handle to `configure()` — pass a getter.** Guards at two
+> layers: `slash-command-options.test.ts` reproduces it with no browser at all (a function option
+> arrives by identity; a plain-object one does not, and a *captured snapshot* of `options` — which
+> is what `addProseMirrorPlugins` takes, once, at editor construction — never sees a later write),
+> and an `editor.spec.ts` case for the journey (arrows move the highlight with the menu still open
+> and the caret still in the query, Enter takes the arrowed-to item rather than the first, Escape
+> closes without inserting). That spec gets **its own fixture page**: these specs share one
+> Postgres in declaration order, and on a page an earlier test had typed into the assertions about
+> what is and isn't in the document inherited someone else's draft — the order-dependence trap
+> already in this file's gotcha list, hit twice in one session.
+>
+> **The media items get a real dialog (2026-08-25).** The `/video` and `/embed` items shipped with
+> `window.prompt`, following the `image` item's lead — and the user's verdict on a native box in
+> the middle of the editor was "looks horrific," which is right. Following an existing precedent
+> was the wrong instinct: the precedent was itself the thing to fix, and `image` is converted too
+> rather than left as the odd one out. New `MediaDialog` (shadcn `Dialog`, so it carries
+> `db-portal` and resolves the platform palette outside the `.db` shell) shared by the slash menu
+> and the `+` picker, with the copy for all three kinds as data in `MEDIA_INPUTS` so the menu item
+> and the dialog can't drift into describing different things.
+>
+> Being a real dialog is what lets it *say* something, which a prompt never could: **Add** is
+> disabled until `isSafeMediaUrl` passes, a rejected scheme explains itself inline instead of
+> silently inserting nothing, and an embed **names the provider it recognised** before you commit —
+> so a mistyped link is visible up front rather than after you look at the page. Enter submits, so
+> it's still one gesture from the `/` menu.
+>
+> Two things the browser settled. Radix focuses the dialog content (or the close button) on open,
+> which beats a plain `autoFocus` on the input — so it claims focus in `onOpenAutoFocus`, and the
+> e2e asserts `toBeFocused()`, because the failure mode is swallowing the first keystroke of a
+> paste. And the URL is re-validated inside `make()` rather than trusted from the dialog: `make` is
+> also reachable from the `+` picker, and a check living in one caller is one refactor from gone.
+> Threading it through took a small contract change — `SlashItem.input?: MediaInputKind` plus
+> `make(value?)`, and a `requestInput` **function** on the slash options (a function, per the
+> gotcha two notes up). Guards: a `MEDIA_INPUTS` meta test (every kind complete, submit labels
+> distinct — the dialog reads every field, so a missing one renders a blank label rather than
+> failing), and the e2e now drives the real dialog and **counts native prompts, asserting zero** —
+> Playwright auto-dismisses a stray `window.prompt`, so its return would otherwise look like an
+> insert that just didn't happen. Verified in both platform themes. Still no Upload control: there
+> is no asset pipeline behind it, and a button that never works is worse than one that isn't there.
+>
+> **Media uploads — the asset pipeline (2026-08-25).** The gap named above, built. An upload is an
+> **edit**: bytes land under `drafts/{sessionId}/`, a `draft_file` row records it, and it goes live
+> only on Publish — so the change list, per-file revert and discard-all work on it with no idea
+> that some changes are bytes.
+>
+> **Presigned PUT straight from the browser, not through us.** Necessary rather than tidy: a Route
+> Handler on Vercel caps the request body at a few MB, which one video clears — so bytes uploaded
+> *through* the app would fail at exactly the sizes this exists for. Three calls, in this order for
+> a reason: `requestMediaUpload` validates and signs, the browser PUTs, `finalizeMediaUpload`
+> confirms the object landed (`headObject`) before writing the row. Recording first would leave a
+> phantom change for an upload that died halfway. The content type is **signed into** the URL, so
+> a client can't upload one thing and have it served as another — an `.mp4` key served as
+> `text/html` is XSS on the tenant's own domain. The extension allowlist, not the browser's
+> reported MIME type, is what decides: the latter is client-supplied and often absent.
+> Cost: the bucket needs CORS for the app's origin. MinIO allows any origin by default so dev is
+> untouched; documented as a self-hosting note.
+>
+> **`draft_file.binary`** (migration `0024`) marks a row whose bytes are in storage and whose
+> `content` is empty. Publish then differs per site kind: hosted gets a new `copies` bucket in
+> `planNativePublish` — a server-side `copyObject`, the same object one prefix over, bytes never
+> entering this process — and Git-backed reads the object and commits it as a **base64 blob**,
+> because the tree API's inline `content` is text-only and passing raw bytes through it would
+> *corrupt* the file rather than fail. Two deliberate refusals-to-write: the plan skips a binary
+> row entirely without a sessionId (the source is unaddressable, and putting `content: ""` would
+> replace a real video with a zero-byte file), and the git path skips a missing object rather than
+> committing an empty one.
+>
+> **Serving the draft copy is one route, split by authorization, not by URL.** Studio renders the
+> tenant's real MDX, so it asks for `/api/tenant-asset/{slug}/…` like a reader does — an editor
+> that couldn't see its own unpublished upload would show a broken player for everything just
+> added. So that route tries the draft prefix first *only* for someone who could open the editor
+> for this site, and the **cookie-presence check comes first** so reader traffic pays nothing for a
+> branch it can never take. Draft responses are `private, no-store`; published ones keep their
+> cache. Verified both directions in a browser: the editor gets 200 and a playing video, a
+> signed-out reader gets **404** for the same URL while the object demonstrably exists.
+>
+> Also: `revertDraftFile` deletes the uploaded object, not just the row (otherwise it sits in the
+> draft prefix forever, unreferenced, while its path still reads as "taken"), and
+> `listSessionChanges` classifies a binary row with `headObject` rather than `getObjectText` —
+> the text path would pull a whole video into memory to decide "added" vs "modified". `gateEditor`
+> moved to `src/lib/editor-gate.ts` so the new actions and the asset route share one gate;
+> deliberately *not* exported from a `"use server"` file, where every export is a public endpoint.
+>
+> The dialog became a real picker: search, an Upload tile, a grid of what the site already has with
+> live thumbnails (`preload="metadata"`, so a grid of videos doesn't pull every byte), and draft
+> entries shadowing published ones at the same path. Uploading a taken name gets a numeric suffix
+> rather than overwriting a file still referenced elsewhere. Guards: `media-upload.test.ts` (18 —
+> the extension/size rules, slugified target paths including a name that slugifies to nothing,
+> collision suffixing, and the published/draft listing merge), four new `native-publish-plan`
+> cases, and an `editor.spec.ts` case pinning what no unit test can see: a real presigned PUT
+> against this storage, the row landing as `binary` with empty content, the slugified path, and the
+> editor-200/reader-404 split. Verified end to end in a browser on both site kinds — including a
+> hosted publish where the live key went from absent to 9409 bytes of `video/mp4`, byte-identical
+> to the source, then fetched anonymously over the tenant host.
+>
+> Two things that cost time and are worth writing down. Playwright's `APIRequestContext` runs in
+> **Node**, whose resolver doesn't do `*.localhost` — every host in this suite is one, so an HTTP
+> assertion there fails on DNS rather than on the thing under test; do it with `page.evaluate(fetch)`
+> or a real page instead. And Radix's dialog focuses its own container on open, so a child's
+> mount-effect `focus()` gets taken straight back — the field is claimed in `onOpenAutoFocus`,
+> which is the one callback that fires instead of that. The symptom is the first keystroke of a
+> paste going nowhere, and it only showed up in the full-suite run.
+>
+> **A failed upload said nothing at all (2026-08-25).** Reported as "this fails hard" with a copied
+> cURL. The upload path had a real defect regardless of what caused their failure: the `fetch` to
+> storage had **no catch**. A rejected fetch — which is what a blocked cross-origin request, an
+> unreachable bucket, or a dropped connection produces — escaped, `finally` stopped the spinner, and
+> the dialog showed *nothing*. Silent failure is the worst mode here: no message, nothing in the
+> change list, nothing to report. Now: a `catch` that names the two things `TypeError: Failed to
+> fetch` actually means (browsers give that error no detail on purpose) plus **the endpoint the
+> request was going to**, and on a non-ok response the **S3/MinIO error body is parsed and shown** —
+> `SignatureDoesNotMatch`, `RequestTimeTooSkewed`, `EntityTooLarge` — because storage already said
+> what was wrong and swallowing it sends the next person reading network logs. Pure helpers
+> (`parseStorageError`, `uploadThrewMessage`, `storageOrigin`) with 9 tests, plus an `editor.spec.ts`
+> case that routes the PUT to a 403 with an XML body and asserts the code is relayed, the spinner
+> stops, and nothing is recorded. Verified all three failure shapes in a browser via request
+> interception.
+>
+> **What the reported failure was is still unknown.** Not reproducible here: a fresh presigned PUT
+> succeeds from Node with every header shape, MinIO's preflight answers 204 with the right
+> `Access-Control-Allow-Origin`, host and container clocks agree to the second, and uploads of 9KB,
+> 3.4MB and 150MB all succeed in Chromium — including a filename shaped exactly like theirs
+> (`copy_….MOV.mp4`, which slugifies to `copy-…-mov.mp4` by design). Their reporter is Brave, and
+> the pasted cURL carries no body (devtools can't serialize a File) and an expired signature, so
+> replaying it proves nothing either way. The error-surfacing above is what closes this: the next
+> attempt says which of the two it is.
+>
+> One test debt logged rather than hidden: the e2e does **not** assert that an editor can read the
+> draft copy back over HTTP. It works (it's what makes the thumbnail and the inserted player show an
+> unpublished upload, verified in a browser, and the reader-404 half IS asserted), but in that
+> harness it 404s on roughly two runs in three and polling for 15s doesn't change it — so it isn't a
+> race, and something about the harness stops the route's draft branch firing. A test that fails two
+> thirds of the time is worse than none; the reason is worth finding before re-adding it. Also, six
+> tests in that file now clear the drafts they create through a shared `clearDrafts` — the
+> Publish-panel test asserts the session has exactly ONE change, so any test leaving an edit behind
+> fails an assertion further down the file, and the two upload tests got their own pages for the
+> same reason. `clearDrafts` **deletes more than once**: autosave is debounced, so a keystroke from
+> the end of a test is still in flight when it finishes and the row lands *after* a single delete —
+> which is what made the Publish-panel test fail intermittently and read as flakiness in itself
+> rather than as unfinished work in the tests above it. And the media tests choose their slash-menu item with **Enter, not a click**: the menu
+> re-renders on every keystroke, so a click lands on a node React has already replaced ("element was
+> detached from the DOM").
 
 ---
 

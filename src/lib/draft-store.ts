@@ -111,14 +111,16 @@ export async function upsertDraftFile(input: {
   path: string;
   content: string;
   deleted?: boolean;
+  /** An uploaded asset: the bytes live in object storage, `content` is empty. See media-upload.ts. */
+  binary?: boolean;
 }): Promise<void> {
-  const { sessionId, path, content, deleted = false } = input;
+  const { sessionId, path, content, deleted = false, binary = false } = input;
   await db
     .insert(draftFile)
-    .values({ id: randomUUID(), sessionId, path, content, deleted })
+    .values({ id: randomUUID(), sessionId, path, content, deleted, binary })
     .onConflictDoUpdate({
       target: [draftFile.sessionId, draftFile.path],
-      set: { content, deleted, updatedAt: new Date() },
+      set: { content, deleted, binary, updatedAt: new Date() },
     });
   await db
     .update(editorSession)

@@ -24,6 +24,39 @@ const config: Config = {
     "./packages/renderer/**/*.{ts,tsx}",
     "./node_modules/streamdown/dist/**/*.js", // assistant markdown renderer classes
   ],
+  // Classes that only ever appear in a TENANT'S MDX. Their content is fetched from Git or object
+  // storage at request time, so the scanner above can never see it — a class used only in
+  // someone's docs page is purged, and the page renders unstyled with nothing to indicate why.
+  //
+  // This isn't solvable in general (a page may use any class), so the list is scoped to what the
+  // compatibility target's own guidance tells authors to write — `className="w-full aspect-video
+  // rounded-xl"` on a <video>, the same plus `h-96` on an <iframe>. A repo that followed that
+  // advice rendered here WITHOUT an aspect ratio, because `aspect-video` appears nowhere in our
+  // own source: measured against the served stylesheet, `aspect-video`, `h-96` and `object-cover`
+  // were missing while `w-full` and `rounded-xl` happened to survive only because our UI uses
+  // them. Which media classes worked was an accident; listing them makes it a guarantee.
+  //
+  // Some entries here look redundant, and that is the point: `aspect-video` is currently also
+  // kept alive by the MEDIA_CLASSES string in src/lib/media-embed.ts, because the scanner reads
+  // candidate names out of any string in scanned source. That is the same accidental coverage
+  // this list exists to replace — move or rename that constant and the class silently vanishes
+  // from the CSS while every page still asks for it. tests/smoke.mjs reads the served stylesheet
+  // and fails if any of these are purged, since the page HTML looks identical either way.
+  safelist: [
+    "aspect-video",
+    "aspect-square",
+    "object-cover",
+    "object-contain",
+    "w-full",
+    "max-w-full",
+    "mx-auto",
+    "h-64",
+    "h-96",
+    "rounded-lg",
+    "rounded-xl",
+    "rounded-2xl",
+    "shadow-lg",
+  ],
   theme: {
     extend: {
       colors: {

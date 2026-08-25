@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/core";
-import { SLASH_CATEGORIES, filterSlashItems, type SlashItem } from "./menu-items";
+import { SLASH_CATEGORIES, filterSlashItems, type RequestInput, type SlashItem } from "./menu-items";
 
 /**
  * The "+" block picker — a standalone, searchable popover (hosted docs platforms' "Sections / Type to
@@ -16,6 +16,7 @@ export function BlockPicker({
   y,
   insertPos,
   replaceRange,
+  requestInput,
   onClose,
 }: {
   editor: Editor;
@@ -25,6 +26,8 @@ export function BlockPicker({
   // When set (from the drag handle's "Turn into"), the selected block REPLACES this range
   // instead of being inserted at insertPos.
   replaceRange?: { from: number; to: number };
+  // Media items need a URL first; the host owns that dialog (see MediaDialog).
+  requestInput: RequestInput;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
@@ -35,15 +38,24 @@ export function BlockPicker({
   useEffect(() => inputRef.current?.focus(), []);
   useEffect(() => setSelected(0), [query]);
 
-  const choose = (item: SlashItem) => {
-    const node = item.make();
-    if (node) {
-      if (replaceRange) {
-        editor.chain().focus().deleteRange(replaceRange).insertContentAt(replaceRange.from, node).run();
-      } else {
-        editor.chain().focus().insertContentAt(insertPos, node).run();
-      }
+  const insert = (node: object | null) => {
+    if (!node) return;
+    if (replaceRange) {
+      editor.chain().focus().deleteRange(replaceRange).insertContentAt(replaceRange.from, node).run();
+    } else {
+      editor.chain().focus().insertContentAt(insertPos, node).run();
     }
+  };
+
+  const choose = (item: SlashItem) => {
+    // Media items need a URL first. Close this popover before the dialog opens — two stacked
+    // overlays with the dialog stealing focus reads as the picker having frozen.
+    if (item.input) {
+      onClose();
+      requestInput(item.input, (value) => insert(item.make(value)));
+      return;
+    }
+    insert(item.make());
     onClose();
   };
 

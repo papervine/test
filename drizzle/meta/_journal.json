@@ -169,6 +169,13 @@
       "when": 1787326814827,
       "tag": "0023_slippery_vermin",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1787675498823,
+      "tag": "0024_massive_brother_voodoo",
+      "breakpoints": true
     }
   ]
 }

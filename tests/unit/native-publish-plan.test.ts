@@ -86,6 +86,54 @@ describe("planNativePublish", () => {
 
   it("plans nothing for an empty draft set", () => {
     const plan = planNativePublish(SITE, [], new Set());
-    expect(plan).toEqual({ puts: [], configPuts: [], deletes: [], added: 0, modified: 0, removed: 0 });
+    expect(plan).toEqual({
+      puts: [],
+      copies: [],
+      configPuts: [],
+      deletes: [],
+      added: 0,
+      modified: 0,
+      removed: 0,
+    });
+  });
+
+  describe("uploaded assets", () => {
+    const upload = { path: "videos/demo.mp4", content: "", deleted: false, binary: true };
+
+    it("copies from the session's draft prefix instead of writing content", () => {
+      const plan = planNativePublish(SITE, [upload], new Set(), "sess1");
+      // No put: the bytes never entered Postgres, so there is nothing to write.
+      expect(plan.puts).toEqual([]);
+      expect(plan.copies).toEqual([
+        { from: "drafts/sess1/videos/demo.mp4", to: `sites/${SITE}/videos/demo.mp4` },
+      ]);
+      expect(plan.added).toBe(1);
+    });
+
+    it("counts a re-upload of a published path as modified", () => {
+      const plan = planNativePublish(SITE, [upload], new Set([`sites/${SITE}/videos/demo.mp4`]), "sess1");
+      expect(plan.modified).toBe(1);
+      expect(plan.added).toBe(0);
+    });
+
+    it("skips the asset entirely with no session id, rather than writing an empty object", () => {
+      // The source key is unaddressable without it, and putting `content: ""` would replace a
+      // real published video with a zero-byte file — far worse than leaving the old one.
+      const plan = planNativePublish(SITE, [upload], new Set(), undefined);
+      expect(plan.puts).toEqual([]);
+      expect(plan.copies).toEqual([]);
+      expect(plan.added).toBe(0);
+    });
+
+    it("still deletes a tombstoned asset", () => {
+      const plan = planNativePublish(
+        SITE,
+        [{ ...upload, deleted: true }],
+        new Set([`sites/${SITE}/videos/demo.mp4`]),
+        "sess1",
+      );
+      expect(plan.deletes).toEqual([`sites/${SITE}/videos/demo.mp4`]);
+      expect(plan.removed).toBe(1);
+    });
   });
 });

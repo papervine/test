@@ -3,9 +3,7 @@
 import matter from "gray-matter";
 import { revalidatePath } from "next/cache";
 import { siteRoute } from "@/lib/dashboard-nav";
-import { findSite, type SiteRow } from "@/lib/dashboard-context";
-import { getSession, listOrganizations, getMemberRole } from "@/lib/session";
-import { canSeeFeature } from "@/lib/features";
+import { gateEditor } from "@/lib/editor-gate";
 import { mintCollabToken } from "@/lib/collab-token";
 import {
   checkoutBranch,
@@ -74,21 +72,6 @@ function findGroupNode(node: unknown, name: string): Record<string, unknown> | n
 // edit one draft buffer. Auth + the editor feature gate happen here at the edge; core
 // assumes an already-authorized SiteRow.
 
-type Gate = { site: SiteRow; userId: string; userName: string } | { error: string };
-
-// Resolve + authorize the site for an editor action, enforcing the editor feature gate
-// (defense-in-depth — the route layout gates the URL, this gates the mutation).
-async function gateEditor(orgSlug: string, siteSlug: string): Promise<Gate> {
-  const session = await getSession();
-  if (!session) return { error: "You're signed out." };
-  const org = (await listOrganizations())?.find((o) => o.slug === orgSlug);
-  if (!org) return { error: "Organization not found." };
-  const role = await getMemberRole(org.id, session.user.id);
-  if (!canSeeFeature("editor.workspace", role)) return { error: "The editor isn't enabled for your role." };
-  const site = await findSite(orgSlug, siteSlug);
-  if (!site) return { error: "Site not found." };
-  return { site, userId: session.user.id, userName: session.user.name ?? "Editor" };
-}
 
 /**
  * Mint a short-lived token for the collaborative editing socket (apps/collab). Runs the full

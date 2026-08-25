@@ -4,7 +4,7 @@ import { useEditor, EditorContent } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { DragHandle } from "@tiptap/extension-drag-handle-react";
 import Placeholder from "@tiptap/extension-placeholder";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Bold, Italic, Strikethrough, Code, Link as LinkIcon, GripVertical, Plus } from "lucide-react";
 import type { Node as PMNode } from "@tiptap/pm/model";
 import type { Awareness } from "y-protocols/awareness";
@@ -16,6 +16,9 @@ import { makeNodeViewOpts } from "./visual/NodeViews";
 import { CollabCarets, collabCaretsKey } from "./visual/CollabCarets";
 import { SlashCommand, type SlashState } from "./visual/SlashCommand";
 import { SlashMenu, type SlashMenuHandle } from "./visual/SlashMenu";
+import { MediaDialog } from "./visual/MediaDialog";
+import type { RequestInput } from "./visual/menu-items";
+import type { MediaInputKind } from "@/lib/media-embed";
 import { BlockPicker } from "./visual/BlockPicker";
 import { BlockMenu } from "./visual/BlockMenu";
 import type { SuggestionKeyDownProps } from "@tiptap/suggestion";
@@ -52,6 +55,9 @@ export function VisualEditor({
   onChange,
   assetBase,
   awareness,
+  org,
+  site,
+  branch,
   slug,
   slugs,
   onNavigate,
@@ -62,6 +68,10 @@ export function VisualEditor({
   // Remote-collaborator carets are rendered from this awareness. Null when collaboration is off or
   // the shared doc hasn't connected yet; the editor rebuilds (see the useEditor deps) once it arrives.
   awareness?: Awareness | null;
+  // Addresses for the media dialog's server actions (list / upload into this site's storage).
+  org: string;
+  site: string;
+  branch: string;
   // The page being edited + every page in the site — what a clicked link is resolved against.
   slug: string;
   slugs: string[];
@@ -95,6 +105,21 @@ export function VisualEditor({
   // The `/` command palette — controlled by suggestion state reported from SlashCommand.
   const [slash, setSlash] = useState<SlashState | null>(null);
   const slashKeyRef = useRef<((p: SuggestionKeyDownProps) => boolean) | null>(null);
+  // The media dialog (`/image`, `/video`, `/embed`), hosted here because both the slash menu and
+  // the "+" picker open it and neither should own a modal.
+  const [mediaInput, setMediaInput] = useState<{
+    kind: MediaInputKind;
+    onSubmit: (value: string) => void;
+  } | null>(null);
+  const requestInput = useCallback<RequestInput>(
+    (kind, onSubmit) => setMediaInput({ kind, onSubmit }),
+    [],
+  );
+  // Stable identity, so React doesn't detach and re-attach the handle on every single render of a
+  // menu that re-renders on each keystroke.
+  const registerSlashMenu = useCallback((h: SlashMenuHandle | null) => {
+    slashKeyRef.current = h ? (p) => h.onKeyDown({ event: p.event }) : null;
+  }, []);
 
   const editor = useEditor({
     immediatelyRender: false, // required under Next SSR to avoid a hydration mismatch
@@ -107,7 +132,11 @@ export function VisualEditor({
       SlashCommand.configure({
         onOpen: (s) => setSlash(s),
         onClose: () => setSlash(null),
-        keyHandlerRef: slashKeyRef,
+        // Read the ref through a function rather than handing the ref itself over: configure()
+        // deep-merges options and would clone a `{ current }` box, leaving the extension reading
+        // an object React never writes to. See SlashOptions.onKeyDown.
+        onKeyDown: (p) => slashKeyRef.current?.(p) ?? false,
+        requestInput,
       }),
       CollabCarets.configure({ getAwareness: () => awarenessRef.current }),
     ],
@@ -319,7 +348,21 @@ export function VisualEditor({
           y={picker.y}
           insertPos={picker.insertPos}
           replaceRange={picker.replaceRange}
+          requestInput={requestInput}
           onClose={() => setPicker(null)}
+        />
+      )}
+      {mediaInput && (
+        <MediaDialog
+          kind={mediaInput.kind}
+          org={org}
+          site={site}
+          branch={branch}
+          onSubmit={(value) => {
+            mediaInput.onSubmit(value);
+            setMediaInput(null);
+          }}
+          onClose={() => setMediaInput(null)}
         />
       )}
       {slash && slash.rect && (
@@ -328,9 +371,7 @@ export function VisualEditor({
           style={{ position: "fixed", left: slash.rect.left, top: slash.rect.bottom + 6, zIndex: 60 }}
         >
           <SlashMenu
-            ref={(h: SlashMenuHandle | null) => {
-              slashKeyRef.current = h ? (p) => h.onKeyDown({ event: p.event }) : null;
-            }}
+            ref={registerSlashMenu}
             items={slash.items}
             command={(item) => slash.command(item)}
           />

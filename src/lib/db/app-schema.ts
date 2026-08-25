@@ -229,6 +229,11 @@ export const draftFile = pgTable(
     path: text("path").notNull(),
     // Full buffered text (MDX/JSON). Postgres text handles MB-scale docs fine.
     content: text("content").notNull(),
+    // An uploaded asset: the bytes are NOT here — a video doesn't belong in a text column — they
+    // live in object storage at `drafts/{sessionId}/{path}` (see src/lib/media-upload.ts) and
+    // `content` is empty. The row still exists so the change list, per-file revert and
+    // discard-all keep working without caring that some changes are bytes rather than text.
+    binary: boolean("binary").default(false).notNull(),
     deleted: boolean("deleted").default(false).notNull(),
     updatedAt: timestamp("updated_at").defaultNow().notNull(),
   },

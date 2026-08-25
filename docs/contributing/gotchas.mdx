@@ -42,6 +42,26 @@ This is a *visual* bug — it passes the DOM check and only shows in a screensho
 why [definition of done](/contributing/working-on-papervine#definition-of-done) requires a
 real-browser screenshot for UI changes.
 
+### Never hand a mutable handle to a TipTap `configure()`
+
+<Warning>
+  `Extension.configure()` merges options with a **deep** merge, which recurses whenever the
+  default and the supplied value are both plain objects. A React ref is `{ current }`, so it gets
+  *copied* — the extension reads its own object forever while React writes to the original.
+  **Fix:** pass a function (`onKeyDown(props)`, `getAwareness()`), which is copied by reference.
+</Warning>
+
+Nothing errors and nothing warns, which is what makes this expensive: the editor's `/` command
+menu ignored the arrow keys and <kbd>Enter</kbd> for as long as it existed, and the symptom read
+as a focus problem rather than a wiring one. Arrows reached the document instead of the menu,
+which moved the cursor out of the `/query` and so closed the menu; <kbd>Enter</kbd> reached the
+document too, leaving the mouse as the only way to choose an item.
+
+It also hides from casual inspection, because `options` is a getter that re-merges on every
+access — read it directly and it looks right. The damage is that extension code captures it
+**once**, at editor construction (`const opts = this.options` in `addProseMirrorPlugins`), and
+that snapshot never sees a later write.
+
 ### Portalled overlays render outside the `.db` shell
 
 <Warning>

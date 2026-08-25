@@ -378,6 +378,18 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   (`PlatformShell`); a `dark:` utility on an element *outside* `.db` (e.g. on `<body>` itself)
   won't see the platform theme. This is why the editor chrome once rendered all-white on the
   dark platform. Don't add a global `.dark` sync — it would flip light-appearance docs pages.
+- **Never hand a mutable handle to a TipTap `configure()` — pass a getter.** `Extension.configure()`
+  merges options with `mergeDeep`, which **recurses whenever the default and the supplied value are
+  both plain objects**. A React ref is `{ current }`, so it gets *copied*: the extension reads its
+  own object forever while React writes to the original. Nothing errors and nothing warns. This is
+  why the `/` menu's arrow/Enter navigation silently never worked — arrows fell through to
+  ProseMirror, which moved the caret out of the `/query` and closed the menu, and Enter fell through
+  too, so items could only be picked with the mouse. Worse, `options` is a *getter* that re-merges
+  on access, so it reads correctly if you poke at it — the damage is that extension code captures
+  it **once** (`const opts = this.options` in `addProseMirrorPlugins`, at editor-construction time)
+  and that snapshot never sees a later write. Pass a function instead (`onKeyDown(props)`,
+  `getAwareness()`): function values are copied by reference and can't be re-broken this way.
+  Pinned by `tests/unit/slash-command-options.test.ts`, which needs no browser.
 - **A random dedupe key is not a dedupe key.** `fireContentUpdateAutomations` is the
   self-trigger loop breaker for `content_update` automations: an automation's own commit
   re-syncs under a sha that already has a run row, so it doesn't re-fire. Its no-sha fallback
