@@ -47,6 +47,26 @@ One long-running Node process that reads MDX from a directory and serves HTML.
 
 Requires Node 20.9 or newer.
 
+## One-click to Vercel
+
+The CLI is a Next.js app, so it deploys to Vercel like any other — the same source, with
+`output: "standalone"` skipped (that mode exists to make the npm tarball relocatable, and Vercel
+builds its own output).
+
+<Card title="Deploy with Vercel" icon="triangle" href="https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fpapervine%2Fcli&root-directory=apps%2Fcli">
+  Forks `papervine/cli` and deploys `apps/cli`, serving the starter site. Replace
+  `examples/starter` with your own docs, or repoint `PAPERVINE_CONTENT`.
+</Card>
+
+<Note>
+  Pages render per request, so each view is a function invocation with no caching. That is fine
+  for a docs site of ordinary traffic and it is *not* how a static host works — static export
+  (`papervine build`) is on the [roadmap](/roadmap) and is the better fit at scale.
+</Note>
+
+The rest of this page is for running it yourself, which gives you caching, a single long-lived
+process, and no per-request billing.
+
 ## Docker
 
 The shortest complete deployment. This installs the CLI, copies your docs in, and serves them:

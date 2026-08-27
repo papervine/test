@@ -5218,6 +5218,54 @@ the hosted API over HTTPS, they don't embed it.
 > hosted MCP routes compile), crawl `docs` 44/44 at 0×500, `mirror:cli --dry-run` (the renderer
 > typechecks outside the monorepo with the new dependency declared), and `npm run test:cli` green.
 >
+> **Status (2026-08-26): Deploy to Vercel — the CLI is a Next app, and I argued it wasn't.**
+> Asked whether a Deploy button was easy. I said no, on the grounds that Vercel runs serverless
+> functions while the CLI is a long-lived process. The user's correction was one line — "the CLI
+> is a nextjs app" — and it was right. `output: "standalone"` is a *packaging* choice for the npm
+> tarball, not an architecture; the app underneath is ordinary Next.
+>
+> Proved by building it both ways: with standalone disabled the app builds clean and `next start`
+> serves the starter — home, a nested page, `/mcp` and `/llms.txt` all 200. My other two
+> objections were also wrong: the mirror repo is a complete npm workspace (root `package.json`
+> with `workspaces: ["packages/*","apps/*"]`, a lockfile, and `examples/starter` for content), so
+> a clone has everything to build, and `root-directory` **is** a supported deploy-button query
+> parameter, so the button can target `apps/cli`.
+>
+> **Three changes.** `output` becomes `process.env.VERCEL ? undefined : "standalone"` — one source
+> serving both targets, since Vercel sets `VERCEL` on every build. `apps/cli/vercel.json` supplies
+> framework, the workspace build command, and `PAPERVINE_CONTENT`. And an
+> `outputFileTracingIncludes` entry for the content, because `content.ts` resolves the docs folder
+> from an env var at *runtime* — nothing statically references those files, so a serverless
+> function would ship without them. The whole-project trace fallback happens to include them
+> today, which means it worked by accident; stating the include makes it deliberate.
+>
+> **Verified by reading the trace manifests, not by deploying.** `.nft.json` files list exactly
+> what each route bundles, so the question "does the content travel" is answerable locally and
+> precisely: 42 starter files reach `(docs)/[[...slug]]`.
+>
+> **And that is how a secret leak got caught.** The first version of the include was
+> `examples/starter/**`, and the trace showed `examples/starter/.env.local` in all eleven route
+> bundles. That file is gitignored, so a Deploy-button clone never has one — but anyone deploying
+> from their own checkout would have uploaded their API keys into the deployment, silently. This is
+> the *second* time this session a copy-everything rule over a directory humans keep secrets in
+> produced that outcome (the first reached `apps/cli/template/`). The include now enumerates
+> content extensions; re-traced at 0 `.env` files and 42 content files. The pattern is worth
+> naming: **a recursive glob across a human-managed directory is a secret leak waiting for an
+> occasion.**
+>
+> **Stated cost, not buried:** every page renders per request, so a Vercel deployment is a
+> function invocation per view with no caching. Correct, but the opposite of the perf posture
+> recorded elsewhere — `papervine build` (static export) remains the right answer for traffic, and
+> both the README and the guide say so next to the button rather than in a footnote.
+>
+> **Not verified:** whether the relative `PAPERVINE_CONTENT=../../examples/starter` resolves
+> against the right cwd inside a Vercel function. That needs a real deploy, which needs a project
+> on the account — the one step the local trace inspection can't stand in for.
+>
+> Verified: typecheck (root + CLI), unit, smoke, crawl `docs` 46/46 at 0×500, and
+> `npm run test:cli` green — the standalone path is untouched, which is what the packaging
+> boundary depends on.
+>
 > **Status (2026-08-24): `papervine new` shipped, and `dev` offers it.** Prompted by a
 > competitor leading with `pnpm dlx create-shiso-app my-docs` — the observation being that a
 > tool should generate a folder when the user hasn't got one. Ours dead-ended instead: `dev`
