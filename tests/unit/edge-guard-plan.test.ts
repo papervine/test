@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { blocksEdgeDelete } from "../../src/components/editor/visual/edge-guard-plan";
+import {
+  blocksEdgeDelete,
+  edgeDeleteAction,
+} from "../../src/components/editor/visual/edge-guard-plan";
 
 // A <Tab> whose editable content spans 12..30, inside a <Tabs> spanning 10..80 — innermost first,
 // the order enclosingContainers returns.
@@ -45,5 +48,31 @@ describe("blocksEdgeDelete", () => {
     // a component and deleting is a considered act, not a slip.
     expect(blocksEdgeDelete(CONTAINERS, { from: TAB.from, to: TAB.to }, "backward")).toBe(false);
     expect(blocksEdgeDelete(CONTAINERS, { from: 5, to: 40 }, "backward")).toBe(false);
+  });
+});
+
+// Guarding the edge is right; treating it as "nothing can happen here" is not. A list opening a
+// tab was the one place a bullet or a checkbox could never be backspaced away, because the press
+// that drops list formatting lands on exactly the position the guard swallows.
+describe("edgeDeleteAction", () => {
+  it("unwraps the list item instead of swallowing the key at the leading edge", () => {
+    expect(edgeDeleteAction(CONTAINERS, caret(TAB.from), "backward", true)).toBe("unwrap");
+  });
+
+  it("still blocks there when there is no list to unwrap — the tab must survive", () => {
+    expect(edgeDeleteAction(CONTAINERS, caret(TAB.from), "backward", false)).toBe("block");
+  });
+
+  it("gives forward Delete no such escape: it pulls the NEXT block in either way", () => {
+    expect(edgeDeleteAction(CONTAINERS, caret(TAB.to), "forward", true)).toBe("block");
+  });
+
+  it("leaves every ordinary delete to the editor", () => {
+    expect(edgeDeleteAction(CONTAINERS, caret(20), "backward", true)).toBe("allow");
+    expect(edgeDeleteAction(CONTAINERS, caret(20), "forward", false)).toBe("allow");
+    // A selection is a deliberate delete — including one that starts on the edge.
+    expect(edgeDeleteAction(CONTAINERS, { from: TAB.from, to: TAB.to }, "backward", true)).toBe(
+      "allow",
+    );
   });
 });

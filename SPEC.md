@@ -2975,6 +2975,24 @@ layer.
 > past empty and asserts both tabs survive — on its own fixture page, since it asserts on what is
 > and isn't left in a document.
 >
+> **…and it swallowed one press it shouldn't have (2026-08-27).** Reported as "I'm not able to
+> backspace out the first checkbox inside a tab." Guarding the edge was right; treating the edge
+> as *"nothing can happen here"* was not. Backspace at the start of a list item normally drops the
+> list formatting — a delete that stays **inside** the component — and the first item of a list
+> that opens a tab sits on exactly the position the guard swallows. So that one checkbox (or
+> bullet) was the only one in the editor that could never be removed; the second item behaved
+> normally, which is why the report named the first. Pre-existing since the guard landed, not a
+> regression from the `/`-menu fix above.
+>
+> The rule is now `edgeDeleteAction` → `allow` / `block` / `unwrap`: at the leading edge with a
+> liftable list item, lift it instead of eating the key. Whether the lift is legal is a question
+> only the editor can answer (`can().liftListItem`), so it goes *in* as a boolean and the decision
+> stays pure. Forward Delete gets no equivalent — at the trailing edge it pulls the following
+> block in whatever the cursor is nested in — and once the list is gone the next press is
+> swallowed exactly as before, which is the second half of the new `editor.spec.ts` case (the two
+> behaviours are one keystroke apart, so pinning them separately would let a fix for either break
+> the other). Plus 4 unit tests on the new decision.
+>
 > **The whole-site preview became an overlay (2026-08-25).** It was `<a target="_blank">`, which
 > put the preview in a window with no relationship to the editor: getting back meant hunting for a
 > tab, and the two drifted — the tab kept showing the draft as of when it opened while you carried
@@ -3089,6 +3107,39 @@ layer.
 > both states survive the autosave while the plain bullet beside them stays plain. The jsdom
 > schema test grew three node-view cases in the same spirit: they assert on the **input** rather
 > than on `data-checked`, since the whole failure was a correct attribute nobody could reach.
+>
+> **`/` inside a component said "No matching blocks" (2026-08-27).** Reported as "if I run a slash
+> command inside a tab I don't get the components list." It listed all 33 blocks in a plain
+> paragraph and none inside a `<Tab>` pane — the same code, the same query (`""`), the same item
+> set. What differs is *who tears the menu down*. The suggestion plugin resolves its items
+> **asynchronously** (`await items({query})`, even for a synchronous filter), so a menu opens with
+> an empty list and is filled a microtask later. `<DragHandle>` (from
+> `@tiptap/extension-drag-handle-react`) `unregisterPlugin`s + `registerPlugin`s inside a
+> `useEffect` whose deps include `onNodeChange` — and ours was an inline arrow, i.e. a new
+> dependency on **every render**. Reconfiguring the plugin set makes ProseMirror destroy and
+> rebuild every plugin view; the suggestion's `destroy()` fires `onExit` and aborts the in-flight
+> lookup, so the resolved list never arrives and the palette is frozen on the empty state it
+> opened with. Every keystroke did this; what made it *visible* only inside components is where
+> the teardown lands relative to that microtask — typing in a node view put it between the open
+> and the resolution, and in a plain paragraph the list won the race. Measured, not guessed: a
+> temporary debug plugin logged `items() "" 33` immediately followed by `onExit`, with a stack
+> ending in `DragHandle.useEffect → Editor.unregisterPlugin`, and no matching state transition —
+> the exit came from the plugin view being **destroyed**, not from the suggestion deactivating.
+>
+> Fix: a `useCallback`-stable `onNodeChange` (it only writes a ref, so it has no deps). The plugin
+> set now stays put while you type, which is also the end of a per-keystroke unregister/register
+> of a ProseMirror plugin nobody was paying attention to. Hardened alongside it: `SlashCommand`
+> deferred its **opens** through `queueMicrotask` (to stay out of the editor's React render phase)
+> but closed **synchronously**, so a close could be applied before an open that was queued ahead
+> of it — leaving exactly this stuck-open-and-empty menu. Both directions are queued now, so they
+> land in the order the editor dispatched them. Guarded by an `editor.spec.ts` case that opens the
+> `tabby` fixture, types `/` inside a pane, and asserts a populated menu (and that picking `Info`
+> still inserts into that pane) — verified failing on the inline-arrow version first.
+>
+> **The general rule, and it is not slash-menu-specific: any prop that feeds a TipTap React
+> component's effect deps must be identity-stable.** An unstable one doesn't warn — it silently
+> rebuilds editor plugins under you, and whatever state those plugins hold (a suggestion, a
+> pending fetch, a decoration set) is what you lose.
 
 ---
 

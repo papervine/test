@@ -32,3 +32,29 @@ export function blocksEdgeDelete(
     direction === "backward" ? selection.from === c.from : selection.from === c.to,
   );
 }
+
+/** What the key should do: run normally, be swallowed, or unwrap the list item it's sitting in. */
+export type EdgeDeleteAction = "allow" | "block" | "unwrap";
+
+/**
+ * The same rule, but with the case swallowing it whole got wrong.
+ *
+ * Guarding the edge is right; treating the edge as "nothing can happen here" is not. Backspace at
+ * the start of a list item normally drops the list formatting — and that is a *delete that stays
+ * inside the component*, so a list opening a tab was the one place a bullet or a checkbox could
+ * never be removed. Reported as "I'm not able to backspace out the first checkbox inside a tab."
+ *
+ * `canUnwrap` is "the editor could lift this list item" — asked of the editor, since only it knows
+ * whether the lift is legal here. Forward Delete gets no such case: at the trailing edge it pulls
+ * the FOLLOWING block into the component whatever the cursor is nested in, so there the answer is
+ * still nothing.
+ */
+export function edgeDeleteAction(
+  containers: readonly SelRange[],
+  selection: SelRange,
+  direction: "backward" | "forward",
+  canUnwrap: boolean,
+): EdgeDeleteAction {
+  if (!blocksEdgeDelete(containers, selection, direction)) return "allow";
+  return direction === "backward" && canUnwrap ? "unwrap" : "block";
+}

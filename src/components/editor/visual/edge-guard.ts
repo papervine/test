@@ -1,6 +1,6 @@
 import { Extension } from "@tiptap/core";
 import { enclosingContainers } from "./containers";
-import { blocksEdgeDelete } from "./edge-guard-plan";
+import { edgeDeleteAction } from "./edge-guard-plan";
 
 // Backspace stops at a component's edge instead of eating the component.
 //
@@ -24,7 +24,17 @@ export const EdgeGuard = Extension.create({
     const guard = (direction: "backward" | "forward") => () => {
       const { state } = this.editor;
       const { from, to } = state.selection;
-      return blocksEdgeDelete(enclosingContainers(state), { from, to }, direction);
+      // Only Backspace has an in-container fallback, so only it asks whether the lift is legal —
+      // `can()` runs the command against a throwaway transaction, which isn't worth doing on a key
+      // that can't use the answer.
+      const canUnwrap =
+        direction === "backward" && this.editor.can().liftListItem("listItem");
+      const action = edgeDeleteAction(enclosingContainers(state), { from, to }, direction, canUnwrap);
+      if (action === "allow") return false;
+      // Drop the list formatting instead of doing nothing: the component survives, and a list that
+      // opens one stops being the one place a checkbox can't be removed.
+      if (action === "unwrap") return this.editor.commands.liftListItem("listItem");
+      return true;
     };
     return {
       Backspace: guard("backward"),

@@ -120,6 +120,21 @@ export function VisualEditor({
   const registerSlashMenu = useCallback((h: SlashMenuHandle | null) => {
     slashKeyRef.current = h ? (p) => h.onKeyDown({ event: p.event }) : null;
   }, []);
+  /**
+   * MUST be `useCallback`-stable: it is a dependency of DragHandle's effect, and that effect
+   * `unregisterPlugin`s + `registerPlugin`s every time it re-runs. Reconfiguring the plugin set
+   * makes ProseMirror destroy and rebuild EVERY plugin view — and the `/` palette reports through
+   * one. Its `destroy()` fires the suggestion's `onExit` and aborts the in-flight item lookup, so
+   * the resolved list never arrives and the menu is stuck on the empty state it opened with
+   * ("No matching blocks"). An inline arrow read as a *new* dependency on every render, so every
+   * keystroke tore the plugins down; typing inside a React node view (a `<Tab>` pane, a callout)
+   * puts that teardown inside the window between the menu opening and its list resolving, which
+   * is why the palette worked in a plain paragraph and died inside a component.
+   */
+  const onDragHandleNode = useCallback((data: { node: PMNode | null; pos: number }) => {
+    // Keep the last real block; don't clear when the pointer moves onto the handle.
+    if (data.node) hovered.current = { pos: data.pos, node: data.node };
+  }, []);
 
   const editor = useEditor({
     immediatelyRender: false, // required under Next SSR to avoid a hydration mismatch
@@ -315,13 +330,7 @@ export function VisualEditor({
         </BubbleMenu>
       )}
       {editor && (
-        <DragHandle
-          editor={editor}
-          onNodeChange={(data) => {
-            // Keep the last real block; don't clear when the pointer moves onto the handle.
-            if (data.node) hovered.current = { pos: data.pos, node: data.node };
-          }}
-        >
+        <DragHandle editor={editor} onNodeChange={onDragHandleNode}>
           <div className="pv-block-controls">
             <button
               type="button"

@@ -64,7 +64,10 @@ export const SlashCommand = Extension.create<SlashOptions>({
         },
         items: ({ query }) => filterSlashItems(query),
         render: () => ({
-          // Defer the setState out of the editor's React render phase.
+          // Defer the setState out of the editor's React render phase — opens AND closes, or they
+          // land out of order: a deferred open applied after a synchronous close re-opens a menu
+          // the editor has already dismissed, and leaves it showing whatever list that (possibly
+          // still-loading, therefore empty) open carried.
           onStart: (props) => {
             const s = toState(props);
             queueMicrotask(() => opts.onOpen(s));
@@ -75,12 +78,12 @@ export const SlashCommand = Extension.create<SlashOptions>({
           },
           onKeyDown: (props) => {
             if (props.event.key === "Escape") {
-              opts.onClose();
+              queueMicrotask(() => opts.onClose());
               return true;
             }
             return opts.onKeyDown(props);
           },
-          onExit: () => opts.onClose(),
+          onExit: () => queueMicrotask(() => opts.onClose()),
         }),
       }),
     ];

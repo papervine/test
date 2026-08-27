@@ -167,6 +167,9 @@ Type `/` anywhere in Visual mode to insert a block. Filter by typing, move with
 <kbd>↑</kbd> / <kbd>↓</kbd>, insert with <kbd>Enter</kbd>, and dismiss with <kbd>Esc</kbd> —
 which leaves what you typed in place, so nothing is lost if you change your mind.
 
+Anywhere means anywhere: the same menu, with the same blocks, opens inside a component — a tab
+pane, a callout, a card, a step — and inserts into whichever one holds the cursor.
+
 ## Video and embeds
 
 Two commands under **Media** in the `/` menu:
@@ -278,6 +281,11 @@ component won't pull the next block into it. This holds for every component, not
 Removing a component is something you do deliberately: the **✕** on a tab, or **Delete** in the
 block handle's menu. Selecting content and deleting it still works exactly as you'd expect — the
 stop only applies to the single keypress that would otherwise escape the component.
+
+Formatting inside the component is not part of that stop. With the cursor at the start of a list
+that opens a component — including the first checkbox of a checklist — <kbd>Backspace</kbd> drops
+the list formatting the way it does anywhere else, leaving a plain paragraph in place. It's the
+press *after* that one, with nothing left to unwrap, that does nothing.
 
 ## Select All works outward from where you are
 

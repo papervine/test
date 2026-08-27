@@ -54,7 +54,9 @@ test.describe("web editor @external", () => {
             "steppy",
             "mediapage",
             "slashpage",
+            "slashtabs",
             "edgepage",
+            "edgetaskpage",
             "taskpage",
             "uploadpage",
             "failpage",
@@ -103,12 +105,31 @@ test.describe("web editor @external", () => {
     // declaration order, so a page an earlier test typed into carries that draft over — and the
     // slash assertions are about what is and isn't in the document.
     await put(`${prefix}slashpage.mdx`, "---\ntitle: Slash\n---\n\nSlash anchor line.\n");
+    // …and its own Tabs page, for the same reason: the "/ inside a component" test types into a
+    // pane and asserts on what the pane then contains, which `tabby` can't promise once the tab
+    // strip test above has renamed, reordered or removed tabs on it.
+    await put(
+      `${prefix}slashtabs.mdx`,
+      "---\ntitle: Slash Tabs\n---\n\n<Tabs>\n" +
+        '  <Tab title="One">\n\n    Slash tab anchor line.\n\n  </Tab>\n' +
+        '  <Tab title="Two">\n\n    Second pane body.\n\n  </Tab>\n' +
+        "</Tabs>\n",
+    );
     // The edge-guard and upload tests each get their own page for the same reason: they assert on
     // what is and isn't in a document, so sharing one made the result depend on run order.
     await put(
       `${prefix}edgepage.mdx`,
       "---\ntitle: Edge\n---\n\n<Tabs>\n" +
         '  <Tab title="Alpha">\n\n    Alpha body text.\n\n  </Tab>\n' +
+        '  <Tab title="Beta">\n\n    Beta body text.\n\n  </Tab>\n' +
+        "</Tabs>\n",
+    );
+    // A task list that OPENS a tab: its first checkbox sits on the very position the edge guard
+    // swallows, so it was the one checkbox in the editor that couldn't be backspaced away.
+    await put(
+      `${prefix}edgetaskpage.mdx`,
+      "---\ntitle: Edge Tasks\n---\n\n<Tabs>\n" +
+        '  <Tab title="Alpha">\n\n    - [ ] first task\n    - [x] second task\n\n  </Tab>\n' +
         '  <Tab title="Beta">\n\n    Beta body text.\n\n  </Tab>\n' +
         "</Tabs>\n",
     );
@@ -589,6 +610,42 @@ test.describe("web editor @external", () => {
     await clearDrafts(["edgepage.mdx"]);
   });
 
+  // …and the case the guard first got wrong: a list OPENING a tab. Its first item starts on
+  // exactly the position the guard swallows, so the press that normally drops list formatting did
+  // nothing, and that checkbox could never be removed. Reported as "not able to backspace out the
+  // first checkbox inside a tab". The edge still has to hold once the list is gone, which is the
+  // second half of this test — the two behaviours are one keystroke apart.
+  test("Backspace unwraps a list that opens a tab, then still stops at the edge", async ({
+    page,
+  }) => {
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=edgetaskpage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    const block = page.locator('[data-node-view-wrapper]:has(> [data-pv-tabs])');
+    const pane = block.locator("[data-pv-tab]").first();
+    await expect(pane.locator('input[type="checkbox"]')).toHaveCount(2);
+
+    // Caret at the very start of the first item — the tab's leading edge.
+    await pane.getByText("first task").click();
+    await page.keyboard.press("Home");
+    await page.keyboard.press("Backspace");
+
+    // The item lost its list formatting and stayed put; the tab is untouched.
+    await expect(pane.locator('input[type="checkbox"]')).toHaveCount(1);
+    await expect(pane.locator("p").first()).toHaveText("first task");
+    await expect(block.locator("[data-pv-tab]")).toHaveCount(2);
+
+    // One more press, now on a plain paragraph at the same position: nothing happens, because
+    // there is nothing left to unwrap and escaping would take the tab with it.
+    await page.keyboard.press("Backspace");
+    await expect(pane).toContainText("first task");
+    await expect(pane).toContainText("second task");
+    await expect(block.locator("[data-pv-tab]")).toHaveCount(2);
+
+    await clearDrafts(["edgetaskpage.mdx"]);
+  });
+
   // The Steps/Step node views (SPEC §9.2): the "add a step" control on the end of the rail, and
   // the separate title / body slots. The things worth pinning are the ones a screenshot wouldn't
   // catch — that the button lands ON the rail (it's positioned against geometry the component
@@ -729,6 +786,63 @@ test.describe("web editor @external", () => {
     expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
 
     await clearDrafts(["slashpage.mdx"]);
+  });
+
+  // The `/` menu INSIDE a component (SPEC §9.2). It listed every block in a plain paragraph and
+  // said "No matching blocks" inside a <Tab> pane. The suggestion resolves its items
+  // asynchronously; DragHandle's effect re-registered its plugin on every render, which makes
+  // ProseMirror rebuild every plugin view — destroying the suggestion's, which fires onExit and
+  // aborts the in-flight lookup, so the resolved list never reached the menu. Typing inside a
+  // React node view lands that teardown between the open and the resolution, which is why only
+  // components showed it. Needs a browser: the item list resolves correctly in isolation; what
+  // breaks is who tears it down.
+  test("the slash menu lists blocks inside a component, not 'No matching blocks'", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    // Its own fixture page: this asserts on what a pane contains after the insert, and the tab
+    // strip test above renames/reorders/removes tabs on `tabby`.
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=slashtabs`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    const block = page.locator('[data-node-view-wrapper]:has(> [data-pv-tabs])');
+    const pane = block.locator("[data-pv-tab]").first();
+    await expect(pane).toBeVisible({ timeout: 15_000 });
+
+    // A fresh line inside the tab pane, so the query is the whole paragraph.
+    await pane.getByText("Slash tab anchor line.").click();
+    await page.keyboard.press("End");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/");
+
+    const menu = page.locator(".pv-slash-menu");
+    await expect(menu).toBeVisible();
+    await expect(page.locator(".pv-slash-empty")).toHaveCount(0);
+    // The whole catalogue, not a truncated or empty one.
+    expect(await page.locator(".pv-slash-item").count()).toBeGreaterThan(20);
+
+    // …and picking from it still inserts into the pane the caret is in.
+    await page.keyboard.type("info");
+    await expect(page.locator(".pv-slash-item.is-active .pv-slash-title")).toHaveText("Info");
+    await page.keyboard.press("Enter");
+    await expect(menu).toHaveCount(0);
+    await expect(pane.locator(".node-callout")).toHaveCount(1);
+    await expect(pane.getByText("/info", { exact: true })).toHaveCount(0);
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat/i.test(e),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+
+    await clearDrafts(["slashtabs.mdx"]);
   });
 
   // Video and embeds (SPEC §9.2). Raw <video>/<iframe> is the portable form — the schema has no

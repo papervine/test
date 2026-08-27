@@ -431,6 +431,20 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   and that snapshot never sees a later write. Pass a function instead (`onKeyDown(props)`,
   `getAwareness()`): function values are copied by reference and can't be re-broken this way.
   Pinned by `tests/unit/slash-command-options.test.ts`, which needs no browser.
+- **An unstable prop on a TipTap React component rebuilds every ProseMirror plugin — silently.**
+  `<DragHandle>` (`@tiptap/extension-drag-handle-react`) `unregisterPlugin`s + `registerPlugin`s
+  inside a `useEffect` whose deps include `onNodeChange`, so an **inline arrow** there is a new
+  dep on every render. Reconfiguring the plugin set makes ProseMirror destroy and rebuild *every*
+  plugin view, and whatever state those hold is gone. That's what made the `/` menu report
+  "No matching blocks" inside a `<Tab>`: the suggestion plugin resolves its items **asynchronously**
+  (`await items({query})` even for a synchronous filter), so the menu opens empty and is filled a
+  microtask later — and the teardown fired `onExit` + aborted that lookup first, freezing the menu
+  on its empty state. Every keystroke tore the plugins down; it only *showed* inside components,
+  where the teardown lands between the open and the resolution rather than after it. So: **every prop feeding a TipTap React component's effect
+  deps must be identity-stable** (`useCallback` / a ref). Related ordering trap in the same fix —
+  if you defer a menu's *open* out of the render phase with `queueMicrotask`, defer its *close*
+  too, or a synchronous close is applied before an open queued ahead of it and the menu sticks.
+  Guarded by an `editor.spec.ts` case that types `/` inside a tab pane.
 - **A random dedupe key is not a dedupe key.** `fireContentUpdateAutomations` is the
   self-trigger loop breaker for `content_update` automations: an automation's own commit
   re-syncs under a sha that already has a run row, so it doesn't re-fire. Its no-sha fallback
