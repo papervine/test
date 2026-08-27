@@ -17,6 +17,7 @@ import {
 import { cookies, headers } from "next/headers";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Brand } from "@/components/Brand";
+import { HeroVideo } from "@/components/HeroVideo";
 import { appHostFor } from "@/lib/tenant-host";
 import { marketingMetadata } from "@/lib/marketing-seo";
 import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
@@ -263,58 +264,9 @@ export default async function LandingPage() {
         </p>
       </section>
 
-      {/* Product mock */}
+      {/* Product tour — poster frame, plays in place on click (HeroVideo) */}
       <section className="mx-auto max-w-5xl px-6">
-        <div
-          className="db-rise relative rounded-2xl p-[1px]"
-          style={{
-            animationDelay: "380ms",
-            background:
-              "linear-gradient(160deg, rgba(140,140,255,0.5), rgba(255,255,255,0.04) 40%)",
-          }}
-        >
-          <div className="overflow-hidden rounded-2xl bg-[#0a0a12]">
-            <div className="flex items-center gap-2 border-b border-[rgba(var(--ink-rgb),0.06)] px-4 py-3">
-              <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
-              <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
-              <span className="h-3 w-3 rounded-full bg-[#28c840]" />
-              <span className="mono ml-3 text-xs text-[var(--muted)]">
-                docs.example.com
-              </span>
-            </div>
-            <div className="grid grid-cols-[180px_1fr] gap-6 p-6">
-              <div className="hidden flex-col gap-2.5 sm:flex">
-                <div className="h-2 w-20 rounded bg-[rgba(var(--ink-rgb),0.1)]" />
-                {[28, 22, 18].map((w, i) => (
-                  <div
-                    key={i}
-                    className="h-2 rounded bg-[rgba(var(--ink-rgb),0.06)]"
-                    style={{ width: `${w * 4}px` }}
-                  />
-                ))}
-                <div className="mt-3 h-2 w-16 rounded bg-[rgba(var(--ink-rgb),0.1)]" />
-                {[24, 20].map((w, i) => (
-                  <div
-                    key={i}
-                    className="h-2 rounded bg-[rgba(var(--ink-rgb),0.06)]"
-                    style={{ width: `${w * 4}px` }}
-                  />
-                ))}
-              </div>
-              <div className="flex flex-col gap-3">
-                <div className="h-3 w-24 rounded bg-gradient-to-r from-[var(--blue)] to-[var(--violet)]" />
-                <div className="h-6 w-2/3 rounded bg-[rgba(var(--ink-rgb),0.15)]" />
-                <div className="h-2.5 w-full rounded bg-[rgba(var(--ink-rgb),0.07)]" />
-                <div className="h-2.5 w-11/12 rounded bg-[rgba(var(--ink-rgb),0.07)]" />
-                <div className="h-2.5 w-4/5 rounded bg-[rgba(var(--ink-rgb),0.07)]" />
-                <div className="mt-2 grid grid-cols-2 gap-3">
-                  <div className="h-20 rounded-lg border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)]" />
-                  <div className="h-20 rounded-lg border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.02)]" />
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
+        <HeroVideo />
       </section>
 
       {/* Intelligence pillars */}

@@ -95,6 +95,51 @@ session: a signed-in visitor gets a single **Dashboard** link instead of **Log i
 up** (which would dead-end them re-signing up). Reading the session opts the page into
 dynamic rendering — acceptable for the apex. Smoke covers the logged-out shape (`/home`).
 
+**Status 2026-08-27 — the hero is the product tour, click-to-play.** The hero's product shot
+was a static skeleton mock (fake sidebar, grey bars). It is now the poster frame of a real
+1:45 tour of the product, which plays in place when clicked (`src/components/HeroVideo.tsx`).
+The film is built with Remotion in `video/` — the UI is **rebuilt in React, not screen-recorded**,
+so it stays crisp, can be re-rendered when a surface moves, and needs no dev server or seeded
+database to produce. `video/SCRIPT.md` is the script of record.
+
+Three decisions worth keeping:
+
+- **Click-to-play, not an autoplaying loop.** Autoplay makes every visitor download the file
+  before showing any interest — the same work-on-the-critical-path this project measures and
+  removes elsewhere (§12). The poster is a `next/image` static import, so the LCP element is an
+  optimised AVIF/WebP at ~114KB and the 7.3MB film is fetched only on intent. It is also a
+  narrated twelve-scene tour rather than ambient motion, so it wants seeking and a pause.
+- **The film is hosted in the public R2 bucket, not committed.** At 9.5MB it would be ten
+  times the largest file in git, and it is re-rendered whenever the product UI moves, so
+  committing it would add a fresh multi-megabyte blob to history each time. R2 egress is free,
+  so there is no bandwidth case for degrading it further. `TOUR_VIDEO` in `HeroVideo.tsx` is the
+  one place the URL lives; build + upload steps are in `video/README.md`. **Open item:** it is
+  served from the bucket's `pub-*.r2.dev` development URL, which Cloudflare rate-limits and
+  documents as not for production traffic — needs a custom domain before the hero takes load,
+  and the uploaded object currently carries no `Cache-Control`.
+- **Self-hosting it from `public/` would not have worked**, which is worth recording because
+  nothing warns you: `middleware.ts`'s `ASSET_RE` matches `mp4|webm`, so an apex request for
+  `/papervine-tour.mp4` is rewritten to the `dbasset` handler and streamed from
+  `PAPERVINE_CONTENT` — a 404, not a video. Root asset paths on the apex belong to tenant docs
+  content. (The poster escapes this by being served from `/_next/`, the same reason the logo is
+  a static import — see the note in `Brand.tsx`.)
+
+**Audio is muxed at post, not rendered.** The cut carries a music bed
+(`video/audio/driftline-groove.mp3`) added with ffmpeg after the render, truncated to the picture
+(exactly 105.6s = 3168 frames / 30fps) with a 2s fade-out — a song cut mid-phrase hard-cuts on
+the last frame otherwise. Keeping music out of the Remotion composition means a re-render doesn't
+re-encode it, and the picture still holds up muted, which is what the hero needs. A voiceover
+would go the other way (inside the composition, see `video/SCRIPT.md`), so once both exist the
+music gets ducked in the mux step.
+
+Three traps found while building it, all fixed: Remotion writes a **silent AAC track at
+~317kbps** (≈4MB of an 11MB render encoding nothing) — the silent web master drops it losslessly
+with `-c:v copy -an`; the music mp3 carries **embedded cover art as an mjpeg stream**, so the mux
+maps streams explicitly (`-map 0:v:0 -map 1:a:0`) or ffmpeg takes the artwork as a second video
+track; and colours inside the video frame must be **literals, not `.db` tokens**, because the
+frame stays dark in both platform appearances, so `var(--fg)` on the overlay label resolved to
+`#1b1b21` under `html[data-db-theme="light"]` and put near-black text on a near-black scrim.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,

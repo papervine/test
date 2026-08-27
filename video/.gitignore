@@ -1,0 +1,13 @@
+node_modules
+dist
+.DS_Store
+.env
+
+# Ignore the output video from Git but not videos you import into src/.
+out
+
+# Media is NOT committed — see README § Setup and § Publishing the tour. The music bed is a
+# 3.7MB binary, the renders are 9.5MB+, and public/ holds a COPY of a logo that already lives
+# in the repo at src/assets/. The repo keeps the code and the docs, not the bytes.
+audio/
+public/
