@@ -23,7 +23,7 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "User Documentation",
+        "tab": "Product Guide",
         "groups": [
           {
             "group": "Get started",
@@ -50,7 +50,6 @@
               "guides/publishing",
               "guides/social-cards",
               "guides/custom-domain",
-              "guides/self-hosting",
               "control-plane/exports"
             ]
           },
@@ -67,7 +66,6 @@
             "pages": [
               "features/search",
               "features/ai-assistant",
-              "features/assistant-providers",
               "features/assistant-widget",
               "features/api-playground",
               "features/mcp-servers",
@@ -94,38 +92,39 @@
         ]
       },
       {
-        "tab": "Technical Documentation",
+        "tab": "Self-Hosting",
         "groups": [
           {
-            "group": "Architecture",
+            "group": "Deploy it",
             "pages": [
-              "architecture",
-              "tech-stack",
-              "roadmap"
+              "guides/self-hosting"
             ]
           },
           {
-            "group": "Rendering",
-            "pages": [
-              "rendering/content-pipeline",
-              "rendering/config",
-              "rendering/internals"
-            ]
-          },
-          {
-            "group": "Auth & access",
+            "group": "Configure it",
             "pages": [
               "auth/overview",
               "auth/platform-auth",
               "auth/google-sign-in",
-              "auth/transactional-email"
+              "auth/transactional-email",
+              "features/assistant-providers",
+              "local-ai"
             ]
           },
           {
-            "group": "Operating a deployment",
+            "group": "Operate it",
             "pages": [
-              "local-ai",
               "control-plane/platform-admin"
+            ]
+          },
+          {
+            "group": "How it works",
+            "pages": [
+              "architecture",
+              "tech-stack",
+              "rendering/content-pipeline",
+              "rendering/config",
+              "rendering/internals"
             ]
           },
           {
@@ -133,7 +132,8 @@
             "pages": [
               "contributing/working-on-papervine",
               "contributing/testing",
-              "contributing/gotchas"
+              "contributing/gotchas",
+              "roadmap"
             ]
           }
         ]

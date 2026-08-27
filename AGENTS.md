@@ -164,9 +164,10 @@ neither (a code comment suffices).
 *discover* a knob, not where they *learn* it — every configuration variable that changes
 product behavior (a model/route, an executor, a local inference endpoint) also needs the
 `docs/` page that explains when to reach for it and what happens when it's absent. If a
-knob has no natural page, that's the signal a page is missing: the "Local AI" group
-exists because local inference had nowhere to live. Same test as everything else —
-a reader who never opens the repo should be able to operate the feature.
+knob has no natural page, that's the signal a page is missing: `docs/local-ai.mdx` exists
+because local inference had nowhere to live (it sits under Self-Hosting → "Configure it",
+with the rest of the env-var surface). Same test as everything else — a reader who never
+opens the repo should be able to operate the feature.
 
 ## Always write tests
 
