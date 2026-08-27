@@ -26,18 +26,21 @@ export step to escape.
 
 ## How these docs are organized
 
-There are two tabs at the top of this site, split by what you're doing — using Papervine, or
-running it.
+There are three tabs at the top of this site, and they answer three different questions.
 
-**Product Guide** is for publishing a docs site: writing pages, organizing navigation,
-publishing and syncing, connecting a domain, managing your team, and turning on features like
-search, the assistant, and reader access control. If you're here to run a docs *site*, stay in
-this tab — everything you need is in it, whether your site is hosted by us or served by the CLI.
+**Product Guide — "how do I publish docs?"** Writing pages, organizing navigation, publishing
+and syncing, connecting a domain, managing your team, and turning on features like search, the
+assistant, and reader access control. If you're here to run a docs *site*, stay in this tab;
+everything you need is in it whether your site is hosted by us or served by the CLI.
 
-**Self-Hosting** is for running Papervine itself on your own infrastructure: deploying it,
-configuring platform auth and email, pointing the assistant at a model you control, and
-operating the result. It also holds the architecture and rendering internals — you don't need
-them to publish docs, but you do need them to run the platform, debug it, or contribute.
+**Self-Hosting / CLI — "how do I run this myself?"** The `papervine` CLI: serving a docs repo
+from your own infrastructure, with no database and nothing to operate. Also where the model
+configuration lives (the CLI has the same AI assistant), along with the renderer internals and
+the contributor guide.
+
+**Control Plane — "how do I run the *platform*?"** The multi-tenant dashboard side: platform
+accounts and sign-in, transactional email, the background services, and the operator view. This
+is a much bigger commitment than serving docs — most people who self-host want the tab above.
 
 <Note>
   These docs are written in Papervine's own format and rendered by Papervine itself. The

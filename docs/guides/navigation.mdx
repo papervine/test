@@ -52,9 +52,10 @@ one level of nesting; deeper than that and readers lose track of where they are.
 ## Tabs
 
 Tabs split a site into distinct areas shown across the top, each with its own sidebar. They
-suit documentation with two genuinely different audiences or modes — a user guide and an API
+suit documentation with genuinely different audiences or modes — a user guide and an API
 reference, say. **These docs use exactly that**: a Product Guide for publishing a docs site,
-and Self-Hosting for running Papervine itself.
+Self-Hosting / CLI for running the renderer yourself, and Control Plane for operating the
+platform.
 
 ```json
 {
@@ -83,6 +84,26 @@ and Self-Hosting for running Papervine itself.
 
 A tab pointed at an OpenAPI file needs no page list: Papervine generates one page per
 operation. See the [API playground](/features/api-playground).
+
+### Hiding a group, or a whole tab
+
+Add `"hidden": true` to a **group** and it drops out of the published sidebar. Its pages still
+render and stay reachable by URL — this hides a section from *navigation*, it doesn't unpublish
+it or protect it. (For access control, use [reader auth](/auth/reader-auth).)
+
+```json
+{ "group": "Internal notes", "hidden": true, "pages": ["internal/runbook"] }
+```
+
+A tab has no `hidden` of its own. It doesn't need one: a tab with no reachable pages is dropped
+automatically, so **hiding every group inside a tab hides the tab**. That's the same rule that
+makes a fully reader-gated tab vanish for readers who can't see any of it — containers derive
+from their pages rather than carrying their own visibility.
+
+<Warning>
+  `"hidden": true` written directly on a `tab` is **ignored** — the tab keeps rendering. It
+  looks like it should work, which is exactly why it's worth knowing. Mark the groups instead.
+</Warning>
 
 ## Anchors and external links
 

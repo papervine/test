@@ -40,8 +40,7 @@
               "guides/authoring",
               "guides/navigation",
               "rendering/components",
-              "rendering/react-components",
-              "cli"
+              "rendering/react-components"
             ]
           },
           {
@@ -92,40 +91,36 @@
         ]
       },
       {
-        "tab": "Self-Hosting",
+        "tab": "Self-Hosting / CLI",
         "groups": [
           {
-            "group": "Deploy it",
+            "group": "Serve your docs",
             "pages": [
-              "guides/self-hosting"
+              "guides/self-hosting",
+              "cli"
             ]
           },
           {
-            "group": "Configure it",
+            "group": "Connect a model",
             "pages": [
-              "auth/overview",
-              "auth/platform-auth",
-              "auth/google-sign-in",
-              "auth/transactional-email",
-              "background-services",
               "features/assistant-providers",
               "local-ai"
             ]
           },
           {
-            "group": "Operate it",
+            "group": "How the renderer works",
             "pages": [
-              "control-plane/platform-admin"
-            ]
-          },
-          {
-            "group": "How it works",
-            "pages": [
-              "architecture",
-              "tech-stack",
               "rendering/content-pipeline",
               "rendering/config",
               "rendering/internals"
+            ]
+          },
+          {
+            "group": "The project",
+            "pages": [
+              "architecture",
+              "tech-stack",
+              "roadmap"
             ]
           },
           {
@@ -133,8 +128,28 @@
             "pages": [
               "contributing/working-on-papervine",
               "contributing/testing",
-              "contributing/gotchas",
-              "roadmap"
+              "contributing/gotchas"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Control Plane",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "auth/overview",
+              "auth/platform-auth",
+              "auth/google-sign-in",
+              "auth/transactional-email"
+            ]
+          },
+          {
+            "group": "Running it",
+            "pages": [
+              "background-services",
+              "control-plane/platform-admin"
             ]
           }
         ]

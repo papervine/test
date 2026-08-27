@@ -169,11 +169,26 @@ because local inference had nowhere to live (it sits under Self-Hosting → "Con
 with the rest of the env-var surface). Same test as everything else — a reader who never
 opens the repo should be able to operate the feature.
 
-**`docs/` has two tabs, and the line between them is the reader, not the topic.** *Product
-Guide* is for publishing a docs site; *Self-Hosting* is for running Papervine itself
-(`docs/docs.json`). The trap isn't putting a page in the wrong tab — it's writing operator
-content **inside** a product page, which is how `docs/control-plane/collaboration.mdx` ended up
-telling customers to set `COLLAB_JWT_SECRET`. The bar:
+**`docs/` has three tabs, and the line between them is the reader, not the topic**
+(`docs/docs.json`):
+
+| Tab | Reader | Commitment |
+|---|---|---|
+| **Product Guide** | publishing a docs site | none — hosted or CLI |
+| **Self-Hosting / CLI** | serving a docs repo themselves | a process; no database |
+| **Control Plane** | operating the multi-tenant platform | Postgres, storage, auth, services |
+
+Two consequences. **Anything a CLI self-hoster still needs must NOT be in the Control Plane
+tab** — that tab is expected to be hidden from the public site later (mark each of its groups
+`"hidden": true`; a tab has no `hidden` of its own — see
+`docs/guides/navigation.mdx#hiding-a-group-or-a-whole-tab`), and hiding it must not take the
+model config or the contributor guide with it. That's why `assistant-providers`, `local-ai`,
+the renderer internals, and `contributing/*` live under Self-Hosting / CLI even though the
+control plane uses them too.
+
+And the trap that actually bites: not putting a page in the wrong tab, but writing operator
+content **inside** a product page — which is how `docs/control-plane/collaboration.mdx` ended
+up telling customers to set `COLLAB_JWT_SECRET`. The bar:
 
 - A Product Guide page **may state an operator fact and link across** — "runs over a small
   always-on service; where it's unavailable the editor falls back", then a `<Note>` flagged
