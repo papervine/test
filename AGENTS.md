@@ -291,10 +291,24 @@ Consequences worth knowing:
   on retry), then run `32897972504` — a commit touching only `vercel.json` and three markdown
   files — failed `widget-settings.spec.ts:31` on both attempts. Same code, opposite verdicts
   twelve minutes apart. Gating on that isn't "don't ship broken code", it's "shipping is a coin
-  flip". e2e still has to be green to merge; it just doesn't hold the deploy. **Put it back once
-  that spec is fixed** — the gap until then is the authed dashboard journeys. Never
-  `continue-on-error`: that would make the job green while shipping the failure it exists to
-  catch.
+  flip". e2e still has to be green to merge; it just doesn't hold the deploy. The gap until then
+  is the authed dashboard journeys. Never `continue-on-error`: that would make the job green
+  while shipping the failure it exists to catch.
+- **That spec's cause was found (2026-08-27): a test budget, not a flake.**
+  `widget-settings.spec.ts` is the only visitor to `settings/widget`, so its first navigation
+  always cold-compiles that route, and it runs *last* in a single-worker suite. On Playwright's
+  default 30s budget that alone timed out — and the test then spent up to 15s more in a
+  `.toPass` loop that `page.reload()`ed the whole page to observe one boolean. Fixed by the
+  pattern `connect-github.spec.ts` and `dashboard.spec.ts` already use (`test.slow()` plus
+  headroom on the first assertion, since `test.slow()` doesn't raise the per-assertion 5s), and
+  by replacing the reload loop with a DB poll + one reload. **`⨯ Error: The destination stream
+  closed early.` in the webServer log is a red herring** — it's Next reporting that the client
+  aborted a stream, i.e. the *symptom* of Playwright giving up; it appears on passing runs too.
+  Don't chase it.
+  **Re-gating is still not done, on purpose:** CI is ~4× slower than a dev machine (this suite:
+  7.6m there, 2.0m here), so the failure cannot be reproduced locally and one green local run
+  isn't evidence. Put `e2e` in `needs:` after several consecutive green CI runs on `main`, not
+  on the strength of the fix looking right.
 - **A missing Vercel secret fails the job loudly**, unlike `deploy-trigger`, which exits 0 when
   unconfigured. A skip here would mean production silently stops receiving deploys.
 - The build still runs **on Vercel**, so `vercel.json`'s `buildCommand` stays the one definition
