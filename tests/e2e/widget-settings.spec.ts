@@ -31,10 +31,18 @@ test.afterAll(async () => {
 test("mints a widget id, persists availability, rejects bad origins, and saves good ones", async ({
   page,
 }) => {
+  // This spec is the only visitor to `settings/widget`, so its first navigation always
+  // cold-compiles the route in `next dev` — and it runs late in a long single-worker run, when
+  // the server is least eager. On the default 30s budget that alone timed out the test (the
+  // navigation aborts, which the server then logs as "The destination stream closed early" —
+  // a symptom of the client giving up, not a separate fault). Same treatment as the other
+  // specs that own a cold route: `test.slow()` raises the TEST budget, and the first assertion
+  // needs its own headroom because `test.slow()` doesn't touch the per-assertion 5s.
+  test.slow();
   await page.goto(widgetPath);
   await expect(
     page.getByRole("heading", { name: "Embed the assistant on any site" }),
-  ).toBeVisible();
+  ).toBeVisible({ timeout: 60_000 });
 
   // A fresh site gets a widget id lazily on first visit — the embed snippet already
   // contains a real one, not a placeholder.
@@ -43,18 +51,34 @@ test("mints a widget id, persists availability, rejects bad origins, and saves g
   const widgetId = (await widgetIdBox.textContent())!.trim();
   expect(widgetId).toMatch(/^widget_[0-9a-f-]{36}$/);
 
-  // Availability persists.
+  // Availability persists. Asserted in two steps against two different sources, rather than
+  // reloading the whole page in a retry loop until it agrees: polling the DB is faster (no SSR
+  // round trip per attempt, where the old loop could spend half the test budget re-rendering a
+  // page to observe one boolean), and it splits the failure — "the write never landed" and "the
+  // page doesn't reflect the write" are different bugs that the loop reported identically.
+  // Same shape as the origins assertion at the end of this test.
   const availability = page.getByRole("switch", { name: "Enable widget" });
   await expect(availability).toHaveAttribute("aria-checked", "false");
   await availability.click();
-  await expect(async () => {
-    await page.reload();
-    await expect(page.getByRole("switch", { name: "Enable widget" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-      { timeout: 2_000 },
-    );
-  }).toPass({ timeout: 15_000 });
+
+  const sqlToggle = postgres(TEST_DB_URL, { max: 1 });
+  await expect
+    .poll(
+      async () => {
+        const [r] = await sqlToggle`select widget_enabled from site where id = ${SITE.id}`;
+        return r.widget_enabled;
+      },
+      { timeout: 15_000, message: "the availability toggle never persisted to the DB" },
+    )
+    .toBe(true);
+  await sqlToggle.end();
+
+  // …and the persisted value is what a fresh render shows.
+  await page.reload();
+  await expect(page.getByRole("switch", { name: "Enable widget" })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
 
   // A path/wildcard origin is rejected with a clear error, not silently accepted.
   await page.getByPlaceholder("https://docs.example.com").fill("https://example.com/path");
