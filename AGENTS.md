@@ -169,6 +169,24 @@ because local inference had nowhere to live (it sits under Self-Hosting → "Con
 with the rest of the env-var surface). Same test as everything else — a reader who never
 opens the repo should be able to operate the feature.
 
+**`docs/` has two tabs, and the line between them is the reader, not the topic.** *Product
+Guide* is for publishing a docs site; *Self-Hosting* is for running Papervine itself
+(`docs/docs.json`). The trap isn't putting a page in the wrong tab — it's writing operator
+content **inside** a product page, which is how `docs/control-plane/collaboration.mdx` ended up
+telling customers to set `COLLAB_JWT_SECRET`. The bar:
+
+- A Product Guide page **may state an operator fact and link across** — "runs over a small
+  always-on service; where it's unavailable the editor falls back", then a `<Note>` flagged
+  **Self-hosting?** pointing at the page with the details. That's useful context.
+- It **must not carry the procedure** — no `<Steps>` of run-this-container, no set-these-two-
+  variables, no deploy-this-separately. Those live in Self-Hosting
+  (`docs/background-services.mdx` collects the three services that can't live in a serverless
+  function; `docs/local-ai.mdx` and `docs/features/assistant-providers.mdx` hold the AI env
+  surface).
+
+Test it by reader: a hosted customer reading a Product Guide page should never hit a sentence
+addressed to somebody who deploys. "With no collaboration service configured…" fails that.
+
 ## Always write tests
 
 Regression protection is a hard requirement, not optional

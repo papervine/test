@@ -106,17 +106,19 @@ so you can watch it progress rather than hunting for it in the Runs tab.
 
 ### How runs execute
 
-Runs are queued in Postgres and executed by a background executor (Trigger.dev; configured via
-`TRIGGER_SECRET_KEY`). Without an executor configured, the page says so and automations simply
-don't run — nothing else in the dashboard or renderer depends on it.
+Runs don't happen in your browser. Each one is queued and picked up by a background executor,
+so closing the tab doesn't stop a run and a long run can't time out a page — you watch progress
+in the Runs tab, or follow the **View run** button straight to it.
 
-The executor is **deployed separately from the web app**. `TRIGGER_SECRET_KEY` only lets the app
-*enqueue* runs; the tasks themselves run on the executor's cloud and have to be published there
-(`npx trigger.dev deploy`) — a release distinct from deploying the site. A run that is enqueued
-but has no published version to pick it up stays pending. In this project's hosting, a push to
-the main branch deploys both halves together (the site build, and a CI job that deploys the
-tasks), so the two never drift apart; running your own deployment means running that
-release step yourself.
+If a deployment has no executor configured, the Automations page tells you so and automations
+simply don't run. Nothing else in the dashboard or the renderer depends on one, so it's a
+feature you can leave off rather than a piece that has to be working.
+
+<Note>
+  **Self-hosting?** The executor is a separate deploy from the web app, and forgetting its
+  release step leaves runs stuck **pending** — see
+  [Background services](/background-services#the-automations-executor).
+</Note>
 
 Because the executor runs in its own environment, it also needs its **own copy of the server
 configuration** — it does not inherit the web app's. A run reaches the database, the draft

@@ -107,6 +107,7 @@
               "auth/platform-auth",
               "auth/google-sign-in",
               "auth/transactional-email",
+              "background-services",
               "features/assistant-providers",
               "local-ai"
             ]

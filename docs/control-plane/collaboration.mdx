@@ -11,8 +11,9 @@ Visual and Source** mode you see each collaborator's **live cursor** — coloure
 their name — moving as they type.
 
 <Info>
-  Collaboration is a **strict enhancement**. With no collaboration service configured, same-browser
-  tabs still stay in sync, and everything else works exactly as before — it can never break editing.
+  Collaboration is a **strict enhancement**: two of your own tabs always stay in sync, and if
+  live multiplayer is unavailable on a deployment, editing behaves exactly as it does solo.
+  Nothing about it can break editing or lose work.
 </Info>
 
 ## How it stays correct
@@ -36,10 +37,10 @@ Both editor modes are views onto that one text:
     Two tabs or windows in the same browser sync instantly with zero setup, over a built-in
     channel. Useful for editing a page while previewing it beside itself.
   </Card>
-  <Card title="Across machines — the collaboration service">
-    Real multiplayer between different people/devices runs over a small always-on service (below).
-    When it's configured, the editor connects to it automatically; when it isn't, the editor falls
-    back to same-browser sync.
+  <Card title="Across machines — live multiplayer">
+    Two people on different devices edit the same page together, with presence and live cursors.
+    This runs over a small always-on service; where it's available the editor connects to it by
+    itself, and where it isn't the editor quietly falls back to same-browser sync.
   </Card>
 </CardGroup>
 
@@ -47,42 +48,21 @@ Either way, your edits still autosave to the page's **draft** on your branch, an
 until you publish** — the same draft-and-publish flow as solo editing. The shared document is just
 live coordination; the draft (and Git) remains the record.
 
-## The collaboration service
+## Who can join a document
 
-Cross-machine editing uses a standalone **Hocuspocus** (Yjs) WebSocket service — `apps/collab` in
-the repo. It's the one always-on piece a serverless host can't run, so it lives on its own. It is
-deliberately minimal: it **relays** the shared document and tracks presence, and holds **no**
-accounts and **no** content — the app authorizes editing and persists drafts.
+Being on the same page isn't enough to edit it together. Before connecting anyone, the app runs
+the same permission check as every other editor action — are you allowed to edit *this site*? —
+and then scopes the connection to **exactly that page**, on that branch, for a few minutes at a
+time. One editor can never join another site's document, and a link to a live document is not a
+way in.
 
-<Steps>
-  <Step title="Run it">
-    Locally it's the `collab` service in `docker-compose` (`docker compose up`). In production run
-    the same container on any host that can hold a WebSocket open — a small always-on machine on
-    Fly, Railway, Render, or your own box. It has no database of its own.
-  </Step>
-  <Step title="Point the app at it">
-    Set two environment variables (see `.env.example`):
-
-    - `COLLAB_JWT_SECRET` — a shared secret. The app signs a short-lived, single-page token with
-      it; the service verifies it. Use the **same value** in both places.
-    - `NEXT_PUBLIC_COLLAB_URL` — the WebSocket URL the browser connects to (e.g.
-      `ws://127.0.0.1:1234` locally, `wss://collab.yourdomain` in production).
-  </Step>
-  <Step title="That's it">
-    With both set, the editor connects automatically. Leave them unset and collaboration simply
-    falls back to same-browser sync — no errors, no configuration required.
-  </Step>
-</Steps>
-
-### How access is enforced
-
-The service can't see your login, so the app does the check. When you open a page, the app confirms
-you're allowed to edit that site (the same gate as every editor action), then mints a token scoped
-to **exactly that page** (`site · branch · path`) that expires in a few minutes. The service accepts
-a connection only if the token is valid and matches the page being opened — so one editor can never
-join another site's document.
+The service that relays your keystrokes never sees your login, your account, or your content: it
+passes changes between the people already authorized and holds nothing. Drafts are persisted by
+Papervine, not by it, so there's no second copy of your docs anywhere.
 
 <Note>
-  Because the service runs as a single container you deploy yourself, multiplayer works the
-  same everywhere Papervine runs — no third-party collaboration SaaS required.
+  **Self-hosting?** Multiplayer needs one small always-on service, because a serverless function
+  can't hold a WebSocket open. It's a single container with no database — see
+  [Background services](/background-services) for running it. Leave it out and you keep
+  same-browser sync.
 </Note>
