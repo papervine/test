@@ -4,7 +4,7 @@ import { contentContext, parsePage, type ContentSource } from "@papervine/render
 import { canAccessPage } from "@/lib/reader-auth";
 import { withReaderAccess } from "@/lib/reader-access";
 import { searchDocs, readPage, listPages } from "@papervine/renderer/lib/docs-tools";
-import { renderLlmsTxt } from "@/lib/llms";
+import { renderLlmsTxt } from "@papervine/renderer/lib/llms";
 
 // Reader-auth gating (SPEC §11.2) must reach the RETRIEVAL surfaces, not just the renderer:
 // the Cmd-K search, the AI assistant's RAG (searchDocs/readPage/listPages), and the MCP

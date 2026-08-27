@@ -3,18 +3,22 @@ import { type NextRequest } from "next/server";
 import { requestContentSource, requestReaderAccess } from "./request-source";
 import { withReaderAccess } from "./reader-access";
 import { contentContext } from "@papervine/renderer/lib/content";
-import { getSiteByHost } from "./tenant";
-import { detectAgent } from "./ua-detect";
-import { agentSessionId, firstForwardedIp } from "./agent-session";
-import { logEvent } from "./track";
-import { renderLlmsTxt } from "./llms";
+import { logAgentVisit } from "./agent-visit";
+import { setLlmsDiscoveryHeaders } from "@papervine/renderer/lib/llms-discovery";
+import { renderLlmsTxt } from "@papervine/renderer/lib/llms";
+
+/** `setLlmsDiscoveryHeaders`, as an expression so it can wrap a `new Headers(...)` literal. */
+export function llmsDiscoveryHeaders(headers: Headers): Headers {
+  setLlmsDiscoveryHeaders(headers);
+  return headers;
+}
 
 /**
- * Serve /llms.txt (and /llms-full.txt) for the tenant in scope, and log the visit as
- * agent traffic (SPEC §10.1). Resolves the tenant content source from the request
- * (host + x-papervine-site header, set by middleware), falling back to the apex/preview
- * default source when there's no tenant. The render runs inside `contentContext` so
- * config/pages read from the right repo.
+ * Serve /llms.txt (and /llms-full.txt) for the tenant in scope, and log the visit as agent
+ * traffic (SPEC §10.1). Resolves the tenant content source from the request (host +
+ * x-papervine-site header, set by middleware), falling back to the apex/preview default
+ * source when there's no tenant. The render runs inside `contentContext` so config/pages
+ * read from the right repo.
  */
 export async function handleLlmsRequest(req: NextRequest, full: boolean): Promise<Response> {
   const host = req.headers.get("host");
@@ -34,31 +38,18 @@ export async function handleLlmsRequest(req: NextRequest, full: boolean): Promis
     return new Response("Not found", { status: 404 });
   }
 
-  // Record the visit by agent name (fire-and-forget). llms.txt is an agent surface, so
-  // we log known agents and generic non-browser clients. A stable per-client session id
-  // (not a per-fetch UUID) keeps "Agent Visitors" a distinct-client count, consistent
-  // with the MCP tools (SPEC §10.1). No-op on the apex/preview host (no tenant site).
-  const { isAgent, name } = detectAgent(req.headers.get("user-agent"));
-  if (isAgent) {
-    const site = await getSiteByHost(host);
-    if (site) {
-      void logEvent({
-        siteId: site.id,
-        type: "page_view",
-        source: "agent",
-        agent: name,
-        path: full ? "/llms-full.txt" : "/llms.txt",
-        sessionId: agentSessionId({
-          mcpSessionId: req.headers.get("mcp-session-id"),
-          agent: name,
-          userAgent: req.headers.get("user-agent"),
-          ip: firstForwardedIp(req.headers.get("x-forwarded-for")) ?? req.headers.get("x-real-ip"),
-        }),
-      });
-    }
-  }
+  logAgentVisit(req, full ? "/llms-full.txt" : "/llms.txt");
 
-  return new Response(body, {
-    headers: { "content-type": "text/plain; charset=utf-8" },
-  });
+  const headers = llmsDiscoveryHeaders(
+    new Headers({
+      "content-type": "text/plain; charset=utf-8",
+      // The response is identical for every client (it's always the anonymous, public
+      // subset), and building it now walks every page for its description — so let a CDN
+      // absorb the repeat fetches that a crawl of this surface produces. `markSiteLive`
+      // bumps the site row on publish, but this route is `force-dynamic` and outside the
+      // content cache, so the ceiling here is time, not a version key.
+      "cache-control": "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400",
+    }),
+  );
+  return new Response(body, { headers });
 }

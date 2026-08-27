@@ -198,8 +198,12 @@ a page they couldn't open directly:
 - **MCP** clients connect without a reader session, so on a gated site they see only the
   **public** (un-gated) subset — group-restricted pages are invisible to search, reading, and
   listing over MCP. Reading a restricted page returns the same "not found" as a missing one.
-- **`llms.txt` / `llms-full.txt`** (the AI-discovery feed) is likewise anonymous, so a gated
-  site publishes only its public pages there — the full-corpus dump never includes gated bodies.
+- **[`llms.txt` / `llms-full.txt`](/features/llms-txt)** (the AI-discovery feed) is likewise
+  anonymous, so a gated site publishes only its public pages there — the full-corpus dump never
+  includes gated bodies. A single page's **`.md` twin** is the exception, because it's a page
+  request rather than a bulk dump: it honors the reader's session, so a signed-in reader gets
+  the Markdown for a page they can already read and an anonymous client gets the same `404` the
+  HTML page gives.
 - The **export-all view** requires a signed-in reader, and the exported document contains only
   the pages that reader can access — a reader without a group can't export the pages it covers.
 

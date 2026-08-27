@@ -1,0 +1,183 @@
+---
+title: llms.txt and .md pages
+description: Every site publishes a machine-readable index of its docs at /llms.txt, the whole corpus at /llms-full.txt, and a clean-Markdown twin of every page at <path>.md.
+public: true
+---
+
+AI clients don't want your HTML. They want the prose, they want to know what pages exist, and
+they want both without running a browser. Every Papervine site publishes three surfaces for
+exactly that, generated from the same content the site renders — nothing to configure, nothing
+to keep in sync. This works the same whether your site is hosted here or served by the CLI
+(`papervine dev` / `papervine serve`).
+
+<CardGroup cols={3}>
+  <Card title="/llms.txt" icon="list">
+    An index of every page: title, link, and description, under headings that mirror your
+    navigation.
+  </Card>
+  <Card title="/llms-full.txt" icon="book-open">
+    The index plus the full Markdown body of every page — the whole site in one fetch.
+  </Card>
+  <Card title="&lt;path&gt;.md" icon="file-text">
+    Any page's Markdown source. `/guides/auth` also serves at `/guides/auth.md`.
+  </Card>
+</CardGroup>
+
+## The index
+
+`/llms.txt` follows the [llmstxt.org](https://llmstxt.org/) convention: an H1 with your site
+name, a blockquote summary, then the pages as a linked list.
+
+```markdown /llms.txt
+# Acme Docs
+
+> Everything about the Acme API.
+
+## Get started
+
+- [Introduction](https://docs.acme.com/index.md): What Acme does and why.
+- [Quickstart](https://docs.acme.com/quickstart.md): Ship your first request in five minutes.
+
+## Guides
+
+### Authentication
+
+- [API tokens](https://docs.acme.com/auth/tokens.md)
+
+## API specifications
+
+- [openapi.json](https://docs.acme.com/openapi.json)
+```
+
+Three things worth noticing:
+
+- **The headings are your navigation.** Tabs and groups become sections, nested groups become
+  nested headings. An agent reading the index sees the same structure a reader sees in the
+  sidebar, rather than one flat list of URLs.
+- **Every link points at `.md`, not the page.** A client that follows a link gets Markdown, not
+  a page it has to strip.
+- **Descriptions come from frontmatter.** A page's `description` becomes its one-line summary
+  in the index, truncated to 300 characters.
+
+`/llms-full.txt` is the same index followed by every page's body, each under its title and the
+URL it came from. Use it when you want the whole corpus in one request; use `/llms.txt` when you
+want an agent to fetch only the pages it actually needs.
+
+Both are also served at their `/.well-known/` paths — `/.well-known/llms.txt` and
+`/.well-known/llms-full.txt` — for clients that probe there first.
+
+## Markdown twins
+
+Append `.md` to any page's URL to get its Markdown source:
+
+<CodeGroup>
+```bash Fetch one page
+curl https://docs.acme.com/guides/auth.md
+```
+
+```markdown Response
+# Authentication
+
+How to authenticate against the Acme API.
+
+<Steps>
+  <Step title="Create a token">…</Step>
+</Steps>
+```
+</CodeGroup>
+
+The response is the page's authored MDX with its frontmatter replaced by an H1 title and the
+description. Component tags are left as written: an `<Accordion>` in the source tells a reader
+(human or not) that the content is grouped, and flattening it would throw that away.
+
+The index page's twin is `/index.md`, since `/` alone has nowhere to put the extension.
+
+## What's included
+
+The feed is built from the same navigation and the same access rules as the site itself, so it
+can't drift from what a reader sees:
+
+| A page that is… | Appears in the feed? |
+|---|---|
+| In your navigation | Yes |
+| `noindex: true` | No — the same opt-out that withholds a page from search and SEO |
+| `hidden: true` (reachable by URL, not in the sidebar) | Only with `seo.indexing: "all"` |
+| Gated behind [reader authentication](/auth/reader-auth) | Not in `/llms.txt`; see below |
+| An external link (frontmatter `url`) | Yes, in an `Optional` section, pointing off-site |
+
+### Gated sites
+
+`/llms.txt` and `/llms-full.txt` are anonymous surfaces — there's no reader session on a
+crawler's request — so on a site with reader authentication they list and inline only the
+**public** subset. A gated page never appears in the index and its body never appears in the
+corpus dump.
+
+A page's `.md` twin is different, because it's a single page rather than a bulk dump: it honors
+the reader's real session. A signed-in reader gets the Markdown for a page they can already read
+in the browser; an anonymous client gets the same `404` the HTML page would give, so a gated page
+never confirms it exists.
+
+## Configuration
+
+Nothing is required. Four `docs.json` fields tune the output:
+
+<ParamField path="description" type="string">
+  A one-line summary of the site, rendered as the blockquote under the H1. This is the first
+  thing an AI client reads to decide what your docs are about — worth writing deliberately.
+</ParamField>
+
+<ParamField path="markdown.instructions" type="string">
+  Free-form guidance for AI clients, emitted verbatim after the summary. Use it to say what a
+  model should know before quoting you — which version supersedes which, how to cite you, what's
+  out of scope.
+</ParamField>
+
+<ParamField path="seo.indexing" type='"navigable" | "all"' default="navigable">
+  `"all"` adds pages that exist in your repo but appear nowhere in the navigation, under an
+  `Additional pages` heading. `noindex` still wins.
+</ParamField>
+
+```json docs.json
+{
+  "name": "Acme Docs",
+  "description": "Everything about the Acme API.",
+  "markdown": {
+    "instructions": "Cite the version banner on each page. The v1 pages are archived."
+  },
+  "seo": { "indexing": "all" }
+}
+```
+
+### Writing your own
+
+If the generated index isn't what you want an agent to read, commit an `llms.txt` (or
+`llms-full.txt`) at the root of your docs repo, next to `docs.json`. It's served verbatim and
+nothing is generated. This is an all-or-nothing override — there's no merging — so reach for it
+only when you want to hand-curate the whole file.
+
+## Discovery
+
+Every docs page's response carries headers pointing at the index, so a client that landed on any
+page can find it without guessing:
+
+```http
+X-Llms-Txt: /llms.txt
+Link: </llms.txt>; rel="alternate"; type="text/plain"; title="llms.txt"
+Link: </llms-full.txt>; rel="alternate"; type="text/plain"; title="llms-full.txt"
+```
+
+A `.md` response additionally carries a `Link: …; rel="canonical"` to the HTML page, so a client
+that quotes the Markdown can cite the URL a human should open.
+
+## Analytics
+
+Fetches of all three surfaces are recorded as **agent** traffic, attributed by client — the same
+accounting the [MCP server](/features/mcp-servers) uses — and show up in the Agents tab in
+[Analytics](/control-plane/analytics). This is how you find out which AI tools are reading your
+docs, and which pages they keep coming back for.
+
+<Note>
+  A very large index is currently served whole rather than split across paginated
+  `/_llms/` sections. Nothing truncates, so no page goes missing; a site with thousands of pages
+  will just have a large `/llms.txt`.
+</Note>

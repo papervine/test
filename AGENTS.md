@@ -478,6 +478,12 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   added, check what `next-env.d.ts` imports before touching the route. Also: routes here
   hand-write `params: Promise<{…}>` rather than using the generated `LayoutProps<…>`/`PageProps<…>`
   — CI typechecks BEFORE building, so on a clean checkout those helpers don't exist yet.
+  **Only those three paths are protected.** `node bin/papervine.mjs dev` is normally safe because
+  it uses the default `.next`, which is already in tsconfig — but give it a `NEXT_DIST_DIR`
+  (e.g. to preview `docs/` alongside a running dev server) and it writes that dir into BOTH
+  files, so `tsconfig.json` turns up in `git status` as a change you didn't make and your
+  typecheck reads a dist dir you then deleted. `git checkout tsconfig.json` and point
+  `next-env.d.ts` back at `.next` when you're done.
 - **A ROOT route on a rewritten host needs an explicit middleware bypass — or it 404s and you
   never hear about it.** Every non-apex host class rewrites its whole path space: the app host
   onto `/app/*`, a tenant subdomain onto `/sites/{slug}/*`, a custom domain onto

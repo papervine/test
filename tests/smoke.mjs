@@ -56,6 +56,15 @@ const CHECKS = [
   },
   { slug: "guide", desc: ".md files are served", include: ["PLAIN_MD_MARKER"] },
   {
+    slug: "llms-noindex",
+    // `noindex` withholds a page from indexes — search, SEO, and (SPEC §9.1) the AI-discovery
+    // feed — but it does NOT unpublish it. The llms.txt exclusion is asserted where the feed is
+    // fetched; this pins the other half, that the page itself still renders and still says
+    // noindex. Regressing either direction is silent: an over-eager filter 404s a live page.
+    desc: "a noindex page still renders, with robots noindex",
+    include: ["LLMS_NOINDEX_MARKER", 'name="robots"', "noindex"],
+  },
+  {
     slug: "components",
     desc: "shiki highlighting + code group + code titles + copy button",
     // Code titles were dead code for months: remarkCodeTitles rewrote a fence's `meta` to
@@ -794,8 +803,9 @@ async function run() {
     }
 
     // llms.txt index (SPEC §9.1). Generated from the in-scope content source — here the
-    // fixtures repo (DB-free, so the agent-analytics logging just no-ops). Assert it's
-    // plain text listing real pages, so the generator can't regress to empty/HTML.
+    // fixtures repo (DB-free, so the agent-analytics logging just no-ops). The format's rules
+    // are unit-tested (`tests/unit/llms-format.test.ts`); what only a real request can prove is
+    // that the generator is wired to real content and that the filters hold end to end.
     {
       const before = failures.length;
       try {
@@ -804,13 +814,137 @@ async function run() {
         const ct = res.headers.get("content-type") ?? "";
         if (res.status !== 200) failures.push(`[llms.txt] expected 200, got ${res.status}`);
         if (!ct.includes("text/plain")) failures.push(`[llms.txt] expected text/plain, got "${ct}"`);
-        for (const needle of ["# ", "## Docs", "(http", "/components"]) {
+        for (const needle of [
+          "# Fixtures",
+          "LLMS_SUMMARY_MARKER", // docs.json `description` → the blockquote
+          "LLMS_INSTRUCTIONS_MARKER", // docs.json `markdown.instructions`, verbatim
+          "## Start", // sections mirror the nav groups, not one flat list
+          "## Edge cases",
+          "/components.md", // links point at the .md twin, not the HTML page
+          "/index.md", // …including the index, whose route is `/`
+          "## API specifications",
+          "openapi.json",
+          "## Additional pages", // seo.indexing: "all" — pages outside the navigation
+        ]) {
           if (!body.includes(needle)) failures.push(`[llms.txt] missing "${needle}"`);
+        }
+        // `noindex: true` is the page-level opt-out; it must hold on BOTH paths into the feed —
+        // the nav walk (llms-noindex is a listed page) and the indexing:"all" sweep
+        // (search-noindex is not listed). A page that opts out of search opts out of this too.
+        for (const forbidden of ["LLMS_NOINDEX_MARKER", "llms-noindex", "search-noindex"]) {
+          if (body.includes(forbidden)) {
+            failures.push(`[llms.txt] noindex page leaked: "${forbidden}"`);
+          }
+        }
+        // The index must advertise itself the same way pages do.
+        if (res.headers.get("x-llms-txt") !== "/llms.txt") {
+          failures.push(`[llms.txt] missing x-llms-txt discovery header`);
         }
       } catch (e) {
         failures.push(`[llms.txt] request failed: ${e.message}`);
       }
-      log(`  ${failures.length === before ? "✓" : "✗"} llms.txt index (200 text/plain + page links)`);
+      log(`  ${failures.length === before ? "✓" : "✗"} llms.txt index (sections, .md links, noindex held)`);
+    }
+
+    // llms-full.txt inlines every page body after the same index. The risk it guards is the
+    // walk silently degrading to the index alone (a `loadPage` that stops resolving).
+    {
+      const before = failures.length;
+      try {
+        const res = await fetch(`${BASE}/llms-full.txt`, { signal: AbortSignal.timeout(60_000) });
+        const body = await res.text();
+        if (res.status !== 200) failures.push(`[llms-full.txt] expected 200, got ${res.status}`);
+        for (const needle of [
+          "# Fixtures",
+          "Source: http", // each inlined page cites where it came from
+          "This is the **fixtures home**", // …and the body really is inlined
+        ]) {
+          if (!body.includes(needle)) failures.push(`[llms-full.txt] missing "${needle}"`);
+        }
+        if (body.includes("LLMS_NOINDEX_MARKER")) {
+          failures.push(`[llms-full.txt] noindex page body leaked`);
+        }
+        if (body.length <= 4000) {
+          failures.push(`[llms-full.txt] suspiciously short (${body.length}B) — bodies not inlined?`);
+        }
+      } catch (e) {
+        failures.push(`[llms-full.txt] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} llms-full.txt (index + inlined page bodies)`);
+    }
+
+    // The `.well-known` aliases. These are ROOT paths, and every non-apex host class rewrites
+    // its whole path space — so the way this breaks is a 404 on tenant hosts only, which no
+    // apex-based check would see. Asserting them here at least pins the routes' existence.
+    {
+      const before = failures.length;
+      for (const path of ["/.well-known/llms.txt", "/.well-known/llms-full.txt"]) {
+        try {
+          const res = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(60_000) });
+          if (res.status !== 200) failures.push(`[${path}] expected 200, got ${res.status}`);
+          else if (!(await res.text()).startsWith("# Fixtures")) {
+            failures.push(`[${path}] did not serve the index`);
+          }
+        } catch (e) {
+          failures.push(`[${path}] request failed: ${e.message}`);
+        }
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} .well-known/llms{,-full}.txt aliases`);
+    }
+
+    // A page's `.md` twin — what every link in llms.txt points at, so a broken rewrite makes
+    // the whole index dead links. The mapping lives in middleware (the route tree can't match
+    // an extension), which is exactly why this needs a real request to verify.
+    {
+      const before = failures.length;
+      const cases = [
+        ["/index.md", "Fixtures Home"], // the index page's two spellings
+        ["/components.md", "components"],
+        ["/guide.md", "Plain Markdown Guide"], // a `.md` SOURCE file's `.md` twin
+      ];
+      for (const [path, needle] of cases) {
+        try {
+          const res = await fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(30_000) });
+          const body = await res.text();
+          const ct = res.headers.get("content-type") ?? "";
+          if (res.status !== 200) failures.push(`[${path}] expected 200, got ${res.status}`);
+          if (!ct.includes("text/markdown")) {
+            failures.push(`[${path}] expected text/markdown, got "${ct}"`);
+          }
+          // Markdown, not a rendered page: the React shell would bring a <!DOCTYPE with it.
+          if (/<!DOCTYPE/i.test(body)) failures.push(`[${path}] served HTML, not Markdown`);
+          if (!body.toLowerCase().includes(needle.toLowerCase())) {
+            failures.push(`[${path}] missing "${needle}"`);
+          }
+        } catch (e) {
+          failures.push(`[${path}] request failed: ${e.message}`);
+        }
+      }
+      try {
+        const res = await fetch(`${BASE}/no-such-page.md`, { signal: AbortSignal.timeout(30_000) });
+        if (res.status !== 404) failures.push(`[/no-such-page.md] expected 404, got ${res.status}`);
+      } catch (e) {
+        failures.push(`[/no-such-page.md] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} page .md twins (text/markdown + 404 on miss)`);
+    }
+
+    // Docs pages advertise the index. Without this the headers are only on the surfaces a
+    // client would already have had to find, which is the one place they're no help.
+    {
+      const before = failures.length;
+      try {
+        const res = await fetch(`${BASE}/components`, { signal: AbortSignal.timeout(30_000) });
+        if (res.headers.get("x-llms-txt") !== "/llms.txt") {
+          failures.push(`[discovery] page response missing x-llms-txt`);
+        }
+        if (!(res.headers.get("link") ?? "").includes("/llms.txt")) {
+          failures.push(`[discovery] page response missing Link: </llms.txt>`);
+        }
+      } catch (e) {
+        failures.push(`[discovery] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} llms.txt discovery headers on a docs page`);
     }
 
     // GitHub push webhook signature gate (SPEC §3 auto-sync). DB-free: an unsigned /

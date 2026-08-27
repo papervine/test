@@ -2016,8 +2016,71 @@ tools (Claude, Cursor, Windsurf). Exposes the **same tool layer as the AI Assist
 - ✅ **llms.txt (done, 2026-06-09):** `/llms.txt` + `/llms-full.txt` (`src/app/llms.txt/`,
   shared `src/lib/llms.ts`) — the llmstxt.org index of every page (full variant inlines page
   bodies), generated from the in-scope content source. Logged as agent traffic. Smoke-covered.
-- ⏳ **Next:** `docs.json` opt-out + per-tenant rate limits; live API execution as MCP tools
-  (depends on the M4 "Try it" auth/proxy slice); index built at sync (M2).
+- ✅ **llms.txt brought to parity + `.md` page twins (2026-08-27):** the index was a flat
+  `## Docs` list of HTML links, which is the shape of the convention without the substance of
+  it. Now it matches what real AI clients expect (checked against the documented behavior of
+  the format's main implementation):
+  - **Structure from the nav.** Tabs and groups become `##`/`###` headings (capped at h4), so
+    the index carries the same shape the sidebar does instead of one flat list. External leaves
+    (frontmatter `url`) are collected into a trailing `## Optional`, per the convention that it
+    holds what a client may skip.
+  - **Descriptions, summary, instructions.** Each link carries the page's frontmatter
+    `description` (truncated to 300 chars); the H1 is followed by a blockquote from `docs.json`
+    `description`, then `markdown.instructions` verbatim. Both config fields are new — and
+    `description` was already set in `docs/docs.json`, where it had been silently landing in
+    the "unsupported key" warning.
+  - **`seo.indexing: "all"`** now does something. It was parsed and used nowhere; it adds
+    non-navigable pages under `## Additional pages`. Default stays `navigable`.
+  - **`noindex: true` excludes a page from the feed** on both paths in (the nav walk and the
+    `indexing:"all"` sweep). The opt-out that withholds a page from search and SEO withholds it
+    here too — asserted in smoke rather than assumed, since it's a silent leak either way.
+  - **OpenAPI/AsyncAPI specs** the nav points at get their own section. Scanned generically for
+    `openapi`/`asyncapi` keys at any depth and in every shape `docs.json` allows (bare string,
+    array, `{ source }`); externally-hosted specs are skipped — not ours to advertise.
+  - **A repo can override the whole file** by committing its own `llms.txt`/`llms-full.txt` at
+    the docs root. All-or-nothing, checked before anything is generated.
+  - **`/.well-known/llms.txt` + `/.well-known/llms-full.txt`** aliases. These are ROOT paths, so
+    they needed the same middleware bypass the Sentry tunnel gotcha is about — rewritten, they'd
+    404 on every tenant host and work only on the apex.
+  - **Discovery headers.** `X-Llms-Txt` + `Link: rel="alternate"` on every docs page response,
+    attached in middleware (the page render never sees the pre-rewrite path).
+  - **`.md` page twins (new surface).** Every page also serves its Markdown at `<path>.md`
+    (`/index.md` for the index), which is what every link in the index now points at — an agent
+    following one gets prose instead of a React render it has to strip. The route tree can't
+    match on an extension, so `middleware.ts` maps `*.md` → `/api/page-md/*` in all four host
+    classes (tenant subdomain, custom domain, apex path-mode, apex/preview).
+  - **Access:** the bulk surfaces stay anonymous (a corpus dump must not leak gated bodies,
+    §11.2), but a single page's `.md` honors the reader's real session — same rule as the HTML
+    page, 404 for a gated page anonymously. Consequence worth remembering: that response
+    **varies by reader**, so it's `private, no-store` whenever a reader cookie is present and
+    publicly cacheable only for anonymous fetches. A blanket `s-maxage` there would have let a
+    CDN hand a gated page to the next anonymous client — the §11.2 leak reintroduced one layer
+    above the code that prevents it.
+  - **Cost note:** the index now reads every page's frontmatter for its description. That's
+    ~free — `buildNav` already loaded each page for its sidebar title and `loadPage` is
+    request-cached — so the only real extra read is the index page, whose slug has two
+    spellings. Both surfaces carry `s-maxage=3600` regardless, since they're crawled in bursts.
+  - **The published CLI got all of it too**, which is why the generator lives in
+    `packages/renderer/lib/` (`llms.ts`, `llms-format.ts`, `llms-discovery.ts`, `page-md.ts`)
+    rather than the web app: `apps/cli` has its own route tree (§10.6), so a surface that
+    exists only in `src/app/` doesn't exist for `npx papervine`. Before the move it would have
+    shipped an index whose every link 404'd — the CLI's `.md` mapping is in *its* middleware,
+    and an index full of dead links still looks perfect. The web app keeps the multi-tenant
+    wrapper (tenant resolution, reader access, analytics, caching); the CLI's
+    `apps/cli/src/lib/llms-handlers.ts` is the same three absences the MCP route documents (one
+    repo, one reader, no analytics). Pinned in the clean room (`npm run test:cli`), which
+    *follows a link out of the index* rather than guessing a path — the only layer where "the
+    module resolved outside the monorepo" and "the middleware shipped" are actually tested.
+  - Layers: pure format core in `packages/renderer/lib/llms-format.ts`
+    (`tests/unit/llms-format.test.ts`, 24 tests — heading nesting, truncation, spec scanning,
+    section order); wiring + filters + `.md` routing in smoke (5 new checks, plus a
+    `llms-noindex` fixture that is *in* the nav and must stay out of the feed); packaging in
+    `test:cli`. The existing `docs-tools-access.test.ts` gated-corpus test carried over
+    unchanged, which is the point of it.
+- ⏳ **Next:** `/_llms/` split indexes for very large sites (deliberately deferred — nothing
+  truncates today, a big site just gets a big file); `docs.json` opt-out + per-tenant rate
+  limits; live API execution as MCP tools (depends on the M4 "Try it" auth/proxy slice); index
+  built at sync (M2).
 
 ### 9.2 Authoring MCP (admin / write)
 

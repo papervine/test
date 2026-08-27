@@ -10,6 +10,7 @@ import {
 } from "./lib/tenant-host";
 import { SIGNED_IN_FLAG } from "./lib/signed-in-flag";
 import { isOAuthCallbackPath } from "./lib/social-auth";
+import { setLlmsDiscoveryHeaders } from "@papervine/renderer/lib/llms-discovery";
 
 // Bare control-plane paths that keep their own URL on the app host (real routes, not
 // rewritten onto /app): the auth pages.
@@ -55,6 +56,45 @@ const ASSET_RE =
 // place errors matter least. It resolves the DSN itself and needs no tenant context, so it
 // passes straight through untouched.
 const SENTRY_TUNNEL = "/monitoring";
+
+/**
+ * The AI-discovery surfaces (SPEC §9.1/§10.1). Like the Sentry tunnel these are ROOT paths
+ * that resolve the tenant from the Host themselves, so they must NOT be rewritten under
+ * `/sites/{slug}` or `/custom-domain` — they're stamped with the tenant and passed through.
+ * `.well-known/*` is included for exactly that reason: rewritten, it would 404 on every
+ * tenant host and only work on the apex, which is the one host no reader is looking at.
+ */
+function isAgentSurface(pathname: string): boolean {
+  return (
+    pathname === "/mcp" ||
+    pathname === "/llms.txt" ||
+    pathname === "/llms-full.txt" ||
+    pathname === "/.well-known/llms.txt" ||
+    pathname === "/.well-known/llms-full.txt"
+  );
+}
+
+/**
+ * Every page also serves its Markdown source at `<path>.md` — what /llms.txt links to, so
+ * an agent following a link gets prose instead of a React render. The route tree can't match
+ * on an extension, so the mapping is here: `/guides/auth.md` → `/api/page-md/guides/auth`.
+ * Ordered BEFORE the asset check on every host, since `.md` is a page, not an asset.
+ */
+const PAGE_MD_RE = /\.md$/i;
+
+function pageMdPath(pathname: string): string {
+  return `/api/page-md/${pathname.replace(/^\//, "").replace(PAGE_MD_RE, "")}`;
+}
+
+/**
+ * Advertise /llms.txt on a docs *page* response. The headers only help if they're on the
+ * response a client already fetched, which for the rewritten host classes means here — the
+ * page render itself never sees the original path.
+ */
+function withLlmsDiscovery(res: NextResponse): NextResponse {
+  setLlmsDiscoveryHeaders(res.headers);
+  return res;
+}
 
 /**
  * Forward the resolved tenant slug to the render as a request header, so server
@@ -261,20 +301,21 @@ export function middleware(req: NextRequest) {
     // x-papervine-site header), and they log agent analytics. Stamp the slug so they
     // read the right content source, but don't rewrite them under /sites/{slug}.
     if (pathname === SENTRY_TUNNEL) return NextResponse.next();
-    if (
-      pathname === "/mcp" ||
-      pathname === "/llms.txt" ||
-      pathname === "/llms-full.txt"
-    ) {
-      return NextResponse.next(withSite(req, tenant));
+    if (isAgentSurface(pathname)) return NextResponse.next(withSite(req, tenant));
+    if (PAGE_MD_RE.test(pathname)) {
+      const url = req.nextUrl.clone();
+      url.pathname = pageMdPath(pathname);
+      return NextResponse.rewrite(url, withSite(req, tenant));
     }
     const url = req.nextUrl.clone();
     // Assets (images/fonts/…) stream from the tenant's synced bucket; everything
     // else is a docs page.
-    url.pathname = ASSET_RE.test(pathname)
+    const isAsset = ASSET_RE.test(pathname);
+    url.pathname = isAsset
       ? `/api/tenant-asset/${tenant}${pathname}`
       : `/sites/${tenant}${pathname === "/" ? "" : pathname}`;
-    return NextResponse.rewrite(url, withSite(req, tenant));
+    const res = NextResponse.rewrite(url, withSite(req, tenant));
+    return isAsset ? res : withLlmsDiscovery(res);
   }
 
   // Apex path-mode docs (`/sites/{slug}/…`, the interim for hosts without a wildcard
@@ -283,7 +324,17 @@ export function middleware(req: NextRequest) {
   // priming React's per-request cache with the default content/ config. See
   // requestContentSource() for the full why.
   const pathSite = pathname.match(/^\/sites\/([^/]+)(?:\/|$)/)?.[1];
-  if (pathSite) return NextResponse.next(withSite(req, pathSite));
+  if (pathSite) {
+    // `.md` is a page twin, not a docs route — send it to the handler with the slug stripped
+    // out of the path, since it resolves the tenant from the stamped header like every other
+    // agent surface.
+    if (PAGE_MD_RE.test(pathname)) {
+      const url = req.nextUrl.clone();
+      url.pathname = pageMdPath(pathname.slice(`/sites/${pathSite}`.length) || "/index.md");
+      return NextResponse.rewrite(url, withSite(req, pathSite));
+    }
+    return withLlmsDiscovery(NextResponse.next(withSite(req, pathSite)));
+  }
 
   // Custom (vanity) domains (SPEC §2): any host that isn't STRUCTURALLY ours is a candidate
   // domain someone pointed at us. We can't DB-resolve the slug at the edge, so forward
@@ -300,18 +351,19 @@ export function middleware(req: NextRequest) {
   if (host && !isReservedPlatformHost(host) && !process.env.PAPERVINE_CONTENT) {
     if (pathname.startsWith("/api/")) return NextResponse.next(withHost(req, host));
     if (pathname === SENTRY_TUNNEL) return NextResponse.next();
-    if (
-      pathname === "/mcp" ||
-      pathname === "/llms.txt" ||
-      pathname === "/llms-full.txt"
-    ) {
-      return NextResponse.next(withHost(req, host));
+    if (isAgentSurface(pathname)) return NextResponse.next(withHost(req, host));
+    if (PAGE_MD_RE.test(pathname)) {
+      const url = req.nextUrl.clone();
+      url.pathname = pageMdPath(pathname);
+      return NextResponse.rewrite(url, withHost(req, host));
     }
     const url = req.nextUrl.clone();
-    url.pathname = ASSET_RE.test(pathname)
+    const isAsset = ASSET_RE.test(pathname);
+    url.pathname = isAsset
       ? `/api/tenant-asset-by-host${pathname}`
       : `/custom-domain${pathname === "/" ? "" : pathname}`;
-    return NextResponse.rewrite(url, withHost(req, host));
+    const res = NextResponse.rewrite(url, withHost(req, host));
+    return isAsset ? res : withLlmsDiscovery(res);
   }
 
   // SaaS apex front door: serve the marketing landing at / (SPEC §2). In single-repo
@@ -320,6 +372,14 @@ export function middleware(req: NextRequest) {
   if (pathname === "/" && !process.env.PAPERVINE_CONTENT) {
     const url = req.nextUrl.clone();
     url.pathname = "/home";
+    return NextResponse.rewrite(url);
+  }
+
+  // Apex `.md` page twins. On the apex this matters most in single-repo preview mode
+  // (`papervine dev` / the published CLI), which is where the docs being previewed live.
+  if (PAGE_MD_RE.test(pathname) && !pathname.startsWith("/api/")) {
+    const url = req.nextUrl.clone();
+    url.pathname = pageMdPath(pathname);
     return NextResponse.rewrite(url);
   }
 
@@ -333,8 +393,9 @@ export function middleware(req: NextRequest) {
   }
 
   // (The control plane is gated on the app host above; the apex only serves marketing +
-  // docs.)
-  return NextResponse.next();
+  // docs.) The apex serves its own /llms.txt — from the previewed repo in single-repo mode,
+  // from `content/` otherwise — so advertising it here is truthful on both.
+  return withLlmsDiscovery(NextResponse.next());
 }
 
 export const config = {

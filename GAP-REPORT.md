@@ -124,8 +124,22 @@ threw when any one component was missing.
    (`packages/renderer/lib/seo.ts`), with a generated 1200×630 card at `/api/og/{slug}` when
    the repo supplies no image of its own. `docs.json` `seo.metatags` and per-page frontmatter
    meta tags (any key containing a `:`) are honored, page-over-site. Still absent: a sitemap /
-   `robots.txt`, and `seo.indexing` is parsed but not acted on — only per-page `noindex` is.
-   See SPEC §5.
+   `robots.txt`. `seo.indexing` was parsed but acted on nowhere; it now selects what the
+   AI-discovery feed publishes (item 11), though it still doesn't affect HTML `robots` meta,
+   where only per-page `noindex` applies. See SPEC §5.
+11. ✅ **AI-discovery surfaces at parity (2026-08-27).** `/llms.txt` existed but emitted a flat
+   list of HTML links under one `## Docs` heading — the convention's shape without its
+   substance. It now carries the navigation's structure as headings, each page's frontmatter
+   `description`, a blockquote from `docs.json` `description`, `markdown.instructions`, the
+   OpenAPI/AsyncAPI specs the nav points at, and `seo.indexing: "all"` extras; `noindex` pages
+   are excluded. Two `docs.json` keys stopped being "unsupported" in the process
+   (`description`, `markdown`) — `description` is common in real repos, so it had been
+   producing a spurious ignored-key warning. Every link now points at a **`.md` twin** of the
+   page (`/guides/auth.md`), a new surface: the page's Markdown, so a client following a link
+   from the index gets prose rather than a page to strip. Also `/.well-known/` aliases and
+   `X-Llms-Txt`/`Link` discovery headers on docs pages. All of it works in the **published
+   CLI** as well as the hosted product — the generator lives in `packages/renderer/lib/` for
+   that reason, since `apps/cli` has its own route tree. See SPEC §9.1.
 
 ## Renderer Decision
 

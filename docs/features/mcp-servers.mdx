@@ -64,9 +64,10 @@ What ships today:
   right content source per connection. Each connection logs agent analytics: `search_docs`
   becomes an MCP-search event and `read_page` becomes an agent page view
   (`source:"agent"`), which feeds the Agents tab in [Analytics](/control-plane/analytics).
-- **`llms.txt`.** Every site also serves `/llms.txt` and `/llms-full.txt` — the
-  [llmstxt.org](https://llmstxt.org/) index of every page (the `full` variant inlines page
-  bodies), generated from the in-scope content source and logged as agent traffic.
+- **`llms.txt`.** For clients that don't speak MCP, every site also publishes a plain-HTTP
+  feed of the same content: an index at `/llms.txt`, the whole corpus at `/llms-full.txt`, and
+  a Markdown twin of every page at `<path>.md`. See
+  [llms.txt and .md pages](/features/llms-txt).
 
 Indexing follows the same [freshness rules](/features/ai-assistant#indexing-and-freshness) as
 the assistant — published pages + OpenAPI specs, excluding hidden/`noindex`.
