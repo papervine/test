@@ -2,6 +2,10 @@
   "$schema": "https://papervine.io/schema.json",
   "name": "Papervine",
   "description": "Documentation for Papervine \u2014 how to publish and run a docs site, and how the platform is built.",
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg"
+  },
   "favicon": {
     "light": "/favicon.ico",
     "dark": "/favicon.ico"
