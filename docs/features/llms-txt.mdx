@@ -1,6 +1,6 @@
 ---
 title: llms.txt and .md pages
-description: Every site publishes a machine-readable index of its docs at /llms.txt, the whole corpus at /llms-full.txt, and a clean-Markdown twin of every page at <path>.md.
+description: Every site publishes a machine-readable index at /llms.txt, the whole corpus at /llms-full.txt, and a clean-Markdown twin of every page at <path>.md — plus a Copy page button so readers can hand a page to their own AI tool.
 public: true
 ---
 
@@ -22,6 +22,32 @@ to keep in sync. This works the same whether your site is hosted here or served 
     Any page's Markdown source. `/guides/auth` also serves at `/guides/auth.md`.
   </Card>
 </CardGroup>
+
+## The Copy page button
+
+Readers hold AI tools too, and their next move is often "paste this page into a chat". Every
+page carries a **Copy page** button at the top of the article, with two more actions behind its
+chevron:
+
+| Action | What it does |
+|---|---|
+| **Copy page** | Puts the page's Markdown on the clipboard — the same bytes an agent gets from `<path>.md`. |
+| **Ask Assistant** | Opens the [AI assistant](/features/ai-assistant) already scoped to this page. |
+| **Download PDF** | Opens the print dialog, where *Save as PDF* produces the file. |
+
+Because Copy page fetches the page's own `.md` twin, there's exactly one definition of "this
+page as Markdown" — what a reader copies and what an agent reads can't drift apart. On a site
+with [reader authentication](/auth/reader-auth), the request carries the reader's session, so a
+signed-in reader copies the gated page they're already reading.
+
+Two notes on the PDF. It's the page you're on, printed with the docs chrome removed — the
+navigation, sidebar, and table of contents don't reach the paper, and code blocks, tables, and
+callouts aren't split across sheets. For the *whole site* as one document, use
+[Export all content](/control-plane/exports) instead.
+
+`Ask Assistant` is hidden when the assistant is off for a site, and generated API reference
+pages have no Copy page button — they're built from your OpenAPI spec rather than an MDX file,
+so there's no Markdown source to hand over. The spec itself is linked from `/llms.txt`.
 
 ## The index
 

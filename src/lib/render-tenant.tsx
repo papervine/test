@@ -26,6 +26,8 @@ import { Navbar } from "@papervine/renderer/components/Navbar";
 import { NavTabs } from "@papervine/renderer/components/NavTabs";
 import { Sidebar } from "@papervine/renderer/components/Sidebar";
 import { TableOfContents } from "@papervine/renderer/components/TableOfContents";
+import { PageActions } from "@papervine/renderer/components/PageActions";
+import { mdHref } from "@papervine/renderer/lib/llms-format";
 import { PageViewBeacon } from "@/components/analytics/PageViewBeacon";
 import { Assistant } from "@papervine/renderer/components/assistant/Assistant";
 import { AskAssistantButton } from "@papervine/renderer/components/assistant/AskAssistantButton";
@@ -355,23 +357,32 @@ export async function TenantDocsArticle({
     const eyebrow = findGroupLabel(sections, base + "/" + (slugStr || "index"));
     const assetDimensions = await loadAssetDimensions();
 
+    // The assistant's kill switch also governs its menu item — offering "Ask Assistant" on a
+    // site where the launcher is hidden would open a panel that isn't mounted.
+    const assistantOn = (await getSiteBySlug(slug))?.assistantEnabled ?? true;
+
     return (
-      <div className={ARTICLE_ROW}>
-        <article className="prose min-w-0 flex-1">
-          {eyebrow && <div className="mb-2 text-sm font-semibold text-primary">{eyebrow}</div>}
-          {page.frontmatter.title && <h1>{page.frontmatter.title}</h1>}
-          {page.frontmatter.description && (
-            <p className="!mt-2 text-lg text-zinc-500 dark:text-zinc-400">
-              {page.frontmatter.description}
-            </p>
-          )}
-          <Mdx
-            source={page.body}
-            linkBase={base}
-            assetBase={assetBase}
-            assetDimensions={assetDimensions}
-          />
-        </article>
+      <div className={`${ARTICLE_ROW} pv-article-row`}>
+        {/* The actions row sits above the article rather than inside it: `prose` styles the
+            article's first child, and a control there fights those rules for margins. */}
+        <div className="pv-article-col min-w-0 flex-1">
+          <PageActions mdHref={base + mdHref("/" + slugStr)} assistant={assistantOn} />
+          <article className="prose min-w-0">
+            {eyebrow && <div className="mb-2 text-sm font-semibold text-primary">{eyebrow}</div>}
+            {page.frontmatter.title && <h1>{page.frontmatter.title}</h1>}
+            {page.frontmatter.description && (
+              <p className="!mt-2 text-lg text-zinc-500 dark:text-zinc-400">
+                {page.frontmatter.description}
+              </p>
+            )}
+            <Mdx
+              source={page.body}
+              linkBase={base}
+              assetBase={assetBase}
+              assetDimensions={assetDimensions}
+            />
+          </article>
+        </div>
         <TableOfContents items={toc} />
       </div>
     );

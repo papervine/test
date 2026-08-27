@@ -188,6 +188,74 @@ test.describe("tenant docs render from the tenant's own content @external", () =
     await expect(page.getByRole("button", { name: "Ask Assistant" })).toHaveCount(0);
   });
 
+  test("the page-actions menu copies the page as Markdown, console stays clean", async ({
+    page,
+    context,
+  }) => {
+    // The per-page actions control (SPEC §9.1). Three things here need a real browser and
+    // can't be asserted from markup:
+    //
+    //  • **Copy page** fetches the page's own `.md` twin and writes the clipboard. The href
+    //    is built from the slug plus the site's base path, and in path mode that path is
+    //    rewritten by middleware — so "the button rendered" and "the fetch resolves" are
+    //    different claims. A wrong base gives a 404 the UI swallows into "Copy failed".
+    //  • **The menu is client state.** Open/close, Escape, and the label flipping to
+    //    "Copied" only exist after hydration.
+    //  • **Console-clean.** This is the docs' first interactive popover; a `flushSync`,
+    //    render-loop, or hydration fault here is invisible in the DOM and in a screenshot.
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    // Clipboard writes need permission in a headless context, or writeText rejects and the
+    // component (correctly) shows its failure state — which would fail this test for the
+    // wrong reason.
+    await context.grantPermissions(["clipboard-read", "clipboard-write"], {
+      origin: APEX_ORIGIN,
+    });
+
+    await page.goto(docsUrl(`/sites/${SLUG}/tenant-page`));
+
+    // The menu is closed until asked for.
+    await expect(page.getByRole("menuitem", { name: /Copy page/ })).toHaveCount(0);
+    await page.getByRole("button", { name: "More page actions" }).click();
+
+    // All three items, and the assistant one is present because this site has it enabled.
+    await expect(page.getByRole("menuitem", { name: /Copy page/ })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: /Ask Assistant/ })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: /Download PDF/ })).toBeVisible();
+
+    // Escape closes it (the listener is bound only while open).
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("menuitem", { name: /Copy page/ })).toHaveCount(0);
+
+    // The primary action: the confirmation only appears if the fetch AND the clipboard
+    // write both succeeded — the component's catch sets "Copy failed" instead.
+    await page.getByRole("button", { name: /^Copy page$/ }).click();
+    await expect(page.getByRole("button", { name: "Copied" })).toBeVisible();
+
+    // And what landed on the clipboard is the page's Markdown, not the rendered HTML.
+    const copied = await page.evaluate(() => navigator.clipboard.readText());
+    expect(copied).toContain("TENANT_PAGE_MARKER");
+    expect(copied).not.toContain("<!DOCTYPE");
+
+    expect(errors, `console/page errors on a tenant docs page:\n${errors.join("\n")}`).toEqual([]);
+  });
+
+  test("a site with the assistant disabled hides it from the page-actions menu too", async ({
+    page,
+  }) => {
+    // The kill switch (SPEC §8.6) governs the menu item as well as the navbar launcher —
+    // offering "Ask Assistant" here would open a panel that isn't mounted, which is exactly
+    // the shape of the original bug (a button dispatching an event nobody listens for).
+    await page.goto(docsUrl(`/sites/${NOASSIST_SLUG}`));
+    await page.getByRole("button", { name: "More page actions" }).click();
+    await expect(page.getByRole("menuitem", { name: /Copy page/ })).toBeVisible();
+    await expect(page.getByRole("menuitem", { name: /Ask Assistant/ })).toHaveCount(0);
+  });
+
   test("search is scoped to the tenant, not the platform default", async ({ page }) => {
     // Regression: /api/search runs on the apex host (middleware doesn't rewrite /api/*),
     // so in path mode it can't infer the tenant from the Host header. Without the explicit

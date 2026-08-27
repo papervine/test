@@ -2077,6 +2077,39 @@ tools (Claude, Cursor, Windsurf). Exposes the **same tool layer as the AI Assist
     `llms-noindex` fixture that is *in* the nav and must stay out of the feed); packaging in
     `test:cli`. The existing `docs-tools-access.test.ts` gated-corpus test carried over
     unchanged, which is the point of it.
+- ✅ **Per-page actions control (2026-08-27):** `.md` twins and `/llms.txt` served agents but
+  nothing served the *reader* holding an AI tool — the person whose next move is "paste this
+  page into a chat". Every docs page now carries a split button at the top of the article
+  (`packages/renderer/components/PageActions.tsx`): **Copy page** as the primary action, with
+  **Ask Assistant** and **Download PDF** in a menu.
+  - **Each action reuses something that already exists rather than adding a pipeline.** Copy
+    fetches the page's own `.md` twin — one definition of "this page as Markdown", so the
+    clipboard can't drift from what an agent fetches, and being same-origin the reader's
+    session rides along so a gated page copies for the reader who can read it. Ask Assistant
+    dispatches the same event the navbar button and Cmd-I use, and the assistant already sends
+    the pathname as `pageSlug`, so "about this page" needs no argument. Download PDF opens the
+    print dialog — the same trade §10.4's whole-site export makes (full renderer fidelity, no
+    server-side PDF pipeline), which is also why it works identically on the CLI.
+  - **The print stylesheet is the actually-new part.** Printing any docs page used to carry the
+    navbar, tab bar, and sidebar onto the paper. `pv-no-print` now sits on the five *shared*
+    chrome components (Navbar, NavTabs, Sidebar, Banner, TableOfContents) — shared is what
+    makes one class cover all three surfaces — and the rules ship inside `PageActions` rather
+    than in a `globals.css`, because there are two of those and Tailwind's purge can't see a
+    class that only appears inside `@media print`.
+  - **Placement:** the control is a sibling above `<article>`, not its first child. `prose`
+    styles the article's first child, and a control there fights those rules for margins. The
+    row keeps `ARTICLE_ROW`'s `min-h-screen` (the sticky-sidebar invariant), and the
+    short-page layout e2e still passes — that was the thing most at risk from restructuring it.
+  - **The assistant item follows the §8.6 kill switch** (and `aiConfigured()` on the CLI):
+    offering it where the panel isn't mounted would reproduce the original bug of a button
+    dispatching an event nobody listens for. Generated OpenAPI endpoint pages get no control —
+    they have no `.md` twin, so every action would be a dead button.
+  - Layers: smoke asserts the control renders with the *right* `.md` href (built from the slug
+    plus the site's base path — exactly the shape that renders as `/.md` with nothing failing)
+    plus the print CSS; e2e (`tenant-render.spec.ts`) drives the menu in a real browser —
+    open/Escape/copy, clipboard contents are Markdown and not HTML, the kill switch hides the
+    assistant item, **and the console stays clean**, this being the docs' first interactive
+    popover.
 - ⏳ **Next:** `/_llms/` split indexes for very large sites (deliberately deferred — nothing
   truncates today, a big site just gets a big file); `docs.json` opt-out + per-tenant rate
   limits; live API execution as MCP tools (depends on the M4 "Try it" auth/proxy slice); index

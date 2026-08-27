@@ -11,6 +11,8 @@ import { pageMetadata, ogImagePath } from "@papervine/renderer/lib/seo";
 import { loadApiCatalog } from "@papervine/renderer/lib/openapi";
 import { Mdx, extractToc } from "@papervine/renderer/lib/mdx";
 import { TableOfContents } from "@papervine/renderer/components/TableOfContents";
+import { PageActions } from "@papervine/renderer/components/PageActions";
+import { mdHref } from "@papervine/renderer/lib/llms-format";
 import { EndpointReference } from "@papervine/renderer/components/api/EndpointReference";
 
 type Params = { slug?: string[] };
@@ -59,17 +61,22 @@ export default async function DocsPage({ params }: { params: Promise<Params> }) 
     const assetDimensions = await loadAssetDimensions();
 
     return (
-      <div className="flex items-start gap-10 px-8 py-10">
-        <article className="prose min-w-0 flex-1">
-          {eyebrow && <div className="mb-2 text-sm font-semibold text-primary">{eyebrow}</div>}
-          {page.frontmatter.title && <h1>{page.frontmatter.title}</h1>}
-          {page.frontmatter.description && (
-            <p className="!mt-2 text-lg text-zinc-500 dark:text-zinc-400">
-              {page.frontmatter.description}
-            </p>
-          )}
-          <Mdx source={page.body} assetDimensions={assetDimensions} />
-        </article>
+      <div className="pv-article-row flex items-start gap-10 px-8 py-10">
+        {/* The actions row sits above the article rather than inside it: `prose` styles the
+            article's first child, and a control there fights those rules for margins. */}
+        <div className="pv-article-col min-w-0 flex-1">
+          <PageActions mdHref={mdHref("/" + slugStr)} assistant />
+          <article className="prose min-w-0">
+            {eyebrow && <div className="mb-2 text-sm font-semibold text-primary">{eyebrow}</div>}
+            {page.frontmatter.title && <h1>{page.frontmatter.title}</h1>}
+            {page.frontmatter.description && (
+              <p className="!mt-2 text-lg text-zinc-500 dark:text-zinc-400">
+                {page.frontmatter.description}
+              </p>
+            )}
+            <Mdx source={page.body} assetDimensions={assetDimensions} />
+          </article>
+        </div>
         <TableOfContents items={toc} />
       </div>
     );

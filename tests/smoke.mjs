@@ -56,6 +56,26 @@ const CHECKS = [
   },
   { slug: "guide", desc: ".md files are served", include: ["PLAIN_MD_MARKER"] },
   {
+    slug: "components",
+    // The per-page actions control (SPEC §9.1). Two things can silently go missing: the
+    // control itself, and the `.md` href it copies from — which is built from the page slug
+    // and the site's base path, so it's exactly the kind of thing that renders as `/.md` or
+    // `/undefined.md` without anything failing. Also asserts the print stylesheet shipped:
+    // without it "Download PDF" prints the sidebar and navbar onto the paper.
+    desc: "the page-actions control renders with a correct .md href + print CSS",
+    include: [
+      "Copy page",
+      "More page actions",
+      // The href reaches the client component as an RSC prop, so it appears escaped in the
+      // flight payload rather than as an HTML attribute. Asserted with the prop name attached
+      // so this can't pass on some unrelated mention of the path.
+      String.raw`\"mdHref\":\"/components.md\"`,
+      "pv-no-print",
+      "pv-article-row",
+      "@media print",
+    ],
+  },
+  {
     slug: "llms-noindex",
     // `noindex` withholds a page from indexes — search, SEO, and (SPEC §9.1) the AI-discovery
     // feed — but it does NOT unpublish it. The llms.txt exclusion is asserted where the feed is
