@@ -169,28 +169,19 @@ mechanisms simply prompt the client to *re-read* it.
   idles at ~20s; a backgrounded tab pauses and refreshes on focus.
 </Note>
 
-#### Realtime over the Pusher protocol
+#### When it updates instantly
 
-Updates arrive over a WebSocket using the **Pusher protocol**. Because serverless functions
-can't hold a socket open, Papervine doesn't *run* a socket server on its deploy target —
-instead it speaks a protocol that has both a server you can run yourself and a managed
-equivalent, swapped by environment (the same pattern as Postgres and object storage):
-
-- **Local** uses a Pusher-compatible server you run yourself (**Soketi**) in `docker-compose`.
-- **Production** uses hosted **Pusher Channels** — the same client and server SDKs; only env
-  changes.
-
-When a sync starts and finishes, the sync runner **publishes a content-free ping** on a
-per-site **private channel**; the browser, subscribed to that channel, reacts by re-running
-its normal authorized `/activity` fetch. No feed data ever transits the realtime host, and
-subscriptions are gated by an auth endpoint that reuses the same org-membership check as the
-page — a tenant can't watch another's channel.
+Where a realtime backend is available the feed doesn't wait for its next poll: the moment a
+sync starts or finishes, the row changes. What travels over that connection is a **content-free
+ping** — never feed data — which the browser answers by re-running the same authorized
+`/activity` fetch it would have polled for. Subscriptions are gated by the same org-membership
+check as the page, so one organization can never watch another's.
 
 <Note>
-  Realtime is **strictly optional**. With its environment variables unset (for example in CI),
-  nothing subscribes or publishes and the feed runs on the adaptive poll alone — exactly the
-  behavior described above. A missing or broken realtime backend can never break a sync or a
-  page.
+  Realtime is **strictly optional**, and the difference is only *latency*: without it the feed
+  runs on the adaptive poll described above, and a missing or broken realtime backend can never
+  break a sync or a page. **Self-hosting?** See
+  [Background services](/background-services#the-realtime-backend) for running one.
 </Note>
 
 An in-flight sync's `building` pill **counts up live** ("Building 0:14", with a pulsing dot),

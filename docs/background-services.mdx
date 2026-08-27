@@ -1,0 +1,115 @@
+---
+title: Background services
+description: Three things can't live inside a serverless function — two sockets and a long-running job queue. Each is a small service you deploy separately, and each degrades cleanly when you don't.
+---
+
+Papervine's deploy target is serverless, which means a request has a time limit and cannot hold
+a WebSocket open. Three features want one or the other:
+
+| Feature | What it needs | Without it |
+|---|---|---|
+| [Real-time collaboration](/control-plane/collaboration) | A WebSocket relay | Same-browser tabs still sync |
+| [Live activity feed](/control-plane/overview#the-activity-feed) | A WebSocket relay | Feed polls instead |
+| [Automation runs](/control-plane/automate) | A job executor | Automations don't run |
+
+Rather than give any of them up or force a socket server into the main deployment, each speaks
+to a service that lives *outside* it — the same pattern as Postgres and object storage, and in
+the first two cases a protocol with both a server you can run yourself and a managed
+equivalent. You pick per environment; only env vars change.
+
+<Info>
+  **All three are optional and independent.** With their variables unset nothing connects and
+  nothing breaks — no errors in the dashboard, no failed syncs, no broken editing. Start with
+  none of them; add each when you want what it buys. If you're only serving docs with the
+  [CLI](/guides/self-hosting), none of them apply at all.
+</Info>
+
+## The collaboration service
+
+Cross-machine editing uses a standalone **Hocuspocus** (Yjs) WebSocket service — `apps/collab`
+in the repo. It is deliberately minimal: it **relays** the shared document and tracks presence,
+and holds **no** accounts and **no** content. The app authorizes editing and persists drafts.
+
+<Steps>
+  <Step title="Run it">
+    Locally it's the `collab` service in `docker-compose` (`docker compose up`). In production
+    run the same container on any host that can hold a WebSocket open — a small always-on
+    machine on Fly, Railway, Render, or your own box. It has no database of its own.
+  </Step>
+  <Step title="Point the app at it">
+    Set two environment variables (see `.env.example`):
+
+    - `COLLAB_JWT_SECRET` — a shared secret. The app signs a short-lived, single-page token
+      with it; the service verifies it. Use the **same value** in both places.
+    - `NEXT_PUBLIC_COLLAB_URL` — the WebSocket URL the browser connects to (e.g.
+      `ws://127.0.0.1:1234` locally, `wss://collab.yourdomain` in production).
+  </Step>
+  <Step title="That's it">
+    With both set, the editor connects automatically. Leave them unset and collaboration falls
+    back to same-browser sync — no errors, nothing else to configure.
+  </Step>
+</Steps>
+
+### How access is enforced
+
+The service can't see your login, so the app does the check. When someone opens a page, the app
+confirms they're allowed to edit that site (the same gate as every editor action), then mints a
+token scoped to **exactly that page** (`site · branch · path`) that expires in a few minutes.
+The service accepts a connection only if the token is valid and matches the page being opened —
+so one editor can never join another site's document.
+
+This is why `COLLAB_JWT_SECRET` must match on both sides: it's the only thing the service trusts.
+A wrong or missing secret doesn't degrade to "unauthenticated but working" — every connection is
+refused, and the editor falls back to same-browser sync.
+
+## The realtime backend
+
+The dashboard's activity feed updates live over a WebSocket using the **Pusher protocol**:
+
+- **Local** uses a Pusher-compatible server you run yourself (**Soketi**) in `docker-compose`.
+- **Production** uses hosted **Pusher Channels** — the same client and server SDKs; only env
+  changes.
+
+When a sync starts and finishes, the sync runner publishes a **content-free ping** on a per-site
+**private channel**; the browser, subscribed to that channel, reacts by re-running its normal
+authorized `/activity` fetch. No feed data ever transits the realtime host, and subscriptions
+are gated by an auth endpoint reusing the same org-membership check as the page — a tenant
+can't watch another's channel.
+
+Unset its variables (as CI does) and nothing subscribes or publishes; the feed runs on its
+adaptive poll alone, which is the behavior the
+[dashboard overview](/control-plane/overview#the-activity-feed) describes.
+
+## The automations executor
+
+[Automation runs](/control-plane/automate) are queued in Postgres and executed by a background
+executor — **Trigger.dev** — configured with `TRIGGER_SECRET_KEY`. Without one configured the
+Automations page says so and automations simply don't run; nothing else in the dashboard or the
+renderer depends on it.
+
+The part worth knowing before you deploy: **the executor is a separate release from the web
+app.** `TRIGGER_SECRET_KEY` only lets the app *enqueue* runs. The tasks themselves execute on
+the executor's side and have to be published there:
+
+```bash
+npx trigger.dev deploy
+```
+
+A run that gets enqueued with no published version to pick it up stays **pending** — which
+looks like a broken automation rather than a missing deploy step, so it's the failure to
+recognize. In this project's own hosting a push to `main` deploys both halves together (the
+site build, plus a CI job that deploys the tasks) so the two can't drift; running your own
+deployment means running that release step yourself.
+
+## Choosing what to run
+
+<CardGroup cols={2}>
+  <Card title="Serving docs only" icon="file-text">
+    None of these apply. The [CLI](/guides/self-hosting) serves a docs site with no database,
+    no editor, and no dashboard — nothing to collaborate on, watch, or automate.
+  </Card>
+  <Card title="Running the full platform" icon="server">
+    Start with none. Add the collaboration service when two people edit one page; the realtime
+    backend when the feed's ~20s idle poll feels slow; the executor when you want automations.
+  </Card>
+</CardGroup>

@@ -23,7 +23,7 @@
   "navigation": {
     "tabs": [
       {
-        "tab": "User Documentation",
+        "tab": "Product Guide",
         "groups": [
           {
             "group": "Get started",
@@ -40,8 +40,7 @@
               "guides/authoring",
               "guides/navigation",
               "rendering/components",
-              "rendering/react-components",
-              "cli"
+              "rendering/react-components"
             ]
           },
           {
@@ -50,7 +49,6 @@
               "guides/publishing",
               "guides/social-cards",
               "guides/custom-domain",
-              "guides/self-hosting",
               "control-plane/exports"
             ]
           },
@@ -67,7 +65,6 @@
             "pages": [
               "features/search",
               "features/ai-assistant",
-              "features/assistant-providers",
               "features/assistant-widget",
               "features/api-playground",
               "features/mcp-servers",
@@ -94,18 +91,24 @@
         ]
       },
       {
-        "tab": "Technical Documentation",
+        "tab": "Self-Hosting / CLI",
         "groups": [
           {
-            "group": "Architecture",
+            "group": "Serve your docs",
             "pages": [
-              "architecture",
-              "tech-stack",
-              "roadmap"
+              "guides/self-hosting",
+              "cli"
             ]
           },
           {
-            "group": "Rendering",
+            "group": "Connect a model",
+            "pages": [
+              "features/assistant-providers",
+              "local-ai"
+            ]
+          },
+          {
+            "group": "How the renderer works",
             "pages": [
               "rendering/content-pipeline",
               "rendering/config",
@@ -113,19 +116,11 @@
             ]
           },
           {
-            "group": "Auth & access",
+            "group": "The project",
             "pages": [
-              "auth/overview",
-              "auth/platform-auth",
-              "auth/google-sign-in",
-              "auth/transactional-email"
-            ]
-          },
-          {
-            "group": "Operating a deployment",
-            "pages": [
-              "local-ai",
-              "control-plane/platform-admin"
+              "architecture",
+              "tech-stack",
+              "roadmap"
             ]
           },
           {
@@ -134,6 +129,27 @@
               "contributing/working-on-papervine",
               "contributing/testing",
               "contributing/gotchas"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Control Plane",
+        "groups": [
+          {
+            "group": "Authentication",
+            "pages": [
+              "auth/overview",
+              "auth/platform-auth",
+              "auth/google-sign-in",
+              "auth/transactional-email"
+            ]
+          },
+          {
+            "group": "Running it",
+            "pages": [
+              "background-services",
+              "control-plane/platform-admin"
             ]
           }
         ]
