@@ -69,8 +69,6 @@ const DOCS = "https://docs.papervine.io/";
 // Public CLI repo (the one people clone / star). Absolute <a>, not <Link> (hard nav off the apex).
 const GITHUB = "https://github.com/papervine/papervine";
 
-// The hero announcement pill links at the page explaining what it announces.
-const DOCS_READER_AUTH = `${DOCS}auth/reader-auth`;
 // The migrate guide backs the "alternative" claim below — it is the page that proves it.
 const DOCS_MIGRATE = `${DOCS}guides/migrate`;
 
@@ -207,14 +205,17 @@ export default async function LandingPage() {
 
       {/* Hero */}
       <section className="mx-auto max-w-3xl px-6 pb-20 pt-24 text-center sm:pt-32">
-        <a
-          href={DOCS_READER_AUTH}
-          className="db-rise db-ring mono inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs text-[var(--muted)]"
+        {/* Eyebrow. This slot used to be a "New · …" announcement linking to the reader-auth
+            docs; it now carries the tagline, so the affordances that said "announcement" went
+            with the copy — no pulsing dot (it means *new*), and not a link (a tagline that
+            navigates somewhere unrelated is a link whose text doesn't describe its
+            destination). */}
+        <span
+          className="db-rise db-ring mono inline-flex items-center rounded-full px-3 py-1 text-xs text-[var(--muted)]"
           style={{ animationDelay: "0ms" }}
         >
-          <span className="h-1.5 w-1.5 rounded-full bg-[var(--blue)] shadow-[0_0_8px_2px_rgba(91,140,255,0.7)]" />
-          New · public docs and internal docs, one site
-        </a>
+          Your product looks good when your docs look good.
+        </span>
 
         <h1
           className="db-rise mt-7 text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
