@@ -111,7 +111,7 @@ export const PLAN_TIER_BY_KEY: Record<PlanKey, PlanTier> = Object.fromEntries(
 // Enterprise CTA href, surfaced for hosts that render their own contact button.
 export const CONTACT_HREF =
   PLAN_TIER_BY_KEY.enterprise?.cta.href ??
-  "mailto:support@papervine.io?subject=Papervine%20Enterprise";
+  "mailto:hello@papervine.io?subject=Papervine%20Enterprise";
 
 // Matrix column headers, in the same order as the tier cards.
 export const MATRIX_TIERS = PLAN_TIERS.map((t) => ({

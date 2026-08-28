@@ -166,7 +166,7 @@
         "priceOverride": "Contact us",
         "cta": {
           "label": "Contact us",
-          "href": "mailto:support@papervine.io?subject=Papervine%20Enterprise"
+          "href": "mailto:hello@papervine.io?subject=Papervine%20Enterprise"
         },
         "lead": "Everything in Pro",
         "features": [

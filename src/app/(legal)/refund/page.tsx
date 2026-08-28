@@ -55,7 +55,7 @@ export default function RefundPolicy() {
       <h2>5. Chargebacks</h2>
       <p>
         If you believe a charge is incorrect, please contact us first at{" "}
-        <a href="mailto:support@papervine.io">support@papervine.io</a> — we will work to resolve it
+        <a href="mailto:hello@papervine.io">hello@papervine.io</a> — we will work to resolve it
         quickly. Initiating a chargeback without contacting us may result in suspension of your
         account.
       </p>
@@ -63,7 +63,7 @@ export default function RefundPolicy() {
       <h2>6. Contact</h2>
       <p>
         Questions about billing or refunds:{" "}
-        <a href="mailto:support@papervine.io">support@papervine.io</a>
+        <a href="mailto:hello@papervine.io">hello@papervine.io</a>
       </p>
     </article>
   );

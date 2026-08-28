@@ -120,7 +120,7 @@ export default function TermsOfService() {
       <p>
         Papervine, LLC — [MAILING ADDRESS]
         <br />
-        <a href="mailto:legal@papervine.io">legal@papervine.io</a>
+        <a href="mailto:hello@papervine.io">hello@papervine.io</a>
       </p>
     </article>
   );

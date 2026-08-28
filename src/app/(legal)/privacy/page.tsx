@@ -84,7 +84,7 @@ export default function PrivacyPolicy() {
         Depending on where you live (for example, under the GDPR or CCPA/CPRA), you may have rights
         to access, correct, delete, or port your personal information, and to object to or restrict
         certain processing. To exercise these rights, contact us at{" "}
-        <a href="mailto:privacy@papervine.io">privacy@papervine.io</a>. We will not discriminate
+        <a href="mailto:hello@papervine.io">hello@papervine.io</a>. We will not discriminate
         against you for exercising them.
       </p>
 
@@ -121,7 +121,7 @@ export default function PrivacyPolicy() {
       <p>
         Papervine, LLC — [MAILING ADDRESS]
         <br />
-        <a href="mailto:privacy@papervine.io">privacy@papervine.io</a>
+        <a href="mailto:hello@papervine.io">hello@papervine.io</a>
       </p>
     </article>
   );
