@@ -4,6 +4,10 @@ import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
 import CodeBlock from "@tiptap/extension-code-block";
 import { ListItem } from "@tiptap/extension-list";
+import { Table as TipTapTable } from "@tiptap/extension-table";
+import { TableRow as TipTapTableRow } from "@tiptap/extension-table-row";
+import { TableCell as TipTapTableCell } from "@tiptap/extension-table-cell";
+import { TableHeader as TipTapTableHeader } from "@tiptap/extension-table-header";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { COMPONENTS } from "@papervine/mdx-prosemirror";
 import { SelectAllScope } from "./select-all-scope";
@@ -20,6 +24,7 @@ export interface NodeViewOpts {
   atomNodeView?: (type: string, inline: boolean) => NodeViewRenderer;
   imageNodeView?: () => NodeViewRenderer;
   codeBlockNodeView?: () => NodeViewRenderer;
+  tableNodeView?: () => NodeViewRenderer;
 }
 
 // Derive each component node's attr set from the shared spec (union across aliased tags),
@@ -75,28 +80,27 @@ function atomNode(type: string, inline: boolean, nodeView?: NodeViewRenderer): N
   });
 }
 
-// Minimal table nodes matching the converter's shape (cells hold inline content directly —
-// unlike @tiptap/extension-table, which requires block content and a header row).
-const Table = Node.create({
-  name: "table",
-  group: "block",
-  content: "tableRow+",
-  addAttributes: () => ({ align: { default: [] } }),
-  parseHTML: () => [{ tag: "table" }],
-  renderHTML: () => ["table", ["tbody", 0]],
+// Tables. The node NAMES and shape are the converter's — a `table` of `tableRow`s of `tableCell`s
+// whose content is inline, because that's what a GFM table is. The extensions are TipTap's, so the
+// schema carries the `tableRole` specs and cell attrs prosemirror-tables needs: without those, none
+// of the table commands (add/delete a row or column, Tab between cells, dragging a cell selection)
+// can run at all, which is why this used to be three hand-rolled nodes you could only type into.
+//
+//
+// `align` (GFM's `|:---|---:|`) rides on the table node, as before. Column widths deliberately
+// aren't a thing: `resizable: false`, because a markdown table has no widths to write them to and
+// a control that silently loses its effect on save is worse than no control.
+const TableWithAlign = TipTapTable.configure({ resizable: false }).extend({
+  addAttributes() {
+    return { ...this.parent?.(), align: { default: [] } };
+  },
 });
-const TableRow = Node.create({
-  name: "tableRow",
-  content: "tableCell+",
-  parseHTML: () => [{ tag: "tr" }],
-  renderHTML: () => ["tr", 0],
-});
-const TableCell = Node.create({
-  name: "tableCell",
-  content: "inline*",
-  parseHTML: () => [{ tag: "td" }],
-  renderHTML: () => ["td", 0],
-});
+// Cells hold BLOCKS (TipTap's default), which is what lets you put a list in one. A GFM cell can't
+// express that — it's a run of inline content — so the converter reconciles the two: an ordinary
+// cell is one paragraph and serializes to exactly the text it always did, and a list serializes to
+// the `<ul><li>…</li></ul>` MDX renders as a real list. See `cellBlocks` / `cellChildren` there.
+const BlockTableCell = TipTapTableCell;
+const BlockTableHeader = TipTapTableHeader;
 
 // Converter emits `thematicBreak`; StarterKit's node is `horizontalRule` — use our name.
 const ThematicBreak = Node.create({
@@ -252,6 +256,7 @@ export function buildMdxExtensions(opts: NodeViewOpts = {}): Extensions {
   );
   // Image carries mdxTag/width/height (so a literal `<img>` round-trips) and, in the live
   // editor, a node view that resolves the tenant asset URL so the image actually loads.
+  const tableView = opts.tableNodeView?.();
   const imageNodeView = opts.imageNodeView;
   const ImageWithAttrs = Image.extend({
     addAttributes() {
@@ -267,9 +272,10 @@ export function buildMdxExtensions(opts: NodeViewOpts = {}): Extensions {
     LinkWithTitle.configure({ openOnClick: false }),
     ImageWithAttrs.configure({ inline: true, allowBase64: true }),
     ThematicBreak,
-    Table,
-    TableRow,
-    TableCell,
+    tableView ? TableWithAlign.extend({ addNodeView: () => tableView }) : TableWithAlign,
+    TipTapTableRow,
+    BlockTableCell,
+    BlockTableHeader,
     ...componentNodes,
     SelectAllScope,
     EdgeGuard,

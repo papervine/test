@@ -117,6 +117,103 @@ describe("known components parse to typed nodes and round-trip", () => {
     expect(ac.content[0].attrs).toMatchObject({ defaultOpen: true });
   });
 
+  // An empty component is the one shape whose PM node can't be what the source literally says:
+  // component nodes are `block+`, so zero children is an INVALID node. Nothing rejects it at parse
+  // time — it surfaces later as `RangeError: Invalid content for node type …` on the first
+  // setNodeMarkup (editing an accordion's title does that on every keystroke), and until then the
+  // component has no line to put a caret on. So the converter fills one empty paragraph in, and
+  // drops it again on the way out.
+  describe("an empty component gets a paragraph to type in — and gives it back", () => {
+    const emptyForms: Record<string, string> = {
+      "self-closing": '<ParamField path="id" type="string" />\n',
+      "empty tag pair": '<Accordion title="More" />\n',
+      "blank line between tags": '<Accordion title="More">\n</Accordion>\n',
+    };
+
+    for (const [name, mdx] of Object.entries(emptyForms)) {
+      it(`${name}: valid node in, unchanged MDX out`, () => {
+        const top = mdxToProseMirror(mdx).content[0];
+        expect(top.content, "an empty component would be an invalid `block+` node").toEqual([
+          { type: "paragraph" },
+        ]);
+        // The filler never reaches the file: a self-closing tag stays self-closing rather than
+        // growing into a tag pair, which would rewrite every API page on save.
+        expect(norm(mdx)).not.toContain("</ParamField>");
+        expectStable(mdx);
+      });
+    }
+
+    it("keeps real content — the filler is only for the empty case", () => {
+      const top = mdxToProseMirror('<Accordion title="More">\n  Details.\n</Accordion>\n').content[0];
+      expect(top.content).toHaveLength(1);
+      expect(top.content?.[0].content?.[0]).toMatchObject({ type: "text", text: "Details." });
+    });
+
+    it("a paragraph the AUTHOR left empty is not the filler (there is no such MDX)", () => {
+      // A blank line inside a tag pair parses to no children at all, so "one empty paragraph"
+      // is unambiguous: it can only be the filler. This pins that assumption.
+      const top = mdxToProseMirror("<Accordion>\n\n\n</Accordion>\n").content[0];
+      expect(top.content).toEqual([{ type: "paragraph" }]);
+    });
+  });
+
+  // A table cell holds blocks in the editor and a run of inline content in GFM. The reconciliation
+  // is the interesting part: an ordinary cell must come out byte-identical, and a list — which pipe
+  // tables cannot express at all — goes out as the HTML MDX renders as a real list, and comes back
+  // as an editable one rather than as source text.
+  describe("table cells: a paragraph stays inline, a list becomes HTML", () => {
+    it("an ordinary cell is one paragraph, and its markdown is unchanged", () => {
+      const doc = mdxToProseMirror("| a | b |\n| - | - |\n| 1 | 2 |\n");
+      const cell = doc.content[0].content?.[0].content?.[0];
+      expect(cell?.content).toEqual([{ type: "paragraph", content: [{ type: "text", text: "a" }] }]);
+      expectStable("| a | b |\n| - | - |\n| 1 | 2 |\n");
+    });
+
+    it("a list in a cell round-trips as <ul>, and re-opens as a list", () => {
+      const mdx = "| item | notes |\n| - | - |\n| x | <ul><li>one</li><li>two</li></ul> |\n";
+      const cell = mdxToProseMirror(mdx).content[0].content?.[1].content?.[1];
+      expect(cell?.content?.[0].type).toBe("bulletList");
+      expect(cell?.content?.[0].content).toHaveLength(2);
+      // …and not as the raw source it would otherwise be shown as.
+      expect(JSON.stringify(cell)).not.toContain("mdxUnknownText");
+      expectStable(mdx);
+    });
+
+    it("keeps an ordered list ordered", () => {
+      const mdx = "| a |\n| - |\n| <ol><li>one</li><li>two</li></ol> |\n";
+      const cell = mdxToProseMirror(mdx).content[0].content?.[1].content?.[0];
+      expect(cell?.content?.[0].type).toBe("orderedList");
+      expectStable(mdx);
+    });
+
+    it("parses an item's markdown, so emphasis in a cell's list survives the trip", () => {
+      const mdx = "| a |\n| - |\n| <ul><li>**bold** item</li></ul> |\n";
+      const item = mdxToProseMirror(mdx).content[0].content?.[1].content?.[0].content?.[0]
+        .content?.[0].content?.[0];
+      expect(item?.content?.[0].marks?.[0].type).toBe("bold");
+      expect(norm(mdx)).toContain("<li>**bold** item</li>");
+      expectStable(mdx);
+    });
+
+    it("handles a cell holding text AND a list — which is what typing one produces", () => {
+      // Adding a list under a cell's existing text is the natural gesture, so the parse side can't
+      // only recognise a cell that is nothing but a list.
+      const mdx = "| a |\n| - |\n| Supports SSO<ul><li>one</li></ul> |\n";
+      const cell = mdxToProseMirror(mdx).content[0].content?.[1].content?.[0];
+      expect(cell?.content?.map((block) => block.type)).toEqual(["paragraph", "bulletList"]);
+      expectStable(mdx);
+    });
+
+    it("leaves HTML that isn't a plain list alone", () => {
+      // Only the shape to-mdx emits is read back as a list; anything else stays raw, which is the
+      // passthrough guarantee for markup we don't model.
+      const mdx = "| a |\n| - |\n| <div><li>odd</li></div> |\n";
+      const cell = mdxToProseMirror(mdx).content[0].content?.[1].content?.[0];
+      expect(cell?.content?.[0].type).toBe("paragraph");
+      expectStable(mdx);
+    });
+  });
+
   it("Columns keeps its own tag name (not normalized to CardGroup)", () => {
     const out = norm('<Columns cols="3">\n  <Card title="A" />\n</Columns>\n');
     expect(out).toContain("<Columns");

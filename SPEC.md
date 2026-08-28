@@ -193,8 +193,8 @@ stock shadcn vars — so `Button`'s `primary`
 is the brand CTA, not `bg-primary` (which stays bound to the tenant docs theme). The
 neutral tokens (`border`/`ring`/`muted`/`accent`) are mapped to the `.db` CSS vars in
 `tailwind.config.ts` and only resolve inside the `.db` scope, so they can't leak into the
-docs renderer. A `<EnvBadge>` (top-right, non-prod only — `local`/`preview`, hidden when
-`VERCEL_ENV=production`) is the first such primitive, mounted globally in the root layout.
+docs renderer. A `<EnvBadge>` (top-right, **preview deploys only** — hidden in production and
+locally, see the 2026-08-27 note) is the first such primitive, mounted globally in the root layout.
 
 > **Status 2026-06-13 — full primitive set + responsive shell.** Grew `src/components/ui/`
 > from 3 primitives to the working set the control plane needs — `input`, `label`,
@@ -3154,6 +3154,144 @@ layer.
 > component's effect deps must be identity-stable.** An unstable one doesn't warn — it silently
 > rebuilds editor plugins under you, and whatever state those plugins hold (a suggestion, a
 > pending fetch, a decoration set) is what you lose.
+>
+> **Accordions become a real disclosure list (2026-08-27).** Asked for with a screenshot of the
+> target: one bordered group, a chevron and an editable name per row, a body you type into. What
+> we had was the reader's component pinned open — `FORCE_OPEN` existed because a closed accordion
+> hides its own editable content — with the title reachable only from Source mode, and
+> `<AccordionGroup>` an invisible `<div>`, so a group read as a stack of separate boxes rather
+> than one list. `AccordionNodeView` owns all three: open/closed is React view state (never the
+> document, and deliberately NOT `defaultOpen`, which is what a *reader* starts with — the same
+> line the tab strip draws for "which tab is showing"), the title is a field committing per
+> keystroke, and the group draws the border so its rows can be flat with hairlines between them.
+> Which one owns the box is decided in CSS by the parent, because the rows are ProseMirror's
+> children and TipTap wraps them in elements of its own — a standalone `<Accordion>` keeps its
+> own box, one inside a group loses it.
+>
+> Two things the browser settled, neither visible in the markup. A fresh row's body looked **height
+> zero**, which read as a styling problem and was really the node bug below — an *invalid*
+> accordion has no paragraph in it at all, and nothing to give the box height. And typing in a
+> title threw `RangeError: Invalid content for node type accordion` on
+> **every keystroke** — the real find here, and a pre-existing hole: every component node's
+> content is `block+`, so an empty component (`<ParamField … />`, or a tag pair with nothing
+> between it) parses to an **invalid node**. Nothing rejects it at parse time; it surfaces later
+> on the first `setNodeMarkup`, which is exactly what an inline title field does. So the converter
+> fills one empty paragraph in — and `to-mdx` drops it again, or `<X />` would grow into a
+> `<X>\n</X>` pair and rewrite every API-reference page on save. The mapping is lossless because
+> no MDX produces a *single empty paragraph*: a blank line inside a tag pair parses to no children
+> at all. Guards: 5 round-trip unit tests on the empty-component contract (including that a
+> self-closing tag stays self-closing) and an `editor.spec.ts` case for the journey — chevron
+> hides the body without unmounting it, Enter moves title→body, add/remove, and the result in the
+> draft as MDX — with `Invalid content` added to its console-error filter, since that's the shape
+> this class of bug takes.
+>
+> Insert defaults changed with it: `/accordion group` makes **two** rows (one collapsible row is
+> just an accordion), and neither carries a `title`. An untitled row writes `<Accordion />` rather
+> than publishing an "Accordion title" nobody chose — the same bargain `<Step>` already makes,
+> with the slot's placeholder standing in for the name.
+>
+> **Second pass: "the styling is off and the way to add an accordion is in the wrong place."** Add
+> started as an **Add accordion** button in a footer strip under the whole group — which put the
+> control nowhere near the row it acts on and read as part of the document rather than as chrome.
+> It's now a hover-revealed **+** at the row's right end, inserting **directly below that row**
+> rather than at the end of the group, with **✕** beside it; a standalone accordion offers neither,
+> because add-and-remove are operations on a *list*.
+>
+> **Third pass, and the one that was actually the point: "can't we at least try to make it look
+> like it does when it's rendered."** Right — and the first two passes were both me hand-drawing a
+> second accordion instead of using the one we ship. Every restyle from here would have been
+> guesswork against a moving target. So the node views now render the **real** `<Accordion>` /
+> `<AccordionGroup>`, the way `StepsNodeView` already hands its controls into the real `<Steps>`:
+> the component grew `title: ReactNode` (the editor passes a field and the row's buttons),
+> `open`/`onToggle` (the editor owns collapse; readers keep their own state), and `keepMounted`
+> (the body is ProseMirror's content hole — unmounting it takes the node's content with it, which
+> is what `FORCE_OPEN` was working around). A string title still sits inside the header button, so
+> the whole row stays one click target for readers; a node title moves beside it, because nesting
+> a field in a button makes it unusable.
+>
+> One reader-side change came with it, and it's visible on published pages: `<AccordionGroup>` was
+> a bare `<div className="my-5">`, so a "group" was a stack of separate boxes. It now draws the
+> list — one border, hairlines between rows, rows flattened by a descendant selector so a
+> standalone accordion keeps its own box. That is also the shape the reference screenshot showed,
+> so editor and reader converge on it rather than on two different looks.
+>
+> Two editor-only compensations survive in `platform.css`, both from the same cause — the rows are
+> ProseMirror's children, so TipTap wraps each in elements of its own and the component's
+> direct-child selectors stop reaching them: the group's `divide-y` seam (redrawn by matching the
+> row's class at any depth, rather than by counting wrappers) and the body's first/last paragraph
+> margins. The seam needed **both** dark selectors — `.dark` for the docs appearance AND
+> `[data-db-theme="dark"] .db` for the platform's, which is what `dark:` compiles to here. Keyed on
+> only the first, it painted a **white line across a black editor**; that gotcha is already in
+> AGENTS.md and I walked into it anyway.
+>
+> **Tables become an editable grid (2026-08-27).** Asked for with two screenshots: a grid with
+> handles while editing, an ordinary markdown table when rendered. A table was the last block you
+> could only *type into* — three hand-rolled nodes with no `tableRole` in their specs, which is
+> what prosemirror-tables dispatches on, so not one of its commands could run: no add a column, no
+> delete a row, no Tab to the next cell, no dragging a cell selection. The schema is TipTap's table
+> extensions now, extended back to the converter's shape — `content: "inline*"`, because a
+> markdown cell is a run of inline content and TipTap's default `block+` would add a paragraph
+> layer to unwrap on every save. `align` still rides on the table node. Column resizing is off on
+> purpose: GFM has nowhere to write a width, and a control that silently loses its effect on save
+> is worse than no control.
+>
+> The chrome is a **plain-DOM node view**, and that isn't a preference. React's `NodeViewContent`
+> renders a wrapper element around the content hole, and a `<div>` between `<table>` and its
+> `<tr>`s is not a table: the rows stop being rows and the columns stop dividing the width. It
+> looked *nearly* right — a grid whose cells hugged their text — which is how it survived a
+> screenshot and died on measurement (`tableW: 551` while its cells added up to 246). The handles
+> are positioned from measured cell geometry, because markdown columns size to their content, and
+> re-measured by a ResizeObserver.
+>
+> The first React attempt also produced "Maximum update depth exceeded": a `useLayoutEffect` that
+> measures after **every** render handed React a fresh array each time, so the update scheduled the
+> render that scheduled the update. That one was caught the way the class always is — by watching
+> the console, not the page. The e2e case has the console-clean assertion for the same reason.
+>
+> One thing the table selection changed elsewhere: the formatting bubble menu now declines to show
+> over a `CellSelection`. Selecting a column with its handle is structural — you're about to delete
+> or move it — and the toolbar popped up across the rows you had just selected, hiding them.
+>
+> **The grid highlights where you are, in violet.** Three states, and they're deliberately not the
+> same weight: the caret's cell is outlined, the handles for *its* row and column light at 55%
+> ("you are here"), and a handle you actually click goes solid with the whole band tinted ("this is
+> what I'll act on"). Violet rather than the blue everything else in the platform uses, because blue
+> is the docs link colour and reads as "this is a link" inside body text — editor furniture
+> shouldn't. The outline is an absolutely-positioned overlay in the chrome layer, not a class on the
+> `<td>`: the cells belong to ProseMirror, and mutating them is an edit as far as it's concerned.
+> The one specificity catch was the header shade painting over a selected header cell —
+> `:where(tr:first-child)` drops that rule's weight so the selection tint wins, which matters
+> exactly when you've selected the header row and need to see it.
+>
+> **The `+` controls drag, and say so.** Asked for as "add these tooltips", with a screenshot of a
+> two-line hint — *Click to add a new row / Drag to add or remove rows*. The tooltip was the ask;
+> the **drag was not built yet**, and shipping a control that advertises a gesture it doesn't have
+> is worse than shipping neither, so both landed together. Dragging the `+` away from the table
+> adds bands and dragging back over it removes them, one per band-width of travel — the unit is the
+> last row's height or last column's width, so the table grows exactly as far as the pointer went
+> rather than at an invented rate. It stops at one row and one column: deleting the table is the
+> drag handle's job, not something you should fall into by overshooting. A drag ends in a click
+> event too, so a drag that changed anything swallows that click rather than adding one more band.
+>
+> **A cell can hold a list (2026-08-27).** Reported as "it's not allowing me to add lists inside a
+> table cell" — and it wasn't, by construction: cells were `content: "inline*"` because that is
+> precisely what a GFM cell is. Markdown has no pipe-table syntax for a list in a cell; the only
+> representable form is HTML, which MDX renders as a real list. So cells hold `block+` now and the
+> converter reconciles the two ends:
+>
+> - **Out** (`cellChildren`): a paragraph flattens to its inline content, so an ordinary cell's
+>   markdown is byte-identical to what it always was. A list becomes `<ul><li>…</li></ul>`, with
+>   each item's inline content serialized as markdown, so emphasis inside one survives.
+> - **In** (`cellBlocks`): the run is walked, and a raw atom matching that exact shape becomes a
+>   list again. Walked rather than tested whole because "text, then a list" is what typing one
+>   actually produces — the first pass only recognised a cell that was *nothing but* a list, so a
+>   reload turned the mixed case back into visible source. Anything that isn't that shape stays
+>   raw, which keeps the passthrough guarantee for markup we don't model.
+>
+> `rawSlice` is no use here: remark gives table cells no position offsets, so slicing one returns
+> "". The markup is read off the parsed atom instead. Guards: six round-trip cases (ordinary cell
+> unchanged, `<ul>`/`<ol>`, emphasis inside an item, text-plus-list, non-list HTML left alone) and
+> an `editor.spec.ts` step that types `- one` into a cell and asserts the HTML in the draft.
 
 ---
 

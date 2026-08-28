@@ -109,6 +109,66 @@ function raw(source: string, node: Any): PMNode {
   return { type: "mdxUnknownFlow", attrs: { raw: rawSlice(source, node) } };
 }
 
+// A table cell holds BLOCKS in the editor — a paragraph, or a list — while a GFM cell holds a run
+// of inline content and nothing else. The two are reconciled here and in to-mdx's `cellChildren`:
+//
+//   `| a |`                          ⇄  a paragraph
+//   `| <ul><li>a</li></ul> |`        ⇄  a list
+//
+// The HTML form is the only way markdown can put a list in a cell — there's no pipe-table syntax
+// for it — and it renders as a real list, since MDX passes HTML through. Parsed back here so it
+// re-opens as an editable list instead of the raw source it would otherwise be shown as.
+const CELL_LIST = /^<(ul|ol)>\s*((?:<li>[\s\S]*?<\/li>\s*)+)<\/\1>$/;
+const CELL_ITEM = /<li>([\s\S]*?)<\/li>/g;
+
+function cellBlocks(cell: Any, source: string): PMNode[] {
+  // Read the HTML off the parsed content rather than slicing the source: remark doesn't give table
+  // cells position offsets, so `rawSlice` on one comes back empty. Markup in a cell arrives as a
+  // raw atom holding it verbatim, which is exactly what to match — and a cell can hold text AND a
+  // list ("Supports SSO<ul>…</ul>"), so this walks the run rather than testing it whole.
+  const blocks: PMNode[] = [];
+  let run: PMNode[] = [];
+  const flushText = () => {
+    if (run.length) blocks.push({ type: "paragraph", content: run });
+    run = [];
+  };
+  for (const child of childrenInline(cell, source, [])) {
+    const markup = child.type === "mdxUnknownText" ? String(child.attrs?.raw ?? "") : "";
+    const list = markup ? cellList(markup.trim()) : null;
+    if (!list) {
+      run.push(child);
+      continue;
+    }
+    flushText();
+    blocks.push(list);
+  }
+  flushText();
+  // An empty cell is still a cell: `block+` needs something to hold the caret.
+  return blocks.length ? blocks : [{ type: "paragraph", content: [] }];
+}
+
+function cellList(raw: string): PMNode | null {
+  const match = CELL_LIST.exec(raw);
+  if (!match) return null;
+  const items = [...match[2].matchAll(CELL_ITEM)].map((item) => item[1].trim());
+  if (!items.length) return null;
+  const ordered = match[1] === "ol";
+  return {
+    type: ordered ? "orderedList" : "bulletList",
+    ...(ordered ? { attrs: { start: 1 } } : {}),
+    content: items.map((text) => ({
+      type: "listItem",
+      content: [{ type: "paragraph", content: inlineFromMarkdown(text) }],
+    })),
+  };
+}
+
+/** An item's text, parsed as markdown — so `**bold**` in a cell's list is bold, not four asterisks. */
+function inlineFromMarkdown(text: string): PMNode[] {
+  const first = ((parseMdx(text) as Any).children ?? [])[0];
+  return first?.type === "paragraph" ? childrenInline(first, text, []) : [{ type: "text", text }];
+}
+
 /** Convert a flow (block) mdast node to a PM block node (or null to drop it). */
 function blockToPM(node: Any, source: string): PMNode | PMNode[] | null {
   switch (node.type) {
@@ -152,7 +212,7 @@ function blockToPM(node: Any, source: string): PMNode | PMNode[] | null {
           type: "tableRow",
           content: (row.children ?? []).map((cell: Any) => ({
             type: "tableCell",
-            content: childrenInline(cell, source, []),
+            content: cellBlocks(cell, source),
           })),
         })),
       };
@@ -166,7 +226,17 @@ function blockToPM(node: Any, source: string): PMNode | PMNode[] | null {
       if (nodeType) {
         const attrs = extractAttrs(node.name, node.attributes ?? []);
         // attrs === null means an expression/unknown attr forced a demotion to raw.
-        if (attrs) return { type: nodeType, attrs, content: childrenBlock(node, source) };
+        if (attrs) {
+          const content = childrenBlock(node, source);
+          // An empty component — `<ParamField … />`, or a tag pair with nothing between it — is an
+          // INVALID ProseMirror node: every component node's content is `block+`. Nothing rejects
+          // it at parse time; it surfaces later as a `RangeError: Invalid content for node type …`
+          // the first time something calls setNodeMarkup on it (editing a title in the Visual
+          // editor does exactly that), and before then the component has no line to put a caret
+          // on. One empty paragraph makes it valid and gives it that line. to-mdx drops it again,
+          // so `<X />` still serializes as `<X />` — see emptyComponent there.
+          return { type: nodeType, attrs, content: content.length ? content : [{ type: "paragraph" }] };
+        }
       }
       return raw(source, node);
     }

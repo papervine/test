@@ -161,6 +161,79 @@ it isn't saved and other people editing the page keep their own selection.
   the editable form.
 </Note>
 
+## Editing tables
+
+A table is the one block that reads best *without* its structure showing — a published table is
+hairlines and a bold header row — and edits worst that way, because nothing tells you where a cell
+ends. So Visual mode draws the grid while you're in it, and the published page stays exactly as it
+was:
+
+<CardGroup cols={2}>
+  <Card title="Type through it">
+    <kbd>Tab</kbd> moves to the next cell and <kbd>⇧Tab</kbd> back; Tab in the last cell adds a
+    row. Dragging across cells selects them.
+  </Card>
+  <Card title="Add — or add several">
+    **+** down the right edge appends a column; **+** along the bottom appends a row. Both appear
+    on hover, and both take a **drag**: pull away from the table to add several at once, back over
+    it to remove them again. A table never drags below one row and one column.
+  </Card>
+  <Card title="Select a column or row">
+    The handles above each column and beside each row select it. That's a whole-column selection,
+    so the formatting toolbar stays out of the way.
+  </Card>
+  <Card title="Remove one">
+    A selected handle grows an **✕** — that deletes the column or row it belongs to. The table
+    itself goes the way any block does, from the drag handle's menu.
+  </Card>
+</CardGroup>
+
+The first row is the header, because that's what a markdown table is: `| --- |` under the first
+row and nothing else. There's no separate header to turn on, and no column widths to set — GFM has
+nowhere to write them, so a width you dragged would vanish on save.
+
+<Note>
+  **A cell can hold a list.** Markdown can't say that — a pipe-table cell is a single run of inline
+  content — so Studio writes it the way MDX renders it, as HTML in that cell:
+
+```mdx
+| Feature | Notes                                         |
+| ------- | --------------------------------------------- |
+| Auth    | Supports SSO<ul><li>SAML</li><li>OIDC</li></ul> |
+```
+
+  You type it as an ordinary list and it opens as one again next time; the HTML is just how it's
+  stored. Emphasis inside those items survives the trip too.
+</Note>
+
+## Editing accordions
+
+An `<AccordionGroup>` in Visual mode **is** the published component — the same border, the same
+rows, the same chevron — with the editing controls handed into it, so what you're arranging is
+what readers get:
+
+<CardGroup cols={2}>
+  <Card title="Open and close">
+    The chevron on a row really collapses it, so a long group stays readable while you work.
+    That's a view of the page, not an edit to it: it isn't saved, it doesn't touch `defaultOpen`
+    (which is what *readers* start with), and other people editing the page keep their own.
+  </Card>
+  <Card title="Name">
+    The title is a field — click it and type. Press <kbd>Enter</kbd> to drop into the body, which
+    is the order you write one in: heading first, then what's under it.
+  </Card>
+  <Card title="Add and remove">
+    Hovering a row reveals **+** and **✕** at its right end. **+** adds the next accordion directly
+    below that row, with the cursor already in its name; **✕** removes that row, and is hidden on
+    the last one — a group with nothing in it would vanish. A lone `<Accordion>` outside a group
+    has neither: it's one block, added to and deleted like any other, from the drag handle.
+  </Card>
+  <Card title="Untitled is untitled">
+    A new row has no `title` yet, so it writes `<Accordion />` rather than inventing a name you'd
+    have to notice and change. The grey text in the field is a placeholder, not content.
+  </Card>
+</CardGroup>
+
 ## The `/` menu
 
 Type `/` anywhere in Visual mode to insert a block. Filter by typing, move with

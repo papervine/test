@@ -18,12 +18,15 @@ export function resolveDeployEnv(
   return "development";
 }
 
-// What the corner marker should say — or null in real production (no marker). The
-// label is intentionally short; EnvBadge appends the git branch for previews.
+// What the corner marker should say — or null where there shouldn't be one. The label
+// is intentionally short; EnvBadge appends the git branch for previews.
+//
+// Only PREVIEW gets a marker. A preview URL looks exactly like production and is the
+// one you can mistake for it; running locally you already know, and the badge is
+// pinned top-right, which is where the editor keeps Publish — so it sat on top of the
+// control it was least helpful next to.
 export function envBadge(
   env: DeployEnv,
 ): { label: string; variant: "local" | "preview" } | null {
-  if (env === "production") return null;
-  if (env === "preview") return { label: "preview", variant: "preview" };
-  return { label: "local", variant: "local" };
+  return env === "preview" ? { label: "preview", variant: "preview" } : null;
 }

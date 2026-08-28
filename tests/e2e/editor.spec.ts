@@ -57,6 +57,8 @@ test.describe("web editor @external", () => {
             "slashtabs",
             "edgepage",
             "edgetaskpage",
+            "accordionpage",
+            "tablepage",
             "taskpage",
             "uploadpage",
             "failpage",
@@ -123,6 +125,21 @@ test.describe("web editor @external", () => {
         '  <Tab title="Alpha">\n\n    Alpha body text.\n\n  </Tab>\n' +
         '  <Tab title="Beta">\n\n    Beta body text.\n\n  </Tab>\n' +
         "</Tabs>\n",
+    );
+    // A table, for the grid node view. Its own page: the test adds and removes columns and rows,
+    // then asserts on the MDX that comes out.
+    await put(
+      `${prefix}tablepage.mdx`,
+      "---\ntitle: Table\n---\n\n| Name | Type |\n| --- | --- |\n| id | string |\n| count | number |\n",
+    );
+    // An <AccordionGroup>, for the disclosure-list node view. Its own page, since the test types
+    // titles and adds rows and then asserts on what the group contains.
+    await put(
+      `${prefix}accordionpage.mdx`,
+      "---\ntitle: Accordions\n---\n\n<AccordionGroup>\n" +
+        '  <Accordion title="First">\n\n    First body text.\n\n  </Accordion>\n' +
+        '  <Accordion title="Second">\n\n    Second body text.\n\n  </Accordion>\n' +
+        "</AccordionGroup>\n",
     );
     // A task list that OPENS a tab: its first checkbox sits on the very position the edge guard
     // swallows, so it was the one checkbox in the editor that couldn't be backspaced away.
@@ -610,6 +627,195 @@ test.describe("web editor @external", () => {
     await clearDrafts(["edgepage.mdx"]);
   });
 
+  // The table node view (SPEC §9.2). A markdown table used to be three hand-rolled nodes you could
+  // only type into: no way to add a column, no way to remove a row, nothing showing where a cell
+  // ended. The schema is prosemirror-tables' now, and this is the chrome around it. Browser-only —
+  // the handles are positioned from measured cell geometry, so they don't exist until layout does.
+  test("a table is an editable grid: add a column and a row, select one, remove it", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=tablepage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    const cells = page.locator(".pv-table-scroll tr:first-child > *");
+    const rows = page.locator(".pv-table-scroll tr");
+    await expect(cells).toHaveCount(2);
+    await expect(rows).toHaveCount(3);
+    // A handle per column and per row, measured onto the real geometry.
+    await expect(page.locator(".pv-table-grip-col")).toHaveCount(2);
+    await expect(page.locator(".pv-table-grip-row")).toHaveCount(3);
+
+    // Both controls say what they do, including the gesture the icon can't show.
+    const rowControl = page.locator(".pv-table-add-row");
+    await rowControl.hover();
+    await expect(rowControl.locator(".pv-table-tip")).toHaveText(
+      "Click to add a new rowDrag to add or remove rows",
+    );
+
+    await page.locator(".pv-table-add-col").click();
+    await expect(cells).toHaveCount(3);
+    await rowControl.click();
+    await expect(rows).toHaveCount(4);
+
+    // …and the drag the tooltip promises: away from the table adds, back over it removes. Pointer
+    // events rather than a helper, because the whole behaviour is "how far did you drag".
+    const rowHeight = (await rows.last().boundingBox())!.height;
+    const dragRow = async (by: number) => {
+      // Measured per drag: adding rows moves the control down, so a box captured once is a press
+      // that lands on the table instead of the button.
+      const bar = (await rowControl.boundingBox())!;
+      const x = bar.x + bar.width / 2;
+      const y = bar.y + bar.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      await page.mouse.move(x, y + by / 2);
+      await page.mouse.move(x, y + by);
+      await page.mouse.up();
+    };
+    await dragRow(rowHeight * 2);
+    await expect(rows).toHaveCount(6);
+    await dragRow(-rowHeight * 2);
+    await expect(rows).toHaveCount(4);
+    // The handles re-measure rather than going stale against the new shape.
+    await expect(page.locator(".pv-table-grip-col")).toHaveCount(3);
+    await expect(page.locator(".pv-table-grip-row")).toHaveCount(4);
+
+    // A handle selects its whole column — and the formatting toolbar stays out of the way, since
+    // selecting a column is a structural act, not a prelude to bolding it.
+    await page.locator(".pv-table-grip-col").nth(2).locator("button").click();
+    await expect(page.locator(".pv-table-scroll .selectedCell")).toHaveCount(4);
+    await expect(page.locator(".pv-bubble")).toHaveCount(0);
+
+    // …and the ✕ that appears on the selected handle removes it.
+    await page.locator(".pv-table-grip-remove").click();
+    await expect(cells).toHaveCount(2);
+
+    // A cell holds blocks, so a list can live in one — GFM has no syntax for that, so it goes out
+    // as the HTML MDX renders as a real list (see the round-trip tests for both directions). Typed
+    // into the empty cell the + added, so the assertion is about the list and not about what Enter
+    // does to text that was already there.
+    const cell = rows.last().locator("td").first();
+    await cell.click();
+    await page.keyboard.type("- one");
+    await expect(cell.locator("ul li")).toHaveCount(1);
+
+    // All of it back out as a GFM table, with the added row still there.
+    const draft = async () => {
+      const drafted = await sql<{ content: string }[]>`
+        select content from draft_file d
+        join editor_session s on s.id = d.session_id
+        where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'tablepage.mdx'`;
+      return drafted[0]?.content ?? "";
+    };
+    await expect.poll(draft, { timeout: 10_000 }).toContain("| id");
+    const saved = await draft();
+    expect(saved, "the table stopped being a table").toContain("| ---");
+    expect(saved, "the cell's list didn't survive as markup MDX renders").toContain(
+      "<ul><li>one</li></ul>",
+    );
+    // Header, the alignment rule, the two original rows, and the one the + added (now holding the
+    // list).
+    const tableLines = saved.split("\n").filter((line) => line.startsWith("|"));
+    expect(tableLines).toHaveLength(5);
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat|Invalid content/i.test(
+          e,
+        ),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+
+    await clearDrafts(["tablepage.mdx"]);
+  });
+
+  // The <AccordionGroup> node view (SPEC §9.2): a real disclosure list. The reader's component
+  // can't be edited in place — closed it would hide its own content, so every accordion used to be
+  // pinned open, and the title is an attr, so naming one meant Source mode. Browser-only: the
+  // chevron, the title field and the group's border are all view-layer.
+  test("the accordion group is a real disclosure list, titled and added to in place", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=accordionpage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    const rows = page.locator(".pv-accordion");
+    await expect(rows).toHaveCount(2);
+    // The published component, not a lookalike: the group class comes from AccordionGroup itself,
+    // and it draws ONE border around the list rather than a stack of separate boxes.
+    await expect(page.locator(".pv-accordion-group")).toHaveCount(1);
+    // …and the rows go flat inside it, with the seam between them drawn instead.
+    await expect(rows.first()).toHaveCSS("border-top-width", "0px");
+    await expect(rows.nth(1)).toHaveCSS("border-top-width", "1px");
+
+    // The chevron really closes the row — the body is hidden, not unmounted (it IS the content
+    // hole, so removing it would take the content out of the document).
+    const second = rows.nth(1);
+    await expect(second.locator(".pv-accordion-body")).toBeVisible();
+    await second.locator('button[aria-expanded="true"]').click();
+    await expect(second.locator(".pv-accordion-body")).toBeHidden();
+    await expect(second.locator('button[aria-expanded="false"]')).toHaveCount(1);
+    await expect(pm).toContainText("Second body text.", { useInnerText: false });
+
+    // The title is a field, and Enter moves into the body — a heading, then what's under it.
+    const firstTitle = rows.first().locator("input");
+    await expect(firstTitle).toHaveValue("First");
+    await firstTitle.fill("Renamed");
+    await firstTitle.press("Enter");
+    await page.keyboard.type("Body typed after Enter.");
+    await expect(rows.first().locator(".pv-accordion-body")).toContainText("Body typed after Enter.");
+
+    // The + on a row adds the next one directly BELOW it — not at the end of the group — and puts
+    // the caret in its name.
+    await rows.first().locator('button[aria-label^="Add an accordion below"]').click();
+    await expect(rows).toHaveCount(3);
+    await expect(rows.nth(1).locator("input")).toBeFocused();
+    await expect(rows.nth(1).locator("input")).toHaveValue("");
+    await expect(rows.nth(2).locator("input")).toHaveValue("Second");
+
+    // …and removing takes that row back out.
+    await rows.nth(1).locator('button[aria-label^="Remove"]').click();
+    await expect(rows).toHaveCount(2);
+
+    // All of it in the draft as real MDX — including the untitled row NOT publishing a made-up
+    // title, and the empty one staying `<Accordion />` rather than growing a tag pair.
+    const draft = async () => {
+      const drafted = await sql<{ content: string }[]>`
+        select content from draft_file d
+        join editor_session s on s.id = d.session_id
+        where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'accordionpage.mdx'`;
+      return drafted[0]?.content ?? "";
+    };
+    await expect.poll(draft, { timeout: 10_000 }).toContain('<Accordion title="Renamed">');
+    expect(await draft()).toContain("Body typed after Enter.");
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat|Invalid content/i.test(
+          e,
+        ),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+
+    await clearDrafts(["accordionpage.mdx"]);
+  });
+
   // …and the case the guard first got wrong: a list OPENING a tab. Its first item starts on
   // exactly the position the guard swallows, so the press that normally drops list formatting did
   // nothing, and that checkbox could never be removed. Reported as "not able to backspace out the
@@ -626,9 +832,26 @@ test.describe("web editor @external", () => {
     const pane = block.locator("[data-pv-tab]").first();
     await expect(pane.locator('input[type="checkbox"]')).toHaveCount(2);
 
-    // Caret at the very start of the first item — the tab's leading edge.
+    // Caret at the very start of the first item — the tab's leading edge. Asserted rather than
+    // assumed: this whole test is about which position the key lands on, so a click that misses
+    // would otherwise read as "the guard swallowed it", i.e. as the bug it exists to catch.
     await pane.getByText("first task").click();
     await page.keyboard.press("Home");
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const sel = window.getSelection();
+          const node = sel?.anchorNode;
+          const el = node?.nodeType === 1 ? (node as Element) : node?.parentElement;
+          const li = el?.closest("li");
+          return {
+            atStart: sel?.anchorOffset === 0,
+            inFirstItem: !!li && li === li.closest("ul")?.firstElementChild,
+          };
+        }),
+      )
+      .toEqual({ atStart: true, inFirstItem: true });
+
     await page.keyboard.press("Backspace");
 
     // The item lost its list formatting and stayed put; the tab is untouched.

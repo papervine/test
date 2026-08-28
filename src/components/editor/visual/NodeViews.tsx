@@ -11,6 +11,8 @@ import type { CSSProperties } from "react";
 import type { NodeViewOpts } from "./nodes";
 import { TabPaneNodeView, TabsNodeView } from "./TabsNodeView";
 import { StepNodeView, StepsNodeView } from "./StepsNodeView";
+import { AccordionGroupNodeView, AccordionNodeView } from "./AccordionNodeView";
+import { tableNodeView } from "./table-node-view";
 import { parseMediaElement } from "@/lib/media-embed";
 
 // Phase-2b node views: render the SAME components the reader-facing renderer uses, so the
@@ -32,7 +34,8 @@ function cleanAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
 }
 
 // Collapsibles hide their children when closed — force them open so the content stays editable.
-const FORCE_OPEN = new Set(["Accordion", "Expandable"]);
+// Accordion isn't here: it has its own node view now, with a chevron that really opens and closes.
+const FORCE_OPEN = new Set(["Expandable"]);
 
 function attrBadges(attrs: Record<string, unknown>): string[] {
   return Object.entries(attrs)
@@ -95,6 +98,12 @@ function ComponentNodeView(props: NodeViewProps) {
   // title is an attr, so it can't be part of the editable content hole).
   if (name === "Steps") return <StepsNodeView {...props} />;
   if (name === "Step") return <StepNodeView {...props} />;
+
+  // Accordions are collapsible AND titled by attr, so the reader's component can't be edited in
+  // place: closed would hide its own content, and the title would be a Source-mode job. The pair
+  // here owns both — the group draws the border, the row draws its triangle and title field.
+  if (name === "AccordionGroup") return <AccordionGroupNodeView />;
+  if (name === "Accordion") return <AccordionNodeView {...props} />;
 
   // Layout containers apply their grid/flex to their DIRECT children — but ProseMirror's
   // content hole is a single element, so wrapping the real component around it collapses the
@@ -239,5 +248,9 @@ export function makeNodeViewOpts(assetBase: string): NodeViewOpts {
     atomNodeView: (_type, inline) => ReactNodeViewRenderer(inline ? InlineAtomView : BlockAtomView),
     imageNodeView: () => ReactNodeViewRenderer(ImageNodeView),
     codeBlockNodeView: () => ReactNodeViewRenderer(CodeBlockNodeView),
+    // The table's chrome (add a row/column, select one, remove it). Plain DOM, not React: the
+    // content hole has to be a <tbody> holding the rows, and React's NodeViewContent would put a
+    // wrapper <div> between them — see table-node-view.ts.
+    tableNodeView,
   };
 }

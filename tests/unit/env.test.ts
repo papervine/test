@@ -21,8 +21,11 @@ describe("envBadge", () => {
     expect(envBadge("production")).toBeNull();
   });
 
-  it("marks preview and local with distinct variants", () => {
+  it("marks a preview deploy, which is the one that looks like production", () => {
     expect(envBadge("preview")).toEqual({ label: "preview", variant: "preview" });
-    expect(envBadge("development")).toEqual({ label: "local", variant: "local" });
+  });
+
+  it("shows nothing locally — you know where you are, and it covered Publish", () => {
+    expect(envBadge("development")).toBeNull();
   });
 });

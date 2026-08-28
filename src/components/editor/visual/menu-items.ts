@@ -126,8 +126,16 @@ const embed = (url?: string) =>
 const callout = (mdxName: string) => ({ type: "callout", attrs: { mdxName }, content: [paragraph()] });
 const card = () => ({ type: "card", attrs: { mdxName: "Card", title: "Card title" }, content: [paragraph()] });
 const cardGroup = (n: number) => ({ type: "cardGroup", attrs: { mdxName: "CardGroup", cols: n }, content: Array.from({ length: n }, card) });
-const accordion = () => ({ type: "accordion", attrs: { mdxName: "Accordion", title: "Accordion title" }, content: [paragraph()] });
-const accordionGroup = () => ({ type: "accordionGroup", attrs: { mdxName: "AccordionGroup" }, content: [accordion()] });
+// No `title`: it defaults to null and serializes away, so an untitled accordion round-trips as
+// `<Accordion>` rather than a `title="Accordion title"` nobody meant to publish. The node view
+// renders the title slot regardless, with that text as its placeholder — the same bargain the
+// `<Step>` title makes. A group starts with two, since one collapsible row is just an accordion.
+const accordion = () => ({ type: "accordion", attrs: { mdxName: "Accordion" }, content: [paragraph()] });
+const accordionGroup = () => ({
+  type: "accordionGroup",
+  attrs: { mdxName: "AccordionGroup" },
+  content: [accordion(), accordion()],
+});
 const steps = () => ({ type: "steps", attrs: { mdxName: "Steps" }, content: [{ type: "step", attrs: { mdxName: "Step", title: "Step title" }, content: [paragraph()] }] });
 const tabs = () => ({
   type: "tabs",
@@ -145,7 +153,7 @@ const responseField = () => ({ type: "apiField", attrs: { mdxName: "ResponseFiel
 
 // Slash command that inserts the node returned by `make` in place of the typed `/query`.
 const insertCmd =
-  (make: (input?: string) => object | null, input?: MediaInputKind) =>
+  (make: (input?: string) => object | null, input?: MediaInputKind, focusTitle?: boolean) =>
   ({ editor, range, requestInput }: { editor: Editor; range: Range; requestInput: RequestInput }) => {
     if (input) {
       // Drop the typed `/query` before opening the dialog, so it isn't sitting behind it as
@@ -161,6 +169,17 @@ const insertCmd =
     const chain = editor.chain().focus().deleteRange(range);
     if (node) chain.insertContent(node);
     chain.run();
+    // A component whose first field is a name gets the caret put in it, so inserting one is
+    // immediately followed by naming it. The node lands where the `/query` was, so `range.from`
+    // addresses it directly rather than hunting for the last title field on the page. The
+    // document selection stays in the body, which is where typing continues after the name.
+    if (node && focusTitle) {
+      requestAnimationFrame(() => {
+        const dom = editor.view.nodeDOM(range.from);
+        const field = dom instanceof HTMLElement ? dom.querySelector("input") : null;
+        if (field) field.focus();
+      });
+    }
   };
 
 // Helper to define an item whose slash + picker behavior both come from a node factory.
@@ -172,8 +191,18 @@ function insertItem(
   searchTerms: string[],
   make: (input?: string) => object | null,
   input?: MediaInputKind,
+  focusTitle?: boolean,
 ): SlashItem {
-  return { title, description, category, icon, searchTerms, make, input, command: insertCmd(make, input) };
+  return {
+    title,
+    description,
+    category,
+    icon,
+    searchTerms,
+    make,
+    input,
+    command: insertCmd(make, input, focusTitle),
+  };
 }
 
 export const SLASH_ITEMS: SlashItem[] = [
@@ -297,8 +326,8 @@ export const SLASH_ITEMS: SlashItem[] = [
   insertItem("2 columns", "Card grid", "Components", LayoutGrid, ["card", "cards", "columns", "grid", "2"], () => cardGroup(2)),
   insertItem("3 columns", "Card grid", "Components", Columns3, ["columns", "grid", "3"], () => cardGroup(3)),
   insertItem("4 columns", "Card grid", "Components", Columns4, ["columns", "grid", "4"], () => cardGroup(4)),
-  insertItem("Accordion", "Collapsible section", "Components", ChevronDown, ["accordion", "toggle", "collapse", "expand"], accordion),
-  insertItem("Accordion group", "Group of accordions", "Components", ListCollapse, ["accordion", "group"], accordionGroup),
+  insertItem("Accordion", "Collapsible section", "Components", ChevronDown, ["accordion", "toggle", "collapse", "expand"], accordion, undefined, true),
+  insertItem("Accordion group", "Group of accordions", "Components", ListCollapse, ["accordion", "group"], accordionGroup, undefined, true),
   insertItem("Steps", "Numbered steps", "Components", ListChecks, ["step", "steps", "guide"], steps),
   insertItem("Tabs", "Tabbed content", "Components", SquareStack, ["tab", "tabs"], tabs),
   insertItem("Code group", "Tabbed code blocks", "Components", FileCode2, ["code", "group", "tabs"], codeGroup),

@@ -519,6 +519,288 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
 .pv-visual .ProseMirror > * + * {
   margin-top: 0.65em;
 }
+/* Two places where <AccordionGroup>/<Accordion> render correctly for readers and need a nudge
+   here, both for the same reason: the rows are ProseMirror's children, so TipTap wraps each one in
+   elements of its own and the group's direct-child selectors stop reaching them.
+
+   The seam between rows. `divide-y` on the group is a `> * + *` rule — right on the published page,
+   a no-op here. Matching on the row's own class instead of a depth makes this survive TipTap
+   changing how many wrappers it uses. Colours are zinc-200/zinc-800, the same pair `divide-zinc-*`
+   resolves to, because this line has to be the one the published page draws. */
+.pv-visual .pv-accordion-group *:not(:first-child) .pv-accordion {
+  border-top: 1px solid rgb(228 228 231);
+}
+/* Both dark selectors, because the editor is a platform surface: the docs appearance toggles
+   `.dark`, the platform toggles `data-db-theme` on <html> and styles through `.db` — which is what
+   `dark:` compiles to here (tailwind.config.ts). Keyed on only the first, this line renders
+   zinc-200 on a black editor, which is a white seam. */
+.pv-visual .pv-accordion-group *:not(:first-child) .pv-accordion:where(.dark *),
+[data-db-theme="dark"] .db .pv-visual .pv-accordion-group *:not(:first-child) .pv-accordion {
+  border-top-color: rgb(39 39 42);
+}
+
+/* <Accordion> bodies. The component already zeroes its first/last paragraph margins — but by
+   direct child, and in the editor the paragraph sits one level deeper. Without this a one-line
+   body is a third taller here than on the published page. */
+.pv-visual .pv-accordion-body > * > :first-child {
+  margin-top: 0;
+}
+.pv-visual .pv-accordion-body > * > :last-child {
+  margin-bottom: 0;
+}
+
+/* Tables, while you edit them. The published table is hairlines under each row and a bold header;
+   that's right to read and wrong to work in, because nothing shows where a cell ends or how to add
+   another one. So the editor draws the whole grid and hangs the chrome (table-node-view.ts) off it. The
+   document is identical either way — none of this is in the MDX. */
+.pv-visual .pv-table-block {
+  /* One grid: the table, the add-column control down its right edge, the add-row control across
+     its bottom — so each control is exactly as long as the edge it adds to. */
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.375rem;
+  margin: 1.25rem 0;
+}
+/* The scroller is the handles' positioning context, so a wide table scrolls its handles along with
+   its columns. Its padding is the gutter they sit in: `overflow-x` clips anything outside the box,
+   so without it a handle hung off the table's edge simply wouldn't be there. */
+.pv-visual .pv-table-scroll {
+  position: relative;
+  grid-column: 1;
+  grid-row: 1;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0.75rem 0 0 0.75rem;
+}
+.pv-visual .pv-table-scroll table {
+  width: 100%;
+  margin: 0;
+  border-collapse: collapse;
+  table-layout: auto;
+}
+.pv-visual .pv-table-scroll :is(td, th) {
+  border: 1px solid rgba(var(--ink-rgb), 0.14);
+  padding: 0.5rem 0.75rem;
+  vertical-align: top;
+  /* A cell is the caret's home; without this an empty one collapses to a line you can't hit. */
+  min-width: 4rem;
+}
+/* A cell holds blocks now (that's what lets a list live in one), so the block spacing that reads
+   well down a page has to come off inside a cell — otherwise one bullet doubles the row's height.
+   The cell's own padding is the spacing. */
+.pv-visual .pv-table-scroll :is(td, th) > :first-child {
+  margin-top: 0;
+}
+.pv-visual .pv-table-scroll :is(td, th) > :last-child {
+  margin-bottom: 0;
+}
+.pv-visual .pv-table-scroll :is(td, th) :is(ul, ol) {
+  margin: 0.25rem 0 0;
+  padding-left: 1.1rem;
+}
+.pv-visual .pv-table-scroll :is(td, th) li {
+  margin: 0.125rem 0;
+}
+.pv-visual .pv-table-scroll :is(td, th) li > p {
+  margin: 0;
+}
+
+/* GFM's first row IS the header — the editor shows that the way the page will, rather than needing
+   a separate header node the markdown has nowhere to put. */
+/* `:where` keeps this at zero specificity for the row part, so a selected cell's tint paints OVER
+   the header shade instead of losing to it — selecting the header row is exactly when you need to
+   see that it's selected. */
+.pv-visual .pv-table-scroll :where(tr:first-child) :is(td, th) {
+  background: rgba(var(--ink-rgb), 0.04);
+  font-weight: 600;
+}
+/* prosemirror-tables marks the cells of a dragged or handle-made selection. Violet, the platform's
+   second brand colour, throughout the grid's chrome: blue is the docs link colour and reads as
+   "this is a link" inside body text, and the editor's own furniture should not. `--violet` is a
+   hex, so mix rather than fake an rgba of it. */
+.pv-visual .pv-table-scroll .selectedCell {
+  background: color-mix(in srgb, var(--violet) 16%, transparent);
+}
+
+/* Add a column (right edge) / add a row (below) — the two controls the grid needs and the document
+   can't provide. Quiet until the block is hovered, like every other editor affordance, but always
+   present where hover doesn't exist. */
+.pv-visual .pv-table-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(var(--ink-rgb), 0.12);
+  border-radius: 0.5rem;
+  color: var(--muted);
+  transition:
+    opacity 0.12s,
+    color 0.12s,
+    background-color 0.12s;
+}
+.pv-visual .pv-table-add::before {
+  content: "+";
+  font-size: 1rem;
+  line-height: 1;
+}
+.pv-visual .pv-table-add:hover {
+  background: rgba(var(--ink-rgb), 0.06);
+  color: var(--fg);
+}
+.pv-visual .pv-table-add-col {
+  grid-column: 2;
+  grid-row: 1;
+  width: 2.25rem;
+  margin-top: 0.75rem; /* clear the handle gutter, so it lines up with the table itself */
+}
+.pv-visual .pv-table-add-row {
+  grid-column: 1;
+  grid-row: 2;
+  height: 2rem;
+  margin-left: 0.75rem;
+}
+/* The hint that names both gestures. Shown on hover or keyboard focus of the control it belongs
+   to, and positioned past the edge it grows — under the row control, left of the column one — so
+   it never covers the table you're deciding about. */
+.pv-visual .pv-table-add {
+  position: relative;
+}
+.pv-visual .pv-table-tip {
+  position: absolute;
+  z-index: 20;
+  display: none;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(var(--ink-rgb), 0.1);
+  background: var(--option-bg);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  color: var(--muted);
+  font-size: 0.8125rem;
+  line-height: 1.35;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.pv-visual .pv-table-tip strong {
+  color: var(--fg);
+  font-weight: 600;
+}
+.pv-visual .pv-table-add:hover .pv-table-tip,
+.pv-visual .pv-table-add:focus-visible .pv-table-tip {
+  display: flex;
+}
+.pv-visual .pv-table-add-row .pv-table-tip {
+  top: calc(100% + 0.5rem);
+  left: 50%;
+  transform: translateX(-50%);
+}
+.pv-visual .pv-table-add-col .pv-table-tip {
+  top: 50%;
+  right: calc(100% + 0.5rem);
+  transform: translateY(-50%);
+}
+
+@media (hover: hover) {
+  .pv-visual .pv-table-add {
+    opacity: 0;
+  }
+  .pv-visual .pv-table-block:hover .pv-table-add,
+  .pv-visual .pv-table-add:focus-visible {
+    opacity: 1;
+  }
+}
+
+/* Column and row handles, positioned from measured cell geometry (see table-node-view.ts) because
+   a markdown table's columns size themselves to their content. */
+.pv-visual .pv-table-grips {
+  position: absolute;
+  top: 0.75rem; /* the table's own top-left, past the gutter */
+  left: 0.75rem;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+}
+.pv-visual .pv-table-grip {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+}
+.pv-visual .pv-table-grip-col {
+  top: -0.625rem;
+  height: 0.625rem;
+}
+.pv-visual .pv-table-grip-row {
+  left: -0.625rem;
+  width: 0.625rem;
+}
+.pv-visual .pv-table-grip-bar {
+  border-radius: 999px;
+  background: rgba(var(--ink-rgb), 0.2);
+  opacity: 0;
+  transition:
+    opacity 0.12s,
+    background-color 0.12s;
+}
+.pv-visual .pv-table-grip-col .pv-table-grip-bar {
+  height: 0.25rem;
+  width: calc(100% - 0.5rem);
+}
+.pv-visual .pv-table-grip-row .pv-table-grip-bar {
+  width: 0.25rem;
+  height: calc(100% - 0.5rem);
+}
+.pv-visual .pv-table-block:hover .pv-table-grip-bar,
+.pv-visual .pv-table-grip-bar:focus-visible {
+  opacity: 1;
+}
+/* The band the caret is in: lit, but softer than a selection — a "you are here", not something
+   you've picked out to act on. */
+.pv-visual .pv-table-grip-bar[data-active="true"] {
+  opacity: 1;
+  background: color-mix(in srgb, var(--violet) 55%, transparent);
+}
+.pv-visual .pv-table-grip-bar[data-selected="true"] {
+  opacity: 1;
+  background: var(--violet);
+}
+/* The caret's cell, outlined over the grid (see table-node-view.ts for why it's an overlay and not
+   a class on the <td>). */
+.pv-visual .pv-table-active-cell {
+  position: absolute;
+  pointer-events: none;
+  border: 1px solid var(--violet);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--violet) 35%, transparent);
+}
+/* The ✕ exists only once its band is selected, so it can sit ON the handle without crowding a
+   table you're only typing in. */
+.pv-visual .pv-table-grip-remove {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.125rem;
+  width: 1.125rem;
+  font-size: 0.625rem;
+  line-height: 1;
+  border-radius: 999px;
+  background: var(--bg);
+  border: 1px solid rgba(var(--ink-rgb), 0.16);
+  color: var(--muted);
+}
+.pv-visual .pv-table-grip-remove:hover {
+  color: var(--fg);
+  border-color: rgba(var(--ink-rgb), 0.32);
+}
+/* Centred ON the handle, not beside it: the gutter is only as deep as the handle, so anything
+   hung outside it is clipped away by the scroller's overflow. */
+.pv-visual .pv-table-grip-remove {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
 /* Empty-line placeholder ("Type '/' for commands…"). */
 .pv-visual .ProseMirror .is-empty::before,
 .pv-visual .ProseMirror .is-editor-empty::before {

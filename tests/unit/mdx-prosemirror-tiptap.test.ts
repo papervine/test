@@ -32,6 +32,9 @@ describe("TipTap schema round-trips converter output unchanged", () => {
     "code fence with meta": "```js title.js\nfoo();\n```\n",
     "thematic break": "a\n\n---\n\nb\n",
     table: "| a | b |\n| - | - |\n| 1 | 2 |\n",
+    // Alignment lives on the table node as an attr, and the schema is prosemirror-tables' now —
+    // this is the case that would go missing if that extension forgot to carry `align` through.
+    "aligned table": "| a | b | c |\n| :-- | :-: | --: |\n| 1 | 2 | 3 |\n",
     image: "![alt](/x.png)\n",
     Note: "<Note>\n  Heads up.\n</Note>\n",
     Card: '<Card title="Setup" icon="rocket" href="/start">\n  Body.\n</Card>\n',

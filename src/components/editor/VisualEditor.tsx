@@ -7,6 +7,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bold, Italic, Strikethrough, Code, Link as LinkIcon, GripVertical, Plus } from "lucide-react";
 import type { Node as PMNode } from "@tiptap/pm/model";
+import { CellSelection } from "@tiptap/pm/tables";
 import type { Awareness } from "y-protocols/awareness";
 import { toast } from "sonner";
 import { mdxToProseMirror, proseMirrorToMdx, splitFrontmatter } from "@papervine/mdx-prosemirror";
@@ -302,7 +303,16 @@ export function VisualEditor({
         />
       </header>
       {editor && (
-        <BubbleMenu editor={editor} className="pv-bubble">
+        <BubbleMenu
+          editor={editor}
+          className="pv-bubble"
+          // Not over a table's cell selection. Selecting a column with its handle is a structural
+          // act — you're about to delete or move it, not embolden it — and the toolbar pops up
+          // across the rows you just selected, hiding the thing you were looking at.
+          shouldShow={({ editor: ed, state }) =>
+            ed.isEditable && !state.selection.empty && !(state.selection instanceof CellSelection)
+          }
+        >
           <BubbleButton active={editor.isActive("bold")} onClick={() => editor.chain().focus().toggleBold().run()}>
             <Bold className="h-4 w-4" />
           </BubbleButton>

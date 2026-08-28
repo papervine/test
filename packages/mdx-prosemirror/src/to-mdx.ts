@@ -111,6 +111,53 @@ function blockList(content: PMNode[] | undefined): Any[] {
   return (content ?? []).map(blockToMdast);
 }
 
+/**
+ * A table cell's blocks, flattened back to the inline run a GFM cell can hold.
+ *
+ * A paragraph is just its inline content, so an ordinary cell is byte-identical to what it always
+ * was. A list has no pipe-table syntax at all, so it goes out as HTML — the form MDX renders as a
+ * real list, and the one `cellBlocks` reads back in to-prosemirror. Anything else flattens to its
+ * inline content rather than being dropped.
+ */
+function cellChildren(blocks: PMNode[] | undefined): Any[] {
+  const out: Any[] = [];
+  for (const block of blocks ?? []) {
+    if (block.type === "bulletList" || block.type === "orderedList") out.push(listAsHtml(block));
+    else out.push(...inlineList(block.content));
+  }
+  return out;
+}
+
+function listAsHtml(list: PMNode): Any {
+  const tag = list.type === "orderedList" ? "ol" : "ul";
+  const items = (list.content ?? [])
+    .map((item) => `<li>${inlineToMarkdown(item.content?.[0]?.content)}</li>`)
+    .join("");
+  // `mdxRaw`, not `html`: the processor's passthrough handler emits it verbatim and suppresses the
+  // escaping that would otherwise creep in around it.
+  return { type: "mdxRaw", value: `<${tag}>${items}</${tag}>` };
+}
+
+/** One item's inline content as markdown text, so emphasis inside a cell's list survives. */
+function inlineToMarkdown(content: PMNode[] | undefined): string {
+  if (!content?.length) return "";
+  return stringifyMdast({
+    type: "root",
+    children: [{ type: "paragraph", children: inlineList(content) }],
+  } as Root).trim();
+}
+
+/**
+ * A component holding nothing but one empty paragraph — the filler to-prosemirror adds so an empty
+ * component is a valid node with somewhere to type (see the note there). It has no MDX of its own:
+ * no source produces a single *empty* paragraph, because a blank line inside a tag pair parses to
+ * no children at all. So it's dropped here, and `<ParamField … />` serializes back self-closing
+ * instead of growing into a `<ParamField …>\n</ParamField>` pair across every API page on save.
+ */
+function isFillerParagraph(content: PMNode[] | undefined): boolean {
+  return content?.length === 1 && content[0].type === "paragraph" && !content[0].content?.length;
+}
+
 /** Rebuild a flow (block) mdast node from a PM block node. */
 function blockToMdast(node: PMNode): Any {
   if (COMPONENT_NODE_TYPES.has(node.type)) {
@@ -118,7 +165,7 @@ function blockToMdast(node: PMNode): Any {
       type: "mdxJsxFlowElement",
       name: tagForNode(node),
       attributes: buildAttributes(node.attrs),
-      children: blockList(node.content),
+      children: isFillerParagraph(node.content) ? [] : blockList(node.content),
     };
   }
   switch (node.type) {
@@ -166,7 +213,7 @@ function blockToMdast(node: PMNode): Any {
           type: "tableRow",
           children: (row.content ?? []).map((cell) => ({
             type: "tableCell",
-            children: inlineList(cell.content),
+            children: cellChildren(cell.content),
           })),
         })),
       };

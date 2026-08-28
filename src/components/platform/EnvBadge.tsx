@@ -1,11 +1,13 @@
 import { Badge } from "@/components/ui/badge";
 import { envBadge, resolveDeployEnv } from "@/lib/env";
 
-// Corner marker so it's obvious at a glance you're NOT looking at production —
-// "local" (amber) or "preview · branch" (violet). Renders nothing in real prod
-// (VERCEL_ENV=production). Mounted globally in the root layout, so it shows on every
-// surface (docs, auth, dashboard); fixed top-right and pointer-events-none so it can
-// never intercept a click. Server component — reads env vars at request time.
+// Corner marker so it's obvious at a glance you're NOT looking at production:
+// "preview · branch" (violet) on a Vercel preview deploy, which is the environment that
+// looks exactly like prod. Nothing in production, and nothing locally — see `envBadge`.
+// Mounted globally in the root layout, so it shows on every surface (docs, auth,
+// dashboard); fixed top-right and pointer-events-none so it can never intercept a click,
+// though it can still SIT ON one: top-right is where the editor keeps Publish.
+// Server component — reads env vars at request time.
 export function EnvBadge() {
   const badge = envBadge(
     resolveDeployEnv(process.env.VERCEL_ENV, process.env.NODE_ENV),
