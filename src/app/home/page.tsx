@@ -34,9 +34,9 @@ const ALTERNATIVE_KEYWORD = "docs platform alternative";
 // Kept near 60 characters so the keyword survives search-result truncation, and set as
 // `absolute` below: the root layout's `%s · Papervine` template would otherwise append a second
 // "Papervine" and push this well past that budget.
-const TITLE = `Papervine — the AI platform | ${ALTERNATIVE_KEYWORD}`;
+const TITLE = `Papervine — a docs site | ${ALTERNATIVE_KEYWORD}`;
 const DESCRIPTION =
-  "Self-updating documentation for AI agents and humans. " +
+  "A docs site for your product — with search, your own domain, and an assistant. " +
   "Open source alternative to the incumbent, ReadMe, and GitBook.";
 
 // Canonical host, `og:`/`twitter:` tags and our X handle come from the shared marketing helper
@@ -50,6 +50,8 @@ export const metadata: Metadata = marketingMetadata({
   keywords: [
     ALTERNATIVE_KEYWORD,
     "docs platform alternatives",
+    "ReadMe alternative",
+    "GitBook alternative",
     "docs.json",
     "documentation platform",
     "docs as code",
@@ -70,66 +72,68 @@ const DOCS_READER_AUTH = `${DOCS}auth/reader-auth`;
 // The migrate guide backs the "alternative" claim below — it is the page that proves it.
 const DOCS_MIGRATE = `${DOCS}guides/migrate`;
 
-// The "intelligence" story (top section).
+// What you get (top section). Same capabilities as before, said without the insider terms
+// (MCP, llms.txt, "docs as code") that a first-time visitor wouldn't parse.
 const PILLARS = [
   {
     icon: Plug,
-    title: "Built for people and agents",
-    body: "llms.txt and MCP out of the box, so your product shows up in the AI workflows your users already live in.",
+    title: "A real docs website",
+    body: "Search, your own domain, and API reference — a documentation site, not a pile of files.",
   },
   {
     icon: Bot,
-    title: "Docs that keep themselves current",
-    body: "Draft, edit, and update content with a context-aware agent — move faster, without the documentation debt.",
+    title: "Easier to keep current",
+    body: "An editing assistant and a visual editor help you update pages without starting from scratch every time.",
   },
   {
     icon: MessagesSquare,
-    title: "Guided answers for every visitor",
-    body: "Turn every docs visit into a conversation: intelligent assistance grounded in your content, with citations.",
+    title: "Answers, not just pages",
+    body: "Visitors can ask questions and get answers from your docs, with citations back to the page.",
   },
 ];
 
-// Concrete capabilities (bento).
+// Concrete capabilities (bento). docs.json / OpenAPI stay when that's the actual artifact —
+// explained in the same sentence so a novice isn't left guessing.
 const FEATURES = [
   {
     icon: FileJson2,
-    title: "docs.json-native",
-    body: "The config schema you already know. Point Papervine at an existing repo and it renders unchanged — migration is a DNS switch.",
+    title: "Bring the docs you already have",
+    body: "If you already have a docs.json — the config file many docs sites use — point Papervine at that repo and it renders unchanged.",
   },
   {
     icon: Boxes,
-    title: "API playground",
-    body: "Drop in an OpenAPI spec and get auto-generated, in-nav endpoint reference with request and response schemas.",
+    title: "API docs you can try",
+    body: "Drop in an OpenAPI spec (the file that describes your API) and get endpoint docs with request and response examples, right in the nav.",
   },
   {
     icon: Search,
-    title: "Instant search",
-    body: "⌘K search across every page, heading, and code block — re-indexed on each sync, no extra service to run.",
+    title: "Search the whole site",
+    body: "⌘K search across every page, heading, and code block — re-indexed whenever your docs update, no extra service to run.",
   },
   {
     icon: MessageSquareCode,
-    title: "Embeddable widget",
-    body: "Drop the assistant into any external site with a script snippet — gated by an allowlist, not a login.",
+    title: "Put the assistant on your website",
+    body: "Add the docs assistant to any site you run with a script snippet — gated by an allowlist, not a login.",
   },
   {
     icon: Lock,
-    title: "Public and private, one site",
-    body: "Gate any page to a reader group with one line of frontmatter. Readers sign in through your own IdP — we never hold their credentials.",
+    title: "Some pages public, some private",
+    body: "Mark any page as private with one line at the top of the file. Readers sign in through your own identity provider — we never hold their passwords.",
   },
   {
     icon: PenLine,
-    title: "Visual editor",
-    body: "A three-panel workspace with an editing agent, live collaboration, and MDX round-tripping. Publish as a commit or a pull request.",
+    title: "Edit in the browser",
+    body: "A three-panel workspace with an editing assistant, live collaboration, and a visual editor. Publish as a commit or a pull request.",
   },
   {
     icon: Globe,
-    title: "Custom domains",
-    body: "Serve docs on your own domain with automatic TLS — or take the subdomain we give you and skip DNS entirely.",
+    title: "Your docs, your domain",
+    body: "Serve docs on your own domain with automatic HTTPS — or take the subdomain we give you and skip DNS entirely.",
   },
   {
     icon: BarChart3,
-    title: "Humans vs. agents",
-    body: "See what people read and search for — then flip one toggle to see the same site through the eyes of the agents crawling it.",
+    title: "See what people actually read",
+    body: "See which pages people open and what they search for — then flip one toggle to see the same site the way automated crawlers see it.",
   },
 ];
 
@@ -208,17 +212,18 @@ export default async function LandingPage() {
           className="db-rise mt-7 text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
           style={{ animationDelay: "80ms" }}
         >
-          Documentation
+          A docs site
           <br />
-          that <span className="db-grad">grows</span> itself.
+          for your <span className="db-grad">product</span>.
         </h1>
 
         <p
           className="db-rise mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[var(--muted)]"
           style={{ animationDelay: "160ms" }}
         >
-          Write, publish, and maintain world-class docs — built for both your
-          readers and the AI agents they rely on.
+          Write help pages. Papervine publishes them as a documentation website
+          — with search, your own domain, and an assistant that answers from
+          your docs.
         </p>
 
         <div
@@ -239,21 +244,20 @@ export default async function LandingPage() {
           style={{ animationDelay: "320ms" }}
         >
           <FileJson2 className="h-3.5 w-3.5" />
-          drop in your <span className="text-[var(--fg)]">docs.json</span> — it
-          just works
+          Connect a GitHub repo and your docs are live.
         </div>
 
-        {/* Sits under the docs.json line because it is the same claim, said the way people
-            search for it. Not keyword stuffing: reading the same config IS the migration story,
-            and the link goes to the page that proves it. */}
+        {/* Sits under the connect-a-repo line because it is the same claim, said the way
+            people search for it. Not keyword stuffing: reading the same config IS the
+            migration story, and the link goes to the page that proves it. */}
         <p
           className="db-rise mx-auto mt-5 max-w-lg text-sm leading-relaxed text-[var(--muted)]"
           style={{ animationDelay: "360ms" }}
         >
           Looking for a{" "}
-          <span className="font-medium text-[var(--fg)]">docs platform alternative</span>? Papervine
-          reads the same <span className="mono text-[var(--fg)]">docs.json</span>, so your
-          existing docs repo renders unchanged —{" "}
+          <span className="font-medium text-[var(--fg)]">docs platform alternative</span>? If you
+          already have docs, they work here without a rewrite — Papervine reads the same{" "}
+          <span className="mono text-[var(--fg)]">docs.json</span>.{" "}
           <a
             href={DOCS_MIGRATE}
             className="underline decoration-dotted underline-offset-4 transition-colors hover:text-[var(--fg)]"
@@ -269,15 +273,15 @@ export default async function LandingPage() {
         <HeroVideo />
       </section>
 
-      {/* Intelligence pillars */}
+      {/* What you get */}
       <section className="mx-auto max-w-5xl px-6 pt-28">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
-            Built for the AI era
+            What you get
           </h2>
           <p className="mt-4 text-[var(--muted)]">
-            Intelligence woven into how your docs are written, served, and
-            understood — not bolted on after.
+            A documentation website, tools to keep it current, and an assistant
+            that answers from your pages.
           </p>
         </div>
         <div className="mt-14 grid gap-10 sm:grid-cols-3">
@@ -332,11 +336,11 @@ export default async function LandingPage() {
               }}
             />
             <h2 className="relative text-3xl font-semibold tracking-tight sm:text-4xl">
-              Make your docs a competitive advantage
+              Put your docs online today
             </h2>
             <p className="relative max-w-md text-[var(--muted)]">
-              Point Papervine at a repo and ship documentation your users — and
-              their agents — actually use. Future-proof it today.
+              Connect a repo or start from scratch. Search, your domain, and an
+              assistant are included.
             </p>
             <Link
               href="/signup"

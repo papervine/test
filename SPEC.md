@@ -95,6 +95,15 @@ session: a signed-in visitor gets a single **Dashboard** link instead of **Log i
 up** (which would dead-end them re-signing up). Reading the session opts the page into
 dynamic rendering — acceptable for the apex. Smoke covers the logged-out shape (`/home`).
 
+**Status 2026-08-27 — marketing home is for first-time visitors.** The landing used to
+lead with "Documentation that grows itself" and insider artifacts (`docs.json`, MCP,
+`llms.txt`, "docs as code"). A visitor who had a product and needed a help site couldn't
+parse it. Copy now names the product in beginner language ("A docs site for your
+product", "Connect a GitHub repo and your docs are live") and the pillars/bento/CTA
+follow. **Kept:** "docs platform alternative" (this page is a discovery surface; the claim is
+factual — we read the same `docs.json`) and the migrate-guide link that proves it.
+Jargon lives in `docs/`, not on the storefront.
+
 **Status 2026-08-27 — the hero is the product tour, click-to-play.** The hero's product shot
 was a static skeleton mock (fake sidebar, grey bars). It is now the poster frame of a real
 1:45 tour of the product, which plays in place when clicked (`src/components/HeroVideo.tsx`).

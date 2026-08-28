@@ -14,7 +14,7 @@ import { domains } from "./tenant-host";
  * wherever the box runs out, which left "on." stranded on a line of its own).
  */
 
-// The hero gradient, matched to the `grows` wordmark on the landing page.
+// The hero gradient, matched to the accent word on the landing page.
 const BLUE = "#5b8cff";
 const VIOLET = "#a974ff";
 
@@ -33,7 +33,7 @@ export type MarketingOgCard = {
   /**
    * The headline, as explicit lines. A segment may be `{ accent: "…" }` to paint it with the
    * hero's gradient — satori supports `background-clip: text`, which is how the landing page
-   * paints "grows".
+   * paints the accent word.
    */
   headline: Array<Array<string | { accent: string }>>;
   /** Sub-lines, authored one per rendered line. */

@@ -11,7 +11,7 @@ import { MarketingOgCard, MARKETING_OG_SIZE } from "@/lib/marketing-og-card";
  * this file's content, so the card re-scrapes when the art or the copy changes.
  */
 
-export const alt = "Papervine — the AI docs platform";
+export const alt = "Papervine — a docs site for your product";
 export const size = MARKETING_OG_SIZE;
 export const contentType = "image/png";
 
@@ -19,9 +19,9 @@ export default async function Image() {
   return new ImageResponse(
     (
       <MarketingOgCard
-        headline={[["Documentation"], ["that ", { accent: "grows" }, " itself."]]}
+        headline={[["A docs site"], ["for your ", { accent: "product." }]]}
         sublines={[
-          "Self-updating documentation for AI agents and humans.",
+          "Write help pages. Papervine publishes them as a site.",
           "Open source alternative to the incumbent, ReadMe, and GitBook.",
         ]}
       />

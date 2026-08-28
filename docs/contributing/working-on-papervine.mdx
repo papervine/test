@@ -117,11 +117,13 @@ don't hand-walk signup → onboarding. Seed a known account and drive a real bro
 
 <Note>
   The apex (`localhost:3000`) is marketing + docs and bounces auth paths to the app host.
-  Drive everything with **`agent-browser`** (the repo standard — `open` / `snapshot -i` /
-  `click @eN` / `fill` / `screenshot`; it navigates `app.localhost` and `{slug}.localhost`
-  fine) or Playwright. This is the same loop that catches per-request content-source bugs:
-  connect a repo, open its docs, confirm the sidebar and pages are the tenant's, not the
-  platform's.
+  The marketing home is written for people new to docs platforms — it explains Papervine
+  as a documentation website for your product. Terms like `docs.json`, MCP, and `llms.txt`
+  live in these product docs, not on the storefront. Drive everything with
+  **`agent-browser`** (the repo standard — `open` / `snapshot -i` / `click @eN` / `fill` /
+  `screenshot`; it navigates `app.localhost` and `{slug}.localhost` fine) or Playwright.
+  This is the same loop that catches per-request content-source bugs: connect a repo, open
+  its docs, confirm the sidebar and pages are the tenant's, not the platform's.
 </Note>
 
 ### Testing the GitHub App locally

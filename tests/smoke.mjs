@@ -506,6 +506,10 @@ const CONTROL_PLANE_CHECKS = [
       'href="/signup"',
       "db-vine",
       "pv-sprouts",
+      // Distinctive beginner copy so we don't silently regress to jargon-only
+      // ("docs.json", MCP, llms.txt). The headline is split across a <br>/span, so
+      // assert a contiguous phrase from the hero chip instead.
+      "Connect a GitHub repo and your docs are live",
       // The apex declared `summary_large_image` with NO image for a long time — the one
       // combination that unfurls as nothing at all. `opengraph-image.tsx` supplies it, and
       // Next mirrors it onto twitter:image; assert the image, not just the card type.
