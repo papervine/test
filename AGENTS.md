@@ -586,6 +586,15 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   sessions + their `draft_file` rows first) rather than inheriting it from whatever ran before.
   Related: this file's failing set genuinely shifts between runs, so re-run before concluding
   your change broke a spec.
+  **The inverse costs more: inheriting a row an earlier test created turns one failure into
+  several.** `automations.spec.ts` read its `automation` row straight out of the DB, where the
+  *first* test in the file had created it through the UI (which is that test's whole point). So
+  when the toggle test failed, the next two died on `auto.id` in ~200ms — reported as three
+  broken features instead of one, and unrecoverable on retry because a retry re-runs the test,
+  not the precondition. They also couldn't be run alone at all (`--grep` found no row). The fix
+  is an **idempotent** `ensureAutomation()` helper: find the row or create it, so the toggle
+  test still creates it via UI and the later tests stop caring who did. When a test needs
+  something another test makes, make it yourself if it's missing.
 - **Tests run alongside `npm run dev` — each harness owns its own `distDir`.** Next allows one
   `next dev` per *distDir* (it holds `<distDir>/dev/lock`), and two dev servers sharing one
   output tree also interleave their compiled chunks and manifests — which is how running the

@@ -28,6 +28,30 @@ test.describe("automations", () => {
     await sql.end();
   });
 
+  /**
+   * The `automation` row every run-history test needs, created if it isn't already there.
+   *
+   * The toggle test below creates it *through the UI* — which is the point of that test — and
+   * the three tests after it used to just read the row it left behind. That made one failure
+   * into three: when the toggle test failed, `auto` came back undefined and the next tests
+   * died on `auto.id` in ~200ms, which reads as three broken features instead of one. It also
+   * meant none of them could run on their own (`--grep` on a single test found no row) and
+   * that a Playwright retry re-ran a test whose precondition was never re-established.
+   *
+   * Set up the precondition you assert on (the order-dependence rule in AGENTS.md). Idempotent
+   * on purpose: after the toggle test this finds that row and changes nothing, so what the UI
+   * wrote is still what's under test.
+   */
+  async function ensureAutomation(): Promise<{ id: string }> {
+    const [existing] =
+      await sql`select id from automation where site_id = ${SITE_ID} and catalog_key = 'fix-broken-links'`;
+    if (existing) return existing as { id: string };
+    const id = "e2e-automation-fix-broken-links";
+    await sql`insert into automation (id, site_id, catalog_key, enabled, trigger_type, apply_mode)
+              values (${id}, ${SITE_ID}, 'fix-broken-links', true, 'content_update', 'auto')`;
+    return { id };
+  }
+
   test("renders the catalog, persists a toggle-on with defaults, and opens the config dialog", async ({
     page,
   }) => {
@@ -86,9 +110,7 @@ test.describe("automations", () => {
   test("run history lists runs with status, no-changes chip, and error detail", async ({
     page,
   }) => {
-    const [auto] =
-      await sql`select id from automation where site_id = ${SITE_ID} and catalog_key = 'fix-broken-links'`;
-    expect(auto, "expected the automation created by the toggle test").toBeTruthy();
+    const auto = await ensureAutomation();
     await sql`delete from automation_run where site_id = ${SITE_ID}`;
     await sql`insert into automation_run (id, automation_id, site_id, trigger_type, trigger_ref, status, error, credits_used, queued_at, finished_at)
               values ('e2e-run-1', ${auto.id}, ${SITE_ID}, 'manual', 'e2e', 'failed', 'agent exploded (e2e fixture)', 7, now(), now())`;
@@ -105,8 +127,7 @@ test.describe("automations", () => {
   test("clicking a run opens the detail view with prompt, files, and summary", async ({
     page,
   }) => {
-    const [auto] =
-      await sql`select id from automation where site_id = ${SITE_ID} and catalog_key = 'fix-broken-links'`;
+    const auto = await ensureAutomation();
     await sql`delete from automation_run where site_id = ${SITE_ID}`;
     await sql`insert into automation_run (id, automation_id, site_id, trigger_type, status, result_ref, summary, prompt, changed_files, credits_used, queued_at, started_at, finished_at)
               values ('e2e-run-3', ${auto.id}, ${SITE_ID}, 'manual', 'succeeded', 'abc1234def', 'Fixed one broken link in the intro.', 'Find internal links that are broken and fix them.', ${sql.json(["index.mdx", "quickstart.mdx"])}, 12, now(), now(), now())`;
@@ -126,8 +147,7 @@ test.describe("automations", () => {
   test("a review_needed run offers Accept/View changes/Reject; Reject discards the draft", async ({
     page,
   }) => {
-    const [auto] =
-      await sql`select id from automation where site_id = ${SITE_ID} and catalog_key = 'fix-broken-links'`;
+    const auto = await ensureAutomation();
     const SESSION = "e2e-review-session";
     const BRANCH = "papervine/review-e2e";
     await sql`delete from automation_run where site_id = ${SITE_ID}`;
