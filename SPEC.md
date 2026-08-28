@@ -104,6 +104,10 @@ follow. **Kept:** "docs platform alternative" (this page is a discovery surface;
 factual — we read the same `docs.json`) and the migrate-guide link that proves it.
 Jargon lives in `docs/`, not on the storefront.
 
+**Status 2026-08-27 — GitHub on the marketing home.** The landing header (desktop) and
+footer link to the public CLI repo (`github.com/papervine/cli`). Absolute `<a>`, not
+`<Link>` — it's a different host. Smoke asserts the href on `/home`.
+
 **Status 2026-08-27 — the hero is the product tour, click-to-play.** The hero's product shot
 was a static skeleton mock (fake sidebar, grey bars). It is now the poster frame of a real
 1:45 tour of the product, which plays in place when clicked (`src/components/HeroVideo.tsx`).

@@ -66,6 +66,8 @@ export const metadata: Metadata = marketingMetadata({
 // An absolute <a>, not <Link>: a different host is a hard navigation, never a soft RSC nav
 // (the tenant-host rewrite gotcha in CLAUDE.md).
 const DOCS = "https://docs.papervine.io/";
+// Public CLI repo (the one people clone / star). Absolute <a>, not <Link> (hard nav off the apex).
+const GITHUB = "https://github.com/papervine/cli";
 
 // The hero announcement pill links at the page explaining what it announces.
 const DOCS_READER_AUTH = `${DOCS}auth/reader-auth`;
@@ -170,6 +172,12 @@ export default async function LandingPage() {
             >
               Pricing
             </Link>
+            <a
+              href={GITHUB}
+              className="hidden rounded-lg px-3 py-1.5 text-[var(--muted)] transition-colors hover:text-[var(--fg)] sm:inline-block"
+            >
+              GitHub
+            </a>
             {signedIn ? (
               <a
                 href={`${appBase}/`}
@@ -369,6 +377,9 @@ export default async function LandingPage() {
             >
               Pricing
             </Link>
+            <a href={GITHUB} className="transition-colors hover:text-[var(--fg)]">
+              GitHub
+            </a>
             {signedIn ? (
               <a
                 href={`${appBase}/`}

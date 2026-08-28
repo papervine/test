@@ -518,6 +518,8 @@ const CONTROL_PLANE_CHECKS = [
       // Our handle, which is what makes X attribute the card instead of rendering it
       // anonymously. Deliberately absent from tenant docs — see marketing-seo.ts.
       'name="twitter:site" content="@papervine_io"',
+      // Public CLI repo — header + footer (SPEC §2 marketing apex).
+      'href="https://github.com/papervine/cli"',
     ],
     // Guards the session-aware swap: a signed-out visitor must never see the
     // Dashboard link (which only renders when getSession() resolves). And the landing
