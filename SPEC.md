@@ -5244,6 +5244,19 @@ the hosted API over HTTPS, they don't embed it.
 > a clone has everything to build, and `root-directory` **is** a supported deploy-button query
 > parameter, so the button can target `apps/cli`.
 >
+> **The button's repo is now `papervine/papervine` (2026-08-28) — a rename, not a retarget.**
+> The public mirror was renamed `papervine/cli` → `papervine/papervine`, and the monorepo took
+> the name `papervine/platform`. The button still clones the mirror, exactly as designed above;
+> only the string changed. Worth stating plainly because the new name reads like the monorepo
+> and invites the wrong conclusion — the source repo is **private**, so it could never be a
+> clone target.
+>
+> The rest of the repo still says `papervine/cli` (the mirror's push remote in
+> `scripts/mirror-cli.mjs`, the README's asset URLs and source link). Those work today only
+> because GitHub redirects a renamed repo, which is a redirect that dies the moment anything
+> new is created at the old name — worth sweeping deliberately rather than leaving on a
+> redirect.
+>
 > **Three changes.** `output` becomes `process.env.VERCEL ? undefined : "standalone"` — one source
 > serving both targets, since Vercel sets `VERCEL` on every build. `apps/cli/vercel.json` supplies
 > framework, the workspace build command, and `PAPERVINE_CONTENT`. And an
