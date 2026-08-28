@@ -67,7 +67,7 @@ export const metadata: Metadata = marketingMetadata({
 // (the tenant-host rewrite gotcha in CLAUDE.md).
 const DOCS = "https://docs.papervine.io/";
 // Public CLI repo (the one people clone / star). Absolute <a>, not <Link> (hard nav off the apex).
-const GITHUB = "https://github.com/papervine/cli";
+const GITHUB = "https://github.com/papervine/papervine";
 
 // The hero announcement pill links at the page explaining what it announces.
 const DOCS_READER_AUTH = `${DOCS}auth/reader-auth`;

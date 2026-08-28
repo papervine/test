@@ -303,7 +303,7 @@ const CHECKS = [
       "REQUEST_EXAMPLE_MARKER",
       "RESPONSE_EXAMPLE_MARKER",
       // GitHub.Repo renders its slug and links out server-side.
-      "papervine/cli",
+      "papervine/papervine",
     ],
     exclude: [
       // The agent-only block must be absent from the tree entirely, not merely hidden:
@@ -519,7 +519,7 @@ const CONTROL_PLANE_CHECKS = [
       // anonymously. Deliberately absent from tenant docs — see marketing-seo.ts.
       'name="twitter:site" content="@papervine_io"',
       // Public CLI repo — header + footer (SPEC §2 marketing apex).
-      'href="https://github.com/papervine/cli"',
+      'href="https://github.com/papervine/papervine"',
     ],
     // Guards the session-aware swap: a signed-out visitor must never see the
     // Dashboard link (which only renders when getSession() resolves). And the landing

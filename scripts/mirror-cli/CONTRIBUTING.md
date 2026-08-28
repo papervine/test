@@ -27,7 +27,7 @@ contributions become regular.
 ## Making a change
 
 ```bash
-git clone https://github.com/papervine/cli
+git clone https://github.com/papervine/papervine
 cd cli
 npm install
 ```

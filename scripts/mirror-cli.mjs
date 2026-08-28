@@ -3,7 +3,7 @@
  * Publish the public-facing parts of this monorepo to their own GitHub repos.
  *
  * Two targets (`--target`), one mechanism:
- *   - `cli`     → `papervine/cli`, the MIT CLI + render engine
+ *   - `cli`     → `papervine/papervine`, the MIT CLI + render engine
  *   - `starter` → `papervine/starter`, the forkable example docs site
  *
  * The monorepo is the single source of truth. This is a **one-directional** publish:
@@ -69,7 +69,7 @@ const VALIDATE = !has("--no-validate");
 /**
  * Two publish targets, same machinery.
  *
- *  - **cli** → `papervine/cli`: the MIT open-source half of the monorepo (the CLI and the
+ *  - **cli** → `papervine/papervine`: the MIT open-source half of the monorepo (the CLI and the
  *    render engine it's built from), plus a generated workspace root, tests and CI.
  *  - **starter** → `papervine/starter`: the forkable example docs site. It lives here rather
  *    than being maintained over there because the monorepo *depends* on it — `db:seed` builds
@@ -80,7 +80,7 @@ const VALIDATE = !has("--no-validate");
  */
 const TARGET = val("--target", "cli");
 const TARGETS = {
-  cli: { remote: "git@github.com:papervine/cli.git", label: "the CLI + render engine" },
+  cli: { remote: "git@github.com:papervine/papervine.git", label: "the CLI + render engine" },
   starter: { remote: "git@github.com:papervine/starter.git", label: "the example docs site" },
 };
 if (!TARGETS[TARGET]) {

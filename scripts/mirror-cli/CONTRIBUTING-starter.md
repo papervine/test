@@ -56,4 +56,4 @@ minimal `docs.json` and `.mdx` pair that reproduces it. That usually becomes a r
 directly.
 
 For a bug in the renderer itself rather than this content, open it against
-[papervine/cli](https://github.com/papervine/cli).
+[papervine/papervine](https://github.com/papervine/papervine).

@@ -1,6 +1,6 @@
 # Publishes the two public snapshots this monorepo is the source of truth for:
 #
-#   cli      → papervine/cli      (the CLI + render engine; what `npm publish` ships from)
+#   cli      → papervine/papervine      (the CLI + render engine; what `npm publish` ships from)
 #   starter  → papervine/starter  (the forkable example docs site)
 #
 # Dormant until a `MIRROR_TOKEN` secret exists. Without it the job runs, says so, and exits
@@ -20,7 +20,7 @@
 #
 # WHY AUTOMATING THE CLI IS SAFE. This used to mirror only the starter, on the reasoning that
 # pushing the CLI moves the source an npm package is built from, and an immutable publish
-# deserves a human gate. The gate is real but it isn't here: `publish.yml` in papervine/cli
+# deserves a human gate. The gate is real but it isn't here: `publish.yml` in papervine/papervine
 # fires only on a `v*` tag or a manual dispatch, and the mirror pushes `main` alone — it never
 # pushes tags. So mirroring moves the source without being able to ship it, and tagging stays
 # the deliberate human act it was. What automation buys is that the tag then describes code

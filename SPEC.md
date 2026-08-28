@@ -105,8 +105,9 @@ factual — we read the same `docs.json`) and the migrate-guide link that proves
 Jargon lives in `docs/`, not on the storefront.
 
 **Status 2026-08-27 — GitHub on the marketing home.** The landing header (desktop) and
-footer link to the public CLI repo (`github.com/papervine/cli`). Absolute `<a>`, not
-`<Link>` — it's a different host. Smoke asserts the href on `/home`.
+footer link to the public CLI repo (`github.com/papervine/papervine` — the mirror; renamed
+from `papervine/cli` on 2026-08-28). Absolute `<a>`, not `<Link>` — it's a different host.
+Smoke asserts the href on `/home`.
 
 **Status 2026-08-27 — the hero is the product tour, click-to-play.** The hero's product shot
 was a static skeleton mock (fake sidebar, grey bars). It is now the poster frame of a real
@@ -5251,11 +5252,18 @@ the hosted API over HTTPS, they don't embed it.
 > and invites the wrong conclusion — the source repo is **private**, so it could never be a
 > clone target.
 >
-> The rest of the repo still says `papervine/cli` (the mirror's push remote in
-> `scripts/mirror-cli.mjs`, the README's asset URLs and source link). Those work today only
-> because GitHub redirects a renamed repo, which is a redirect that dies the moment anything
-> new is created at the old name — worth sweeping deliberately rather than leaving on a
-> redirect.
+> **Swept the rest of the name in the same pass.** Everything else said `papervine/cli` and
+> worked only because GitHub redirects a renamed repo — a redirect that dies the moment
+> anything is created at the old name, and the load-bearing one was `scripts/mirror-cli.mjs`'s
+> push remote, which publishes on every green CI run of `main`. Also updated: `apps/cli`'s
+> `package.json` (`homepage`/`repository`/`bugs`, which npm renders as links), the README's
+> five `raw.githubusercontent` asset URLs and its source link, the marketing home's `GITHUB`
+> constant with the smoke assertion that pins it, the generated mirror templates
+> (`CONTRIBUTING*.md`, `workflows/ci.yml`), and `mirror.yml`'s comments.
+>
+> The **dated notes above keep saying `papervine/cli`** on purpose: they record what was
+> decided when, and a log that rewrites its own history stops being evidence. Only statements
+> of *current* fact were changed.
 >
 > **Three changes.** `output` becomes `process.env.VERCEL ? undefined : "standalone"` — one source
 > serving both targets, since Vercel sets `VERCEL` on every build. `apps/cli/vercel.json` supplies

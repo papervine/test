@@ -35,7 +35,7 @@ rule is about customer-identifying info, not about any one name specifically.
 
 **Competitor names: allowed on discovery surfaces, not in product prose** (decided
 2026-08-23; SPEC §10.6). Naming competitors is how people find us, so the npm
-`description`/`keywords`, the public `papervine/cli` repo description/topics, and the CLI
+`description`/`keywords`, the public `papervine/papervine` repo description/topics, and the CLI
 README's Compatibility section deliberately say "docs.json-compatible" and "alternative to
 GitBook / ReadMe". Keep the not-affiliated disclaimer, and never use another product's logo
 or imply endorsement. **`docs/` prose stays neutral** — explaining our own feature by
@@ -676,9 +676,9 @@ npm test                    # smoke: renderer + control-plane gate (zero-dep, no
 npm run test:unit           # vitest — pure-logic unit tests
 npm run test:e2e            # playwright — authed journeys (needs docker Postgres + MinIO)
 npm run test:cli            # clean-room: packs the real papervine tarball, installs it OUTSIDE the repo, serves docs/ from it (slow — runs a full next build)
-npm run mirror:cli -- --dry-run       # build + validate the public papervine/cli snapshot without touching the remote (add --push to publish)
+npm run mirror:cli -- --dry-run       # build + validate the public papervine/papervine snapshot without touching the remote (add --push to publish)
 npm run mirror:starter -- --dry-run   # same, for the forkable example site → papervine/starter
-# BOTH mirrors are LIVE: .github/workflows/mirror.yml publishes each on every green CI run of main. The dry runs are for checking a change before it lands, not for publishing. Shipping to npm is still a separate, deliberate act — tag `v*` in papervine/cli; the mirror never pushes tags.
+# BOTH mirrors are LIVE: .github/workflows/mirror.yml publishes each on every green CI run of main. The dry runs are for checking a change before it lands, not for publishing. Shipping to npm is still a separate, deliberate act — tag `v*` in papervine/papervine; the mirror never pushes tags.
 node tests/crawl.mjs examples/starter # crawl the example site (a CI gate)
 npm run db:generate         # generate a versioned SQL migration from schema changes
 npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
