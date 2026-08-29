@@ -37,10 +37,13 @@ const ALTERNATIVE_KEYWORD = "docs platform alternative";
 // Kept near 60 characters so the keyword survives search-result truncation, and set as
 // `absolute` below: the root layout's `%s · Papervine` template would otherwise append a second
 // "Papervine" and push this well past that budget.
-const TITLE = `Papervine — a docs site | ${ALTERNATIVE_KEYWORD}`;
+const TITLE = `Papervine — publish beautiful docs | ${ALTERNATIVE_KEYWORD}`;
+// Leads with the hero's own positioning so the unfurled card reads as the page it links to,
+// then keeps the competitor sentence — that clause is the discovery surface (§10.6), not
+// decoration, and it stays whatever the headline above it happens to say.
 const DESCRIPTION =
-  "A docs site for your product — with search, your own domain, and an assistant. " +
-  "Open source alternative to the incumbent, ReadMe, and GitBook.";
+  "AI-powered self-updating knowledge platform. Open source or hosted. " +
+  "An alternative to the incumbent, ReadMe, and GitBook.";
 
 // Canonical host, `og:`/`twitter:` tags and our X handle come from the shared marketing helper
 // — see marketing-seo.ts for why they can't live in the root layout (it renders for tenant docs

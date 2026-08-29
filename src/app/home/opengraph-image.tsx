@@ -11,7 +11,7 @@ import { MarketingOgCard, MARKETING_OG_SIZE } from "@/lib/marketing-og-card";
  * this file's content, so the card re-scrapes when the art or the copy changes.
  */
 
-export const alt = "Papervine — a docs site for your product";
+export const alt = "Papervine — publish beautiful docs";
 export const size = MARKETING_OG_SIZE;
 export const contentType = "image/png";
 
@@ -19,10 +19,11 @@ export default async function Image() {
   return new ImageResponse(
     (
       <MarketingOgCard
-        headline={[["A docs site"], ["for your ", { accent: "product." }]]}
+        // Matches the hero, including which word carries the gradient.
+        headline={[["Publish ", { accent: "beautiful" }, " docs."]]}
         sublines={[
-          "Write help pages. Papervine publishes them as a site.",
-          "Open source alternative to the incumbent, ReadMe, and GitBook.",
+          "AI-powered self-updating knowledge platform.",
+          "Open source or hosted.",
         ]}
       />
     ),
