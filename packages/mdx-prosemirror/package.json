@@ -4,7 +4,7 @@
   "description": "Bidirectional MDX <-> ProseMirror conversion for Papervine's collaborative WYSIWYG editor. Pure and isomorphic (no React, no server-only). Internal: not published to npm.",
   "private": true,
   "type": "module",
-  "license": "MIT",
+  "license": "Elastic-2.0",
   "main": "./index.ts",
   "types": "./index.ts",
   "files": [

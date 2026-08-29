@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "license": "MIT",
+  "license": "Elastic-2.0",
   "description": "Papervine collaborative editing socket — a standalone Hocuspocus (Yjs) WebSocket service. Relays the editor's shared MDX document across clients; the Next app mints room tokens and persists drafts, so this service holds no session/RBAC and no content pipeline.",
   "main": "src/server.ts",
   "scripts": {

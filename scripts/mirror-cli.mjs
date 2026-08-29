@@ -3,7 +3,7 @@
  * Publish the public-facing parts of this monorepo to their own GitHub repos.
  *
  * Two targets (`--target`), one mechanism:
- *   - `cli`     → `papervine/papervine`, the MIT CLI + render engine
+ *   - `cli`     → `papervine/papervine`, the source-available (ELv2) CLI + render engine
  *   - `starter` → `papervine/starter`, the forkable example docs site
  *
  * The monorepo is the single source of truth. This is a **one-directional** publish:
@@ -69,7 +69,7 @@ const VALIDATE = !has("--no-validate");
 /**
  * Two publish targets, same machinery.
  *
- *  - **cli** → `papervine/papervine`: the MIT open-source half of the monorepo (the CLI and the
+ *  - **cli** → `papervine/papervine`: the public, source-available half of the monorepo (the CLI and the
  *    render engine it's built from), plus a generated workspace root, tests and CI.
  *  - **starter** → `papervine/starter`: the forkable example docs site. It lives here rather
  *    than being maintained over there because the monorepo *depends* on it — `db:seed` builds
@@ -99,7 +99,7 @@ const STAMP = ".mirror-source";
 const MIRROR_TRAILER = "Mirrored-From:";
 const LEGACY_TRAILERS = ["Mirrored from ", "Published from the Papervine monorepo at "];
 
-// The two workspaces that are MIT and public. `packages/renderer` is most of the substance
+// The two workspaces that are public (Elastic License 2.0). `packages/renderer` is most of the substance
 // — apps/cli is thin glue — so open-sourcing "the CLI" necessarily means this too.
 const MIRRORED_PATHS = ["apps/cli", "packages/renderer"];
 
@@ -254,7 +254,7 @@ function rootPackageJson(cliPkg) {
     private: true,
     type: "module",
     description: cliPkg.description,
-    license: "MIT",
+    license: "Elastic-2.0",
     homepage: cliPkg.homepage,
     repository: cliPkg.repository,
     bugs: cliPkg.bugs,

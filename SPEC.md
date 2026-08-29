@@ -4618,6 +4618,33 @@ the hosted API over HTTPS, they don't embed it.
 > `LICENSE` (MIT) lives at **`apps/cli/LICENSE`**, deliberately *not* the repo root: a root
 > LICENSE would assert MIT over the control plane too.
 >
+> **Superseded (2026-08-28): the public half is now the Elastic License 2.0, not MIT.** Same
+> boundary, different terms. MIT let anyone take `papervine` + `packages/renderer` — which is the
+> whole rendering product — and offer it as a hosted docs service, i.e. compete with the only
+> thing being sold, using the thing being given away. ELv2 keeps everything a *user* cares about:
+> read it, change it, self-host it, run it in CI, ship your own docs with it, no key required and
+> no telemetry. The single limitation is providing the software to third parties **as a hosted or
+> managed service**. That is the specific hole MIT left open, and closing it costs a self-hoster
+> nothing.
+>
+> Not OSI open source any more, and the docs shouldn't call it that — "source-available" is the
+> honest word, and `docs/roadmap.mdx` says so. The two other ELv2 clauses are inert here by
+> construction: there is no license-key functionality to circumvent, and the notices clause is the
+> usual "pass the terms along". `LICENSE` stays at **`apps/cli/LICENSE`** for the reason the
+> 2026-08-23 note gives — a root LICENSE would assert these terms over the control plane, which is
+> not licensed to anyone. SPDX `Elastic-2.0` on `apps/cli`, `packages/renderer`,
+> `packages/mdx-prosemirror` and `apps/collab`, on the mirror's generated workspace root, and in
+> the README badge + CONTRIBUTING of the public repo.
+>
+> Worth knowing for anything that reads package metadata: npm shows `Elastic-2.0` as a
+> non-OSI-approved license, and some corporate policy scanners flag ELv2 alongside SSPL/BUSL. That
+> is the intended trade, but it will produce the occasional "is this open source?" question, and
+> the answer to give is the paragraph above rather than a yes.
+>
+> The earlier MIT notes in this file are left as written — they were true when dated, and this
+> file is a log. Anywhere the *present tense* matters (the mirror script's prose, the CLI README,
+> CONTRIBUTING, the roadmap page) now says ELv2.
+>
 > **Consequence to be explicit about: this open-sources the render engine, not just the CLI.**
 > `apps/cli` is 19 files of glue; the substance is `packages/renderer` (38 files), and a public
 > CLI repo that anyone can actually build has to contain it. That's a coherent open-core split —
