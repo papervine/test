@@ -264,7 +264,7 @@ export default async function LandingPage() {
               </Link>
               <span className="mono flex items-center gap-2 text-xs text-[var(--muted)]">
                 <FileJson2 className="h-3.5 w-3.5" />
-                Connect a GitHub repo and your docs are live.
+                With or without GitHub, we got you covered.
               </span>
             </div>
 
