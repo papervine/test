@@ -1,5 +1,5 @@
 import { parseMdx } from "./processor";
-import { extractAttrs, nodeTypeForTag, rawSlice } from "./components";
+import { extractAttrs, isInlineTag, isVoidTag, nodeTypeForTag, rawSlice } from "./components";
 import type { PMDoc, PMMark, PMNode } from "./types";
 
 // mdast → ProseMirror. Standard markdown maps to conventional PM nodes; the 15 known
@@ -76,17 +76,50 @@ function inlineToPM(node: Any, source: string, marks: PMMark[]): PMNode[] {
       if (marks.length) img.marks = marks;
       return [img];
     }
-    case "mdxJsxTextElement":
+    case "mdxJsxTextElement": {
       // Literal inline `<img>` → a real image node; other inline JSX is preserved verbatim.
       if (node.name === "img") {
         const img = imgNode(node, marks);
         if (img) return [img];
       }
+      const inlineNode = inlineComponent(node, source, marks);
+      if (inlineNode) return [inlineNode];
       return [{ type: "mdxUnknownText", attrs: { raw: rawSlice(source, node) } }];
+    }
     default:
       // mdxTextExpression, inline html, reference links/images, footnotes — preserved verbatim.
       return [{ type: "mdxUnknownText", attrs: { raw: rawSlice(source, node) } }];
   }
+}
+
+/**
+ * An inline component (`<Badge color="green">Beta</Badge>`) as a typed PM node, or null when it
+ * has to stay raw.
+ *
+ * The label is the node's own content, so it's edited in place like any other text. It's kept to
+ * TEXT, though — a badge holding a link or an image is not something the component renders
+ * meaningfully, and demoting those to raw preserves them exactly rather than silently dropping
+ * what the typed model can't hold.
+ */
+function inlineComponent(node: Any, source: string, marks: PMMark[]): PMNode | null {
+  if (!isInlineTag(node.name)) return null;
+  const attrs = extractAttrs(node.name as string, node.attributes ?? []);
+  if (!attrs) return null; // an expression/unknown attr forced a demotion to raw
+  const type = nodeTypeForTag(node.name) as string;
+  // A childless component (`<Icon />`) is an atom: no content, and anything written between its
+  // tags anyway would be dropped, so that demotes to raw instead.
+  if (isVoidTag(node.name)) {
+    if ((node.children ?? []).length) return null;
+    const atom: PMNode = { type, attrs };
+    if (marks.length) atom.marks = marks;
+    return atom;
+  }
+  const content = childrenInline(node, source, []);
+  if (content.some((c) => c.type !== "text")) return null;
+  const out: PMNode = { type, attrs, content };
+  // A badge inside a link or bold run carries those marks, so it round-trips inside them.
+  if (marks.length) out.marks = marks;
+  return out;
 }
 
 function childrenInline(node: Any, source: string, marks: PMMark[]): PMNode[] {
@@ -176,8 +209,14 @@ function blockToPM(node: Any, source: string): PMNode | PMNode[] | null {
       return { type: "paragraph", content: childrenInline(node, source, []) };
     case "heading":
       return { type: "heading", attrs: { level: node.depth ?? 1 }, content: childrenInline(node, source, []) };
-    case "blockquote":
-      return { type: "blockquote", content: childrenBlock(node, source) };
+    case "blockquote": {
+      // `>` on its own is a quote with nothing in it, and a `block+` node with no children is an
+      // INVALID ProseMirror node — the same trap as an empty component: nothing rejects it at
+      // parse time, and it surfaces later as a RangeError the first time something tries to change
+      // it. One empty paragraph makes it a quote you can put a caret in.
+      const quoted = childrenBlock(node, source);
+      return { type: "blockquote", content: quoted.length ? quoted : [{ type: "paragraph" }] };
+    }
     case "list":
       return {
         type: node.ordered ? "orderedList" : "bulletList",
@@ -222,9 +261,22 @@ function blockToPM(node: Any, source: string): PMNode | PMNode[] | null {
         const img = imgNode(node, []);
         return img ? { type: "paragraph", content: [img] } : raw(source, node);
       }
+      // An inline component on a line of its own arrives as a FLOW element. Its PM node belongs
+      // to the inline group, so it needs a paragraph to live in — the MDX it serializes back to
+      // is the same either way.
+      if (isInlineTag(node.name)) {
+        const inlineNode = inlineComponent(node, source, []);
+        return inlineNode ? { type: "paragraph", content: [inlineNode] } : raw(source, node);
+      }
       const nodeType = nodeTypeForTag(node.name);
       if (nodeType) {
         const attrs = extractAttrs(node.name, node.attributes ?? []);
+        // A childless BLOCK component (`<Tree.File name="x" />`) is an atom: a row, not a
+        // container. Anything written between its tags anyway demotes to raw rather than being
+        // silently dropped.
+        if (attrs && isVoidTag(node.name)) {
+          return (node.children ?? []).length ? raw(source, node) : { type: nodeType, attrs };
+        }
         // attrs === null means an expression/unknown attr forced a demotion to raw.
         if (attrs) {
           const content = childrenBlock(node, source);

@@ -2,14 +2,15 @@ import { Node, mergeAttributes, type Extensions, type NodeViewRenderer } from "@
 import StarterKit from "@tiptap/starter-kit";
 import Image from "@tiptap/extension-image";
 import Link from "@tiptap/extension-link";
-import CodeBlock from "@tiptap/extension-code-block";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import { lowlight } from "./code-highlight";
 import { ListItem } from "@tiptap/extension-list";
 import { Table as TipTapTable } from "@tiptap/extension-table";
 import { TableRow as TipTapTableRow } from "@tiptap/extension-table-row";
 import { TableCell as TipTapTableCell } from "@tiptap/extension-table-cell";
 import { TableHeader as TipTapTableHeader } from "@tiptap/extension-table-header";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { COMPONENTS } from "@papervine/mdx-prosemirror";
+import { COMPONENTS, INLINE_NODE_TYPES, VOID_NODE_TYPES } from "@papervine/mdx-prosemirror";
 import { SelectAllScope } from "./select-all-scope";
 import { EdgeGuard } from "./edge-guard";
 
@@ -21,6 +22,8 @@ import { EdgeGuard } from "./edge-guard";
 
 export interface NodeViewOpts {
   componentNodeView?: (type: string) => NodeViewRenderer;
+  /** Inline components (`<Badge>`) — a live component wrapping its own editable label. */
+  inlineComponentNodeView?: (type: string) => NodeViewRenderer;
   atomNodeView?: (type: string, inline: boolean) => NodeViewRenderer;
   imageNodeView?: () => NodeViewRenderer;
   codeBlockNodeView?: () => NodeViewRenderer;
@@ -38,12 +41,51 @@ function componentNodeAttrs(): Record<string, string[]> {
   return out;
 }
 
-function componentNode(type: string, attrNames: string[], nodeView?: NodeViewRenderer): Node {
+// An INLINE component (`<Badge>Beta</Badge>`) — a node in the inline group holding its own label
+// as text, so it's typed into like the rest of the sentence it sits in. `content: "text*"` rather
+// than `inline*`: the converter only models a plain-text label, and a schema that accepted more
+// would let the editor build a badge that can't be serialized.
+function inlineComponentNode(
+  type: string,
+  attrNames: string[],
+  isVoid: boolean,
+  nodeView?: NodeViewRenderer,
+): Node {
+  return Node.create({
+    name: type,
+    group: "inline",
+    inline: true,
+    // A childless component (`<Icon />`) is an atom: one thing to select, arrow past and delete,
+    // with nothing to type into.
+    ...(isVoid ? { atom: true, selectable: true } : { content: "text*" }),
+    addAttributes() {
+      const attrs: Record<string, { default: unknown }> = { mdxName: { default: null } };
+      for (const a of attrNames) attrs[a] = { default: null };
+      return attrs;
+    },
+    parseHTML() {
+      return [{ tag: `span[data-mdx="${type}"]` }];
+    },
+    renderHTML({ HTMLAttributes }) {
+      return ["span", mergeAttributes(HTMLAttributes, { "data-mdx": type }), 0];
+    },
+    ...(nodeView ? { addNodeView: () => nodeView } : {}),
+  });
+}
+
+function componentNode(
+  type: string,
+  attrNames: string[],
+  isVoid: boolean,
+  nodeView?: NodeViewRenderer,
+): Node {
   return Node.create({
     name: type,
     group: "block",
-    content: "block+", // permissive: never reject real content that isn't the idealized shape
-    defining: true,
+    // A childless component (`<Tree.File name="x" />`) is a row, not a container: an atom, with
+    // its name carried as an attr. Everything else takes `block+` — permissive on purpose, so
+    // real content that isn't the idealized shape is never rejected.
+    ...(isVoid ? { atom: true, selectable: true } : { content: "block+", defining: true }),
     addAttributes() {
       const attrs: Record<string, { default: unknown }> = { mdxName: { default: null } };
       for (const a of attrNames) attrs[a] = { default: null };
@@ -112,13 +154,19 @@ const ThematicBreak = Node.create({
 
 // codeBlock keeps the fence info string (```lang meta); Link keeps the `title` (`[x](u "t")`).
 // In the live editor a node view renders a ```mermaid fence as a diagram (see NodeViews).
+//
+// Lowlight, not the plain CodeBlock: a fence is syntax-highlighted while you type it, from the
+// same `language` the tab strip's picker writes (see code-highlight.ts for why it isn't Shiki).
+// `defaultLanguage` is "plaintext" rather than unset on purpose — with no language the plugin
+// falls back to `highlightAuto`, and an untitled fence being coloured as the highlighter's guess
+// is noise, not information.
 function codeBlockExt(nodeView?: NodeViewRenderer) {
-  return CodeBlock.extend({
+  return CodeBlockLowlight.extend({
     addAttributes() {
       return { ...this.parent?.(), meta: { default: null } };
     },
     ...(nodeView ? { addNodeView: () => nodeView } : {}),
-  });
+  }).configure({ lowlight, defaultLanguage: "plaintext" });
 }
 /**
  * A GFM task item — `- [ ]` / `- [x]` — is StarterKit's ordinary `listItem` carrying a `checked`
@@ -252,7 +300,14 @@ const LinkWithTitle = Link.extend({
 export function buildMdxExtensions(opts: NodeViewOpts = {}): Extensions {
   const attrs = componentNodeAttrs();
   const componentNodes = Object.entries(attrs).map(([type, names]) =>
-    componentNode(type, names, opts.componentNodeView?.(type)),
+    INLINE_NODE_TYPES.has(type)
+      ? inlineComponentNode(
+          type,
+          names,
+          VOID_NODE_TYPES.has(type),
+          opts.inlineComponentNodeView?.(type),
+        )
+      : componentNode(type, names, VOID_NODE_TYPES.has(type), opts.componentNodeView?.(type)),
   );
   // Image carries mdxTag/width/height (so a literal `<img>` round-trips) and, in the live
   // editor, a node view that resolves the tenant asset URL so the image actually loads.

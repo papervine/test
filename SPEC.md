@@ -3007,6 +3007,44 @@ layer.
 > behaviours are one keystroke apart, so pinning them separately would let a fix for either break
 > the other). Plus 4 unit tests on the new decision.
 >
+> **…and it was still swallowing two more (2026-08-28).** Reported as "if I add a code block inside
+> an accordion and press backspace and delete all the letters, it stops and doesn't remove the code
+> block", then "same for blockquote". The list fix above was the right *shape* and too narrow: what
+> Backspace means at the start of a block is generally "strip this block's formatting", and every
+> form of that stays INSIDE the component. So the guard now holds an ordered list of in-container
+> actions — lift the list item, leave the quote, turn an emptied code fence back into a paragraph —
+> and runs the first that applies; the pure decision drops to `allow` / `block` / `handle`, with
+> the editor answering "is there anything to do here" via `can()`. Clearing an emptied typed block
+> is `setNode("paragraph")` rather than TipTap's own `clearNodes()`, because that one *also lifts*
+> and would carry the paragraph out of the component — the exact escape being guarded.
+>
+> Both new actions are pinned twice: `edge-guard-actions.test.ts` (jsdom, three commands at the
+> leading edge, each asserted to leave the component standing — the commands were what was in
+> question, and they run in milliseconds everywhere) and one browser case for the keystroke.
+>
+> Getting that browser case honest took four tries and **none of the failures were the product** —
+> worth writing down, because each is a way to write a lying editor test. `⌘A` first (Select All is
+> component-scoped here, so it deleted the whole accordion). Then clicks landing on a block's
+> padding rather than its text. Then the real one: **`keyboard.press` resolves when the event is
+> sent, not when ProseMirror has applied it**, so a run of presses raced the editor and two never
+> landed — visible only because a temporary `console.debug` in the guard, echoed through
+> Playwright's console listener, showed presses arriving at 14, 13, 12, 11, 10 and then stopping.
+> That's the tool to reach for when a keystroke "does nothing". The version that stuck stopped
+> simulating typing altogether: **empty the block with a triple-click selection and one Backspace**,
+> so the only press under test is the one after it. The lesson generalises — when the setup is
+> flakier than the assertion, make the setup a single deliberate act.
+>
+> While seeding that fixture, an adjacent invalid node turned up: `>` alone parses to a blockquote
+> with **no children**, which `block+` forbids — the same trap as the empty component, from
+> markdown's side. Filled with a paragraph in the converter, with a round-trip test.
+>
+> **The `/` menu didn't scroll to the highlight (2026-08-28).** 33 blocks in a ~340px scroller, and
+> the arrows move a highlight the mouse isn't driving — so nothing brought the new row into view
+> and the selection silently ran off the bottom, which reads as the keys having stopped working.
+> One `scrollIntoView({ block: "nearest" })` keyed to the selected index. The e2e asserts the
+> LIST's `scrollTop` moved, not just that the item is in view: with no scrolling the item would be
+> past the fold and a naive in-view check could still pass on a shorter list.
+>
 > **The whole-site preview became an overlay (2026-08-25).** It was `<a target="_blank">`, which
 > put the preview in a window with no relationship to the editor: getting back meant hunting for a
 > tab, and the two drifted — the tab kept showing the draft as of when it opened while you carried
@@ -3310,6 +3348,141 @@ layer.
 > "". The markup is read off the parsed atom instead. Guards: six round-trip cases (ordinary cell
 > unchanged, `<ul>`/`<ol>`, emphasis inside an item, text-plus-list, non-list HTML left alone) and
 > an `editor.spec.ts` step that types `- one` into a cell and asserts the HTML in the draft.
+>
+> **`<CodeGroup>` becomes a real tab strip (2026-08-29).** Asked for with three screenshots: a bar
+> of file names with the active one coloured and closable, `+` and a bin beside it, `// add code
+> here` in an empty fence, and a language control on the right. It was the last structural
+> component still falling back to labelled chrome, for the reason `<Tabs>` used to: a group picks
+> its children apart, and ProseMirror gives a node view exactly one content hole. Same answer as
+> the tab strip — render every block into that hole and hide all but the active one with a scoped
+> `<style>` (`hiddenCodeRule`, now sharing `hiddenChildRule` with the tabs version) — because a
+> class toggled from an effect doesn't survive ProseMirror re-rendering its children.
+>
+> Everything the strip edits is the fence's own syntax, not editor state. A tab's label is its
+> **title** (```` ```bash npm ```` or ```` ```ts title="app.ts" ````), so renaming one writes
+> `meta` and the reader's tab says exactly what you typed. `code-meta.ts` is the write half of
+> `parseCodeTitle`, and it has to mirror that parser's *greediness* to be safe: with no `title=`
+> present the parser reads a bare label as the WHOLE meta, so a label sharing the meta with
+> anything else (`{1,3-4}`, a `key=value` directive) is written in the explicit form — otherwise
+> `app.ts {1,3-4}` comes back as a tab named "app.ts {1,3-4}". Every unit case asserts the round
+> trip through `parseCodeTitle` rather than the formatting, since the string is only ever a means.
+>
+> The language picker is searchable and matches the **spellings authors write**: `ts`, `py`, `yml`
+> and `sh` are aliases on their entries, so a fence already written ```` ```ts ```` reads
+> "TypeScript" instead of falling through as unlisted, and typing two letters finds it. A language
+> we don't list is shown as written and left alone.
+>
+> Two things the reference showed that deliberately did NOT ship. The "…" menu (line numbers, wrap,
+> expandable, twoslash, hide copy) is absent because **the renderer ignores those fence directives
+> today** — `parseCodeTitle` reads a title and nothing else — and a control that writes a directive
+> nothing honours is worse than no control (the same call as the table `+` tooltip, which only
+> shipped because the drag shipped with it).
+>
+> **Where the violet convention stops.** Reported as "tabs are purple in the editor and green in the
+> render". The active tab had been moved to `--violet` on the reasoning that editor furniture is
+> violet (the grid highlight's rule) — but the green it replaced was the **site's own `primary`**,
+> which is what the reader's `<CodeGroup>` underlines with, so the change was what *created* the
+> mismatch. The line is the reader, not the surface: the tab labels are a preview of a published
+> component and follow `primary`; the controls beside them (`+`, `✕`, bin, language) exist only in
+> the editor and stay violet. The green itself is a stale-content artifact, not a design choice —
+> `examples/starter/docs.json` and `docs/docs.json` are both `#7C3AED`, while every seeded site
+> carries `#16a34a` from the published `papervine/starter` mirror, which is behind.
+>
+> One thing measurement caught: the menu is **portaled to `<body>`**. The group's `overflow-hidden`
+> is what rounds the code block's corners, and rendered in place it clipped the menu to two rows —
+> visible only in a screenshot, since every assertion about it still passed. Portaled it sits
+> outside the `.db` shell, so it carries `db-portal` and its own dark surface like the `/` palette.
+> Guards: `tests/unit/code-meta.test.ts` (round trips, directive preservation, the alias table) and
+> an `editor.spec.ts` journey — switch, rename, language, add, remove, then assert the MDX in the
+> draft — with the console-clean assertion.
+>
+> **Syntax highlighting in the editor (2026-08-29).** Asked as "I imagine it should syntax
+> highlight (based on the language selected?)" — and it should. Published pages are highlighted by
+> **Shiki at compile time**: server-side, async, WASM-backed, none of which a keystroke can wait
+> for. In the editor highlighting is ProseMirror decorations recomputed on every change, so it has
+> to be synchronous — that's **lowlight** (highlight.js) via `@tiptap/extension-code-block-lowlight`,
+> with the token classes mapped onto `github-light`/`github-dark`, the same two themes the renderer
+> uses, so a block reads the same in both places. (Verified by reading the computed colour in both
+> platform themes, not by eye.)
+>
+> The registry (`code-highlight.ts`) is explicit because of what an UNREGISTERED language does:
+> TipTap's plugin falls back to `highlightAuto`, which guesses. A ```mermaid fence coloured as
+> somebody's guess at Ruby is worse than no colour, so mermaid and prisma are aliased to plaintext,
+> and `defaultLanguage: "plaintext"` stops an untitled fence being auto-detected at all.
+>
+> **Components whose whole content is ATTRS (2026-08-29).** Reported one at a time — "we're missing
+> a badge component", then colour, icon, tree — and none of them were missing from the *renderer*:
+> `<Badge>`, `<Icon>`, `<Color>` and `<Tree>` all shipped and all match the documented API (Badge's
+> is prop-for-prop; `iconType` is accepted and ignored, as Lucide has one weight). What was missing
+> was the **editor**: the converter modeled no inline components and no member-expression tags, so
+> each one came through as an unknown atom — its own MDX source, in an amber box, uninsertable from
+> the `/` menu.
+>
+> Three shapes had to be added to the typed model, and each one is a schema fact, not a rendering
+> choice:
+>
+> - **Inline** (`ComponentSpec.inline`): `<Badge>Beta</Badge>` sits in a run of text, so MDX hands
+>   it over as an `mdxJsxTextElement` and its node belongs to the inline group with `content:
+>   "text*"` — the label is the node's content, typed into like the sentence around it. Written on
+>   a line of its own it arrives as a FLOW element instead, and gets wrapped in a paragraph so an
+>   inline node has somewhere legal to live; the MDX it serializes back to is identical either way.
+> - **Void** (`ComponentSpec.void`): `<Icon />` and `<Tree.File />` hold nothing, so their nodes are
+>   atoms — selected, arrowed past and deleted as one thing — and serialize back self-closing.
+>   Children written into one anyway demote the element to raw rather than being dropped.
+> - **Member-expression tags**: `<Tree.Folder>` / `<Color.Item>` are reported by mdast under their
+>   literal dotted name, so they're ordinary keys in `COMPONENTS`, and `mdxName` round-trips the
+>   exact spelling — a `<FileTree.File>` that came back as `<Tree.File>` would be a diff in
+>   somebody's repo.
+>
+> The node views split on one line, the same one as everywhere else: **is this thing the reader's
+> component, or is it chrome?** A badge and an icon ARE the published component (they render live,
+> from the registry). A tree row and a colour swatch are not — a `<Tree.File>` is named entirely by
+> an attr, so there is no content hole to type into, and the reader's tree collapses with
+> `<details>`, which in an editor would hide the rows you're arranging. Those are drawn here from
+> the same parts: same icons, same indent, same rail, same swatch tiles.
+>
+> Two things stay deliberately raw, and both are the passthrough guarantee working rather than a
+> gap: a `<Color.Item value={{ light, dark }}>` (an expression attr — flattening it would silently
+> lose the dark colour) and a badge with an unknown attr. And one bug the tests caught twice: a
+> popover rendered *inside* a component that rounds its corners with `overflow: hidden` gets
+> clipped — the colour editor to a sliver, the language menu to two rows — so every menu here is
+> portaled to `<body>` with measured coordinates and `db-portal`.
+>
+> Guards: `mdx-prosemirror-roundtrip.test.ts` (Badge: inline parse, marks, attr preservation,
+> demotion), `mdx-prosemirror-tree.test.ts`, `mdx-prosemirror-color.test.ts`,
+> `icon-names.test.ts` (the kebab names the picker offers resolve back to real Lucide exports —
+> asserted over the whole library, since an unknown name renders nothing and reports nothing), and
+> three `editor.spec.ts` journeys.
+>
+> **Still unmodeled** (they render for readers; in Visual mode they show their source): `Danger`,
+> `Banner`, `Tile`, `Panel`, `RequestExample`, `ResponseExample`, `Prompt`, `Tooltip`, `GitHub`,
+> `Update`, `Visibility`, `View`. Most are plain containers — a `COMPONENTS` entry, a registry
+> entry and a `/` item each.
+>
+> **The bug the new components surfaced: a namespace component 500'd the draft Preview
+> (2026-08-29).** Reported as `Expected component `Color.Item` to be defined` from
+> `preview/[org]/[site]/site/[[...path]]`. Not a converter or editor bug at all — `applyTenantUrls`
+> rewrites `href`/`src` against the tenant's base by **wrapping every named component in a plain
+> arrow function**, and a wrapper carries none of a namespace component's static members. MDX
+> compiles `<Color.Item>` to a `components.Color.Item` lookup, found `undefined`, and threw — a
+> 500 rather than a degraded render, because the throw lands while React renders the content, not
+> inside the compile step's try/catch.
+>
+> What made it invisible for months is the branch it lives in: the wrap only happens when a link
+> or asset base is SET, i.e. the **draft preview** and **path-based serving** (`/sites/{slug}`). On
+> a tenant host the map passes through untouched — so `tests/fixtures/components-extended.mdx`
+> renders `<Tree.Folder>`, `<Color.Item>` and `<GitHub.Repo>` on every smoke run, and every crawl
+> is 0 × 500, while the same page died in Preview. It went unnoticed because nothing could
+> *insert* one of these components until the editor learned to; the first `<Color>` a person added
+> from the `/` menu hit it immediately.
+>
+> Fixed by copying the members onto the wrapper (`Object.assign(Wrapped, Comp)`) — unwrapped on
+> purpose, since `rewrite` only touches `href`/`src` and no namespace member takes either. Guards
+> at both layers: `tests/unit/mdx-tenant-urls.test.ts` asserts the members survive the wrap for
+> every namespace we ship (verified failing with the fix reverted), and an `editor.spec.ts` case
+> loads the Preview route on a page holding `<Color.Item>` and `<Tree.Folder>` and asserts 200 with
+> no page errors. The general lesson for this file's gotcha log: **a components-map transform that
+> rebuilds entries has to preserve their statics** — the map holds namespaces, not just functions.
 
 ---
 

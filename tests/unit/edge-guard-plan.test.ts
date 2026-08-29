@@ -51,15 +51,16 @@ describe("blocksEdgeDelete", () => {
   });
 });
 
-// Guarding the edge is right; treating it as "nothing can happen here" is not. A list opening a
-// tab was the one place a bullet or a checkbox could never be backspaced away, because the press
-// that drops list formatting lands on exactly the position the guard swallows.
+// Guarding the edge is right; treating it as "nothing can happen here" is not. What Backspace means
+// at the start of a block is usually "strip this block's formatting" — unwrap the list item, leave
+// the quote, turn an emptied code fence back into a paragraph — and each of those stays inside the
+// component. Blocking them made a component the one place those blocks couldn't be undone.
 describe("edgeDeleteAction", () => {
-  it("unwraps the list item instead of swallowing the key at the leading edge", () => {
-    expect(edgeDeleteAction(CONTAINERS, caret(TAB.from), "backward", true)).toBe("unwrap");
+  it("runs the in-container action instead of swallowing the key at the leading edge", () => {
+    expect(edgeDeleteAction(CONTAINERS, caret(TAB.from), "backward", true)).toBe("handle");
   });
 
-  it("still blocks there when there is no list to unwrap — the tab must survive", () => {
+  it("still blocks there when there is nothing to strip — the tab must survive", () => {
     expect(edgeDeleteAction(CONTAINERS, caret(TAB.from), "backward", false)).toBe("block");
   });
 

@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Locator } from "@playwright/test";
 import postgres from "postgres";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { TEST_DB_URL } from "./global-setup";
@@ -57,7 +57,15 @@ test.describe("web editor @external", () => {
             "slashtabs",
             "edgepage",
             "edgetaskpage",
+            "edgeblockpage",
             "accordionpage",
+            "codegrouppage",
+            "codehlpage",
+            "cardpage",
+            "inlinepage",
+            "treepage",
+            "colorpage",
+            "previewpage",
             "tablepage",
             "taskpage",
             "uploadpage",
@@ -141,6 +149,67 @@ test.describe("web editor @external", () => {
         '  <Accordion title="Second">\n\n    Second body text.\n\n  </Accordion>\n' +
         "</AccordionGroup>\n",
     );
+    // A <CodeGroup>, for the code tab strip. Its own page: the test renames tabs, changes a
+    // language and adds and removes blocks, then asserts on the MDX that comes out.
+    await put(
+      `${prefix}codegrouppage.mdx`,
+      "---\ntitle: Code Group\n---\n\n<CodeGroup>\n\n" +
+        "```bash npm\nnpm i papervine\n```\n\n" +
+        "```bash yarn\nyarn add papervine\n```\n\n" +
+        "</CodeGroup>\n",
+    );
+    // A fence with real code in it, for the highlighter. Its own page: the test changes the
+    // block's language and asserts on the tokens that produces. In a group, because that's where
+    // the language picker lives.
+    await put(
+      `${prefix}codehlpage.mdx`,
+      "---\ntitle: Code Highlight\n---\n\n<CodeGroup>\n\n```ts app.ts\nconst answer = 42;\n```\n\n</CodeGroup>\n",
+    );
+    // A pair of cards, for the card node view. Its own page: the test names one, gives it an icon
+    // and a link, and removes the other, then asserts on the MDX.
+    await put(
+      `${prefix}cardpage.mdx`,
+      "---\ntitle: Cards\n---\n\n<CardGroup cols={2}>\n" +
+        "  <Card>\n\n  </Card>\n" +
+        '  <Card title="Second card">\n\n    Second card body.\n\n  </Card>\n' +
+        "</CardGroup>\n",
+    );
+    // The components whose whole content is ATTRS — inline labels, tree rows, colour swatches.
+    // Each on its own page: every one of these tests adds and removes rows and asserts on the MDX.
+    await put(
+      `${prefix}inlinepage.mdx`,
+      "---\ntitle: Inline\n---\n\n" +
+        'Status: <Badge color="green">Stable</Badge> and an <Icon icon="rocket" /> icon.\n',
+    );
+    await put(
+      `${prefix}treepage.mdx`,
+      "---\ntitle: Tree\n---\n\n<Tree>\n" +
+        '  <Tree.Folder name="src" defaultOpen>\n' +
+        '    <Tree.File name="index.ts" />\n' +
+        "  </Tree.Folder>\n" +
+        '  <Tree.File name="README.md" />\n' +
+        "</Tree>\n",
+    );
+    // Namespace components (`<Color.Item>`, `<Tree.Folder>`) on a page the PREVIEW renders: the
+    // preview sets a link/asset base, and that is the branch that used to lose the members.
+    await put(
+      `${prefix}previewpage.mdx`,
+      // Titled "Namespaces", not "Preview": the nav row's name would otherwise collide with the
+      // Preview button the overlay test clicks (`getByRole("button", { name: "Preview" })`).
+      "---\ntitle: Namespaces\n---\n\n<Color>\n" +
+        '  <Color.Item name="PREVIEW_SWATCH" value="#7c3aed" />\n' +
+        "</Color>\n\n<Tree>\n" +
+        '  <Tree.Folder name="src">\n' +
+        '    <Tree.File name="PREVIEW_FILE.ts" />\n' +
+        "  </Tree.Folder>\n" +
+        "</Tree>\n",
+    );
+    await put(
+      `${prefix}colorpage.mdx`,
+      "---\ntitle: Colors\n---\n\n<Color>\n" +
+        '  <Color.Item name="primary" value="#7c3aed" />\n' +
+        "</Color>\n",
+    );
     // A task list that OPENS a tab: its first checkbox sits on the very position the edge guard
     // swallows, so it was the one checkbox in the editor that couldn't be backspaced away.
     await put(
@@ -149,6 +218,16 @@ test.describe("web editor @external", () => {
         '  <Tab title="Alpha">\n\n    - [ ] first task\n    - [x] second task\n\n  </Tab>\n' +
         '  <Tab title="Beta">\n\n    Beta body text.\n\n  </Tab>\n' +
         "</Tabs>\n",
+    );
+    // A code block and a blockquote that OPEN a component. Emptying either one leaves the caret on
+    // the component's leading edge — the position the guard swallows — with the block itself still
+    // there and nothing able to remove it.
+    await put(
+      `${prefix}edgeblockpage.mdx`,
+      "---\ntitle: Edge Blocks\n---\n\n<AccordionGroup>\n" +
+        '  <Accordion title="Code">\n\n    ```js\n    hi\n    ```\n\n  </Accordion>\n' +
+        '  <Accordion title="Quote">\n\n    > quoted\n\n  </Accordion>\n' +
+        "</AccordionGroup>\n",
     );
     // A page that ALREADY has a task list: the bug was about opening existing content, not about
     // inserting new. The plain bullet is there to prove it doesn't grow a checkbox.
@@ -302,11 +381,20 @@ test.describe("web editor @external", () => {
     await expect(title).toHaveValue("Second Page");
     expect(onEditorRoute()).toBe(editorPath);
 
-    // A Card's href is a live next/link wrapping the card; clicking the card (not its editable
-    // body) does the same thing rather than routing the app host to a 404.
+    // A Card's href is a live next/link wrapping the card; clicking the card itself — its padding,
+    // not its editable body and not one of its fields — does the same thing rather than routing
+    // the app host to a 404.
     await page.getByRole("button", { name: "Linky", exact: true }).click();
     await expect(prose).toContainText("An inline link", { timeout: 10_000 });
-    await prose.locator("a").filter({ hasText: "Card body text" }).getByRole("heading").click();
+    const card = prose.locator("a").filter({ hasText: "Card body text" });
+    // The card's own controls live INSIDE that <a>, so clicking one has to focus it rather than
+    // navigate — otherwise a linked card's title and icon are unreachable with the mouse.
+    await card.getByRole("textbox", { name: "Card title" }).click();
+    await expect(card.getByRole("textbox", { name: "Card title" })).toBeFocused();
+    expect(onEditorRoute()).toBe(editorPath);
+    await expect(title).toHaveValue("Linky");
+
+    await card.click({ position: { x: 6, y: 6 } });
     await expect(title).toHaveValue("Second Page");
     expect(onEditorRoute()).toBe(editorPath);
 
@@ -816,6 +904,358 @@ test.describe("web editor @external", () => {
     await clearDrafts(["accordionpage.mdx"]);
   });
 
+  // The <CodeGroup> node view (SPEC §9.2): the reader's tab strip, made editable. Browser-only
+  // for the same reason as <Tabs> — which block is showing is a scoped CSS rule, and the label,
+  // language and add/remove controls are all view-layer over the fence's own `meta`.
+  test("the code group is an editable tab strip over its fences", async ({ page }) => {
+    // Own the starting content: this test renames tabs and removes a block, then asserts on the
+    // MDX, so a draft left by an earlier run would have it asserting against a different group.
+    await clearDrafts(["codegrouppage.mdx"]);
+
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=codegrouppage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    const group = page.locator(".pv-codegroup");
+    const tabs = group.locator("button[title='Double-click to rename']");
+    const blocks = group.locator("[data-pv-code]");
+    // The tabs are the fences' own titles (```bash npm), not their language.
+    await expect(tabs).toHaveText(["npm", "yarn"]);
+    await expect(blocks).toHaveCount(2);
+
+    // One block showing at a time, and clicking a tab swaps which — the whole point of the strip.
+    await expect(blocks.first()).toBeVisible();
+    await expect(blocks.nth(1)).toBeHidden();
+    await tabs.nth(1).click();
+    await expect(blocks.first()).toBeHidden();
+    await expect(blocks.nth(1)).toBeVisible();
+    await expect(blocks.nth(1)).toContainText("yarn add papervine");
+
+    // The language control names the ACTIVE block's language, reading ```bash as "Bash" rather
+    // than leaving the author to guess at the raw id.
+    const language = group.getByRole("button", { name: "Language" });
+    await expect(language).toContainText("Bash");
+    await language.click();
+    // The menu portals to <body> (the group's overflow-hidden clipped it in place), so it is
+    // addressed from the page rather than from inside the group.
+    await page.getByRole("textbox", { name: "Search languages" }).fill("python");
+    await page.getByRole("button", { name: "Python", exact: true }).click();
+    await expect(language).toContainText("Python");
+
+    // Double-click renames the tab, which is the fence's title.
+    await tabs.nth(1).dblclick();
+    const field = group.getByRole("textbox", { name: "File name" });
+    await field.fill("pnpm");
+    await field.press("Enter");
+    await expect(tabs).toHaveText(["npm", "pnpm"]);
+
+    // + adds a block after the last, inheriting the language you were looking at (so its tab
+    // falls back to "python"), and it opens ready to type.
+    await group.getByRole("button", { name: "Add code block" }).click();
+    await expect(blocks).toHaveCount(3);
+    await expect(tabs).toHaveText(["npm", "pnpm", "python"]);
+    await expect(blocks.nth(2)).toBeVisible();
+    // An empty fence says what to do with itself rather than sitting there as a blank rectangle.
+    await expect(blocks.nth(2)).toContainText("// add code here");
+
+    // …and ✕ takes it back out. Only the active tab offers one, so a stray click can't delete a
+    // block you aren't looking at.
+    await expect(group.locator("button[aria-label^='Remove']")).toHaveCount(1);
+    await group.locator("button[aria-label^='Remove']").click();
+    await expect(blocks).toHaveCount(2);
+
+    // All of it in the draft as real MDX: the rename is the fence's own title, and the language
+    // change is the fence's info string — nothing is editor-only state.
+    const draft = async () => {
+      const drafted = await sql<{ content: string }[]>`
+        select content from draft_file d
+        join editor_session s on s.id = d.session_id
+        where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'codegrouppage.mdx'`;
+      return drafted[0]?.content ?? "";
+    };
+    await expect.poll(draft, { timeout: 10_000 }).toContain("```python pnpm");
+    const mdx = await draft();
+    expect(mdx).toContain("```bash npm");
+    expect(mdx).toContain("yarn add papervine");
+    expect(mdx).toContain("<CodeGroup>");
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat|Invalid content/i.test(
+          e,
+        ),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+
+    await clearDrafts(["codegrouppage.mdx"]);
+  });
+
+  // Syntax highlighting (SPEC §9.2). Published pages are highlighted by Shiki at compile time,
+  // which a keystroke can't wait for, so the editor highlights with lowlight decorations instead —
+  // and the fact worth pinning is that they follow the fence's OWN language, the one the picker
+  // writes. Browser-only: decorations exist only in a running ProseMirror view.
+  test("highlights a fence, and re-highlights it when the language changes", async ({ page }) => {
+    await clearDrafts(["codehlpage.mdx"]);
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=codehlpage`);
+    const block = page.locator(".pv-visual .pv-codeblock");
+    await expect(block).toBeVisible({ timeout: 15_000 });
+
+    // ```ts — `const` is a keyword, and the short spelling resolves to the same grammar as
+    // "typescript" (a fence written ```ts is the common case in real repos), which the picker
+    // also has to READ as TypeScript rather than as something it doesn't recognise.
+    await expect(block.locator(".hljs-keyword")).toHaveText(["const"]);
+    const language = page.getByRole("button", { name: "Language" });
+    await expect(language).toContainText("TypeScript");
+
+    // Plain Text is a real choice, not the absence of one: it has to CLEAR the tokens rather than
+    // leave the highlighter guessing at the content.
+    await language.click();
+    await page.getByRole("button", { name: "Plain Text", exact: true }).click();
+    await expect(block.locator(".hljs-keyword")).toHaveCount(0);
+
+    await clearDrafts(["codehlpage.mdx"]);
+  });
+
+  // The <Card> node view (SPEC §9.2). A card's icon, title and link are attrs, so the generic
+  // component view could render them and not edit them — naming a card meant Source mode. All
+  // three are controls now, inside the published card. Browser-only: the icon set, the fields and
+  // the menu are view-layer, and the point is that they write the card's own attributes.
+  test("names a card, gives it an icon and a link, and removes one", async ({ page }) => {
+    await clearDrafts(["cardpage.mdx"]);
+
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=cardpage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    const cards = page.locator(".pv-card-node");
+    await expect(cards).toHaveCount(2);
+    const first = cards.first();
+
+    // An untitled card still shows its field and says what its body is for — with nothing there,
+    // there'd be nowhere to click and no hint that a card has a title at all.
+    const titleField = first.getByRole("textbox", { name: "Card title" });
+    await expect(titleField).toHaveValue("");
+    await expect(first).toContainText("Enter your card description here");
+
+    // Name it, then Enter to drop into the body — a card is a name, then a description.
+    await titleField.fill("Quickstart");
+    await titleField.press("Enter");
+    await page.keyboard.type("Up in five minutes.");
+    await expect(first).not.toContainText("Enter your card description here");
+
+    // The icon set: search, pick, and it becomes the card's `icon`.
+    await first.getByRole("button", { name: "Add an icon" }).click();
+    await page.getByRole("textbox", { name: "Search icons" }).fill("rocket");
+    await page.getByRole("button", { name: "rocket", exact: true }).click();
+    await expect(first.getByRole("button", { name: "Icon: rocket" })).toBeVisible();
+
+    // …and off again. Remove is only offered when there IS one, so it can't be a control that
+    // does nothing.
+    await first.getByRole("button", { name: "Icon: rocket" }).click();
+    await page.getByRole("button", { name: "Remove" }).click();
+    await expect(first.getByRole("button", { name: "Add an icon" })).toBeVisible();
+    await first.getByRole("button", { name: "Add an icon" }).click();
+    await expect(page.getByRole("button", { name: "Remove" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+
+    // The link, from the card's own menu.
+    await first.getByRole("button", { name: "Card options" }).click();
+    await page.getByRole("textbox", { name: "Card link" }).fill("/second");
+    await page.getByRole("textbox", { name: "Card link" }).press("Enter");
+
+    // …and removing the other card takes it out of the group without touching this one.
+    await cards.nth(1).getByRole("button", { name: "Card options" }).click();
+    await page.getByRole("button", { name: "Remove card" }).click();
+    await expect(cards).toHaveCount(1);
+
+    // All of it in the draft as real MDX — the attrs readers get, not editor state.
+    const draft = async () => {
+      const drafted = await sql<{ content: string }[]>`
+        select content from draft_file d
+        join editor_session s on s.id = d.session_id
+        where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'cardpage.mdx'`;
+      return drafted[0]?.content ?? "";
+    };
+    await expect.poll(draft, { timeout: 10_000 }).toContain('title="Quickstart"');
+    const mdx = await draft();
+    expect(mdx).toContain('href="/second"');
+    expect(mdx).toContain("Up in five minutes.");
+    // The icon was added and taken off again, so it must not have been left behind.
+    expect(mdx).not.toContain("icon=");
+    expect(mdx).not.toContain("Second card");
+
+    const reactErrors = errors.filter(
+      (e) =>
+        e.startsWith("pageerror:") ||
+        /flushSync|Maximum update depth|Cannot update a component|not wrapped in act|hydrat|Invalid content/i.test(
+          e,
+        ),
+    );
+    expect(reactErrors, `unexpected React errors:\n${reactErrors.join("\n")}`).toEqual([]);
+
+    await clearDrafts(["cardpage.mdx"]);
+  });
+
+  // The inline components (SPEC §9.2): <Badge> and <Icon> sit in a run of text, so MDX parses them
+  // as inline JSX — which the converter used to preserve as raw source, meaning a badge showed in
+  // the Visual editor as its own MDX and there was no way to insert one. Browser-only: what's
+  // being asserted is that they render live, in the sentence, and stay there when edited.
+  test("renders a badge and an icon inline, and inserts more from the / menu", async ({ page }) => {
+    await clearDrafts(["inlinepage.mdx"]);
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=inlinepage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    // Live components, not source: the badge is the published one (its own class), and the icon
+    // is an svg — not the text "<Badge …>".
+    const badge = pm.locator("span.pv-inline-node").first();
+    await expect(badge).toHaveText("Stable");
+    await expect(pm).not.toContainText("<Badge");
+    await expect(pm.getByRole("button", { name: "Icon: rocket" })).toBeVisible();
+
+    // The label is the node's own content, so it's typed into like the sentence around it.
+    await badge.click();
+    await page.keyboard.press("End");
+    await page.keyboard.type("!");
+    await expect(badge).toHaveText("Stable!");
+
+    // Inserting from the `/` menu puts one in the line rather than breaking the paragraph.
+    await pm.click();
+    await page.keyboard.press("End");
+    await page.keyboard.type(" /badge");
+    await page.getByRole("button", { name: /Badge/ }).first().click();
+    await expect(pm.locator("span.pv-inline-node")).toHaveCount(3); // 2 badges + the icon
+
+    const draft = async () => {
+      const drafted = await sql<{ content: string }[]>`
+        select content from draft_file d
+        join editor_session s on s.id = d.session_id
+        where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'inlinepage.mdx'`;
+      return drafted[0]?.content ?? "";
+    };
+    await expect.poll(draft, { timeout: 10_000 }).toContain('<Badge color="green">Stable!</Badge>');
+    const mdx = await draft();
+    expect(mdx).toContain('<Icon icon="rocket" />');
+    // Still one paragraph: an inline component must not have split the line it was inserted into.
+    expect(mdx.trim().split("\n\n")).toHaveLength(1);
+
+    await clearDrafts(["inlinepage.mdx"]);
+  });
+
+  // The <Tree> node view (SPEC §9.2). Its rows are member-expression tags named entirely by an
+  // attr — `<Tree.File name="x" />` has no content hole at all — so the rows are drawn with real
+  // fields and added from a control. Browser-only for the same reason as every other node view.
+  test("builds a file tree by adding, naming and removing rows", async ({ page }) => {
+    await clearDrafts(["treepage.mdx"]);
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=treepage`);
+    await expect(page.locator(".pv-visual .ProseMirror")).toBeVisible({ timeout: 15_000 });
+
+    const tree = page.locator(".pv-tree");
+    await expect(tree.locator(".pv-tree-folder")).toHaveCount(1);
+    await expect(tree.locator(".pv-tree-file")).toHaveCount(2);
+
+    // A name is a field on the row.
+    const folderName = tree.getByRole("textbox", { name: "Folder name" });
+    await expect(folderName).toHaveValue("src");
+    await folderName.fill("app");
+
+    // Adding a row: the tree's own control asks which kind, then puts it in.
+    await tree.locator(".pv-tree-add").click();
+    await page.getByRole("button", { name: "File", exact: true }).click();
+    await expect(tree.locator(".pv-tree-file")).toHaveCount(3);
+    await page.keyboard.type("main.ts");
+
+    // …and removing one takes it back out. Addressed by the button's own label rather than by the
+    // row's text: a row's name lives in an INPUT, so `hasText` never matches it.
+    await tree.getByRole("button", { name: "Remove README.md" }).click();
+    await expect(tree.locator(".pv-tree-file")).toHaveCount(2);
+
+    const draft = async () => {
+      const drafted = await sql<{ content: string }[]>`
+        select content from draft_file d
+        join editor_session s on s.id = d.session_id
+        where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'treepage.mdx'`;
+      return drafted[0]?.content ?? "";
+    };
+    await expect.poll(draft, { timeout: 10_000 }).toContain('<Tree.Folder name="app"');
+    const mdx = await draft();
+    expect(mdx).toContain('<Tree.File name="main.ts" />');
+    expect(mdx).not.toContain("README.md");
+    // `defaultOpen` was on the row before this test touched it, and nothing here should have
+    // dropped an attr it never asked about.
+    expect(mdx).toContain("defaultOpen");
+
+    await clearDrafts(["treepage.mdx"]);
+  });
+
+  // The <Color> node view (SPEC §9.2): swatches whose colour and name are attrs.
+  test("edits a colour swatch and adds another", async ({ page }) => {
+    await clearDrafts(["colorpage.mdx"]);
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=colorpage`);
+    await expect(page.locator(".pv-visual .ProseMirror")).toBeVisible({ timeout: 15_000 });
+
+    const palette = page.locator(".pv-color");
+    await expect(palette.locator(".pv-color-item")).toHaveCount(1);
+
+    // The swatch opens an editor for the two things it is.
+    await palette.getByRole("button", { name: "Edit primary" }).click();
+    await page.getByRole("textbox", { name: "Colour value" }).fill("#16a34a");
+    await page.getByRole("textbox", { name: "Colour name" }).fill("brand");
+    await page.keyboard.press("Escape");
+
+    await palette.getByRole("button", { name: "Add a colour" }).click();
+    await expect(palette.locator(".pv-color-item")).toHaveCount(2);
+
+    const draft = async () => {
+      const drafted = await sql<{ content: string }[]>`
+        select content from draft_file d
+        join editor_session s on s.id = d.session_id
+        where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'colorpage.mdx'`;
+      return drafted[0]?.content ?? "";
+    };
+    await expect.poll(draft, { timeout: 10_000 }).toContain('name="brand"');
+    const mdx = await draft();
+    expect(mdx).toContain('value="#16a34a"');
+    expect(mdx).toContain('<Color.Item name="new-color"');
+
+    await clearDrafts(["colorpage.mdx"]);
+  });
+
+  // The draft Preview renders the tenant's own pages with a link/asset base — and THAT is the
+  // branch of `applyTenantUrls` that wraps every component to rewrite `href`/`src`. A wrapper
+  // function carries none of a namespace component's members, so `<Color.Item>` / `<Tree.Folder>`
+  // resolved to undefined and MDX threw "Expected component `Color.Item` to be defined" — a 500,
+  // because the throw lands while React renders the content rather than inside the compile step's
+  // try/catch. On a tenant host the map isn't wrapped at all, which is why every fixture, crawl
+  // and smoke check rendered a `<Tree>` perfectly while the same page died in Preview.
+  //
+  // `mdx-tenant-urls.test.ts` pins the wrapping itself; this is the journey that surfaced it.
+  test("Preview renders namespace components (Color.Item, Tree.Folder)", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+
+    const res = await page.goto(`/preview/${ORG_SLUG}/${SLUG}/site/previewpage`);
+    expect(res?.status(), "the preview must render, not 500").toBe(200);
+    await expect(page.getByText("PREVIEW_SWATCH")).toBeVisible({ timeout: 15_000 });
+    // Attached, not visible: the reader's folder is a `<details>` and this one has no
+    // `defaultOpen`, so its rows are collapsed — the point here is that `Tree.Folder` RESOLVED.
+    await expect(page.getByText("PREVIEW_FILE.ts")).toBeAttached();
+    expect(errors, `unexpected page errors:\n${errors.join("\n")}`).toEqual([]);
+  });
+
   // …and the case the guard first got wrong: a list OPENING a tab. Its first item starts on
   // exactly the position the guard swallows, so the press that normally drops list formatting did
   // nothing, and that checkbox could never be removed. Reported as "not able to backspace out the
@@ -824,6 +1264,9 @@ test.describe("web editor @external", () => {
   test("Backspace unwraps a list that opens a tab, then still stops at the edge", async ({
     page,
   }) => {
+    // Own the starting content: this test strips a list and asserts it's gone, so a draft left by
+    // an earlier run would have it asserting against a page that no longer has one.
+    await clearDrafts(["edgetaskpage.mdx"]);
     await page.goto(`${sitePath(SLUG, "editor")}?slug=edgetaskpage`);
     const pm = page.locator(".pv-visual .ProseMirror");
     await expect(pm).toBeVisible({ timeout: 15_000 });
@@ -836,10 +1279,13 @@ test.describe("web editor @external", () => {
     // assumed: this whole test is about which position the key lands on, so a click that misses
     // would otherwise read as "the guard swallowed it", i.e. as the bug it exists to catch.
     await pane.getByText("first task").click();
-    await page.keyboard.press("Home");
     await expect
-      .poll(() =>
-        page.evaluate(() => {
+      .poll(async () => {
+        // Home INSIDE the poll: `press` resolves when the event is sent, not when ProseMirror has
+        // applied the click that precedes it, so a single press can land before the caret exists.
+        // Re-asking for the start of the line is idempotent, which makes this a wait, not a retry.
+        await page.keyboard.press("Home");
+        return page.evaluate(() => {
           const sel = window.getSelection();
           const node = sel?.anchorNode;
           const el = node?.nodeType === 1 ? (node as Element) : node?.parentElement;
@@ -848,8 +1294,8 @@ test.describe("web editor @external", () => {
             atStart: sel?.anchorOffset === 0,
             inFirstItem: !!li && li === li.closest("ul")?.firstElementChild,
           };
-        }),
-      )
+        });
+      })
       .toEqual({ atStart: true, inFirstItem: true });
 
     await page.keyboard.press("Backspace");
@@ -867,6 +1313,62 @@ test.describe("web editor @external", () => {
     await expect(block.locator("[data-pv-tab]")).toHaveCount(2);
 
     await clearDrafts(["edgetaskpage.mdx"]);
+  });
+
+  // …and the same rule for the other two blocks that OPEN a component. Emptying a code block or a
+  // blockquote leaves the caret on the component's leading edge, where the guard used to swallow
+  // the key — so the emptied block sat there with no way to remove it. Backspace there means
+  // "drop this block's formatting", which stays inside the component; only the press after that,
+  // with nothing left to strip, is the one that would escape.
+  test("Backspace clears an emptied code block or quote that opens a component", async ({
+    page,
+  }) => {
+    // Own the starting content rather than inherit it: this test deletes blocks and then asserts
+    // they're gone, so a draft left behind by an earlier run (its own, from a failure that never
+    // reached clearDrafts) would have it asserting against a page that no longer has them.
+    await clearDrafts(["edgeblockpage.mdx"]);
+
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=edgeblockpage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    const rows = page.locator(".pv-accordion");
+    await expect(rows).toHaveCount(2);
+
+    // Emptied with a SELECTION rather than a run of Backspaces: a selection delete is one press
+    // with one visible effect, where seven presses in a row raced the editor (`keyboard.press`
+    // resolves when the event is sent, not when ProseMirror has applied it). What's under test is
+    // the press AFTER the block is empty, so getting it empty shouldn't be the flaky part.
+    // `content` rather than the block itself: an emptied code block draws a "// add code here"
+    // hint (chrome, outside the content hole), so the block having no TEXT is the fact to assert.
+    const empty = async (target: Locator, text: string, content: Locator) => {
+      await target.getByText(text).click({ clickCount: 3 }); // select the line
+      await page.keyboard.press("Backspace"); // a selection delete — always allowed
+      await expect(content).toHaveText("");
+    };
+
+    // A code block holding "hi": empty it, then one more press should take the block itself.
+    const codeRow = rows.first();
+    await expect(codeRow.locator("pre")).toHaveCount(1);
+    await empty(codeRow.locator("pre"), "hi", codeRow.locator("pre code"));
+    await page.keyboard.press("Backspace"); // the press that used to do nothing
+    await expect(codeRow.locator("pre")).toHaveCount(0);
+    await expect(rows).toHaveCount(2); // …and the accordion is still there
+
+    // Same for a blockquote.
+    const quoteRow = rows.nth(1);
+    await expect(quoteRow.locator("blockquote")).toHaveCount(1);
+    await empty(quoteRow.locator("blockquote"), "quoted", quoteRow.locator("blockquote"));
+    await page.keyboard.press("Backspace");
+    await expect(quoteRow.locator("blockquote")).toHaveCount(0);
+    await expect(rows).toHaveCount(2);
+
+    // The edge still holds: with nothing left to strip, the next press does nothing rather than
+    // taking the accordion with it.
+    await page.keyboard.press("Backspace");
+    await expect(rows).toHaveCount(2);
+
+    await clearDrafts(["edgeblockpage.mdx"]);
   });
 
   // The Steps/Step node views (SPEC §9.2): the "add a step" control on the end of the rail, and
@@ -988,6 +1490,31 @@ test.describe("web editor @external", () => {
     await expect(pm.locator("pre")).toHaveCount(1);
     // …and the typed query is consumed by the insert, not left behind as text.
     await expect(pm.getByText("/c", { exact: true })).toHaveCount(0);
+
+    // Arrowing past the fold SCROLLS the highlight into view. The menu is a scroller (33 blocks in
+    // ~340px) and the arrows move a highlight the mouse isn't driving, so nothing brings the new
+    // row into view on its own — you arrow "off the bottom" and the selection is somewhere you
+    // can't see, which reads as the keys having stopped working.
+    await page.reload();
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+    await freshLine();
+    await page.keyboard.type("/");
+    await expect(menu).toBeVisible();
+    for (let i = 0; i < 12; i++) await page.keyboard.press("ArrowDown");
+    const scrolled = await menu.evaluate((list) => {
+      const active = list.querySelector(".pv-slash-item.is-active");
+      if (!active) return null;
+      const a = active.getBoundingClientRect();
+      const l = list.getBoundingClientRect();
+      // scrollTop proves the LIST moved, not merely that the item happened to be in view: with no
+      // scrolling at all the highlight would be past the fold and this would still be 0.
+      return { inView: a.top >= l.top - 1 && a.bottom <= l.bottom + 1, scrollTop: list.scrollTop };
+    });
+    expect(scrolled, "the highlight ran off the bottom instead of scrolling").toMatchObject({
+      inView: true,
+    });
+    expect(scrolled?.scrollTop ?? 0).toBeGreaterThan(0);
+    await page.keyboard.press("Escape");
 
     // Escape still closes without inserting. Reloaded rather than continued from above: the
     // suggestion plugin remembers a dismissed range, and the insert just now left the caret

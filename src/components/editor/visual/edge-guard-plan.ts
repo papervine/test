@@ -33,28 +33,30 @@ export function blocksEdgeDelete(
   );
 }
 
-/** What the key should do: run normally, be swallowed, or unwrap the list item it's sitting in. */
-export type EdgeDeleteAction = "allow" | "block" | "unwrap";
+/** What the key should do: run normally, be swallowed, or run the in-container action instead. */
+export type EdgeDeleteAction = "allow" | "block" | "handle";
 
 /**
  * The same rule, but with the case swallowing it whole got wrong.
  *
- * Guarding the edge is right; treating the edge as "nothing can happen here" is not. Backspace at
- * the start of a list item normally drops the list formatting — and that is a *delete that stays
- * inside the component*, so a list opening a tab was the one place a bullet or a checkbox could
- * never be removed. Reported as "I'm not able to backspace out the first checkbox inside a tab."
+ * Guarding the edge is right; treating the edge as *"nothing can happen here"* is not. What
+ * Backspace means at the start of a block is usually "strip this block's formatting" — lift the
+ * list item, leave the quote, turn the emptied code fence back into a paragraph — and every one of
+ * those stays INSIDE the component. Blocking them made a component the one place those blocks
+ * couldn't be undone: first reported as "I'm not able to backspace out the first checkbox inside a
+ * tab", then again for a code block and a blockquote that open one.
  *
- * `canUnwrap` is "the editor could lift this list item" — asked of the editor, since only it knows
- * whether the lift is legal here. Forward Delete gets no such case: at the trailing edge it pulls
- * the FOLLOWING block into the component whatever the cursor is nested in, so there the answer is
- * still nothing.
+ * `hasInContainerAction` is the editor's answer to "is there such a thing to do here" — it owns
+ * that question, since only it knows which lift is legal at this position. Forward Delete gets no
+ * equivalent: at the trailing edge it pulls the FOLLOWING block in whatever the cursor is nested
+ * in, so there the answer is still nothing.
  */
 export function edgeDeleteAction(
   containers: readonly SelRange[],
   selection: SelRange,
   direction: "backward" | "forward",
-  canUnwrap: boolean,
+  hasInContainerAction: boolean,
 ): EdgeDeleteAction {
   if (!blocksEdgeDelete(containers, selection, direction)) return "allow";
-  return direction === "backward" && canUnwrap ? "unwrap" : "block";
+  return direction === "backward" && hasInContainerAction ? "handle" : "block";
 }

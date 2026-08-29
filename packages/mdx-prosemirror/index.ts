@@ -12,5 +12,5 @@ export { mdxToProseMirror } from "./src/to-prosemirror";
 export { proseMirrorToMdx } from "./src/to-mdx";
 export { splitFrontmatter, type SplitFrontmatter } from "./src/frontmatter";
 export { textDiff, applyTextEdit, type TextEdit } from "./src/text-diff";
-export { COMPONENTS } from "./src/components";
+export { COMPONENTS, INLINE_NODE_TYPES, VOID_NODE_TYPES } from "./src/components";
 export type { PMDoc, PMNode, PMMark } from "./src/types";

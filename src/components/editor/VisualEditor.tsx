@@ -255,9 +255,14 @@ export function VisualEditor({
     // A component node view can wrap editable content in its link — a Card's body text lives
     // inside its <a> — and that text still has to be reachable with the mouse. So a click that
     // lands *in* the content hole places the caret instead of following the link; the rest of
-    // the card (padding, title, icon) navigates. ⌘/Ctrl overrides, for the caret's own line.
+    // the card (its padding) navigates. ⌘/Ctrl overrides, for the caret's own line.
     const hole = target?.closest?.("[data-node-view-content]");
     if (editable && !e.metaKey && !e.ctrlKey && hole && anchor.contains(hole)) return;
+    // Same for the node view's own controls, which a link can also enclose: a card's title field
+    // and icon button sit inside its <a>, and a click that navigates instead of focusing them
+    // makes the card's own attributes uneditable with the mouse.
+    const chrome = target?.closest?.("input, textarea, button, [contenteditable='false'] label");
+    if (editable && !e.metaKey && !e.ctrlKey && chrome && anchor.contains(chrome)) return;
     // Don't hijack the click that ends a drag-selection over a link — the user is selecting text.
     if (!window.getSelection()?.isCollapsed) return;
     e.stopPropagation();

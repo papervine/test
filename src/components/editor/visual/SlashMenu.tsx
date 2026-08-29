@@ -1,6 +1,6 @@
 "use client";
 
-import { forwardRef, useEffect, useImperativeHandle, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { SLASH_CATEGORIES, type SlashItem } from "./menu-items";
 
 export interface SlashMenuHandle {
@@ -20,6 +20,18 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function Sl
 ) {
   const [selected, setSelected] = useState(0);
   useEffect(() => setSelected(0), [items]);
+
+  // The menu scrolls (33 blocks in ~340px), and the arrows move a highlight that the mouse isn't
+  // driving — so nothing brings the new row into view on its own. Without this you arrow "past"
+  // the bottom of the list and the highlight is somewhere you can't see, which reads as the keys
+  // having stopped working. `block: "nearest"` so it only scrolls when it has to, and never drags
+  // the page around under the menu.
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    list.current?.querySelector<HTMLElement>(".pv-slash-item.is-active")?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [selected, items]);
 
   useImperativeHandle(ref, () => ({
     onKeyDown: ({ event }) => {
@@ -49,7 +61,7 @@ export const SlashMenu = forwardRef<SlashMenuHandle, SlashMenuProps>(function Sl
   // between groups. `flatIndex` maps each rendered row back to that flat index.
   let flatIndex = -1;
   return (
-    <div className="pv-slash-menu">
+    <div className="pv-slash-menu" ref={list}>
       {SLASH_CATEGORIES.map((category) => {
         const inCategory = items.filter((it) => it.category === category);
         if (!inCategory.length) return null;

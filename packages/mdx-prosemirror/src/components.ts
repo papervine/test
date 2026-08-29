@@ -10,6 +10,19 @@ type AttrKind = "string" | "boolean" | "number";
 interface ComponentSpec {
   node: string;
   attrs: Record<string, AttrKind>;
+  /**
+   * The component is INLINE — it sits in a run of text (`<Badge>Beta</Badge>` mid-sentence), so
+   * MDX parses it as an `mdxJsxTextElement` and its PM node belongs to the inline group. Written
+   * on its own line it arrives as a flow element instead, and is wrapped in a paragraph so the
+   * node still lands somewhere legal (the serialized MDX is identical either way).
+   */
+  inline?: true;
+  /**
+   * The component holds no children — `<Icon icon="rocket" />`. Its PM node is an atom, so it is
+   * selected and deleted as one thing rather than typed into, and it serializes back as a
+   * self-closing tag.
+   */
+  void?: true;
 }
 
 export const COMPONENTS: Record<string, ComponentSpec> = {
@@ -52,7 +65,99 @@ export const COMPONENTS: Record<string, ComponentSpec> = {
     attrs: { name: "string", type: "string", required: "boolean", deprecated: "boolean", defaultValue: "string" },
   },
   Expandable: { node: "expandable", attrs: { title: "string", defaultOpen: "boolean" } },
+  // The one inline component we model. `iconType` is carried through the typed model even though
+  // the renderer ignores it (it selects a Font Awesome weight): dropping an attr an author wrote
+  // would lose information, and demoting the whole badge to raw source over it would take it out
+  // of the Visual editor entirely.
+  // The file tree. Its rows are MEMBER-EXPRESSION tags (`<Tree.Folder>`), which mdast reports as
+  // the literal name — so they're keys here like any other, and `mdxName` round-trips the exact
+  // spelling (`Tree.File` vs `FileTree.File`). A file row is childless, so its node is an atom.
+  Tree: { node: "tree", attrs: {} },
+  FileTree: { node: "tree", attrs: {} },
+  "Tree.Folder": {
+    node: "treeFolder",
+    attrs: {
+      name: "string",
+      defaultOpen: "boolean",
+      openable: "boolean",
+      highlight: "boolean",
+    },
+  },
+  "FileTree.Folder": {
+    node: "treeFolder",
+    attrs: {
+      name: "string",
+      defaultOpen: "boolean",
+      openable: "boolean",
+      highlight: "boolean",
+    },
+  },
+  "Tree.File": { node: "treeFile", void: true, attrs: { name: "string", highlight: "boolean" } },
+  "FileTree.File": {
+    node: "treeFile",
+    void: true,
+    attrs: { name: "string", highlight: "boolean" },
+  },
+  // Colour swatches. Same member-expression shape as the tree; a swatch is childless, and its
+  // `value` is modeled only in its plain-string form — `value={{ light, dark }}` is an expression,
+  // which demotes that swatch to raw and preserves it verbatim (see extractAttrs).
+  Color: { node: "color", attrs: { variant: "string" } },
+  "Color.Item": { node: "colorItem", void: true, attrs: { name: "string", value: "string" } },
+  "Color.Row": { node: "colorRow", attrs: { title: "string" } },
+  // Inline and childless: `<Icon icon="rocket" size={24} />`. `iconType` is carried for the same
+  // reason as Badge's — an attr the author wrote survives even where the renderer ignores it.
+  Icon: {
+    node: "icon",
+    inline: true,
+    void: true,
+    attrs: {
+      icon: "string",
+      src: "string",
+      iconType: "string",
+      color: "string",
+      size: "number",
+      className: "string",
+    },
+  },
+  Badge: {
+    node: "badge",
+    inline: true,
+    attrs: {
+      color: "string",
+      size: "string",
+      shape: "string",
+      icon: "string",
+      iconType: "string",
+      stroke: "boolean",
+      disabled: "boolean",
+      className: "string",
+    },
+  },
 };
+
+/** Is this tag one of the inline components (see ComponentSpec.inline)? */
+export function isInlineTag(name: string | null): boolean {
+  return !!name && COMPONENTS[name]?.inline === true;
+}
+
+/** Is this tag a childless component (see ComponentSpec.void)? */
+export function isVoidTag(name: string | null): boolean {
+  return !!name && COMPONENTS[name]?.void === true;
+}
+
+/** The PM node types of the inline components, for the editor's schema. */
+export const INLINE_NODE_TYPES = new Set(
+  Object.values(COMPONENTS)
+    .filter((c) => c.inline)
+    .map((c) => c.node),
+);
+
+/** …and of the childless ones, which are atoms. */
+export const VOID_NODE_TYPES = new Set(
+  Object.values(COMPONENTS)
+    .filter((c) => c.void)
+    .map((c) => c.node),
+);
 
 /** The PM node type for a source tag, or undefined if the tag isn't a known component. */
 export function nodeTypeForTag(name: string | null): string | undefined {

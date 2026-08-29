@@ -1,6 +1,6 @@
 import type { Root } from "mdast";
 import { stringifyMdast } from "./processor";
-import { COMPONENTS, buildAttributes, tagForNode } from "./components";
+import { COMPONENTS, buildAttributes, isInlineTag, isVoidTag, tagForNode } from "./components";
 import type { PMDoc, PMMark, PMNode } from "./types";
 
 // ProseMirror → mdast → MDX. The exact inverse of to-prosemirror: standard nodes rebuild
@@ -40,6 +40,20 @@ function leafToMdast(node: PMNode): Any {
     return { type: "image", url: node.attrs?.src ?? "", alt: node.attrs?.alt ?? null, title: node.attrs?.title ?? null };
   }
   if (node.type === "mdxUnknownText") return { type: "mdxRaw", value: node.attrs?.raw ?? "" };
+  // An inline component (`<Badge>Beta</Badge>`): a text element, so it stays inside the paragraph
+  // it was written in rather than breaking the line the way a flow element would.
+  if (isInlineTag((node.attrs?.mdxName as string) ?? null)) {
+    const name = tagForNode(node);
+    return {
+      type: "mdxJsxTextElement",
+      name,
+      attributes: buildAttributes(node.attrs),
+      // Through the same inline machinery as a paragraph, so emphasis inside a label survives —
+      // the schema lets a badge's text carry marks, so the serializer has to write them. A
+      // childless component has none of that: no children serializes as `<Icon … />`.
+      children: isVoidTag(name) ? [] : inlineList(node.content),
+    };
+  }
   return hasMark(node.marks, "code")
     ? { type: "inlineCode", value: node.text ?? "" }
     : { type: "text", value: node.text ?? "" };
@@ -161,11 +175,15 @@ function isFillerParagraph(content: PMNode[] | undefined): boolean {
 /** Rebuild a flow (block) mdast node from a PM block node. */
 function blockToMdast(node: PMNode): Any {
   if (COMPONENT_NODE_TYPES.has(node.type)) {
+    const name = tagForNode(node);
     return {
       type: "mdxJsxFlowElement",
-      name: tagForNode(node),
+      name,
       attributes: buildAttributes(node.attrs),
-      children: isFillerParagraph(node.content) ? [] : blockList(node.content),
+      // A childless component (`<Tree.File />`) has no children to serialize; anything else
+      // serializes its blocks, minus the filler paragraph an empty one was given to type in.
+      children:
+        isVoidTag(name) || isFillerParagraph(node.content) ? [] : blockList(node.content),
     };
   }
   switch (node.type) {

@@ -107,6 +107,92 @@ describe("known components parse to typed nodes and round-trip", () => {
     });
   }
 
+  // <Badge> is the one INLINE component the converter models: it sits in a run of text, so MDX
+  // parses it as a text element and its node belongs to the inline group. Before this it was an
+  // unknown-inline atom — preserved byte-exact, but shown in the Visual editor as its own source.
+  describe("Badge is an inline node, not a block", () => {
+    it("parses inside a paragraph and keeps the sentence around it", () => {
+      const mdx = 'Status: <Badge color="green">Stable</Badge> today.\n';
+      const doc = mdxToProseMirror(mdx);
+      const para = doc.content[0];
+      expect(para.type).toBe("paragraph");
+      expect(para.content?.map((c) => c.type)).toEqual(["text", "badge", "text"]);
+      expect(para.content?.[1]).toMatchObject({
+        type: "badge",
+        attrs: { mdxName: "Badge", color: "green" },
+        content: [{ type: "text", text: "Stable" }],
+      });
+      expectStable(mdx);
+    });
+
+    it("keeps every documented attr, including the one the renderer ignores", () => {
+      // `iconType` picks a Font Awesome weight, which our icons don't have — but an attr the
+      // author wrote has to survive the trip, and demoting the badge to raw over it would take it
+      // out of the editor.
+      const mdx =
+        '<Badge icon="star" iconType="solid" color="blue" size="lg" shape="pill" stroke disabled>Premium</Badge>\n';
+      const doc = mdxToProseMirror(mdx);
+      expect(doc.content[0].content?.[0]).toMatchObject({
+        type: "badge",
+        attrs: {
+          icon: "star",
+          iconType: "solid",
+          color: "blue",
+          size: "lg",
+          shape: "pill",
+          stroke: true,
+          disabled: true,
+        },
+      });
+      expectStable(mdx);
+    });
+
+    it("on its own line, gets the paragraph an inline node needs", () => {
+      // Written alone, MDX hands it over as a FLOW element — but the node is inline, so it needs
+      // somewhere to live. The MDX it serializes back to is the same either way.
+      const mdx = "<Badge>Beta</Badge>\n";
+      const doc = mdxToProseMirror(mdx);
+      expect(doc.content[0].type).toBe("paragraph");
+      expect(doc.content[0].content?.[0].type).toBe("badge");
+      expectStable(mdx);
+    });
+
+    it("carries the marks around it, so a linked or bold badge round-trips", () => {
+      const mdx = "**<Badge>New</Badge>**\n";
+      const doc = mdxToProseMirror(mdx);
+      expect(doc.content[0].content?.[0]).toMatchObject({
+        type: "badge",
+        marks: [{ type: "bold" }],
+      });
+      expectStable(mdx);
+    });
+
+    it("keeps emphasis inside the label", () => {
+      // The label is the node's content, so it's ordinary marked text — and the serializer writes
+      // it back through the same machinery a paragraph uses.
+      const mdx = "<Badge>**bold**</Badge>\n";
+      const doc = mdxToProseMirror(mdx);
+      expect(doc.content[0].content?.[0]).toMatchObject({
+        type: "badge",
+        content: [{ type: "text", text: "bold", marks: [{ type: "bold" }] }],
+      });
+      expectStable(mdx);
+    });
+
+    it("demotes to raw rather than lose what the typed model can't hold", () => {
+      // An expression-valued attr and an unknown one: preserved verbatim rather than dropped.
+      for (const mdx of [
+        "<Badge color={theme.accent}>X</Badge>\n",
+        '<Badge tooltip="unknown">X</Badge>\n',
+      ]) {
+        const doc = mdxToProseMirror(mdx);
+        const inline = doc.content[0].content?.[0];
+        expect(inline?.type).toBe("mdxUnknownText");
+        expectStable(mdx);
+      }
+    });
+  });
+
   it("literal expression attrs resolve to real typed nodes (cols={2}, defaultOpen={true})", () => {
     const cg = mdxToProseMirror("<CardGroup cols={2}>\n  <Card title=\"A\" />\n</CardGroup>\n");
     expect(cg.content[0].type).toBe("cardGroup");
@@ -212,6 +298,16 @@ describe("known components parse to typed nodes and round-trip", () => {
       expect(cell?.content?.[0].type).toBe("paragraph");
       expectStable(mdx);
     });
+  });
+
+  it("an empty blockquote gets a paragraph too", () => {
+    // `>` alone is a `block+` node with no children — the same invalid-node trap as the empty
+    // component above, arriving from markdown's side. Nothing rejects it at parse time; it
+    // surfaces later, the first time something tries to change the node.
+    const quote = mdxToProseMirror(">\n").content[0];
+    expect(quote.type).toBe("blockquote");
+    expect(quote.content).toEqual([{ type: "paragraph" }]);
+    expectStable(">\n");
   });
 
   it("Columns keeps its own tag name (not normalized to CardGroup)", () => {

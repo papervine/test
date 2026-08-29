@@ -1,5 +1,9 @@
 import type { Editor, Range } from "@tiptap/core";
 import {
+  FolderTree,
+  Palette,
+  Shapes,
+  Tag,
   Heading1,
   Heading2,
   Heading3,
@@ -145,10 +149,45 @@ const tabs = () => ({
     { type: "tab", attrs: { mdxName: "Tab", title: "Tab 2" }, content: [paragraph()] },
   ],
 });
-const codeGroup = () => ({ type: "codeGroup", attrs: { mdxName: "CodeGroup" }, content: [{ type: "codeBlock", attrs: { language: "js", meta: null }, content: [{ type: "text", text: "// code" }] }] });
+// Two empty fences, the way Tabs inserts two empty tabs: a group of one renders as a plain code
+// block, so one block would show none of what you just inserted. Untitled and unlanguaged on
+// purpose — the strip labels them "Block 1"/"Block 2" and both are a click away from being named.
+const codeGroup = () => ({ type: "codeGroup", attrs: { mdxName: "CodeGroup" }, content: [emptyCode(), emptyCode()] });
+const emptyCode = () => ({ type: "codeBlock", attrs: { language: null, meta: null }, content: [] });
 const frame = () => ({ type: "frame", attrs: { mdxName: "Frame" }, content: [paragraph()] });
 const expandable = () => ({ type: "expandable", attrs: { mdxName: "Expandable", title: "Details" }, content: [paragraph()] });
 const paramField = () => ({ type: "apiField", attrs: { mdxName: "ParamField", name: "param", type: "string" }, content: [paragraph()] });
+// The two INLINE components. They insert into the sentence the caret is in rather than as blocks
+// of their own — a badge with a label to type over, and an icon that opens its picker on arrival
+// (choosing the icon IS the insertion, so an icon-less one would be an invisible node).
+const badge = () => ({
+  type: "badge",
+  attrs: { mdxName: "Badge", color: "green" },
+  content: [{ type: "text", text: "New" }],
+});
+const icon = () => ({ type: "icon", attrs: { mdxName: "Icon" } });
+// A tree starts with one folder and one file, the way Tabs starts with two tabs: an empty tree is
+// a box with nothing in it, and the rows are what the component IS.
+// One swatch to start, the way a tree starts with one row: an empty palette is a box with nothing
+// in it, and the "+" beside it is how you add the rest.
+const color = () => ({
+  type: "color",
+  attrs: { mdxName: "Color", variant: "compact" },
+  content: [
+    { type: "colorItem", attrs: { mdxName: "Color.Item", value: "#7c3aed", name: "primary" } },
+  ],
+});
+const tree = () => ({
+  type: "tree",
+  attrs: { mdxName: "Tree" },
+  content: [
+    {
+      type: "treeFolder",
+      attrs: { mdxName: "Tree.Folder", name: "untitled folder" },
+      content: [{ type: "treeFile", attrs: { mdxName: "Tree.File", name: "untitled file" } }],
+    },
+  ],
+});
 const responseField = () => ({ type: "apiField", attrs: { mdxName: "ResponseField", name: "field", type: "string" }, content: [paragraph()] });
 
 // Slash command that inserts the node returned by `make` in place of the typed `/query`.
@@ -335,6 +374,10 @@ export const SLASH_ITEMS: SlashItem[] = [
   insertItem("Expandable", "Inline collapsible", "Components", ChevronsUpDown, ["expandable", "expand", "collapse", "details"], expandable),
   insertItem("Parameter field", "API request param", "Components", TextCursorInput, ["param", "parameter", "field", "api"], paramField),
   insertItem("Response field", "API response field", "Components", MessageSquare, ["response", "field", "api"], responseField),
+  insertItem("Badge", "Inline status label", "Components", Tag, ["badge", "label", "status", "pill", "tag"], badge),
+  insertItem("Icon", "Inline icon", "Components", Shapes, ["icon", "symbol", "glyph", "lucide"], icon),
+  insertItem("File tree", "Files and folders", "Components", FolderTree, ["tree", "file", "files", "folder", "directory"], tree),
+  insertItem("Colors", "Swatches with names", "Components", Palette, ["color", "colour", "swatch", "palette", "brand"], color),
 ];
 
 export function filterSlashItems(query: string): SlashItem[] {

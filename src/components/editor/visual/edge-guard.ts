@@ -1,4 +1,4 @@
-import { Extension } from "@tiptap/core";
+import { Extension, type Editor } from "@tiptap/core";
 import { enclosingContainers } from "./containers";
 import { edgeDeleteAction } from "./edge-guard-plan";
 
@@ -16,7 +16,43 @@ import { edgeDeleteAction } from "./edge-guard-plan";
 // half would leave the mirror-image bug in place.
 //
 // Returning true consumes the key. The rule is in ./edge-guard-plan; this only turns ProseMirror
-// positions into what that rule compares.
+// positions into what that rule compares, and owns the list of things Backspace can mean here.
+
+/**
+ * What Backspace means at a component's leading edge, where "join with what's above" isn't
+ * available — in the order the editor would try them, innermost formatting first. Every one stays
+ * INSIDE the component, which is the whole line the guard defends: strip the block, never escape
+ * the box. If none applies there is genuinely nothing to do, and the key is swallowed.
+ *
+ * `can()` is the test rather than a hand-written "is this a list item?", because the editor is the
+ * one that knows whether a given lift is legal at this exact position.
+ */
+const IN_CONTAINER_ACTIONS: { can: (editor: Editor) => boolean; run: (editor: Editor) => boolean }[] =
+  [
+    {
+      can: (editor) => editor.can().liftListItem("listItem"),
+      run: (editor) => editor.commands.liftListItem("listItem"),
+    },
+    {
+      can: (editor) => editor.can().lift("blockquote"),
+      run: (editor) => editor.commands.lift("blockquote"),
+    },
+    {
+      // An emptied code block (or heading) is a block whose only remaining content IS its type, so
+      // Backspace means "and not even that" — turned back into a paragraph in place, rather than
+      // `clearNodes()`, which also lifts and would take it out of the component.
+      can: (editor) => isEmptyTypedBlock(editor),
+      run: (editor) => editor.commands.setNode("paragraph"),
+    },
+  ];
+
+/** An empty textblock that isn't already a plain paragraph — the caret's own block. */
+function isEmptyTypedBlock(editor: Editor): boolean {
+  const { $from, empty } = editor.state.selection;
+  const block = $from.parent;
+  return empty && block.isTextblock && block.content.size === 0 && block.type.name !== "paragraph";
+}
+
 export const EdgeGuard = Extension.create({
   name: "componentEdgeGuard",
 
@@ -24,16 +60,21 @@ export const EdgeGuard = Extension.create({
     const guard = (direction: "backward" | "forward") => () => {
       const { state } = this.editor;
       const { from, to } = state.selection;
-      // Only Backspace has an in-container fallback, so only it asks whether the lift is legal —
-      // `can()` runs the command against a throwaway transaction, which isn't worth doing on a key
-      // that can't use the answer.
-      const canUnwrap =
-        direction === "backward" && this.editor.can().liftListItem("listItem");
-      const action = edgeDeleteAction(enclosingContainers(state), { from, to }, direction, canUnwrap);
-      if (action === "allow") return false;
-      // Drop the list formatting instead of doing nothing: the component survives, and a list that
-      // opens one stops being the one place a checkbox can't be removed.
-      if (action === "unwrap") return this.editor.commands.liftListItem("listItem");
+      // Only Backspace has in-container actions, so only it goes looking — `can()` runs each
+      // command against a throwaway transaction, which isn't worth doing on a key that can't use
+      // the answer.
+      const action =
+        direction === "backward"
+          ? IN_CONTAINER_ACTIONS.find((candidate) => candidate.can(this.editor))
+          : undefined;
+      const decision = edgeDeleteAction(
+        enclosingContainers(state),
+        { from, to },
+        direction,
+        action !== undefined,
+      );
+      if (decision === "allow") return false;
+      if (decision === "handle" && action) return action.run(this.editor);
       return true;
     };
     return {

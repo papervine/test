@@ -12,6 +12,11 @@ import type { NodeViewOpts } from "./nodes";
 import { TabPaneNodeView, TabsNodeView } from "./TabsNodeView";
 import { StepNodeView, StepsNodeView } from "./StepsNodeView";
 import { AccordionGroupNodeView, AccordionNodeView } from "./AccordionNodeView";
+import { CodeGroupNodeView } from "./CodeGroupNodeView";
+import { CardNodeView } from "./CardNodeView";
+import { IconNodeView } from "./IconNodeView";
+import { TreeFileNodeView, TreeFolderNodeView, TreeNodeView } from "./TreeNodeView";
+import { ColorItemNodeView, ColorNodeView, ColorRowNodeView } from "./ColorNodeView";
 import { tableNodeView } from "./table-node-view";
 import { parseMediaElement } from "@/lib/media-embed";
 
@@ -21,8 +26,8 @@ import { parseMediaElement } from "@/lib/media-embed";
 // body in place. Props come from the node's attrs (title/icon/href/…), which are generally still
 // a Source-mode job — the exceptions are the ones where the attr IS the thing you edit: tab and
 // step titles have purpose-built views with real fields (TabsNodeView, StepsNodeView), and Tabs
-// gets a whole tab strip. CodeGroup, which also picks its children apart structurally, still
-// falls back to labelled chrome. Unknown MDX renders its raw source, read-only.
+// and CodeGroup — which pick their children apart structurally — get whole tab strips of their
+// own. Unknown MDX renders its raw source, read-only.
 
 function cleanAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {};
@@ -43,7 +48,7 @@ function attrBadges(attrs: Record<string, unknown>): string[] {
     .map(([k, v]) => (v === true ? k : `${k}=${String(v)}`));
 }
 
-/** Labelled editor chrome — for components we don't render live (CodeGroup, Frame, …). */
+/** Labelled editor chrome — for components we don't render live (Frame, Update, …). */
 function ChromeNodeView({ node }: NodeViewProps) {
   const name = (node.attrs.mdxName as string) || node.type.name;
   return (
@@ -104,6 +109,27 @@ function ComponentNodeView(props: NodeViewProps) {
   // here owns both — the group draws the border, the row draws its triangle and title field.
   if (name === "AccordionGroup") return <AccordionGroupNodeView />;
   if (name === "Accordion") return <AccordionNodeView {...props} />;
+
+  // Same shape as Tabs: a strip that has to know about its siblings, so the group owns it and the
+  // fences underneath render as bare code blocks it shows one at a time.
+  if (name === "CodeGroup") return <CodeGroupNodeView {...props} />;
+
+  // A card's icon and title are attrs, so the generic view can render them but not edit them —
+  // this one hands both back as controls inside the published card.
+  if (name === "Card") return <CardNodeView {...props} />;
+
+  // A file tree's rows are named entirely by attrs — there is no content hole in a `<Tree.File>`
+  // to type into — so the rows are drawn here with real fields. See TreeNodeView.
+  if (name === "Tree" || name === "FileTree") return <TreeNodeView {...props} />;
+  if (name === "Tree.Folder" || name === "FileTree.Folder")
+    return <TreeFolderNodeView {...props} />;
+  if (name === "Tree.File" || name === "FileTree.File") return <TreeFileNodeView {...props} />;
+
+  // Colour swatches: same shape again — a swatch's colour and name are attrs, so the tile is
+  // drawn here with the controls to change them.
+  if (name === "Color") return <ColorNodeView {...props} />;
+  if (name === "Color.Row") return <ColorRowNodeView {...props} />;
+  if (name === "Color.Item") return <ColorItemNodeView {...props} />;
 
   // Layout containers apply their grid/flex to their DIRECT children — but ProseMirror's
   // content hole is a single element, so wrapping the real component around it collapses the
@@ -227,15 +253,52 @@ function CodeBlockNodeView({ node }: NodeViewProps) {
   const isMermaid = language.toLowerCase() === "mermaid";
   const chart = node.textContent;
   return (
-    <NodeViewWrapper className="pv-codeblock">
+    // data-pv-code: how a <CodeGroup>'s scoped rule finds the blocks to hide (see tabs-plan).
+    <NodeViewWrapper className="pv-codeblock" data-pv-code="">
       {isMermaid && chart.trim() && (
         <div contentEditable={false} className="pv-mermaid-preview">
           <Mermaid chart={chart} />
         </div>
       )}
       <pre>
+        {/* An empty fence is a blank rectangle with no hint that it takes typing; the comment says
+            so in the language of the thing you're editing. Rendered rather than left to the
+            Placeholder extension, which only marks the node the caret is in. */}
+        {node.content.size === 0 && (
+          <span contentEditable={false} className="pv-code-placeholder">
+            // add code here
+          </span>
+        )}
         <NodeViewContent<"code"> as="code" />
       </pre>
+    </NodeViewWrapper>
+  );
+}
+
+/**
+ * An inline component (`<Badge color="green">Beta</Badge>`): the published component wrapping its
+ * own label, which is the node's content — so the label is typed into in place, in the sentence
+ * it sits in, and the attrs around it come from the node.
+ */
+function InlineComponentNodeView(props: NodeViewProps) {
+  const { node } = props;
+  const name = node.attrs.mdxName as string;
+  // An icon is childless and picked rather than typed, so it has a view of its own.
+  if (name === "Icon") return <IconNodeView {...props} />;
+  const Comp = editorComponents[name];
+  const compProps = cleanAttrs(node.attrs);
+  if (!Comp) {
+    return (
+      <NodeViewWrapper as="span">
+        <NodeViewContent<"span"> as="span" />
+      </NodeViewWrapper>
+    );
+  }
+  return (
+    <NodeViewWrapper as="span" className="pv-inline-node">
+      <Comp {...compProps}>
+        <NodeViewContent<"span"> as="span" />
+      </Comp>
     </NodeViewWrapper>
   );
 }
@@ -245,6 +308,7 @@ export function makeNodeViewOpts(assetBase: string): NodeViewOpts {
   const BlockAtomView = makeBlockAtomView(assetBase);
   return {
     componentNodeView: () => ReactNodeViewRenderer(ComponentNodeView),
+    inlineComponentNodeView: () => ReactNodeViewRenderer(InlineComponentNodeView),
     atomNodeView: (_type, inline) => ReactNodeViewRenderer(inline ? InlineAtomView : BlockAtomView),
     imageNodeView: () => ReactNodeViewRenderer(ImageNodeView),
     codeBlockNodeView: () => ReactNodeViewRenderer(CodeBlockNodeView),

@@ -47,8 +47,26 @@ export function activeAfterRemove(active: number, count: number): number {
  * among ALL children — not its index among the tabs.
  */
 export function hiddenPaneRule(scopeId: string, nthChild: number): string {
+  return hiddenChildRule("data-pv-tabs", "data-pv-tab", scopeId, nthChild);
+}
+
+/**
+ * The same rule for a `<CodeGroup>`'s blocks — one strip, one visible block, same reasoning.
+ * Different markers, so a code group inside a tab (or the other way round) can't hide the other's
+ * children.
+ */
+export function hiddenCodeRule(scopeId: string, nthChild: number): string {
+  return hiddenChildRule("data-pv-codegroup", "data-pv-code", scopeId, nthChild);
+}
+
+function hiddenChildRule(
+  hostAttr: string,
+  childAttr: string,
+  scopeId: string,
+  nthChild: number,
+): string {
   return (
-    `[data-pv-tabs="${scopeId}"] > [data-node-view-content-react] > ` +
-    `:is([data-pv-tab], :has(> [data-pv-tab])):not(:nth-child(${nthChild})) { display: none; }`
+    `[${hostAttr}="${scopeId}"] > [data-node-view-content-react] > ` +
+    `:is([${childAttr}], :has(> [${childAttr}])):not(:nth-child(${nthChild})) { display: none; }`
   );
 }

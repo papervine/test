@@ -1426,3 +1426,745 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   background: rgba(var(--ink-rgb), 0.03);
   border: 1px solid var(--line);
 }
+
+/* Visual editor: an empty fence says what to do with itself. The hint is absolutely positioned so
+   it sits exactly where the first character will and never shifts the caret; `position: relative`
+   on the <pre> only pins the containing block for it. */
+.pv-visual .pv-codeblock pre {
+  position: relative;
+}
+.pv-visual .pv-code-placeholder {
+  position: absolute;
+  color: var(--muted);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* The <CodeGroup> language menu. Portaled to <body> — the group's `overflow-hidden` is what rounds
+   the code block's corners, and it clipped a menu rendered in place down to two rows — so it
+   carries `db-portal` and, like the `/` palette above, its own dark surface rather than `dark:`
+   utilities that only resolve inside the `.db` shell. */
+.pv-lang-menu {
+  position: fixed;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  width: 200px;
+  max-height: 320px;
+  overflow: hidden;
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.5);
+}
+.pv-lang-search {
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: transparent;
+  color: #ececf1;
+  font-size: 13px;
+  outline: none;
+}
+.pv-lang-search::placeholder {
+  color: #6b6b78;
+}
+.pv-lang-list {
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  padding: 4px;
+}
+.pv-lang-item {
+  padding: 6px 9px;
+  border-radius: 7px;
+  text-align: left;
+  font-size: 13px;
+  color: #c9c9d4;
+}
+.pv-lang-item.is-active {
+  background: rgba(91, 140, 255, 0.16);
+  color: #ececf1;
+}
+.pv-lang-item.is-current {
+  color: #ececf1;
+  font-weight: 500;
+}
+.pv-lang-empty {
+  padding: 8px 10px;
+  color: #8a8a99;
+  font-size: 13px;
+}
+
+/* ── Visual editor: syntax highlighting inside a fence ─────────────────────────────────────────
+   lowlight emits highlight.js class names; these map them onto `github-light` / `github-dark`,
+   the two themes the RENDERER highlights published pages with, so a block looks the same in the
+   editor as on the page. Light is the base and dark is the override, keyed on BOTH dark
+   selectors — `.dark` for the docs appearance and `[data-db-theme="dark"] .db` for the platform's
+   — which is what a `dark:` utility compiles to here. Keyed on only one, a fence in the editor
+   would keep light-theme tokens on a black background. */
+.pv-visual .hljs-comment,
+.pv-visual .hljs-quote {
+  color: #6a737d;
+  font-style: italic;
+}
+.pv-visual .hljs-keyword,
+.pv-visual .hljs-selector-tag,
+.pv-visual .hljs-literal,
+.pv-visual .hljs-doctag,
+.pv-visual .hljs-meta .hljs-keyword {
+  color: #d73a49;
+}
+.pv-visual .hljs-string,
+.pv-visual .hljs-regexp,
+.pv-visual .hljs-meta .hljs-string,
+.pv-visual .hljs-addition {
+  color: #032f62;
+}
+.pv-visual .hljs-number,
+.pv-visual .hljs-symbol,
+.pv-visual .hljs-bullet,
+.pv-visual .hljs-attr,
+.pv-visual .hljs-variable.constant_,
+.pv-visual .hljs-meta {
+  color: #005cc5;
+}
+.pv-visual .hljs-title,
+.pv-visual .hljs-title.function_,
+.pv-visual .hljs-title.class_,
+.pv-visual .hljs-section,
+.pv-visual .hljs-built_in,
+.pv-visual .hljs-type {
+  color: #6f42c1;
+}
+.pv-visual .hljs-name,
+.pv-visual .hljs-selector-id,
+.pv-visual .hljs-selector-class,
+.pv-visual .hljs-tag {
+  color: #22863a;
+}
+.pv-visual .hljs-attribute,
+.pv-visual .hljs-variable,
+.pv-visual .hljs-template-variable,
+.pv-visual .hljs-property {
+  color: #e36209;
+}
+.pv-visual .hljs-deletion {
+  color: #b31d28;
+}
+.pv-visual .hljs-emphasis {
+  font-style: italic;
+}
+.pv-visual .hljs-strong {
+  font-weight: 600;
+}
+
+.dark .pv-visual .hljs-keyword,
+.dark .pv-visual .hljs-selector-tag,
+.dark .pv-visual .hljs-literal,
+.dark .pv-visual .hljs-doctag,
+.dark .pv-visual .hljs-meta .hljs-keyword,
+[data-db-theme="dark"] .db .pv-visual .hljs-keyword,
+[data-db-theme="dark"] .db .pv-visual .hljs-selector-tag,
+[data-db-theme="dark"] .db .pv-visual .hljs-literal,
+[data-db-theme="dark"] .db .pv-visual .hljs-doctag,
+[data-db-theme="dark"] .db .pv-visual .hljs-meta .hljs-keyword {
+  color: #f97583;
+}
+.dark .pv-visual .hljs-string,
+.dark .pv-visual .hljs-regexp,
+.dark .pv-visual .hljs-meta .hljs-string,
+.dark .pv-visual .hljs-addition,
+[data-db-theme="dark"] .db .pv-visual .hljs-string,
+[data-db-theme="dark"] .db .pv-visual .hljs-regexp,
+[data-db-theme="dark"] .db .pv-visual .hljs-meta .hljs-string,
+[data-db-theme="dark"] .db .pv-visual .hljs-addition {
+  color: #9ecbff;
+}
+.dark .pv-visual .hljs-number,
+.dark .pv-visual .hljs-symbol,
+.dark .pv-visual .hljs-bullet,
+.dark .pv-visual .hljs-attr,
+.dark .pv-visual .hljs-variable.constant_,
+.dark .pv-visual .hljs-meta,
+[data-db-theme="dark"] .db .pv-visual .hljs-number,
+[data-db-theme="dark"] .db .pv-visual .hljs-symbol,
+[data-db-theme="dark"] .db .pv-visual .hljs-bullet,
+[data-db-theme="dark"] .db .pv-visual .hljs-attr,
+[data-db-theme="dark"] .db .pv-visual .hljs-variable.constant_,
+[data-db-theme="dark"] .db .pv-visual .hljs-meta {
+  color: #79b8ff;
+}
+.dark .pv-visual .hljs-title,
+.dark .pv-visual .hljs-title.function_,
+.dark .pv-visual .hljs-title.class_,
+.dark .pv-visual .hljs-section,
+.dark .pv-visual .hljs-built_in,
+.dark .pv-visual .hljs-type,
+[data-db-theme="dark"] .db .pv-visual .hljs-title,
+[data-db-theme="dark"] .db .pv-visual .hljs-title.function_,
+[data-db-theme="dark"] .db .pv-visual .hljs-title.class_,
+[data-db-theme="dark"] .db .pv-visual .hljs-section,
+[data-db-theme="dark"] .db .pv-visual .hljs-built_in,
+[data-db-theme="dark"] .db .pv-visual .hljs-type {
+  color: #b392f0;
+}
+.dark .pv-visual .hljs-name,
+.dark .pv-visual .hljs-selector-id,
+.dark .pv-visual .hljs-selector-class,
+.dark .pv-visual .hljs-tag,
+[data-db-theme="dark"] .db .pv-visual .hljs-name,
+[data-db-theme="dark"] .db .pv-visual .hljs-selector-id,
+[data-db-theme="dark"] .db .pv-visual .hljs-selector-class,
+[data-db-theme="dark"] .db .pv-visual .hljs-tag {
+  color: #85e89d;
+}
+.dark .pv-visual .hljs-attribute,
+.dark .pv-visual .hljs-variable,
+.dark .pv-visual .hljs-template-variable,
+.dark .pv-visual .hljs-property,
+[data-db-theme="dark"] .db .pv-visual .hljs-attribute,
+[data-db-theme="dark"] .db .pv-visual .hljs-variable,
+[data-db-theme="dark"] .db .pv-visual .hljs-template-variable,
+[data-db-theme="dark"] .db .pv-visual .hljs-property {
+  color: #ffab70;
+}
+.dark .pv-visual .hljs-deletion,
+[data-db-theme="dark"] .db .pv-visual .hljs-deletion {
+  color: #fdaeb7;
+}
+
+/* ── Visual editor: <Card> ─────────────────────────────────────────────────────────────────────
+   The card itself is the published component; these are the controls handed into it. */
+
+/* The icon slot: a tile, so an empty card still has something to click. */
+.pv-visual .pv-card-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  color: var(--fg);
+  background: rgba(var(--ink-rgb), 0.06);
+  transition: background 0.15s ease;
+}
+.pv-visual .pv-card-icon:hover {
+  background: color-mix(in srgb, var(--violet) 18%, transparent);
+}
+
+/* The "…" button, over the card rather than inside it — an editor-only affordance shouldn't be a
+   prop on the component readers get. Revealed on hover (and kept while its menu is open), so a
+   grid of cards isn't a grid of buttons. */
+/* No z-index on the wrapper: it would make this a stacking context, and the menu's full-screen
+   click-away layer inside it could then only rise above its own siblings — so a second card's
+   button stayed clickable and two menus could be open at once. The button carries the z-index
+   instead. */
+.pv-visual .pv-card-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+}
+.pv-visual .pv-card-actions > button {
+  position: relative;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity 0.15s ease, background 0.15s ease;
+}
+.pv-visual .pv-card-node:hover .pv-card-actions > button,
+.pv-visual .pv-card-actions > button:focus-visible {
+  opacity: 1;
+}
+.pv-visual .pv-card-actions > button:hover {
+  background: rgba(var(--ink-rgb), 0.08);
+  color: var(--fg);
+}
+.pv-card-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 240px;
+  padding: 6px;
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.5);
+}
+.pv-card-menu-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #c9c9d4;
+}
+.pv-card-menu-field input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: #ececf1;
+  font-size: 13px;
+}
+.pv-card-menu-field input::placeholder {
+  color: #6b6b78;
+}
+.pv-card-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  color: #c9c9d4;
+  font-size: 13px;
+  text-align: left;
+}
+.pv-card-menu-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ececf1;
+}
+
+/* Sits exactly where the first character will, so it never moves the caret. */
+.pv-visual .pv-card-placeholder {
+  position: absolute;
+  color: var(--muted);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* The icon set. Portaled like the language menu: a card sits in a grid cell that clips, and the
+   popover is taller than the card. */
+.pv-iconpicker {
+  position: fixed;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  width: 340px;
+  height: 400px;
+  overflow: hidden;
+  padding: 10px;
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.5);
+}
+.pv-iconpicker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+.pv-iconpicker-tab {
+  color: #ececf1;
+  font-size: 13px;
+  font-weight: 500;
+  border-bottom: 2px solid var(--violet);
+  padding-bottom: 6px;
+  margin-bottom: -9px;
+}
+.pv-iconpicker-remove {
+  color: #8a8a99;
+  font-size: 13px;
+}
+.pv-iconpicker-remove:hover {
+  color: #ececf1;
+}
+.pv-iconpicker-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 10px 2px;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  color: #8a8a99;
+}
+.pv-iconpicker-search:focus-within {
+  border-color: color-mix(in srgb, var(--violet) 60%, transparent);
+}
+.pv-iconpicker-search input {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: #ececf1;
+  font-size: 13px;
+}
+.pv-iconpicker-search input::placeholder {
+  color: #6b6b78;
+}
+.pv-iconpicker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 4px;
+  overflow-y: auto;
+  padding: 2px;
+}
+.pv-iconpicker-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  border-radius: 8px;
+  color: #ececf1;
+}
+.pv-iconpicker-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.pv-iconpicker-item.is-current {
+  box-shadow: 0 0 0 1px var(--violet) inset;
+}
+
+/* ── Visual editor: inline components (<Badge>, <Icon>) ────────────────────────────────────────
+   They sit in a run of text, so the node view's wrapper must not become a box of its own — a
+   block-level wrapper would break the line around it. */
+.pv-visual .pv-inline-node {
+  display: inline;
+}
+/* An icon with nothing chosen renders NOTHING for readers, so in the editor it says what it needs
+   instead of being an invisible node you can't click. */
+.pv-visual .pv-icon-node {
+  display: inline-flex;
+  align-items: center;
+  vertical-align: -0.125em;
+  border-radius: 5px;
+}
+.pv-visual .pv-icon-node.is-empty {
+  padding: 1px 7px;
+  font-size: 12px;
+  color: var(--muted);
+  background: rgba(var(--ink-rgb), 0.06);
+  border: 1px dashed var(--line);
+}
+.pv-visual .pv-icon-node:hover {
+  background: color-mix(in srgb, var(--violet) 16%, transparent);
+}
+.pv-visual .pv-icon-node.is-selected {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--violet) 45%, transparent);
+}
+
+/* ── Visual editor: <Tree> ─────────────────────────────────────────────────────────────────────
+   The rows are drawn here rather than by the reader's component: its rows are named by an ATTR
+   (no content hole to type into) and its folders collapse with <details>, which in an editor
+   would hide the rows you're arranging. Same icons, same indent, same rail. */
+.pv-visual .pv-tree {
+  margin: 1rem 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--db-radius, 10px);
+  background: rgba(var(--ink-rgb), 0.03);
+  font-size: 14px;
+}
+.pv-visual .pv-tree-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  color: var(--fg);
+}
+.pv-visual .pv-tree-row:hover {
+  background: rgba(var(--ink-rgb), 0.05);
+}
+.pv-visual .pv-tree-row.is-highlight {
+  color: var(--violet);
+  font-weight: 600;
+}
+.pv-visual .pv-tree-name {
+  min-width: 0;
+  flex: 1;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: inherit;
+  font: inherit;
+}
+.pv-visual .pv-tree-name::placeholder {
+  color: var(--muted);
+}
+/* Revealed on hover: a tree of ten rows shouldn't be a wall of thirty buttons. */
+.pv-visual .pv-tree-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.pv-visual .pv-tree-row:hover .pv-tree-row-actions,
+.pv-visual .pv-tree-row-actions:focus-within {
+  opacity: 1;
+}
+.pv-visual .pv-tree-row-actions button {
+  display: flex;
+  padding: 3px;
+  border-radius: 5px;
+  color: var(--muted);
+}
+.pv-visual .pv-tree-row-actions button:hover {
+  background: rgba(var(--ink-rgb), 0.1);
+  color: var(--fg);
+}
+.pv-visual .pv-tree-row-actions button.is-on {
+  color: var(--violet);
+}
+/* The rail down a folder's children — the same one the published tree draws. */
+.pv-visual .pv-tree-children {
+  margin-left: 1rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--line);
+}
+.pv-visual .pv-tree-children > * + * {
+  margin-top: 0;
+}
+.pv-visual .pv-tree-add-wrap {
+  position: relative;
+  margin-top: 4px;
+}
+.pv-visual .pv-tree-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px;
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.pv-visual .pv-tree-add:hover {
+  border-color: color-mix(in srgb, var(--violet) 50%, transparent);
+  color: var(--fg);
+  background: rgba(var(--ink-rgb), 0.04);
+}
+.pv-tree-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 180px;
+  padding: 6px;
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.5);
+}
+.pv-tree-menu button,
+.pv-tree-menu label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 7px;
+  color: #c9c9d4;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+.pv-tree-menu button:hover,
+.pv-tree-menu label:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ececf1;
+}
+.pv-tree-menu input[type="checkbox"] {
+  accent-color: var(--violet);
+}
+/* A row inside a folder sits directly under it, not spaced like a paragraph. */
+.pv-visual .pv-tree-rows > * + *,
+.pv-visual .pv-tree-folder + *,
+.pv-visual .pv-tree-file + * {
+  margin-top: 0;
+}
+
+/* ── Visual editor: <Color> ────────────────────────────────────────────────────────────────────
+   Swatch tiles drawn here for the same reason the tree's rows are: a `<Color.Item>` is named and
+   valued entirely by attrs, so there's no content hole to type into. */
+.pv-visual .pv-color {
+  margin: 1rem 0;
+  border: 1px solid var(--line);
+  border-radius: var(--db-radius, 10px);
+  overflow: hidden;
+}
+.pv-visual .pv-color-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--line);
+  background: rgba(var(--ink-rgb), 0.03);
+}
+.pv-visual .pv-color-variant {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.pv-visual .pv-color-variant select {
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 2px 6px;
+  color: var(--fg);
+  font-size: 12px;
+}
+.pv-visual .pv-color-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 10px;
+}
+.pv-visual .pv-color-body.is-table {
+  flex-direction: column;
+}
+/* TipTap wraps the content hole and each child view in elements of its own; flattening both is
+   what lets the swatches sit in one row (the same fix `.pv-cardgrid` needs). */
+.pv-visual .pv-color-items,
+.pv-visual .pv-color-items > [data-node-view-content-react] {
+  display: contents;
+}
+.pv-visual .pv-color-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.pv-visual .pv-color-swatch {
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  border: 1px solid rgba(var(--ink-rgb), 0.15);
+}
+.pv-visual .pv-color-swatch:hover {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--violet) 45%, transparent);
+}
+.pv-visual .pv-color-label {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  line-height: 1.3;
+}
+.pv-visual .pv-color-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+}
+.pv-visual .pv-color-value {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 11px;
+  color: var(--muted);
+}
+.pv-visual .pv-color-row {
+  width: 100%;
+}
+.pv-visual .pv-color-row-title {
+  display: block;
+  width: 100%;
+  margin-bottom: 6px;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.pv-visual .pv-color-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border: 1px dashed var(--line);
+  border-radius: 9px;
+  color: var(--muted);
+}
+.pv-visual .pv-color-add:hover {
+  border-color: color-mix(in srgb, var(--violet) 50%, transparent);
+  color: var(--fg);
+}
+.pv-color-edit {
+  position: fixed;
+  z-index: 51;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 250px;
+  padding: 12px;
+  background: #16161c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 12px 44px rgba(0, 0, 0, 0.5);
+}
+.pv-color-edit-head {
+  color: #ececf1;
+  font-size: 13px;
+  font-weight: 500;
+}
+.pv-color-field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #8a8a99;
+  font-size: 12px;
+}
+.pv-color-field > input,
+.pv-color-input {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #ececf1;
+  font-size: 13px;
+  outline: none;
+}
+.pv-color-input input[type="color"] {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  background: none;
+}
+.pv-color-input input:not([type="color"]) {
+  width: 100%;
+  background: transparent;
+  border: 0;
+  outline: none;
+  color: #ececf1;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 13px;
+}
+.pv-color-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px;
+  border: 1px solid rgba(248, 113, 113, 0.4);
+  border-radius: 8px;
+  color: #f87171;
+  font-size: 13px;
+}
+.pv-color-delete:hover {
+  background: rgba(248, 113, 113, 0.12);
+}

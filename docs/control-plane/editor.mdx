@@ -234,11 +234,135 @@ what readers get:
   </Card>
 </CardGroup>
 
+## Editing code groups
+
+A `<CodeGroup>` is a tab strip too, and the tabs are the **fences' own titles** — what you name one
+here is what the published page shows:
+
+<CardGroup cols={2}>
+  <Card title="Switch and rename">
+    Click a tab to show that block. Double-click its label to rename it, then press <kbd>Enter</kbd>
+    — that writes the fence's title, so the tab and the page always agree.
+  </Card>
+  <Card title="Add and remove">
+    **+** at the end of the strip appends a block, in the same language as the one you were looking
+    at. The **✕** on the active tab removes that block; it's hidden on the last one. The **bin** at
+    the far right deletes the whole group.
+  </Card>
+  <Card title="Language">
+    The control on the right names the active block's language and changes it. Type to search — it
+    knows the short spellings, so `ts` finds TypeScript and `yml` finds YAML — and a language it
+    doesn't list is shown as written rather than rewritten.
+  </Card>
+  <Card title="Copy">
+    Copies the block you're looking at, the same way the copy button does for readers.
+  </Card>
+</CardGroup>
+
+An empty fence says `// add code here` until you type in it. That's a hint, not content: it isn't in
+your MDX and it never publishes.
+
+<Note>
+  A fence's title is written either way real repos write it, and Studio reads and writes both:
+
+````mdx
+<CodeGroup>
+
+  ```bash npm
+  npm i papervine
+  ```
+
+  ```ts title="app.config.ts"
+  export default { name: "docs" };
+  ```
+
+</CodeGroup>
+````
+
+  A block with no title falls back to its language, and a block with neither is labelled by
+  position. Anything else already in the fence's info string — a line-highlight range like
+  `{1,3-4}`, say — is kept exactly as you wrote it.
+</Note>
+
+## Editing cards
+
+A `<Card>` in Visual mode is the published card, with the three things you author handed back as
+controls:
+
+<CardGroup cols={2}>
+  <Card title="Icon">
+    The tile in the corner opens the icon set — search it, click one, or take the one that's there
+    back off. It writes the card's `icon`.
+  </Card>
+  <Card title="Title">
+    A field, not a heading you have to find in Source. Press <kbd>Enter</kbd> to drop into the
+    body, which is the order you write a card in.
+  </Card>
+  <Card title="Link">
+    The **…** in the corner holds the card's link. A linked card is still a real link while you
+    edit — clicking it opens that page in the editor — and clicking its title or icon puts the
+    cursor there instead.
+  </Card>
+  <Card title="Remove">
+    Also in **…**. A card in a group goes with it; the group itself goes from the drag handle,
+    like any other block.
+  </Card>
+</CardGroup>
+
+An empty card says `Enter your card description here` until you type. That's a hint, not content.
+
+## Badges and icons in a line of text
+
+`<Badge>` and `<Icon>` are **inline** — they belong in a sentence, not on a line of their own — and
+Visual mode treats them that way:
+
+- A badge renders as the badge readers get, and its label is ordinary text: click into it and type.
+- An icon is one thing: click it to change which icon, or select it and press <kbd>Backspace</kbd>
+  to remove it. Inserting one from the `/` menu opens the icon set straight away, since picking the
+  icon *is* the insertion.
+- Both keep every attribute you wrote — colour, size, shape, and the `iconType` weight — and insert
+  into the line the cursor is in rather than breaking the paragraph.
+
+## Editing a file tree
+
+`<Tree>` (also written `<FileTree>`) is built from rows rather than typed as MDX:
+
+<CardGroup cols={2}>
+  <Card title="Add a row">
+    **Add file or folder** at the bottom of the tree asks which, then puts the new row in with its
+    name selected. A folder has the same **+** on its own row, which adds inside it.
+  </Card>
+  <Card title="Name it">
+    Every row's name is a field. That's the whole content of a `<Tree.File>` — there's nothing else
+    to type.
+  </Card>
+  <Card title="Folder options">
+    The gear on a folder holds what readers get: open by default, whether they can collapse it at
+    all, and highlight. The tree doesn't collapse *while you edit*, since that would hide the rows
+    you're arranging.
+  </Card>
+  <Card title="Remove">
+    The bin on a row takes it — and, for a folder, everything under it — out.
+  </Card>
+</CardGroup>
+
+## Editing colour swatches
+
+`<Color>` is a palette, and each swatch is a colour and a name:
+
+- Click a swatch to edit it: a colour picker, the value as text (so `hsl(...)` or `var(--brand)`
+  work as well as a hex), and its name. **Delete** removes that swatch.
+- **+** adds one; **Variant** switches between the compact row and the table layout.
+- A theme-aware swatch — `value={{ light: "#fff", dark: "#000" }}` — shows as its own MDX instead.
+  That form can't be modelled as a single value, and showing you the source is better than
+  silently keeping one of the two colours. Edit those in Source mode.
+
 ## The `/` menu
 
 Type `/` anywhere in Visual mode to insert a block. Filter by typing, move with
-<kbd>↑</kbd> / <kbd>↓</kbd>, insert with <kbd>Enter</kbd>, and dismiss with <kbd>Esc</kbd> —
-which leaves what you typed in place, so nothing is lost if you change your mind.
+<kbd>↑</kbd> / <kbd>↓</kbd> — the list scrolls to keep the highlighted block in view — insert with
+<kbd>Enter</kbd>, and dismiss with <kbd>Esc</kbd>, which leaves what you typed in place, so
+nothing is lost if you change your mind.
 
 Anywhere means anywhere: the same menu, with the same blocks, opens inside a component — a tab
 pane, a callout, a card, a step — and inserts into whichever one holds the cursor.
@@ -359,10 +483,11 @@ Removing a component is something you do deliberately: the **✕** on a tab, or 
 block handle's menu. Selecting content and deleting it still works exactly as you'd expect — the
 stop only applies to the single keypress that would otherwise escape the component.
 
-Formatting inside the component is not part of that stop. With the cursor at the start of a list
-that opens a component — including the first checkbox of a checklist — <kbd>Backspace</kbd> drops
-the list formatting the way it does anywhere else, leaving a plain paragraph in place. It's the
-press *after* that one, with nothing left to unwrap, that does nothing.
+Formatting inside the component is not part of that stop. With the cursor at the start of the
+block that opens a component, <kbd>Backspace</kbd> strips that block the way it does anywhere
+else — a list loses its bullets (including the first checkbox of a checklist), a quote loses its
+bar, an emptied code block becomes an ordinary paragraph. It's the press *after* that one, with
+nothing left to strip, that does nothing.
 
 ## Select All works outward from where you are
 
