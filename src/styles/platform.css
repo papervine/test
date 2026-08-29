@@ -350,6 +350,60 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   }
 }
 
+/* Cursor-tracking card (MagicCard). The pointer handler writes --pv-mx/--pv-my in px; both
+   layers read them, so the whole effect costs two custom-property writes per frame and no
+   React render. Starts parked off-card so nothing glows until the pointer arrives. */
+.pv-magic-card {
+  --pv-mx: -100%;
+  --pv-my: 50%;
+  /* Inherited by both layers, so the ring and the wash always match the card's own corners. */
+  --pv-radius: 1rem;
+}
+.pv-magic-card-border,
+.pv-magic-card-glow {
+  border-radius: var(--pv-radius);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.pv-magic-card:hover .pv-magic-card-border,
+.pv-magic-card:hover .pv-magic-card-glow {
+  opacity: 1;
+}
+/* The 1px gradient ring: paint the whole box, then mask out everything but the border, by
+   compositing a content-box fill against a border-box fill with `exclude`. */
+.pv-magic-card-border {
+  padding: 1px;
+  background: radial-gradient(
+    360px circle at var(--pv-mx) var(--pv-my),
+    var(--blue),
+    var(--violet) 35%,
+    transparent 70%
+  );
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+}
+/* The interior wash. `--ink-rgb` rather than a literal, so it lifts the dark surface and
+   deepens the light one from a single declaration (the two-theme rule). */
+.pv-magic-card-glow {
+  background: radial-gradient(
+    300px circle at var(--pv-mx) var(--pv-my),
+    rgba(var(--ink-rgb), 0.11),
+    transparent 70%
+  );
+}
+@media (prefers-reduced-motion: reduce) {
+  .pv-magic-card-border,
+  .pv-magic-card-glow {
+    transition: none;
+  }
+}
+
 /* Brand gradient as text fill. */
 .db-grad {
   background: linear-gradient(110deg, var(--blue), var(--violet) 70%);
