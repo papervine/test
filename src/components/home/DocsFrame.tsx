@@ -55,59 +55,80 @@ export function DocsFrame({ url }: { url: string | null }) {
 
   // Keep the HOST page still while someone browses inside the frame.
   //
-  // The framed site is a Next app: every client-side navigation ends in a scrollIntoView/focus on
-  // its own content, and inside an iframe those scroll EVERY ancestor scroll container — the host
-  // window included. Clicking a link in the demo yanked this page by hundreds of pixels
+  // The framed site is a Next app, and its client-side navigations end in scrollIntoView/focus on
+  // their own content. Inside an iframe those scroll EVERY ancestor scroll container — this
+  // window included — so clicking a link in the demo yanked the page by hundreds of pixels
   // (measured: 632 -> 945, then -> 390 on the next click).
   //
-  // This restores the scroll instead of preventing it, which is second best and deliberate.
-  // Prevention was tried four ways and none of them works from out here:
-  //  - `pointerdown` never fires: events inside a cross-origin iframe do not bubble to the parent
-  //    document, so there is no synchronous signal that a link was clicked at all.
-  //  - Locking on window `blur` is too late (the navigation has already scrolled by the time
-  //    activeElement settles) and never fires for a second click, since focus is already inside.
-  //  - `overflow: hidden` on the root still permits PROGRAMMATIC scrolling — it only stops the
-  //    user, which was never the problem.
-  //  - `overflow: clip` does not stop it either; the call still moves the viewport.
+  // The fix is to take the page's scroll range away entirely while the reader is inside the
+  // frame: `position: fixed` on the body, held at the current offset. With no scroll range there
+  // is nothing for scrollIntoView to move, so nothing moves — no jump, and no wiggle from
+  // correcting one afterwards.
   //
-  // The cost is one painted frame at the wrong offset — a small wiggle on click. The real fix
-  // belongs on the framed site (suppressing scroll-on-navigation when embedded), which is a
-  // renderer change rather than a marketing-page one.
+  // Four things that do NOT work, all tried and measured, because each looks like the answer:
+  //  - `pointerdown` on the frame never fires: events inside a cross-origin iframe do not bubble
+  //    to the parent document, so there is no synchronous signal that a link was clicked at all.
+  //  - `overflow: hidden` on the root still permits PROGRAMMATIC scrolling — it only stops the
+  //    user, which was never the problem here.
+  //  - `overflow: clip` does not stop it either.
+  //  - Undoing the scroll on the next `scroll` event does work, but paints one frame at the wrong
+  //    offset: the visible wiggle.
+  //
+  // Focus entering the frame is the only cue available, and crucially it STAYS true for every
+  // later click — which is what makes this hold for the second and third link, where a blur-only
+  // approach silently stopped working.
   useEffect(() => {
-    let pinned: number | null = null;
-    let until = 0;
+    const body = document.body;
+    let lockedAt: number | null = null;
 
     const frameFocused = () => {
       const el = box.current?.querySelector("iframe") ?? null;
       return !!el && document.activeElement === el;
     };
 
-    // Focus enters the frame just before it navigates; that is the cue to remember where the
-    // reader actually was, and to start accepting corrections for a short window afterwards.
-    const remember = () => {
-      if (!frameFocused()) return;
-      pinned = window.scrollY;
-      until = Date.now() + 1500;
+    const lock = () => {
+      if (lockedAt !== null) return;
+      const y = window.scrollY;
+      // Removing the document's scroll range hides the scrollbar, which would shift everything
+      // sideways; pad by exactly the width it occupied.
+      const gutter = window.innerWidth - document.documentElement.clientWidth;
+      lockedAt = y;
+      body.style.position = "fixed";
+      body.style.top = `-${y}px`;
+      body.style.left = "0";
+      body.style.right = "0";
+      if (gutter > 0) body.style.paddingRight = `${gutter}px`;
     };
-    // A real gesture out here re-baselines, so the reader is never fought for their own scrollbar.
-    const rebaseline = () => {
-      pinned = frameFocused() ? window.scrollY : null;
-    };
-    const restore = () => {
-      if (pinned === null || Date.now() > until || !frameFocused()) return;
-      if (Math.abs(window.scrollY - pinned) > 4) window.scrollTo(0, pinned);
+    const unlock = () => {
+      if (lockedAt === null) return;
+      const y = lockedAt;
+      lockedAt = null;
+      body.style.position = "";
+      body.style.top = "";
+      body.style.left = "";
+      body.style.right = "";
+      body.style.paddingRight = "";
+      // The page was visually parked at `y` the whole time; put the real scroll back so nothing
+      // appears to move on release.
+      window.scrollTo(0, y);
     };
 
-    const onBlur = () => queueMicrotask(remember);
-    const gestures = ["wheel", "touchstart", "keydown", "mousedown"] as const;
+    // A microtask rather than a timeout: activeElement has settled, and this still runs before
+    // the navigation's scroll.
+    const onBlur = () => queueMicrotask(() => frameFocused() && lock());
+    // The pointer leaving the demo means they want the page back.
+    const onPointerOver = (e: Event) => {
+      if (!box.current?.contains(e.target as Node)) unlock();
+    };
 
     window.addEventListener("blur", onBlur);
-    window.addEventListener("scroll", restore);
-    for (const evt of gestures) window.addEventListener(evt, rebaseline, { passive: true });
+    window.addEventListener("focus", unlock);
+    document.addEventListener("pointerover", onPointerOver, { passive: true });
     return () => {
       window.removeEventListener("blur", onBlur);
-      window.removeEventListener("scroll", restore);
-      for (const evt of gestures) window.removeEventListener(evt, rebaseline);
+      window.removeEventListener("focus", unlock);
+      document.removeEventListener("pointerover", onPointerOver);
+      unlock();
     };
   }, []);
 
