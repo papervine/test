@@ -25,6 +25,7 @@ export default async function Image() {
           "AI-powered self-updating knowledge platform.",
           "Open source or hosted.",
         ]}
+        buttons
       />
     ),
     size,

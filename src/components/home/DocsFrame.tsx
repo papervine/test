@@ -53,6 +53,64 @@ export function DocsFrame({ url }: { url: string | null }) {
     return () => observer.disconnect();
   }, [visible]);
 
+  // Keep the HOST page still while someone browses inside the frame.
+  //
+  // The framed site is a Next app: every client-side navigation ends in a scrollIntoView/focus on
+  // its own content, and inside an iframe those scroll EVERY ancestor scroll container — the host
+  // window included. Clicking a link in the demo yanked this page by hundreds of pixels
+  // (measured: 632 -> 945, then -> 390 on the next click).
+  //
+  // This restores the scroll instead of preventing it, which is second best and deliberate.
+  // Prevention was tried four ways and none of them works from out here:
+  //  - `pointerdown` never fires: events inside a cross-origin iframe do not bubble to the parent
+  //    document, so there is no synchronous signal that a link was clicked at all.
+  //  - Locking on window `blur` is too late (the navigation has already scrolled by the time
+  //    activeElement settles) and never fires for a second click, since focus is already inside.
+  //  - `overflow: hidden` on the root still permits PROGRAMMATIC scrolling — it only stops the
+  //    user, which was never the problem.
+  //  - `overflow: clip` does not stop it either; the call still moves the viewport.
+  //
+  // The cost is one painted frame at the wrong offset — a small wiggle on click. The real fix
+  // belongs on the framed site (suppressing scroll-on-navigation when embedded), which is a
+  // renderer change rather than a marketing-page one.
+  useEffect(() => {
+    let pinned: number | null = null;
+    let until = 0;
+
+    const frameFocused = () => {
+      const el = box.current?.querySelector("iframe") ?? null;
+      return !!el && document.activeElement === el;
+    };
+
+    // Focus enters the frame just before it navigates; that is the cue to remember where the
+    // reader actually was, and to start accepting corrections for a short window afterwards.
+    const remember = () => {
+      if (!frameFocused()) return;
+      pinned = window.scrollY;
+      until = Date.now() + 1500;
+    };
+    // A real gesture out here re-baselines, so the reader is never fought for their own scrollbar.
+    const rebaseline = () => {
+      pinned = frameFocused() ? window.scrollY : null;
+    };
+    const restore = () => {
+      if (pinned === null || Date.now() > until || !frameFocused()) return;
+      if (Math.abs(window.scrollY - pinned) > 4) window.scrollTo(0, pinned);
+    };
+
+    const onBlur = () => queueMicrotask(remember);
+    const gestures = ["wheel", "touchstart", "keydown", "mousedown"] as const;
+
+    window.addEventListener("blur", onBlur);
+    window.addEventListener("scroll", restore);
+    for (const evt of gestures) window.addEventListener(evt, rebaseline, { passive: true });
+    return () => {
+      window.removeEventListener("blur", onBlur);
+      window.removeEventListener("scroll", restore);
+      for (const evt of gestures) window.removeEventListener(evt, rebaseline);
+    };
+  }, []);
+
   // The address bar shows the site's real public URL, minus the scheme — the point of the chrome
   // is to say "this is a docs website", and a visible https:// adds nothing to that.
   const address = url ? url.replace(/^https?:\/\//, "").replace(/\/$/, "") : "docs.yourcompany.com";
@@ -115,7 +173,7 @@ export function DocsFrame({ url }: { url: string | null }) {
             src={url}
             title="A documentation site rendered by Papervine"
             loading="lazy"
-            className="h-[560px] lg:h-[660px] w-full border-0 bg-white"
+            className="h-[560px] w-full border-0 bg-white lg:h-[660px]"
             // The frame shows our own site, but it is still a separate document embedded in the
             // marketing page: keep it from navigating the top-level window or opening popups.
             sandbox="allow-scripts allow-same-origin allow-forms"
