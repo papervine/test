@@ -40,6 +40,12 @@ const SITE = {
 let widgetId: string;
 
 test.beforeAll(async () => {
+  // Hooks carry their OWN 30s budget, independent of `test.slow()` on the tests below — and the
+  // warm-up at the end of this hook deliberately triggers two on-demand route compiles, which
+  // on CI exceeded that and failed the hook (reported against the first test, at 0ms). Called
+  // inside beforeAll, `setTimeout` raises the HOOK's budget, which is the one that matters here.
+  test.setTimeout(180_000);
+
   const sql = postgres(TEST_DB_URL, { max: 1 });
   const [org] = await sql`select id from organization where name = ${TEST_USER.org} limit 1`;
   expect(org, "expected the onboarded org").toBeTruthy();
