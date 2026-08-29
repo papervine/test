@@ -19,6 +19,7 @@ import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Brand } from "@/components/Brand";
 import { HeroVideo } from "@/components/HeroVideo";
 import { TryItSection } from "@/components/home/TryItSection";
+import { SparklesText } from "@/components/home/SparklesText";
 import { resolveDocsFrame, resolveHomeDemo } from "@/lib/home-demo";
 import { appHostFor } from "@/lib/tenant-host";
 import { marketingMetadata } from "@/lib/marketing-seo";
@@ -234,16 +235,17 @@ export default async function LandingPage() {
               className="db-rise mt-7 text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
               style={{ animationDelay: "80ms" }}
             >
-              Publish <span className="db-grad">beautiful</span> docs.
+              <SparklesText>
+                Publish <span className="db-grad">beautiful</span> docs.
+              </SparklesText>
             </h1>
 
             <p
               className="db-rise mt-6 max-w-xl text-lg leading-relaxed text-[var(--muted)]"
               style={{ animationDelay: "160ms" }}
             >
-              Write help pages. Papervine publishes them as a documentation
-              website — with search, your own domain, and an assistant that
-              answers from your docs.
+              AI-powered self-updating knowledge platform. Open source or
+              hosted.
             </p>
 
             <div

@@ -312,6 +312,44 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   }
 }
 
+/* Twinkling sparkles over a heading (SparklesText). Each star runs the same keyframes on its
+   own inline delay/duration, so ten elements give a continuous, non-repeating shimmer with no
+   JS and no per-frame work — the browser composites transform + opacity only.
+
+   `transform-box: fill-box` + `transform-origin: center` so each star rotates and scales about
+   ITSELF; without them an SVG child rotates around the user-space origin and the sparkles swing
+   across the headline instead of twinkling in place. */
+.pv-sparkle {
+  transform-box: fill-box;
+  transform-origin: center;
+  opacity: 0;
+  animation-name: pv-sparkle;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+  /* A faint bloom in the star's own colour, so it reads as light rather than as a pasted
+     shape — most of the difference between "sparkle" and "asterisk" on a dark ground. */
+  filter: drop-shadow(0 0 4px currentColor);
+}
+@keyframes pv-sparkle {
+  0%,
+  100% {
+    opacity: 0;
+    transform: scale(0) rotate(0deg);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1) rotate(90deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  /* Keep the decoration, drop the motion: the stars settle at a constant, gentle presence
+     rather than vanishing, so the heading looks intentional either way. */
+  .pv-sparkle {
+    animation: none;
+    opacity: 0.55;
+  }
+}
+
 /* Brand gradient as text fill. */
 .db-grad {
   background: linear-gradient(110deg, var(--blue), var(--violet) 70%);
