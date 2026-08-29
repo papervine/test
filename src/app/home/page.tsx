@@ -13,6 +13,7 @@ import {
   PenLine,
   Globe,
   BarChart3,
+  Github,
 } from "lucide-react";
 import { cookies, headers } from "next/headers";
 import { PlatformShell } from "@/components/platform/PlatformShell";
@@ -24,6 +25,7 @@ import { resolveDocsFrame, resolveHomeDemo } from "@/lib/home-demo";
 import { appHostFor } from "@/lib/tenant-host";
 import { marketingMetadata } from "@/lib/marketing-seo";
 import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
+import { formatStars, githubStars } from "@/lib/github-stars";
 
 // Marketing landing for the SaaS apex (SPEC §2). Reached via the middleware rewrite
 // of `/` when not in single-repo preview mode (no PAPERVINE_CONTENT).
@@ -77,6 +79,13 @@ const GITHUB = "https://github.com/papervine/papervine";
 
 // The migrate guide backs the "alternative" claim below — it is the page that proves it.
 const DOCS_MIGRATE = `${DOCS}guides/migrate`;
+
+// Deploy-your-own. The same clone URL as apps/cli/README.md and the self-hosting guide —
+// `root-directory` is what aims Vercel at the CLI app instead of the monorepo root, and
+// without it the clone builds the control plane and fails for want of a database.
+const DEPLOY_TO_VERCEL =
+  "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fpapervine%2Fpapervine" +
+  "&root-directory=apps%2Fcli&project-name=papervine-docs&repository-name=papervine-docs";
 
 // What you get (top section). Same capabilities as before, said without the insider terms
 // (MCP, llms.txt, "docs as code") that a first-time visitor wouldn't parse.
@@ -159,6 +168,9 @@ export default async function LandingPage() {
   // The rendered docs site the demo frames (the forkable starter, which carries an OpenAPI
   // spec and therefore a working API console). Null → the frame shows its static placeholder.
   const frame = await resolveDocsFrame(host);
+  // Decoration on the GitHub button. Null when api.github.com is slow, rate-limited or
+  // unreachable, and the button simply renders without a number (see githubStars).
+  const stars = await githubStars();
 
   return (
     <PlatformShell variant="home">
@@ -257,22 +269,54 @@ export default async function LandingPage() {
             >
               <Link
                 href="/signup"
-                className="db-cta group inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-white"
+                className="db-cta inline-flex items-center rounded-xl px-5 py-3 text-sm font-medium text-white"
               >
-                Start free
-                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+                Free Trial
               </Link>
-              <span className="mono flex items-center gap-2 text-xs text-[var(--muted)]">
-                <FileJson2 className="h-3.5 w-3.5" />
-                With or without GitHub, we got you covered.
-              </span>
+
+              {/* Deploy-your-own, beside the trial CTA on purpose: the two ways in are hosted or
+                  self-hosted, and the page claims both a sentence later. Same clone URL the CLI
+                  README and the self-hosting guide use — `root-directory` is what points Vercel
+                  at the CLI app rather than the monorepo. */}
+              <a
+                href={DEPLOY_TO_VERCEL}
+                className="db-ring inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-[var(--fg)] transition-colors hover:bg-[rgba(var(--ink-rgb),0.05)]"
+              >
+                {/* Vercel's mark is a plain triangle; inlined rather than loading their button
+                    image so the hero pulls nothing from a third-party origin. */}
+                <svg viewBox="0 0 76 65" className="h-3.5 w-3.5" aria-hidden fill="currentColor">
+                  <path d="M38 0 76 65H0Z" />
+                </svg>
+                Deploy
+              </a>
+
+              <a
+                href={GITHUB}
+                className="db-ring inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-[var(--fg)] transition-colors hover:bg-[rgba(var(--ink-rgb),0.05)]"
+              >
+                <Github className="h-4 w-4" />
+                Star
+                {/* Absent when GitHub can't be reached — see githubStars(). The separator is
+                    part of the conditional so it never renders as a dangling divider. */}
+                {stars !== null && (
+                  <span className="mono flex items-center gap-1.5 text-xs text-[var(--muted)]">
+                    <span className="text-[rgba(var(--ink-rgb),0.25)]">|</span>
+                    {formatStars(stars)}
+                  </span>
+                )}
+              </a>
             </div>
+
+            <p className="db-rise mono mt-5 flex items-center gap-2 text-xs text-[var(--muted)]" style={{ animationDelay: "300ms" }}>
+              <FileJson2 className="h-3.5 w-3.5" />
+              With or without GitHub, we got you covered.
+            </p>
 
             {/* The same claim, said the way people search for it. Not keyword stuffing: reading
                 the same config IS the migration story, and the link proves it. */}
             <p
-              className="db-rise mt-5 max-w-lg text-sm leading-relaxed text-[var(--muted)]"
-              style={{ animationDelay: "320ms" }}
+              className="db-rise mt-4 max-w-lg text-sm leading-relaxed text-[var(--muted)]"
+              style={{ animationDelay: "360ms" }}
             >
               Looking for a{" "}
               <span className="font-medium text-[var(--fg)]">docs platform alternative</span>? If you

@@ -514,6 +514,11 @@ const CONTROL_PLANE_CHECKS = [
       // ("docs.json", MCP, llms.txt). The headline is split across a <br>/span, so
       // assert a contiguous phrase from the hero chip instead.
       "With or without GitHub, we got you covered",
+      // The two self-serve ways in, beside the trial CTA (SPEC §2). The clone URL is
+      // asserted without its query separators because the HTML escapes them.
+      "vercel.com/new/clone?repository-url=",
+      "root-directory=apps%2Fcli",
+
       // The apex declared `summary_large_image` with NO image for a long time — the one
       // combination that unfurls as nothing at all. `opengraph-image.tsx` supplies it, and
       // Next mirrors it onto twitter:image; assert the image, not just the card type.
