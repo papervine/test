@@ -5,8 +5,19 @@ on:
     branches: [main]
   pull_request:
 
+# The verification steps below used to be one sequential `verify` job, which put ~8m20 between
+# a push and a production deploy. They are mutually independent — smoke and the crawl each spawn
+# their own `next dev` (their own NEXT_DIST_DIR, see next.config.mjs) so neither needs the
+# production build, and the clean-room test runs its own build inside the packed tarball — so
+# they now run as parallel jobs. Each pays ~50s of checkout + npm ci, but they pay it at the
+# same time: the critical path becomes the slowest single job rather than the sum of all five.
+#
+# `verify` survives as an aggregator that needs them all, so `deploy-production` /
+# `deploy-trigger` (and any branch protection naming "verify") keep working unchanged. If any
+# job fails, the aggregator is skipped, and so is the deploy — which is the behavior we want.
 jobs:
-  verify:
+  checks:
+    name: Typecheck + unit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,6 +38,31 @@ jobs:
       - name: Unit tests (pure logic)
         run: npm run test:unit
 
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Next's own build cache. Only npm was cached before, so every build started cold.
+      # Keyed on the lockfile + sources so a real change still rebuilds what it must, with
+      # restore-keys so an unrelated edit reuses most of the previous compile.
+      - name: Cache the Next build
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'packages/**', 'next.config.mjs') }}
+          restore-keys: |
+            next-${{ hashFiles('package-lock.json') }}-
+            next-
+
       - name: Build
         # Raise V8's old-space cap: the runner's cgroup makes Node default to ~2GB,
         # which `next build` now exceeds (OOM, exit 134). The runner has 7GB.
@@ -34,8 +70,34 @@ jobs:
           NODE_OPTIONS: --max-old-space-size=6144
         run: npm run build
 
+  smoke:
+    name: Smoke (renderer + control-plane, no DB)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
       - name: Smoke test (renderer + control-plane gate, no DB)
         run: npm test
+
+  crawl:
+    name: Crawl the example docs site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
 
       # The forkable example site (examples/starter → papervine/starter). It's the first thing
       # a prospective user renders, and `db:seed` builds its dev sites from it — including the
@@ -43,6 +105,19 @@ jobs:
       # verified it until it lived in this repo.
       - name: Crawl the example docs site
         run: node tests/crawl.mjs examples/starter
+
+  cli-package:
+    name: Clean-room CLI package test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
 
       # Packs, audits and installs the real `papervine` tarball, then serves docs/ from
       # it. Every other job runs with the workspace's hoisted node_modules in scope, so
@@ -53,6 +128,15 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=6144
         run: node tests/cli-package.mjs
+
+  # The gate the deploy jobs wait on. Deliberately does no work of its own: it exists so the
+  # five jobs above can run in parallel while `needs: verify` downstream keeps its meaning.
+  verify:
+    name: Verify
+    needs: [checks, build, smoke, crawl, cli-package]
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "typecheck, unit, build, smoke, crawl and the clean-room CLI test all passed"
 
   # Authed control-plane journeys (Playwright + real Postgres). The @external connect
   # spec hits the GitHub API, so it's skipped here to keep CI deterministic; run it

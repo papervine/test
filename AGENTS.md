@@ -269,9 +269,14 @@ browser + real services. Three layers — put the test where the logic lives:
    mid-run**, and each restart is an `ERR_CONNECTION_REFUSED` window that cascades spec failures
    that look like flakes but aren't.
 
-CI (`.github/workflows/ci.yml`): `verify` job runs typecheck + unit + build + smoke
-(no services); `e2e` job runs Playwright against a Postgres service (skipping `@external`).
-Keep both green.
+CI (`.github/workflows/ci.yml`): five **parallel** jobs cover what `verify` used to run
+sequentially — `checks` (typecheck + unit), `build`, `smoke`, `crawl`, `cli-package` — and
+**`verify` is now an empty aggregator** that needs all five. They're independent (smoke and the
+crawl each spawn their own `next dev` on their own distDir; the clean-room test builds inside
+the packed tarball), so running them at once turned an ~8m20 critical path into roughly the
+slowest single job. Keep `verify` as the name the deploy jobs gate on — that's the whole point
+of the aggregator, and why splitting the work needed no change downstream. Separately, the
+`e2e` job runs Playwright against a Postgres service (skipping `@external`). Keep them all green.
 
 ### Deploys are gated on the tests
 

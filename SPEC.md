@@ -263,6 +263,27 @@ did nothing at all and every request sailed through — caught only by the e2e t
 actually arrives. And `assistantCaptchaEnabled` (`app-schema.ts`) remains **persisted UI that
 nothing enforces**; the flag round-trips and has never been read by the assistant route.
 
+**Status 2026-08-29 — CI's verification runs in parallel.** `verify` was one sequential job:
+typecheck → unit → build → smoke → crawl → clean-room CLI, ~8m20, and since `deploy-production`
+needs `verify`, that was the floor on how long any change took to reach production. The steps
+turn out to be mutually independent — smoke and the crawl each spawn their own `next dev` on
+their own `NEXT_DIST_DIR`, so neither needs the production build, and the clean-room test builds
+inside the tarball it packs — so they now run as five parallel jobs. Each pays ~50s of checkout
+plus `npm ci`, but concurrently: the critical path becomes the slowest single job (the ~2m build)
+rather than the sum.
+
+`verify` remains as an **empty aggregator** needing all five, so `deploy-production`,
+`deploy-trigger` and any branch protection naming "verify" were untouched by the split — and a
+failure still skips the aggregator and therefore the deploy. `.next/cache` is now restored
+between runs too; only npm was cached before, so every build started cold.
+
+Deliberately NOT done: skipping jobs by changed path. Tempting for a marketing-copy edit, but
+the "Try it" work is the counter-example — it began as a home-page task and ended up touching
+two API routes, the DB schema, a migration, the editor's slash menu and tenant-host resolution,
+and the bug that reached production lived in `src/lib/`, not in the page. The two jobs with
+genuinely crisp scopes (`cli-package`, the starter `crawl`) could be path-filtered later; the
+rest can't be, honestly.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,
@@ -7299,8 +7320,9 @@ Three layers; the test lives where the logic does:
   (the GitHub connect flow) are tagged `@external` so CI skips them for determinism.
 - **Real-repo crawl** (`tests/crawl.mjs <dir>`): the `papervine dev` analogue used to validate
   against representative docs repos; reports rendered / degraded / 500, non-zero exit on any 500.
-- **CI** (`.github/workflows/ci.yml`): `verify` job = typecheck + unit + build + smoke (no
-  services); `e2e` job = Playwright against a Postgres service (skipping `@external`).
+- **CI** (`.github/workflows/ci.yml`): five parallel jobs — `checks` (typecheck + unit),
+  `build`, `smoke`, `crawl`, `cli-package` — aggregated by an empty `verify` job that the
+  deploys gate on; `e2e` job = Playwright against a Postgres service (skipping `@external`).
 - **Migrations are GitOps** (versioned, not `push`): schema changes are committed SQL
   (`drizzle/`, via `npm run db:generate`), reviewed like code, and applied by
   `drizzle-kit migrate` — locally (`db:migrate`), in CI's e2e (rebuilds `papervine_test` from
