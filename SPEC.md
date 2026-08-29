@@ -3122,6 +3122,24 @@ layer.
 > schema test grew three node-view cases in the same spirit: they assert on the **input** rather
 > than on `data-checked`, since the whole failure was a correct attribute nobody could reach.
 >
+> **…and the READER half was never styled (2026-08-28).** Reported with a screenshot of a checklist
+> rendering as "bullet, then checkbox, then text". The editor got the full treatment when task
+> lists landed — marker off, checkbox in the gutter, finished item struck through — and the
+> published page got remark-gfm's `<li class="task-list-item"><input>` with `.prose ul` still
+> drawing `list-disc` over it. Nobody wrote the reader's rules, so the two surfaces disagreed from
+> the day the feature shipped; it isn't a regression from the table work above. The same shape now
+> lives in `globals.css` — **both copies**, the platform's and `apps/cli`'s, which are hand-kept
+> mirrors of the docs `.prose` styles.
+>
+> The checkbox needed one thing the editor didn't: **`color-scheme`**. `color-scheme: dark` is set
+> on `<html>` for the platform shell, and a docs page shares that element, so the UA painted a
+> native control dark on a *light* docs page — the two-theme-systems gotcha arriving from the other
+> side. It's pinned per-control to the docs appearance instead. Guarded by the existing "docs CSS"
+> smoke check, which reads the stylesheet the page actually links (this is CSS, so there is nothing
+> in the HTML to assert): verified failing with the rule removed — `task-list styling gone —
+> checklists render bullet + checkbox` — and the fixture's `include` list now pins the
+> `task-list-item` class the selector depends on.
+>
 > **`/` inside a component said "No matching blocks" (2026-08-27).** Reported as "if I run a slash
 > command inside a tab I don't get the components list." It listed all 33 blocks in a plain
 > paragraph and none inside a `<Tab>` pane — the same code, the same query (`""`), the same item

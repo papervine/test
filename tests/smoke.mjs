@@ -176,6 +176,10 @@ const CHECKS = [
       "TASK_LIST_MARKER",
       'type="checkbox"',
       "checked",
+      // The class remark-gfm hangs on a task item — the hook the CSS below styles against, so the
+      // marker is hidden and the checkbox sits in its place. If this ever stops being emitted,
+      // every checklist silently goes back to "bullet, then checkbox, then text".
+      "task-list-item",
     ],
   },
   { slug: "badfrontmatter", desc: "malformed frontmatter doesn't crash", include: ["BAD_FRONTMATTER_MARKER"] },
@@ -699,6 +703,13 @@ async function run() {
             if (!css.includes(cls)) {
               failures.push(`[${tag}] ".${cls}" purged — tenant MDX using it renders unstyled`);
             }
+          }
+          // A GFM task list is the one list whose marker has to go: remark-gfm renders a real
+          // checkbox INSIDE the item, so with the bullet still there each line reads "bullet,
+          // checkbox, text". The rule lives in globals.css rather than in a component, which is
+          // exactly the kind of thing that gets deleted in a cleanup and noticed by nobody.
+          if (!css.includes("task-list-item")) {
+            failures.push(`[${tag}] task-list styling gone — checklists render bullet + checkbox`);
           }
         }
       } catch (e) {
