@@ -177,6 +177,62 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
     transform: scale(1) rotate(0);
   }
 }
+
+/* A leaf with a LIFE: it sprouts, holds for most of the cycle, then withers and drops.
+   Lives on a wrapper <g> that sits in SCREEN space — outside the leaf's own rotate() — so a
+   falling leaf drifts downward regardless of which way the blade points. Rotating first and
+   translating second would send each leaf off along its own axis, which reads as the whole
+   backdrop sliding rather than leaves falling.
+
+   One infinite animation covers the whole life so nothing has to coordinate two of them, and
+   the long invisible tail at the end is the gap before it grows back. Callers vary duration and
+   delay per leaf; with those spread out, no two are ever in the same phase and the effect reads
+   as occasional rather than as a pulse. */
+.db-leaf-life {
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  opacity: 0;
+  animation-name: db-leaf-life;
+  animation-iteration-count: infinite;
+  animation-timing-function: ease-in-out;
+}
+@keyframes db-leaf-life {
+  /* Waiting to grow. */
+  0% {
+    opacity: 0;
+    transform: translateY(0) scale(0.2);
+  }
+  /* Unfurling — the quickest part of the cycle, so it catches the eye. */
+  6% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+  /* Grown, and staying that way for most of the cycle. */
+  68% {
+    opacity: 1;
+    transform: translateY(0) scale(1) rotate(0deg);
+  }
+  /* Letting go. */
+  76% {
+    opacity: 0.9;
+    transform: translateY(6px) scale(0.98) rotate(10deg);
+  }
+  /* Falling out of frame, fading as it goes. */
+  90% {
+    opacity: 0;
+    transform: translateY(54px) scale(0.9) rotate(38deg);
+  }
+  /* Gone, and the ground is bare for a while before it starts again. */
+  100% {
+    opacity: 0;
+    transform: translateY(54px) scale(0.9) rotate(38deg);
+  }
+}
+/* The blade itself, for a leaf whose wrapper owns the animation: no unfurl of its own. */
+.db-leaf-still {
+  fill: url(#db-vine-grad);
+  fill-opacity: 0.3;
+}
 .db-vine-bud {
   fill: #d7ddff;
   opacity: 0;
@@ -223,6 +279,7 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
     stroke-dashoffset: 0;
   }
   .db-leaf,
+  .db-leaf-life,
   .db-vine-bud {
     animation: none;
     opacity: 1;

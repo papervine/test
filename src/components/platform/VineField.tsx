@@ -16,22 +16,57 @@ const VINES = [
 
 // Leaves sit on the vine curves; each unfurls just as the stroke reaches it (hence the delay,
 // tuned to the draw timing). x/y is the leaf base, r its orientation, s a size variation.
+//
+// Coordinates are SNAPPED to the nearest point on the owning bezier rather than typed by hand.
+// Several used to sit up to 29px off their stalk — visibly floating in mid-air — because these
+// curves bow a long way from the straight line between their endpoints, so a coordinate that
+// looks plausible beside the path data is not necessarily on the path. `r` follows the tangent
+// there (turned 90deg onto the blade's own axis, then splayed off the stem).
 const LEAVES = [
   // center
-  { x: 604, y: 452, r: 55, s: 1.05, delay: 2.2 },
-  { x: 600, y: 360, r: -50, s: 1, delay: 3.1 },
-  { x: 600, y: 230, r: 48, s: 1.1, delay: 4.2 },
-  { x: 600, y: 150, r: -42, s: 0.9, delay: 5 },
+  { x: 604, y: 452, r: 25, s: 1.05, delay: 2.2 },
+  { x: 596.9, y: 359.3, r: -35, s: 1, delay: 3.1 },
+  { x: 613.8, y: 228, r: 37, s: 1.1, delay: 4.2 },
+  { x: 594.6, y: 150.9, r: -54, s: 0.9, delay: 5 },
   // left
-  { x: 344, y: 500, r: -60, s: 1, delay: 1.9 },
-  { x: 352, y: 404, r: 40, s: 1.05, delay: 2.8 },
-  { x: 372, y: 300, r: -46, s: 1.1, delay: 3.9 },
-  { x: 392, y: 200, r: 52, s: 0.9, delay: 4.8 },
+  { x: 344, y: 500, r: -22, s: 1, delay: 1.9 },
+  { x: 350.1, y: 404.5, r: 33, s: 1.05, delay: 2.8 },
+  { x: 344.3, y: 290.7, r: -27, s: 1.1, delay: 3.9 },
+  { x: 377.7, y: 198.8, r: 50, s: 0.9, delay: 4.8 },
   // right
-  { x: 856, y: 500, r: 60, s: 1, delay: 1.9 },
-  { x: 848, y: 404, r: -40, s: 1.05, delay: 2.8 },
-  { x: 828, y: 300, r: 46, s: 1.1, delay: 3.9 },
-  { x: 808, y: 200, r: -52, s: 0.9, delay: 4.8 },
+  { x: 856, y: 500, r: 22, s: 1, delay: 1.9 },
+  { x: 849.9, y: 404.5, r: -33, s: 1.05, delay: 2.8 },
+  { x: 855.7, y: 290.7, r: 27, s: 1.1, delay: 3.9 },
+  { x: 822.3, y: 198.8, r: -50, s: 0.9, delay: 4.8 },
+];
+
+// New growth: leaves that come and go rather than unfurling once and staying. Each sprouts,
+// holds for most of its cycle, then withers and drops — so the backdrop keeps changing without
+// ever announcing itself.
+//
+// Every x/y here is COMPUTED, not eyeballed: each is a point evaluated on the vine's own cubic
+// bezier at a given t, so the leaf base sits exactly on the stalk. Placing them by eye put
+// several visibly adrift in mid-air — the curves bow a long way from the straight line between
+// their endpoints, so a coordinate that looks right next to the path data is not on the path.
+// `r` is derived too: the tangent at that t, turned 90deg to match the blade's own axis, then
+// splayed ~45deg off the stalk so it reads as joined rather than glued flat against it.
+//
+// `dur` and `delay` share no common factor and none repeat: with a shared duration the whole
+// field would pulse in unison, which is the one thing that would make it read as an animation
+// rather than as a plant.
+const NEW_GROWTH = [
+  // center
+  { x: 608.9, y: 597.3, r: 58, s: 0.85, dur: 23, delay: 2 },
+  { x: 602.8, y: 332, r: -30, s: 0.8, dur: 31, delay: 11 },
+  { x: 594, y: 93.1, r: 48, s: 0.75, dur: 27, delay: 19 },
+  // left
+  { x: 338.9, y: 642.9, r: -64, s: 0.8, dur: 29, delay: 6 },
+  { x: 344.5, y: 381, r: 31, s: 0.85, dur: 21, delay: 14 },
+  { x: 379.5, y: 173.8, r: -38, s: 0.7, dur: 34, delay: 25 },
+  // right
+  { x: 861.1, y: 642.9, r: 64, s: 0.8, dur: 26, delay: 9 },
+  { x: 855.5, y: 381, r: -31, s: 0.85, dur: 33, delay: 17 },
+  { x: 820.5, y: 173.8, r: 38, s: 0.7, dur: 24, delay: 3 },
 ];
 
 // A glowing bud at each growing tip, lit once the strand finishes drawing.
@@ -68,6 +103,22 @@ export function VineField() {
             {LEAVES.map((l, i) => (
               <g key={`l${i}`} transform={`translate(${l.x},${l.y}) rotate(${l.r}) scale(${l.s})`}>
                 <path className="db-leaf" d={LEAF} style={{ animationDelay: `${l.delay}s` }} />
+              </g>
+            ))}
+            {/* Nested transforms on purpose. The OUTER <g> only moves the leaf into place, so the
+                middle <g> — which owns the sprout/fall animation — translates in screen space and
+                a falling leaf drops downward. Rotating before translating would send each one off
+                along its own axis instead. */}
+            {NEW_GROWTH.map((l, i) => (
+              <g key={`n${i}`} transform={`translate(${l.x},${l.y})`}>
+                <g
+                  className="db-leaf-life"
+                  style={{ animationDuration: `${l.dur}s`, animationDelay: `${l.delay}s` }}
+                >
+                  <g transform={`rotate(${l.r}) scale(${l.s})`}>
+                    <path className="db-leaf-still" d={LEAF} />
+                  </g>
+                </g>
               </g>
             ))}
             {BUDS.map((b, i) => (
