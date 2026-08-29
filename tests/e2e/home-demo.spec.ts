@@ -1,4 +1,4 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, request as apiRequest } from "@playwright/test";
 import postgres from "postgres";
 import { TEST_USER, E2E_PORT } from "./constants";
 import { TEST_DB_URL } from "./global-setup";
@@ -55,6 +55,20 @@ test.beforeAll(async () => {
                     ${SITE.customDomain}, now(),
                     ${widgetId}, true, ${sql.json([HOME_ORIGIN])})`;
   await sql.end();
+
+  // Warm the two widget routes this file is the FIRST visitor to. Under `next dev` each route
+  // compiles on demand, and on CI (~4× slower than a dev machine) that first compile alone can
+  // outlast a test's 30s budget — which is what failed the chip spec twice while it passed
+  // locally, the same shape as the widget-settings cold-compile story in CLAUDE.md. Warming
+  // here moves the compile off the assertion path instead of papering over it with timeouts.
+  //
+  // The chat POST carries NO Origin header on purpose: that returns 403 at the allowlist check,
+  // which sits *before* the rate limiter, so warming the route costs none of the quota the
+  // limit test later depends on.
+  const warm = await apiRequest.newContext();
+  await warm.get(`${HOME_ORIGIN}/api/widget/embed.js`).catch(() => {});
+  await warm.post(`${HOME_ORIGIN}/api/widget/${widgetId}/chat`, { data: {} }).catch(() => {});
+  await warm.dispose();
 });
 
 test.afterAll(async () => {
@@ -70,16 +84,23 @@ test("the frame reads a live docs site, and Edit swaps the same frame to the edi
 }) => {
   await page.goto(HOME_ORIGIN);
 
-  // Read mode frames a real Papervine-rendered site. The iframe is only rendered once the
-  // section scrolls into view — a third-party document is the heaviest thing on this page, and
-  // loading it for visitors who never leave the hero would undo the rest of the care here.
+  // Read mode frames a real Papervine-rendered site.
+  //
+  // Deliberately NOT asserting the iframe is absent before scrolling. It IS lazily mounted (an
+  // IntersectionObserver with a 200px margin), but the demo now sits just under the hero, so at
+  // most viewport heights the observer fires on load and the count is legitimately 1 straight
+  // away — an assertion that depended on the section being below the fold raced against the
+  // page's own layout. The guarantee worth pinning is that the *editor chunk* isn't on the
+  // critical path, which the next test asserts off a click rather than a scroll position.
   const frame = page.locator('iframe[title="A documentation site rendered by Papervine"]');
-  await expect(frame).toHaveCount(0);
 
   await page.getByRole("button", { name: "Edit this page" }).scrollIntoViewIfNeeded();
   await expect(frame).toHaveCount(1, { timeout: 10_000 });
-  // It points at a real docs page, not a placeholder.
-  await expect(frame).toHaveAttribute("src", /\/quickstart$/);
+  // It points at the framed site's INDEX. Pinned because an earlier cut appended a guessed
+  // `/quickstart`, which exists on the starter example but not on our own documentation — so in
+  // production the demo framed the renderer's "Page not found". Only the index is guaranteed to
+  // exist on every site, which is why the resolver must never append a page here.
+  await expect(frame).toHaveAttribute("src", /^https?:\/\/[^/]+(\/|\/sites\/[^/]+)$/);
 
   // Edit replaces what the frame shows without unmounting the iframe (re-mounting would
   // re-download the site on every toggle, and would throw away anything typed).
@@ -173,6 +194,9 @@ test("the demo editor offers no media blocks, since it has no site behind it", a
 });
 
 test("an Ask chip opens the widget and asks the question", async ({ page }) => {
+  // Mounting a shadow-root widget and streaming a first answer is genuinely slow on CI even
+  // with the routes warmed, and the default 30s budget leaves no room for the panel wait.
+  test.slow();
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
 
@@ -181,21 +205,28 @@ test("an Ask chip opens the widget and asks the question", async ({ page }) => {
   // With a demo site resolved, the chips are buttons that drive the widget (they degrade to
   // plain links when it isn't — that fallback is covered by the smoke gate).
   const chip = page.getByRole("button", { name: /migrate an existing docs.json site/i });
+  // Explicit headroom on the first interactions: `test.slow()` raises the TEST budget but not
+  // the 5s per-assertion default, and the routes being warm doesn't make a cold CI runner fast.
+  await expect(chip).toBeVisible({ timeout: 30_000 });
+  await chip.scrollIntoViewIfNeeded();
   await chip.click();
 
   // Playwright pierces shadow DOM, so the widget's own UI is addressable.
-  await expect(page.locator(".pv-panel.open")).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator(".pv-panel.open")).toBeVisible({ timeout: 45_000 });
   await expect(page.locator(".pv-msg.user")).toContainText("migrate");
   // Whether a real answer streams depends on an AI provider being configured in this
   // environment; a graceful "unavailable" bubble is an equally valid outcome. What must NOT
   // happen is an uncaught error.
   await expect(page.locator(".pv-msg.assistant, .pv-msg.error").first()).not.toBeEmpty({
-    timeout: 30_000,
+    timeout: 45_000,
   });
   expect(errors, `unexpected page errors:\n${errors.join("\n")}`).toEqual([]);
 });
 
 test("the widget chat endpoint rate limits one visitor", async ({ request }) => {
+  // 22 concurrent requests against a dev server: fast once warm, but it flaked on CI at the
+  // default budget (failed, then passed on retry) before the beforeAll warm-up existed.
+  test.slow();
   // The limiter runs BEFORE the provider check precisely so this is observable with no AI
   // configured (the state CI runs in) — otherwise every request would 503 and the 429 would
   // never be reached.

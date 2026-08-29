@@ -98,6 +98,16 @@ export default defineConfig({
       EMAIL_FROM: "",
       GOOGLE_CLIENT_ID: "",
       GOOGLE_CLIENT_SECRET: "",
+      // Same isolation rule for AI (SPEC §8). CI has no provider, so every assistant surface
+      // answers 503 "not configured" there; an operator with a key in .env.local was getting a
+      // DIFFERENT suite — real model calls, real latency, and a widget that answered instead of
+      // refusing. That divergence is exactly what let the home-demo chip spec pass locally and
+      // fail twice in CI. Blank them so both run the refusal path, which is also the fast one.
+      PAPERVINE_AI_MODEL: "",
+      AI_GATEWAY_API_KEY: "",
+      ANTHROPIC_API_KEY: "",
+      OPENAI_API_KEY: "",
+      GOOGLE_GENERATIVE_AI_API_KEY: "",
       // Platform superadmin allowlist (SPEC §10.10) for admin.spec.ts. Deliberately NOT
       // TEST_USER's email: the shared storageState user must stay a plain customer so the
       // admin rail link / bypass never leaks into the other specs' assertions. The admin

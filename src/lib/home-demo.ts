@@ -31,20 +31,27 @@ export async function resolveDocsFrame(host: string): Promise<{ url: string } | 
   const local = host.includes("localhost") || host.startsWith("127.0.0.1");
   const proto = local ? "http" : "https";
 
+  // The site's INDEX, never a guessed inner page. An earlier cut framed `/quickstart`, which
+  // exists on the starter example but not on our own documentation (where it's
+  // `guides/quickstart`) — so on any deployment without a `starter` site the demo framed the
+  // renderer's "Page not found", which is the worst possible first impression on a page whose
+  // whole argument is "this is a real docs site". Every site has an index; nothing else is
+  // guaranteed, and the index is the natural landing anyway.
+  //
   // A connected custom domain is the site's real public home — prefer it over the tenant host.
   // NOT locally, though: dev seeds `docs.localhost` as a custom domain purely as a lookup key,
   // and that host is RESERVED, so it renders the marketing apex. Framing it would embed this
   // very page inside itself.
-  if (site.customDomain && !local) return { url: `https://${site.customDomain}/quickstart` };
+  if (site.customDomain && !local) return { url: `https://${site.customDomain}/` };
 
   // Otherwise the same subdomain-vs-path decision the dashboard's "Open site" link makes: a
   // host with no wildcard (a preview deployment, a bare IP) can only serve tenants by path.
   const tenantHost = tenantHostFor(site.slug, host);
   if (supportsSubdomainTenants(tenantHost.replace(/^[^.]+\./, ""))) {
-    return { url: `${proto}://${tenantHost}/quickstart` };
+    return { url: `${proto}://${tenantHost}/` };
   }
   const apex = host.replace(/^(app|www)\./, "");
-  return { url: `${proto}://${apex}/sites/${site.slug}/quickstart` };
+  return { url: `${proto}://${apex}/sites/${site.slug}` };
 }
 
 /**

@@ -55,7 +55,7 @@ export function DocsFrame({ url }: { url: string | null }) {
 
   // The address bar shows the site's real public URL, minus the scheme — the point of the chrome
   // is to say "this is a docs website", and a visible https:// adds nothing to that.
-  const address = url ? url.replace(/^https?:\/\//, "") : "docs.yourcompany.com/quickstart";
+  const address = url ? url.replace(/^https?:\/\//, "").replace(/\/$/, "") : "docs.yourcompany.com";
 
   return (
     <div
@@ -140,7 +140,10 @@ export function DocsFrame({ url }: { url: string | null }) {
       <div className="flex items-center justify-between gap-3 border-t border-[rgba(var(--ink-rgb),0.08)] px-4 py-2.5">
         <span className="text-xs text-[var(--muted)]">
           {mode === "read"
-            ? "A real Papervine site — search it, browse the API reference, ask its assistant."
+            ? // Deliberately not naming the API reference: which site gets framed depends on the
+              // deployment (the starter example has an OpenAPI spec, our own docs don't), and
+              // copy that promises a tab the framed site lacks is worse than copy that doesn't.
+              "A real Papervine site — browse it, search it, ask its assistant."
             : "The real editor, running in your browser. Nothing is saved."}
         </span>
         {mode === "read" && url && visible ? (
