@@ -28,6 +28,13 @@ export interface SlashOptions {
   onKeyDown: (props: SuggestionKeyDownProps) => boolean;
   /** Opens the media dialog for items that need a URL first. A function, for the reason above. */
   requestInput: RequestInput;
+  /**
+   * Which items this editor offers. Defaults to all of them; the marketing home's demo passes
+   * NO_MEDIA, since it mounts the editor with no site (and therefore no asset storage) behind it.
+   * A function, for the same merge reason as onKeyDown above — a predicate can't be a plain object,
+   * so this one is safe by construction, but keep it a function if it ever grows options.
+   */
+  allowItem: (item: SlashItem) => boolean;
 }
 
 // The Notion-style `/` command. We deliberately do NOT use @tiptap/react's ReactRenderer to
@@ -43,6 +50,7 @@ export const SlashCommand = Extension.create<SlashOptions>({
       onClose: () => {},
       onKeyDown: () => false,
       requestInput: () => {},
+      allowItem: () => true,
     };
   },
 
@@ -62,7 +70,7 @@ export const SlashCommand = Extension.create<SlashOptions>({
         command: ({ editor, range, props }: { editor: Editor; range: Range; props: SlashItem }) => {
           props.command({ editor, range, requestInput: opts.requestInput });
         },
-        items: ({ query }) => filterSlashItems(query),
+        items: ({ query }) => filterSlashItems(query, opts.allowItem),
         render: () => ({
           // Defer the setState out of the editor's React render phase — opens AND closes, or they
           // land out of order: a deferred open applied after a synchronous close re-opens a menu

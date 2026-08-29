@@ -159,6 +159,24 @@ export function appHostFor(host: string): string {
 }
 
 /**
+ * The host whose site backs the marketing home's live demo: `docs.` on the apex the request
+ * came in on (`papervine.io` / `www.papervine.io` → `docs.papervine.io`, `localhost:3000` →
+ * `docs.localhost`). Convention instead of configuration — there is no env var to set, and
+ * the demo simply degrades to links when no such site exists (see lib/home-demo.ts).
+ *
+ * The PORT IS DROPPED, because this is a `custom_domain` lookup key, not a URL to fetch:
+ * `getSiteByCustomDomain` normalizes the port away too, and the dogfood site's stored domain
+ * is `docs.papervine.io`. Note that in dev `docs.localhost` isn't *servable* (it's RESERVED,
+ * so it's neither a tenant subdomain nor routed as a custom domain, and it renders the
+ * marketing apex) — it works purely as the column value the seed writes. That's enough for
+ * the demo, whose widget calls `/api/widget/{id}/chat` on the apex rather than that host.
+ */
+export function demoDocsHost(requestHost: string): string {
+  const name = requestHost.split(":")[0].toLowerCase();
+  return `docs.${name.replace(/^(www|app)\./, "")}`;
+}
+
+/**
  * The control plane's ORIGIN for a configured apex origin: `https://papervine.io` →
  * `https://app.papervine.io`, `http://localhost:3000` → `http://app.localhost:3000`.
  *

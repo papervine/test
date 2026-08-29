@@ -62,3 +62,48 @@ Because `/admin` (and a few other control-plane paths) live beside the `/:org` d
 those names can't be used as organization slugs: `admin`, `preview`, `app`, `api`, `login`,
 `signup`, `onboarding`, and `accept-invite`. Creating an organization whose name slugifies to one
 of these is rejected with a clear error — pick a different name.
+
+## The marketing home's live demo
+
+The marketing home page carries a **Try it** section built from working product rather than
+screenshots. It has two halves that need something from you, and one that doesn't.
+
+The framed demo shows a **real docs site** you can read, search and browse, with an **Edit this
+page** button that swaps the frame over to the visual editor. The editor half runs entirely in the
+visitor's browser and needs no setup. The framed site is chosen by convention: the site with the
+slug `starter` if one exists — preferred because the forkable example ships an OpenAPI spec, so
+the frame includes a working API console — otherwise the `docs.` site described below. If neither
+exists, the frame shows a placeholder and everything else still works.
+
+The **Ask the assistant** chips talk to a real docs site through the
+[embeddable widget](/features/assistant-widget), so they need one to point at.
+
+It finds that site **by convention rather than configuration**: the home page looks for the site
+whose custom domain is `docs.` followed by your apex — `docs.example.com` for a platform served at
+`example.com`. In practice that's your own dogfooded documentation. There is no environment
+variable to set.
+
+Three things have to be true for the chips to become live, and they're all ordinary site settings:
+
+<Steps>
+  <Step title="A site claims the docs domain">
+    Connect `docs.{your apex}` as that site's [custom domain](/guides/custom-domain).
+  </Step>
+  <Step title="Its widget is on">
+    **Settings → Widget → Availability**, which is off by default.
+  </Step>
+  <Step title="The home page's origins are authorized">
+    Add every origin the marketing home is served on under **Authorized domains** — both
+    `https://{apex}` and `https://www.{apex}` if you serve both. Origins are matched exactly.
+  </Step>
+</Steps>
+
+Until all three hold, the section still renders: the questions become plain links into the
+documentation page that answers each one. That's also what visitors see if the database is
+briefly unreachable, so a misconfiguration here degrades quietly rather than breaking the page.
+
+<Note>
+  The demo's answers are metered against the organization that owns the docs site, like any other
+  widget traffic — and each visitor is rate limited, so an unusually busy day on the home page
+  can't drain the account.
+</Note>

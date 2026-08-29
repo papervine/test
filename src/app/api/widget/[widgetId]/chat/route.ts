@@ -6,6 +6,8 @@ import { requestContentSource, requestReaderAccess, requestSearchIndexKey } from
 import { aiRefusalResponse, authorizeAi } from "@/lib/billing/store";
 import { getSiteByWidgetId } from "@/lib/tenant";
 import { isOriginAllowed, resolveDocsBaseUrl } from "@/lib/widget";
+import { rateLimited } from "@/lib/rate-limit";
+import { checkRateLimit } from "@/lib/rate-limit-store";
 
 /**
  * The embeddable assistant widget's chat endpoint (SPEC §8.7) — the cross-origin
@@ -32,8 +34,10 @@ function corsHeaders(origin: string): HeadersInit {
     "Access-Control-Max-Age": "86400",
     // A custom response header is invisible to client JS on a cross-origin fetch unless
     // explicitly exposed — without this, res.headers.get("X-Papervine-Docs-Base") reads
-    // null in the browser even though the header is present on the wire.
-    "Access-Control-Expose-Headers": "X-Papervine-Docs-Base",
+    // null in the browser even though the header is present on the wire. Retry-After is
+    // listed for the same reason: it is NOT one of the CORS-safelisted response headers,
+    // so a rate-limited embed couldn't read its own cooldown without this.
+    "Access-Control-Expose-Headers": "X-Papervine-Docs-Base, Retry-After",
     Vary: "Origin",
   };
 }
@@ -79,6 +83,14 @@ export async function POST(
       origin!,
     );
   }
+
+  // Per-visitor rate limit, keyed on this widget so one embed's traffic can't spend another
+  // tenant's allowance. The origin allowlist above stops OTHER sites embedding this widget; it
+  // does nothing about one visitor on an allowed page asking two hundred questions, which is
+  // the case this covers. Runs BEFORE the provider check: with no AI configured every request
+  // 503s and the limit would never be reached (the state CI runs in).
+  const limit = await checkRateLimit(`widget:${widgetId}`, req);
+  if (!limit.allowed) return withCors(rateLimited(limit.retryAfterSec), origin!);
 
   const provider = aiProviderStatus();
   if (!provider.ok) {

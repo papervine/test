@@ -524,11 +524,30 @@ const CONTROL_PLANE_CHECKS = [
       'name="twitter:site" content="@papervine_io"',
       // Public CLI repo — header + footer (SPEC §2 marketing apex).
       'href="https://github.com/papervine/papervine"',
+      // The "Try it" live demo section (SPEC §2). Both halves are server-rendered shells —
+      // the editor's poster frame and the question chips — so their absence is visible here
+      // even though the interactive parts only exist after a click (that's home-demo.spec.ts).
+      "Try it",
+      "Edit this page",
+      "How do I migrate an existing docs.json site?",
+      // With no DB there is no site to frame, so the demo shows its placeholder rather than
+      // an iframe pointed at nothing.
+      "A live docs site appears here.",
     ],
     // Guards the session-aware swap: a signed-out visitor must never see the
     // Dashboard link (which only renders when getSession() resolves). And the landing
     // must not fall back to the static grid backdrop.
-    exclude: ['href="/dashboard"', "db-grid"],
+    //
+    // The widget assertions are the DB-free contract for the demo: this gate runs with no
+    // Postgres, so resolveHomeDemo() must return null and the Ask chips must degrade to plain
+    // links into the docs. A loader tag here would mean the page tried to embed a widget it
+    // has no site for — and, worse, that a missing DB had reached the render path at all.
+    exclude: [
+      'href="/dashboard"',
+      "db-grid",
+      "/api/widget/embed.js",
+      "data-widget-id",
+    ],
   },
   {
     path: "/pricing",

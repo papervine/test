@@ -1,0 +1,161 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
+import { PenLine, BookOpen, RotateCcw } from "lucide-react";
+
+// TipTap is a large dependency graph and the home page is the SEO landing, so the editor stays
+// a separate chunk that is only requested when someone actually clicks Edit — the same rule the
+// hero video's click-to-play follows. `ssr: false` because the editor is browser-only.
+const EditorDemo = dynamic(() => import("./EditorDemo").then((m) => m.EditorDemo), {
+  ssr: false,
+  loading: () => (
+    <div className="grid h-[560px] place-items-center">
+      <span className="mono text-xs text-[var(--muted)]">Loading the editor…</span>
+    </div>
+  ),
+});
+
+type Mode = "read" | "edit";
+
+/**
+ * The home page's one live demo: a real docs site inside browser chrome, with an Edit button
+ * that swaps the same frame over to the real visual editor.
+ *
+ * Both halves are the shipped product. Reading is an iframe of an actual Papervine-rendered
+ * site — real nav, real ⌘K search, a real API console, its own assistant — not a screenshot.
+ * Editing mounts the same `VisualEditor` the dashboard uses, over an in-memory MDX string with
+ * no backend (see EditorDemo). The button between them is the product's story in one gesture:
+ * this is your docs site, and you can edit it in the browser.
+ *
+ * The iframe is NOT rendered until the section scrolls into view. A third-party document is the
+ * heaviest thing on this page, and loading it for visitors who never scroll past the hero would
+ * undo the care taken to keep the landing light.
+ */
+export function DocsFrame({ url }: { url: string | null }) {
+  const [mode, setMode] = useState<Mode>("read");
+  const [visible, setVisible] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  // Sticky: true once Edit has been opened, so the editor survives a trip back to Read.
+  const [everEdited, setEverEdited] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = box.current;
+    if (!el || visible) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) setVisible(true);
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [visible]);
+
+  // The address bar shows the site's real public URL, minus the scheme — the point of the chrome
+  // is to say "this is a docs website", and a visible https:// adds nothing to that.
+  const address = url ? url.replace(/^https?:\/\//, "") : "docs.yourcompany.com/quickstart";
+
+  return (
+    <div
+      ref={box}
+      className="overflow-hidden rounded-2xl border border-[rgba(var(--ink-rgb),0.1)] bg-[var(--surface)] shadow-2xl shadow-black/20"
+    >
+      {/* Browser chrome. Traffic lights + address bar, then the mode switch on the right. */}
+      <div className="flex items-center gap-3 border-b border-[rgba(var(--ink-rgb),0.08)] px-4 py-3">
+        <div className="flex shrink-0 gap-1.5" aria-hidden>
+          <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
+          <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
+          <span className="h-3 w-3 rounded-full bg-[#28c840]" />
+        </div>
+        <div className="mono hidden min-w-0 flex-1 truncate rounded-lg bg-[rgba(var(--ink-rgb),0.05)] px-3 py-1 text-center text-xs text-[var(--muted)] sm:block">
+          {mode === "read" ? address : "quickstart.mdx — press / to insert a block"}
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-1 rounded-lg bg-[rgba(var(--ink-rgb),0.05)] p-1 sm:ml-0">
+          <button
+            type="button"
+            onClick={() => setMode("read")}
+            aria-pressed={mode === "read"}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              mode === "read"
+                ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm"
+                : "text-[var(--muted)] hover:text-[var(--fg)]"
+            }`}
+          >
+            <BookOpen className="h-3.5 w-3.5" />
+            Read
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setEverEdited(true);
+              setMode("edit");
+            }}
+            aria-pressed={mode === "edit"}
+            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              mode === "edit"
+                ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm"
+                : "text-[var(--muted)] hover:text-[var(--fg)]"
+            }`}
+          >
+            <PenLine className="h-3.5 w-3.5" />
+            Edit this page
+          </button>
+        </div>
+      </div>
+
+      {/* Both modes stay MOUNTED once opened, hidden with `hidden` rather than unmounted: the
+          iframe would otherwise re-download the site on every toggle, and the editor would throw
+          away whatever the visitor had just typed — which reads as the demo losing their work. */}
+      <div className={mode === "read" ? undefined : "hidden"}>
+        {visible && url ? (
+          <iframe
+            key={reloadKey}
+            src={url}
+            title="A documentation site rendered by Papervine"
+            loading="lazy"
+            className="h-[560px] w-full border-0 bg-white"
+            // The frame shows our own site, but it is still a separate document embedded in the
+            // marketing page: keep it from navigating the top-level window or opening popups.
+            sandbox="allow-scripts allow-same-origin allow-forms"
+          />
+        ) : (
+          <div className="grid h-[560px] place-items-center px-6 text-center">
+            <span className="mono text-xs text-[var(--muted)]">
+              {url ? "Loading a live docs site…" : "A live docs site appears here."}
+            </span>
+          </div>
+        )}
+      </div>
+
+      <div className={mode === "edit" ? undefined : "hidden"}>
+        {/* Mounted from the first time Edit is opened and kept thereafter, so switching back to
+            Read and returning doesn't discard what the visitor typed. Keyed off its own flag,
+            not the iframe's reload counter — reusing that one mounted the whole editor chunk
+            when someone pressed Reset in Read mode, which is the opposite of loading on intent. */}
+        {everEdited ? <EditorDemo /> : null}
+      </div>
+
+      <div className="flex items-center justify-between gap-3 border-t border-[rgba(var(--ink-rgb),0.08)] px-4 py-2.5">
+        <span className="text-xs text-[var(--muted)]">
+          {mode === "read"
+            ? "A real Papervine site — search it, browse the API reference, ask its assistant."
+            : "The real editor, running in your browser. Nothing is saved."}
+        </span>
+        {mode === "read" && url && visible ? (
+          <button
+            type="button"
+            onClick={() => setReloadKey((k) => k + 1)}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2 py-1 text-xs text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+            {/* "Reload", not "Reset": this one re-fetches the framed site, while the editor's
+                Reset restores the document. One label for two behaviours reads as a bug. */}
+            Reload
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}

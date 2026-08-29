@@ -176,6 +176,13 @@
       "when": 1787675498823,
       "tag": "0024_massive_brother_voodoo",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788019628851,
+      "tag": "0025_normal_loners",
+      "breakpoints": true
     }
   ]
 }

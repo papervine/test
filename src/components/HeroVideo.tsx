@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
-import { Play } from "lucide-react";
+import { Play, X } from "lucide-react";
 import tourPoster from "@/assets/tour-poster.jpg";
 
 // The tour lives in the public R2 bucket, not in this repo: it's 9.5MB — ten times the largest
@@ -20,77 +21,113 @@ const TOUR_VIDEO =
 const RUNTIME = "1:45";
 
 /**
- * The hero's product shot: the poster frame of the tour, which plays in place when clicked.
+ * The tour, as a small pill in the hero that opens the film in a modal.
  *
- * Click-to-play rather than an autoplaying background loop, for two reasons. The payload —
- * autoplay makes every visitor download the whole file before they've shown any interest,
- * which is exactly the kind of work-on-the-critical-path this project measures and removes
- * (SPEC §12). And the content: this is a narrated 1:45 tour with twelve scenes, not ambient
- * motion, so it wants to be started deliberately and seeked. The poster carries the argument
- * for anyone who never clicks — it shows a docs.json repo on the left and the rendered site
- * on the right.
+ * It used to be the hero's centrepiece — a full-width poster frame that played in place. The
+ * live demo now holds that slot, because a visitor who can *use* the product is worth more than
+ * one watching a video of it, and two large frames stacked above each other made the page read
+ * as a showreel. The film is still here for people who want the guided version; it just no
+ * longer outranks the thing it's describing.
  *
- * The film contains its own browser chrome in nearly every scene, so this frame deliberately
- * has none: a second set of traffic lights around it would read as a window inside a window.
- *
- * Colours inside the frame are LITERALS, not `.db` tokens, and must stay that way: the frame is
- * dark in both platform appearances (a dark film needs a dark bezel), so `var(--fg)` on the
- * label would resolve to #1b1b21 under `html[data-db-theme="light"]` and put near-black text on
- * a near-black scrim. Same reason the focus ring offset is #0a0a12.
+ * Click-to-play survives the move, and matters more than before (SPEC §12): the 9.5MB file is
+ * only requested once someone opens the modal, so the hero costs a ~114KB static-import poster
+ * thumbnail and nothing else. The poster still carries the argument for anyone who never clicks.
  */
 export function HeroVideo() {
-  const [playing, setPlaying] = useState(false);
+  const [open, setOpen] = useState(false);
+  const closeButton = useRef<HTMLButtonElement>(null);
+
+  // Escape closes, and the page behind must not scroll while the film is up.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButton.current?.focus();
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previous;
+    };
+  }, [open]);
 
   return (
-    <div
-      className="db-rise relative rounded-2xl p-[1px]"
-      style={{
-        animationDelay: "380ms",
-        background:
-          "linear-gradient(160deg, rgba(140,140,255,0.5), rgba(255,255,255,0.04) 40%)",
-      }}
-    >
-      <div className="relative aspect-video overflow-hidden rounded-2xl bg-[#0a0a12]">
-        {playing ? (
-          <video
-            // eslint-disable-next-line jsx-a11y/media-has-caption -- music bed only, no
-            // dialogue: every claim the tour makes is on-screen type (video/SCRIPT.md), so
-            // there is no speech to caption. Revisit if a voiceover is ever added.
-            src={TOUR_VIDEO}
-            controls
-            autoPlay
-            playsInline
-            preload="auto"
-            className="h-full w-full"
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        aria-label={`Play the Papervine product tour, ${RUNTIME} long`}
+        className="db-feature group flex items-center gap-3 rounded-2xl p-2 pr-4 text-left transition-colors"
+      >
+        <span className="relative block h-11 w-20 shrink-0 overflow-hidden rounded-xl bg-[#0a0a12]">
+          <Image
+            src={tourPoster}
+            alt=""
+            aria-hidden
+            fill
+            sizes="80px"
+            className="object-cover opacity-80 transition-opacity group-hover:opacity-100"
           />
-        ) : (
-          <>
-            <Image
-              src={tourPoster}
-              alt="A docs.json repository on the left, and the documentation site Papervine renders from it on the right."
-              fill
-              priority
-              sizes="(max-width: 1024px) 100vw, 1024px"
-              className="object-cover"
-            />
-            <button
-              type="button"
-              onClick={() => setPlaying(true)}
-              aria-label={`Play the Papervine product tour, ${RUNTIME} long`}
-              className="group absolute inset-0 grid place-items-center bg-[rgba(6,6,9,0.32)] transition-colors hover:bg-[rgba(6,6,9,0.18)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--blue)] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a12]"
+          <span className="absolute inset-0 grid place-items-center">
+            <span className="grid h-6 w-6 place-items-center rounded-full bg-white/90 text-[#0a0a12]">
+              <Play className="ml-0.5 h-3 w-3" fill="currentColor" />
+            </span>
+          </span>
+        </span>
+        <span className="flex flex-col">
+          <span className="text-sm font-medium">Watch the tour</span>
+          <span className="mono text-xs text-[var(--muted)]">{RUNTIME}</span>
+        </span>
+      </button>
+
+      {/* PORTALLED TO <body>, and it has to be. `position: fixed` resolves against the nearest
+          ancestor with a transform/filter rather than the viewport, and this button sits inside
+          the hero's `db-rise` entrance animation — so an in-place overlay rendered at the size
+          and position of the little pill instead of filling the screen. The portal escapes every
+          such ancestor; `db-portal` re-applies the platform palette outside the `.db` shell,
+          which is the house rule for anything portalled to body (dialogs, dropdowns, toasts). */}
+      {open
+        ? createPortal(
+            <div
+              className="db-portal fixed inset-0 z-50 grid place-items-center bg-black/80 p-4 backdrop-blur-sm sm:p-8"
+              role="dialog"
+              aria-modal="true"
+              aria-label="Papervine product tour"
+              // Click the backdrop to dismiss; clicks inside the player must not bubble out.
+              onClick={() => setOpen(false)}
             >
-              <span className="flex flex-col items-center gap-4">
-                <span className="db-cta grid h-16 w-16 place-items-center rounded-full text-white transition-transform group-hover:scale-105 sm:h-20 sm:w-20">
-                  <Play className="ml-0.5 h-6 w-6 sm:h-7 sm:w-7" fill="currentColor" />
-                </span>
-                <span className="mono text-xs text-[#ececf1] sm:text-sm">
-                  Watch the tour · {RUNTIME}
-                </span>
-              </span>
-            </button>
-          </>
-        )}
-      </div>
-    </div>
+              <div
+                className="relative w-full max-w-6xl"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  ref={closeButton}
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  aria-label="Close the tour"
+                  className="absolute -top-9 right-0 inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm text-white/80 transition-colors hover:text-white"
+                >
+                  <X className="h-4 w-4" />
+                  Close
+                </button>
+                <video
+                  // eslint-disable-next-line jsx-a11y/media-has-caption -- music bed only, no
+                  // dialogue: every claim the tour makes is on-screen type (video/SCRIPT.md),
+                  // so there is no speech to caption. Revisit if a voiceover is ever added.
+                  src={TOUR_VIDEO}
+                  controls
+                  autoPlay
+                  playsInline
+                  preload="auto"
+                  className="aspect-video max-h-[82vh] w-full rounded-2xl bg-[#0a0a12]"
+                />
+              </div>
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
   );
 }

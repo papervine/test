@@ -18,6 +18,8 @@ import { cookies, headers } from "next/headers";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Brand } from "@/components/Brand";
 import { HeroVideo } from "@/components/HeroVideo";
+import { TryItSection } from "@/components/home/TryItSection";
+import { resolveDocsFrame, resolveHomeDemo } from "@/lib/home-demo";
 import { appHostFor } from "@/lib/tenant-host";
 import { marketingMetadata } from "@/lib/marketing-seo";
 import { SIGNED_IN_FLAG } from "@/lib/signed-in-flag";
@@ -146,6 +148,13 @@ export default async function LandingPage() {
   const signedIn = Boolean((await cookies()).get(SIGNED_IN_FLAG));
   const host = (await headers()).get("host") ?? "papervine.io";
   const appBase = `${host.includes("localhost") ? "http" : "https"}://${appHostFor(host)}`;
+  // The site backing the "Ask" demo, or null to fall back to link chips (no DB, single-repo
+  // preview, or the widget isn't enabled/allowlisted for this origin yet). Never throws —
+  // the home page has to render DB-free (the smoke gate probes it without Postgres).
+  const demo = await resolveHomeDemo(host);
+  // The rendered docs site the demo frames (the forkable starter, which carries an OpenAPI
+  // spec and therefore a working API console). Null → the frame shows its static placeholder.
+  const frame = await resolveDocsFrame(host);
 
   return (
     <PlatformShell variant="home">
@@ -203,84 +212,85 @@ export default async function LandingPage() {
         </div>
       </header>
 
-      {/* Hero */}
-      <section className="mx-auto max-w-3xl px-6 pb-20 pt-24 text-center sm:pt-32">
-        {/* Eyebrow. This slot used to be a "New · …" announcement linking to the reader-auth
-            docs; it now carries the tagline, so the affordances that said "announcement" went
-            with the copy — no pulsing dot (it means *new*), and not a link (a tagline that
-            navigates somewhere unrelated is a link whose text doesn't describe its
-            destination). */}
-        <span
-          className="db-rise db-ring mono inline-flex items-center rounded-full px-3 py-1 text-xs text-[var(--muted)]"
-          style={{ animationDelay: "0ms" }}
-        >
-          Your product looks good when your docs look good.
-        </span>
+      {/* Hero. Left-aligned, with the tour reduced to a small pill on the right — the live demo
+          below is the hero's real product shot now, and two big frames stacked read as a
+          showreel rather than a product. */}
+      <section className="mx-auto max-w-6xl px-6 pb-10 pt-20 sm:pt-24">
+        <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_auto]">
+          <div className="max-w-2xl">
+            {/* Eyebrow. This slot used to be a "New · …" announcement linking to the reader-auth
+                docs; it now carries the tagline, so the affordances that said "announcement"
+                went with the copy — no pulsing dot (it means *new*), and not a link (a tagline
+                that navigates somewhere unrelated is a link whose text doesn't describe its
+                destination). */}
+            <span
+              className="db-rise db-ring mono inline-flex items-center rounded-full px-3 py-1 text-xs text-[var(--muted)]"
+              style={{ animationDelay: "0ms" }}
+            >
+              Your product looks good when your docs look good.
+            </span>
 
-        <h1
-          className="db-rise mt-7 text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
-          style={{ animationDelay: "80ms" }}
-        >
-          A docs site
-          <br />
-          for your <span className="db-grad">product</span>.
-        </h1>
+            <h1
+              className="db-rise mt-7 text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
+              style={{ animationDelay: "80ms" }}
+            >
+              Publish <span className="db-grad">beautiful</span> docs.
+            </h1>
 
-        <p
-          className="db-rise mx-auto mt-6 max-w-xl text-lg leading-relaxed text-[var(--muted)]"
-          style={{ animationDelay: "160ms" }}
-        >
-          Write help pages. Papervine publishes them as a documentation website
-          — with search, your own domain, and an assistant that answers from
-          your docs.
-        </p>
+            <p
+              className="db-rise mt-6 max-w-xl text-lg leading-relaxed text-[var(--muted)]"
+              style={{ animationDelay: "160ms" }}
+            >
+              Write help pages. Papervine publishes them as a documentation
+              website — with search, your own domain, and an assistant that
+              answers from your docs.
+            </p>
 
-        <div
-          className="db-rise mt-9 flex items-center justify-center gap-3"
-          style={{ animationDelay: "240ms" }}
-        >
-          <Link
-            href="/signup"
-            className="db-cta group inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-white"
-          >
-            Start free
-            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-          </Link>
+            <div
+              className="db-rise mt-9 flex flex-wrap items-center gap-x-5 gap-y-3"
+              style={{ animationDelay: "240ms" }}
+            >
+              <Link
+                href="/signup"
+                className="db-cta group inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-white"
+              >
+                Start free
+                <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+              <span className="mono flex items-center gap-2 text-xs text-[var(--muted)]">
+                <FileJson2 className="h-3.5 w-3.5" />
+                Connect a GitHub repo and your docs are live.
+              </span>
+            </div>
+
+            {/* The same claim, said the way people search for it. Not keyword stuffing: reading
+                the same config IS the migration story, and the link proves it. */}
+            <p
+              className="db-rise mt-5 max-w-lg text-sm leading-relaxed text-[var(--muted)]"
+              style={{ animationDelay: "320ms" }}
+            >
+              Looking for a{" "}
+              <span className="font-medium text-[var(--fg)]">docs platform alternative</span>? If you
+              already have docs, they work here without a rewrite — Papervine reads the same{" "}
+              <span className="mono text-[var(--fg)]">docs.json</span>.{" "}
+              <a
+                href={DOCS_MIGRATE}
+                className="underline decoration-dotted underline-offset-4 transition-colors hover:text-[var(--fg)]"
+              >
+                migrate in minutes
+              </a>
+              .
+            </p>
+          </div>
+
+          <div className="db-rise lg:justify-self-end" style={{ animationDelay: "380ms" }}>
+            <HeroVideo />
+          </div>
         </div>
-
-        <div
-          className="db-rise mono mx-auto mt-6 flex w-fit items-center gap-2 text-xs text-[var(--muted)]"
-          style={{ animationDelay: "320ms" }}
-        >
-          <FileJson2 className="h-3.5 w-3.5" />
-          Connect a GitHub repo and your docs are live.
-        </div>
-
-        {/* Sits under the connect-a-repo line because it is the same claim, said the way
-            people search for it. Not keyword stuffing: reading the same config IS the
-            migration story, and the link goes to the page that proves it. */}
-        <p
-          className="db-rise mx-auto mt-5 max-w-lg text-sm leading-relaxed text-[var(--muted)]"
-          style={{ animationDelay: "360ms" }}
-        >
-          Looking for a{" "}
-          <span className="font-medium text-[var(--fg)]">docs platform alternative</span>? If you
-          already have docs, they work here without a rewrite — Papervine reads the same{" "}
-          <span className="mono text-[var(--fg)]">docs.json</span>.{" "}
-          <a
-            href={DOCS_MIGRATE}
-            className="underline decoration-dotted underline-offset-4 transition-colors hover:text-[var(--fg)]"
-          >
-            migrate in minutes
-          </a>
-          .
-        </p>
       </section>
 
-      {/* Product tour — poster frame, plays in place on click (HeroVideo) */}
-      <section className="mx-auto max-w-5xl px-6">
-        <HeroVideo />
-      </section>
+      {/* Try it — the product itself, immediately under the hero. It IS the product shot. */}
+      <TryItSection demo={demo} docsUrl={DOCS} frameUrl={frame?.url ?? null} />
 
       {/* What you get */}
       <section className="mx-auto max-w-5xl px-6 pt-28">

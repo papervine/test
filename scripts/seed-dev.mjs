@@ -74,8 +74,44 @@ const DEV = {
     { name: "Starter (gated)", slug: "starter-gated", repoOwner: "papervine", repoName: "starter", branch: "main",
       auth: { method: "jwt", config: { loginUrl: "https://app.example.com/login" } } },
     { name: "Large Docs", slug: "large-docs", repoOwner: "papervine", repoName: "docs", branch: "main" },
+    // The site the MARKETING HOME's "Ask" demo talks to (SPEC §2). Uploaded from the in-repo
+    // `docs/` directory rather than fetched, so it's the documentation in this very checkout.
+    //
+    // `customDomain: "docs.localhost"` is a LOOKUP KEY, not a servable host: `docs` is RESERVED
+    // on the `.localhost` suffix (tenant-host.ts), so that host renders the marketing apex in
+    // dev rather than this site. That's fine — resolveHomeDemo() only needs the row, and the
+    // widget calls /api/widget/{id}/chat on the apex. Read the seeded docs at /sites/docs.
+    // In prod the equivalent is the real, routed custom domain docs.papervine.io.
+    {
+      name: "Papervine Docs",
+      slug: "docs",
+      dir: "docs",
+      customDomain: "docs.localhost",
+      widget: true,
+      repoOwner: "papervine",
+      repoName: "papervine",
+      branch: "main",
+    },
   ],
 };
+
+/**
+ * Origins the marketing home is served on locally — what the demo widget must allow.
+ *
+ * A RANGE, not just :3000, because `next dev` auto-picks the next free port when 3000 is busy,
+ * which is the normal state with several worktrees running (CLAUDE.md → "Working across
+ * worktrees"). Seeding one port means the demo silently falls back to link chips in every
+ * worktree but the first, which reads as "the widget is broken" rather than "wrong origin".
+ * Dev-only and localhost-only — the prod allowlist is set once in the dashboard.
+ */
+const DEV_WIDGET_ORIGINS = [
+  ...new Set(
+    ["3000", "3001", "3002", "3003", process.env.PORT].filter(Boolean).flatMap((port) => [
+      `http://localhost:${port}`,
+      `http://127.0.0.1:${port}`,
+    ]),
+  ),
+];
 
 const DATABASE_URL = process.env.DATABASE_URL ?? "";
 
@@ -372,6 +408,14 @@ for (const s of DEV.sites) {
   }
   const authConfig = configObj ? sql.json(configObj) : null;
 
+  // Widget columns — deterministic per seed, like the reader-auth keypair above. A widget id is
+  // public by design (it sits in the script tag on every customer's page), so a fixed dev value
+  // is fine and keeps the id stable across re-seeds.
+  const widgetId = s.widget ? `widget_${s.slug}_dev` : null;
+  const widgetOrigins = s.widget ? sql.json(DEV_WIDGET_ORIGINS) : sql.json([]);
+  const customDomain = s.customDomain ?? null;
+  const domainVerifiedAt = customDomain ? now : null;
+
   let siteId = await findId("site", "slug", s.slug);
   if (siteId) {
     await sql`update site set organization_id = ${orgId}, name = ${s.name},
@@ -379,27 +423,38 @@ for (const s of DEV.sites) {
               branch = ${s.branch}, status = 'live',
               auth_enabled = ${authEnabled}, auth_method = ${authMethod}, auth_config = ${authConfig},
               auth_secret_enc = ${authSecretEnc},
+              custom_domain = ${customDomain}, custom_domain_verified_at = ${domainVerifiedAt},
+              widget_id = ${widgetId}, widget_enabled = ${!!s.widget},
+              widget_allowed_origins = ${widgetOrigins},
               updated_at = ${now} where id = ${siteId}`;
     console.log(`• site ${s.slug} exists — updated${authEnabled ? ` (auth: ${authMethod})` : ""}`);
   } else {
     siteId = randomUUID();
     await sql`insert into site (id, organization_id, name, slug, repo_owner, repo_name, branch, status,
-                               auth_enabled, auth_method, auth_config, auth_secret_enc, created_at, updated_at)
+                               auth_enabled, auth_method, auth_config, auth_secret_enc,
+                               custom_domain, custom_domain_verified_at,
+                               widget_id, widget_enabled, widget_allowed_origins, created_at, updated_at)
               values (${siteId}, ${orgId}, ${s.name}, ${s.slug}, ${s.repoOwner},
                       ${s.repoName}, ${s.branch}, 'live',
-                      ${authEnabled}, ${authMethod}, ${authConfig}, ${authSecretEnc}, ${now}, ${now})`;
+                      ${authEnabled}, ${authMethod}, ${authConfig}, ${authSecretEnc},
+                      ${customDomain}, ${domainVerifiedAt},
+                      ${widgetId}, ${!!s.widget}, ${widgetOrigins}, ${now}, ${now})`;
     console.log(`• created site ${s.slug} → ${s.repoOwner}/${s.repoName}${authEnabled ? ` (auth: ${authMethod})` : ""}`);
   }
 
   // Sync the repo into our object storage so the render path serves config, pages, AND
   // assets (logos/images) from us — never GitHub at request time.
   try {
-    const files = await syncToStorage({
-      id: siteId,
-      repoOwner: s.repoOwner,
-      repoName: s.repoName,
-      branch: s.branch,
-    });
+    // `dir` sites come from this checkout (the dogfood docs) rather than GitHub — the same
+    // upload path PAPERVINE_STARTER_DIR uses, so what the renderer reads is identical.
+    const files = s.dir
+      ? await syncFromDisk({ id: siteId, dir: path.resolve(s.dir) })
+      : await syncToStorage({
+          id: siteId,
+          repoOwner: s.repoOwner,
+          repoName: s.repoName,
+          branch: s.branch,
+        });
     console.log(`  ↳ synced ${files} files into object storage`);
   } catch (e) {
     console.warn(`  ↳ sync failed for ${s.slug}: ${e.message} — docs won't render until re-synced`);
@@ -469,5 +524,9 @@ console.log(
     ` profiles, to exercise real-time collab):\n` +
     DEV.users.map((u) => `    ${u.email}  /  ${u.password}  (${u.role})`).join("\n") +
     `\n  Live docs (path form on a no-domain host):\n` +
-    DEV.sites.map((s) => `    /sites/${s.slug}  (${s.repoOwner}/${s.repoName})`).join("\n"),
+    DEV.sites
+      .map((s) => `    /sites/${s.slug}  (${s.dir ? `./${s.dir}` : `${s.repoOwner}/${s.repoName}`})`)
+      .join("\n") +
+    `\n  Marketing home demo: the "Ask" chips are live (widget on the docs site, origins` +
+    ` ${DEV_WIDGET_ORIGINS.join(", ")}).`,
 );

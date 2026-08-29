@@ -18,7 +18,7 @@ import { CollabCarets, collabCaretsKey } from "./visual/CollabCarets";
 import { SlashCommand, type SlashState } from "./visual/SlashCommand";
 import { SlashMenu, type SlashMenuHandle } from "./visual/SlashMenu";
 import { MediaDialog } from "./visual/MediaDialog";
-import type { RequestInput } from "./visual/menu-items";
+import { NO_MEDIA, type RequestInput, type SlashItem } from "./visual/menu-items";
 import type { MediaInputKind } from "@/lib/media-embed";
 import { BlockPicker } from "./visual/BlockPicker";
 import { BlockMenu } from "./visual/BlockMenu";
@@ -51,11 +51,23 @@ function setFrontmatterField(fm: string, key: string, value: string): string {
  * bubble toolbar (BubbleMenu), block drag handles (DragHandle), and empty-line placeholders.
  * Phase 2 is single-user (no Yjs yet); the shared document arrives in Phase 3.
  */
+/**
+ * Media (`/image`, `/video`, `/embed`) needs a site behind the editor: the dialog lists and
+ * uploads into that site's object storage through server actions. `media: false` drops those
+ * items from both menus and never mounts the dialog, which is what lets the editor run with no
+ * backend at all (the marketing home's demo). The union makes the addresses required exactly
+ * when they're used, so a caller can't pass `media: false` and stale org/site/branch.
+ */
+type VisualEditorMediaProps =
+  | { media?: true; org: string; site: string; branch: string }
+  | { media: false; org?: never; site?: never; branch?: never };
+
 export function VisualEditor({
   value,
   onChange,
   assetBase,
   awareness,
+  media,
   org,
   site,
   branch,
@@ -69,16 +81,12 @@ export function VisualEditor({
   // Remote-collaborator carets are rendered from this awareness. Null when collaboration is off or
   // the shared doc hasn't connected yet; the editor rebuilds (see the useEditor deps) once it arrives.
   awareness?: Awareness | null;
-  // Addresses for the media dialog's server actions (list / upload into this site's storage).
-  org: string;
-  site: string;
-  branch: string;
   // The page being edited + every page in the site — what a clicked link is resolved against.
   slug: string;
   slugs: string[];
   // Follow an in-site link by loading that page in the editor (same path as a nav click).
   onNavigate: (slug: string) => void;
-}) {
+} & VisualEditorMediaProps) {
   const frontmatter = useRef(splitFrontmatter(value).frontmatter);
   const lastEmitted = useRef<string | null>(null);
   // Awareness (remote carets) is read through a stable getter so the editor is built once and never
@@ -115,6 +123,12 @@ export function VisualEditor({
   const requestInput = useCallback<RequestInput>(
     (kind, onSubmit) => setMediaInput({ kind, onSubmit }),
     [],
+  );
+  // Which blocks this editor offers. Stable identity: it feeds SlashCommand.configure(), which is
+  // read once when the editor is constructed.
+  const allowItem = useCallback(
+    (item: SlashItem) => (media === false ? NO_MEDIA(item) : true),
+    [media],
   );
   // Stable identity, so React doesn't detach and re-attach the handle on every single render of a
   // menu that re-renders on each keystroke.
@@ -153,6 +167,7 @@ export function VisualEditor({
         // an object React never writes to. See SlashOptions.onKeyDown.
         onKeyDown: (p) => slashKeyRef.current?.(p) ?? false,
         requestInput,
+        allowItem,
       }),
       CollabCarets.configure({ getAwareness: () => awarenessRef.current }),
     ],
@@ -373,15 +388,16 @@ export function VisualEditor({
           insertPos={picker.insertPos}
           replaceRange={picker.replaceRange}
           requestInput={requestInput}
+          allowItem={allowItem}
           onClose={() => setPicker(null)}
         />
       )}
-      {mediaInput && (
+      {mediaInput && media !== false && (
         <MediaDialog
           kind={mediaInput.kind}
-          org={org}
-          site={site}
-          branch={branch}
+          org={org!}
+          site={site!}
+          branch={branch!}
           onSubmit={(value) => {
             mediaInput.onSubmit(value);
             setMediaInput(null);

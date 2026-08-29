@@ -42,4 +42,18 @@ describe("Extension.configure option identity", () => {
   it("defaults onKeyDown to declining the key, so an unconfigured menu can't swallow input", () => {
     expect(SlashCommand.options.onKeyDown({} as never)).toBe(false);
   });
+
+  it("hands allowItem through by identity too", () => {
+    // Same hazard, newer option: the item-visibility predicate is read from the captured
+    // `opts` snapshot inside addProseMirrorPlugins. It's a function, so the deep merge can't
+    // clone it — but only as long as it stays a function (an options *object* here would be
+    // silently copied, and a demo mounted with media disabled would quietly offer the media
+    // items again, whose dialog has no site behind it).
+    const allowItem = () => true;
+    expect(SlashCommand.configure({ allowItem }).options.allowItem).toBe(allowItem);
+  });
+
+  it("defaults allowItem to offering every block", () => {
+    expect(SlashCommand.options.allowItem({} as never)).toBe(true);
+  });
 });

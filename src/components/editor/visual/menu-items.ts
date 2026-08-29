@@ -380,10 +380,24 @@ export const SLASH_ITEMS: SlashItem[] = [
   insertItem("Colors", "Swatches with names", "Components", Palette, ["color", "colour", "swatch", "palette", "brand"], color),
 ];
 
-export function filterSlashItems(query: string): SlashItem[] {
+/**
+ * Drops the items that need the media dialog — the ones with `input` set, which collect a
+ * URL through a server action (list/upload into a site's storage). Note this is keyed on
+ * `input`, NOT on the "Media" category: Mermaid is categorised as Media but inserts a plain
+ * code block with no backend, so it survives.
+ *
+ * Used by surfaces that mount the editor with no site behind it (the marketing home's demo).
+ */
+export const NO_MEDIA = (item: SlashItem): boolean => !item.input;
+
+export function filterSlashItems(
+  query: string,
+  allow: (item: SlashItem) => boolean = () => true,
+): SlashItem[] {
   const q = query.toLowerCase().trim();
-  if (!q) return SLASH_ITEMS;
-  return SLASH_ITEMS.filter(
+  const items = SLASH_ITEMS.filter(allow);
+  if (!q) return items;
+  return items.filter(
     (item) => item.title.toLowerCase().includes(q) || item.searchTerms.some((t) => t.includes(q)),
   );
 }

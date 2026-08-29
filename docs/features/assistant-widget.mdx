@@ -15,8 +15,7 @@ from **Settings → Widget**.
   real markdown rendering (headings, lists, tables, links, images), on-demand Mermaid
   diagrams, dark/light/system theming, the full `init()` option surface below, a
   programmatic API (`open`/`close`/`ask`/`update`/`reset`/`destroy`), and event hooks.
-  Not yet built: a widget-specific rate limit beyond the shared AI billing gate, and
-  analytics that distinguish widget-originated questions from in-docs ones.
+  Not yet built: analytics that distinguish widget-originated questions from in-docs ones.
 </Info>
 
 ## Why this needs its own security model
@@ -39,6 +38,11 @@ cookie. A widget embedded on someone else's domain has neither:
 - **It's off by default.** Unlike the in-docs assistant, which ships enabled, a site's
   widget must be turned on explicitly — it's a new, public endpoint, so enabling it is a
   deliberate choice.
+- **Each visitor is rate limited.** The origin allowlist decides which *sites* may embed
+  your widget; it says nothing about one visitor on an allowed page asking hundreds of
+  questions. So the chat endpoint also caps how many questions a single visitor can ask in
+  a short window, counted per widget. Beyond it, that visitor gets a brief "give it a
+  minute" reply in the conversation while everyone else is unaffected.
 
 ## Setting it up
 

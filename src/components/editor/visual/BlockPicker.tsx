@@ -17,6 +17,7 @@ export function BlockPicker({
   insertPos,
   replaceRange,
   requestInput,
+  allowItem,
   onClose,
 }: {
   editor: Editor;
@@ -28,12 +29,14 @@ export function BlockPicker({
   replaceRange?: { from: number; to: number };
   // Media items need a URL first; the host owns that dialog (see MediaDialog).
   requestInput: RequestInput;
+  // Which blocks to offer. Defaults to all; a host with no asset storage passes NO_MEDIA.
+  allowItem?: (item: SlashItem) => boolean;
   onClose: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
-  const items = filterSlashItems(query);
+  const items = filterSlashItems(query, allowItem);
 
   useEffect(() => inputRef.current?.focus(), []);
   useEffect(() => setSelected(0), [query]);

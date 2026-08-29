@@ -6,6 +6,7 @@ import {
   legacyTenantRedirectHost,
   tenantHostFor,
   domains,
+  demoDocsHost,
 } from "@/lib/tenant-host";
 
 // The whole point of the split is that these are DIFFERENT registrable domains: the
@@ -113,5 +114,30 @@ describe("supportsSubdomainTenants", () => {
     expect(supportsSubdomainTenants("papervine-two.vercel.app")).toBe(false);
     expect(supportsSubdomainTenants("example.com")).toBe(false);
     expect(supportsSubdomainTenants("")).toBe(false);
+  });
+});
+
+// The marketing home's demo finds its site by convention rather than configuration, so this
+// mapping IS the wiring — if it drifts, the home silently falls back to link chips.
+describe("demoDocsHost", () => {
+  it("prefixes the apex, from any of the platform's own front doors", () => {
+    expect(demoDocsHost("papervine.io")).toBe("docs.papervine.io");
+    expect(demoDocsHost("www.papervine.io")).toBe("docs.papervine.io");
+    // The apex bounces app paths to `app.`, but a request could still arrive there.
+    expect(demoDocsHost("app.papervine.io")).toBe("docs.papervine.io");
+  });
+
+  it("drops the port — this is a custom_domain lookup key, not a URL to fetch", () => {
+    expect(demoDocsHost("localhost:3000")).toBe("docs.localhost");
+    expect(demoDocsHost("127.0.0.1:3210")).toBe("docs.127.0.0.1");
+  });
+
+  it("is total: an IP or an unrecognized host still yields a key, it just won't match a row", () => {
+    expect(demoDocsHost("127.0.0.1")).toBe("docs.127.0.0.1");
+    expect(demoDocsHost("papervine-two.vercel.app")).toBe("docs.papervine-two.vercel.app");
+  });
+
+  it("lowercases, since Host is case-insensitive but the column isn't", () => {
+    expect(demoDocsHost("Papervine.IO")).toBe("docs.papervine.io");
   });
 });

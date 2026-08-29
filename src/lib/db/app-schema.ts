@@ -771,3 +771,18 @@ export const draftFileRelations = relations(draftFile, ({ one }) => ({
     references: [editorSession.id],
   }),
 }));
+
+// One fixed-window counter per (surface, hashed client) — the store behind
+// src/lib/rate-limit.ts, which guards the two PUBLIC AI endpoints (/api/assistant and
+// /api/widget/{id}/chat) against a single visitor burning the model budget.
+//
+// Deliberately FK-free and org-free: the key is `{surface}:{sha256(ip)}`, so a row can't
+// be traced back to a reader, and there is nothing to cascade from. That also means
+// seed-dev's wipeDb() truncates it harmlessly, and rows are disposable — losing the table
+// costs at most one window of allowance, never data.
+export const rateLimit = pgTable("rate_limit", {
+  // `{surface}:{hashed ip}` — see rateLimitKey(). Never contains a raw IP.
+  key: text("key").primaryKey(),
+  count: integer("count").notNull(),
+  windowStart: timestamp("window_start").notNull(),
+});

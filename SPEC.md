@@ -154,6 +154,115 @@ track; and colours inside the video frame must be **literals, not `.db` tokens**
 frame stays dark in both platform appearances, so `var(--fg)` on the overlay label resolved to
 `#1b1b21` under `html[data-db-theme="light"]` and put near-black text on a near-black scrim.
 
+**Status 2026-08-29 — "Try it": the demo IS the product, not a mock.** The home page could only
+*describe* the two things that distinguish it (a visual editor over real MDX, an assistant that
+answers from your docs). A new section under the tour lets a visitor use both without an account,
+and in each case it is the shipped component rather than a recreation — a mock would have to be
+kept in step with the real thing forever, and would be teaching visitors something we can't
+promise is true.
+
+- **One frame, two modes** (`src/components/home/DocsFrame.tsx`). The demo sits inside browser
+  chrome — traffic lights, an address bar showing the site's real public URL — because that is
+  what says "this is a docs website" before anyone reads a word. **Read** is an `<iframe>` of an
+  actual Papervine-rendered site, so the visitor gets the real nav, real ⌘K search, the real API
+  console and the site's own assistant with no work on our side. **Edit this page** swaps the
+  same frame to the editor. The two modes stay mounted and are toggled with `hidden`: unmounting
+  would re-download the framed site on every toggle and throw away whatever the visitor had just
+  typed, which reads as the demo losing their work.
+- **Which site gets framed** (`resolveDocsFrame`): `starter` first — the forkable example is the
+  one with an OpenAPI spec, and therefore the only one whose frame includes a working API
+  console — then the `docs.{apex}` site. Locally a custom domain is deliberately *skipped*: dev
+  seeds `docs.localhost` as a lookup key, and that host is reserved, so framing it would embed
+  the marketing page inside itself.
+- **Edit** mounts the real `VisualEditor` (`src/components/home/EditorDemo.tsx`) over an
+  in-memory MDX string, with a live source pane beside it. This is possible because the editor
+  and `packages/mdx-prosemirror` are pure client code with no network calls of their own —
+  everything effectful (draft persistence, collab tokens, publish) lives *above* them in
+  `MdxEditorPane`/`EditorShell`, which the demo skips. The one coupling is the media dialog, so
+  `VisualEditor` gained a `media` prop: `media={false}` drops `/image`, `/video` and `/embed`
+  from both menus and never mounts the dialog. The filter keys on an item's `input` field rather
+  than its "Media" category, deliberately — Mermaid is categorised as media but inserts a plain
+  code block and must survive.
+- **Ask the assistant** embeds our own `widget-embed.js`, pointed at our own docs, driven by
+  three question chips through `PapervineAssistant.ask()`. Chosen over an inline chat pane
+  because the bubble in the corner *is* the feature being sold ("add the assistant to your site
+  with one script tag") — an inline pane would be a second implementation of the same surface,
+  and would prove less.
+- **No tour overlay.** The 1:45 film above already is the tour; guided-overlay walkthroughs on
+  marketing pages get dismissed. The guidance lives inside the demos instead — the three chips,
+  and the header telling you to press `/`.
+- **The demo site is found by convention, with no new env var**: `resolveHomeDemo()`
+  (`src/lib/home-demo.ts`) looks for the site whose custom domain is `docs.{apex}` — our own
+  dogfooded docs — and offers the widget only when it is enabled *and* the home's origin is on
+  its allowlist. Null is an ordinary answer (no DB, single-repo preview, operator hasn't set it
+  up), and the chips then degrade to links into the docs page that answers each question. The
+  smoke gate asserts exactly that, since it runs with no Postgres.
+- **Loading follows the hero-video rule** (nothing heavy before intent): the editor is a
+  `next/dynamic({ ssr: false })` chunk requested only when Edit is pressed, the framed site is
+  not rendered until the section scrolls into view, and the widget loader is injected on the
+  first chip click. Verified rather than assumed — the production build puts TipTap in exactly
+  one chunk, `/home`'s HTML references it zero times, and it is fetched on the click.
+- **The band behind the frame** uses `rgba(var(--ink-rgb), α)`, the house overlay channel, so one
+  declaration lightens the dark appearance and darkens the light one. The obvious first cut — a
+  literal dark overlay — painted a grey haze across the light platform theme, the same two-theme
+  trap that once rendered the editor chrome all-white.
+- **The source pane is syntax-highlighted** (`src/components/home/SourcePane.tsx`): a read-only
+  CodeMirror over `markdown()` rather than a `<pre>`, so component tags, attributes, headings and
+  fences are tokenised properly instead of by a regex that would mis-colour the first document it
+  didn't anticipate. The token colours (`markdown-highlight.ts`) are platform tokens, so the pane
+  follows the light/dark appearance for free. **Worth knowing:** CodeMirror 6 separates parsing
+  from painting — `markdown()` alone colours nothing without a `HighlightStyle`, which is why the
+  editor's own Source mode (`SourceEditor.tsx`, same `markdown()`, no highlight style) is still
+  monochrome today. Adopting `markdownHighlight` there is a small, obvious follow-up.
+
+- **The demo took the hero slot from the film** (supersedes the 2026-08-27 note above, which put
+  the tour there). The hero is now left-aligned copy with the tour reduced to a small pill —
+  thumbnail, "Watch the tour", runtime — that opens the film in a modal, and the live demo sits
+  immediately beneath the fold instead. A visitor who can *use* the product is worth more than
+  one watching a video of it, and two large frames stacked read as a showreel rather than a
+  product. Click-to-play survives and matters more: the hero now costs only the ~114KB poster,
+  and the 9.5MB file is fetched only when the modal opens.
+- **That modal must be portalled to `<body>`.** `position: fixed` resolves against the nearest
+  transformed ancestor rather than the viewport, and the pill sits inside the hero's `db-rise`
+  entrance animation — so an in-place overlay rendered at the size and position of the little
+  pill instead of filling the screen. It portals out and carries `db-portal`, the house rule for
+  anything rendered outside the `.db` shell.
+
+Deferred on purpose: AI *editing* in the demo (the editor agent needs a session, an org and a
+real draft branch — an anonymous version means a new route with model cost and write-tool
+prompt-injection surface), and a "paste your repo URL" sandbox (needs an anonymous-site concept
+and a TTL reaper).
+
+**Open discrepancy:** the pill advertises a 1:45 runtime (`RUNTIME` in `HeroVideo.tsx`, matching
+`video/SCRIPT.md`'s 3168 frames), but the file currently served from R2 plays for **0:46** — so
+the bucket holds an older, shorter cut than the script describes. Pre-existing, and unchanged by
+this work; either re-render and re-upload the film, or correct the label.
+
+**Status 2026-08-29 — the first rate limiter (`src/lib/rate-limit.ts`).** Inviting anonymous
+visitors to use the assistant from the marketing home made this a prerequisite rather than a
+nicety: there was **no rate limiting anywhere in the codebase**, and two public AI endpoints —
+`/api/widget/{id}/chat` and `/api/assistant`, whose apex path is deliberately unauthenticated
+*and* unmetered — were reachable by anyone. The widget's origin allowlist stops other *sites*
+embedding a widget; it does nothing about one visitor on an allowed page asking two hundred
+questions.
+
+A fixed window of **20 requests per 10 minutes, per client IP, per surface**, keyed
+`{surface}:{sha256(ip)}` — the IP is hashed so the table can't become a record of who read what.
+Per-surface keys (`widget:{widgetId}`, `assistant:{siteId}` / `assistant:apex`) keep one busy
+office NAT from locking readers out of an unrelated site. The pure decision core is unit-tested;
+the Postgres counter (`rate_limit`, one atomic upsert — the window reset is a CASE inside the
+UPDATE, because read-then-write lets two concurrent requests both pass the limit) **fails open**
+on any DB error, the same posture as `authorizeAi`: a limiter must never take down the surface it
+protects. It runs *before* the provider-availability check in both routes, or an environment with
+no AI configured would 503 every request and never reach the limit — which is exactly the state
+CI runs in, and would have made the regression test vacuous.
+
+Two things worth knowing. Failing open means a broken limiter is **silent**: the first
+implementation passed `Date` objects to `db.execute`, which postgres-js rejects, so the limiter
+did nothing at all and every request sailed through — caught only by the e2e that asserts a 429
+actually arrives. And `assistantCaptchaEnabled` (`app-schema.ts`) remains **persisted UI that
+nothing enforces**; the flag round-trips and has never been read by the assistant route.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,
@@ -1973,11 +2082,17 @@ precedent already in the codebase rather than inventing a new access model:
 >   supportEmail, starterQuestions, nonce, all event-hook types (including the error
 >   hook), and all 6 runtime methods (including `destroy()` + a clean re-`init()`).
 >
-> Still open: a widget-specific rate limit beyond the shared AI billing gate (the
-> org-level gate caps total spend, but nothing stops one allowed origin from making many
-> cheap/free-tier requests within a period), and analytics that distinguish
-> widget-originated questions from in-docs ones (both currently log as the same
-> `source: "human"` event).
+> **Per-visitor rate limiting landed 2026-08-29** (see §2, "the first rate limiter"). The
+> org-level billing gate caps total spend but never stopped one allowed origin from making
+> many cheap/free-tier requests within a period; the chat route now counts each visitor
+> (hashed IP, keyed per widget) and answers a 429 with `Retry-After` once the window is
+> spent. `Retry-After` is listed in `Access-Control-Expose-Headers` — it is not
+> CORS-safelisted, so a cross-origin embed otherwise can't read its own cooldown — and the
+> script already surfaces `body.error` for any non-2xx, so the message appears in the
+> conversation with no client change.
+>
+> Still open: analytics that distinguish widget-originated questions from in-docs ones (both
+> currently log as the same `source: "human"` event).
 >
 > **Citation links resolved against the wrong origin (2026-08-08).** The assistant's
 > system prompt writes citation links as relative paths (e.g. `[Quickstart](/quickstart)`)
