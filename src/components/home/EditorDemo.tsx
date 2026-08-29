@@ -5,6 +5,7 @@ import { RotateCcw } from "lucide-react";
 import { VisualEditor } from "@/components/editor/VisualEditor";
 import { SourcePane } from "./SourcePane";
 import { DEMO_MDX } from "@/app/home/demo-page";
+import type { EditorView } from "./DocsFrame";
 
 /**
  * The real Visual editor, running on the marketing home with no backend at all.
@@ -25,8 +26,13 @@ import { DEMO_MDX } from "@/app/home/demo-page";
  *
  * Chrome-less on purpose: DocsFrame supplies the browser frame, the filename and the mode
  * switch, so this renders only the panes.
+ *
+ * Both panes stay MOUNTED in every view and are hidden with CSS rather than unmounted. The
+ * editor holds live ProseMirror state — caret, selection, undo history — and none of that
+ * survives a remount, so switching to Markdown and back would silently discard the reader's
+ * place in the document.
  */
-export function EditorDemo() {
+export function EditorDemo({ view = "split" }: { view?: EditorView }) {
   const [value, setValue] = useState(DEMO_MDX);
   // What the editor emits for the UNTOUCHED document, captured from its own first emission.
   //
@@ -43,8 +49,9 @@ export function EditorDemo() {
   }, []);
   const dirty = baseline.current !== null && value !== baseline.current;
 
+  // Only the split view is two columns; the single views give their pane the whole frame.
   return (
-    <div className="relative grid md:grid-cols-2">
+    <div className={`relative grid ${view === "split" ? "md:grid-cols-2" : "grid-cols-1"}`}>
       {dirty ? (
         <button
           type="button"
@@ -59,7 +66,11 @@ export function EditorDemo() {
       {/* A definite height: .pv-visual is h-full, and a percentage height resolves against the
           nearest definite-height ancestor — without one the editor collapses (the same
           flex/percentage trap that gave the Card component full-page height). */}
-      <div className="h-[560px] lg:h-[660px] overflow-y-auto px-5 py-4">
+      <div
+        className={`h-[560px] overflow-y-auto px-5 py-4 lg:h-[660px] ${
+          view === "markdown" ? "hidden" : ""
+        }`}
+      >
         <VisualEditor
           value={value}
           onChange={onChange}
@@ -76,7 +87,18 @@ export function EditorDemo() {
           scrollbar hides the ends of the very lines the pane exists to show. */}
       <SourcePane
         value={value}
-        className="hidden h-[560px] lg:h-[660px] overflow-y-auto border-l border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] text-[var(--muted)] md:block"
+        className={`h-[560px] overflow-y-auto bg-[rgba(var(--ink-rgb),0.02)] text-[var(--muted)] lg:h-[660px] ${
+          view === "markdown"
+            ? "block"
+            : view === "visual"
+              ? // Editor only. This MUST be an unconditional `hidden`: an earlier cut fell through
+                // to the split classes here, whose `md:block` put the Markdown back on screen —
+                // stacked underneath the editor, since this view is a single column.
+                "hidden"
+              : // Split keeps the divider and, below md, drops to the editor alone — two panes in
+                // a phone's width would leave neither readable.
+                "hidden border-l border-[rgba(var(--ink-rgb),0.08)] md:block"
+        }`}
       />
     </div>
   );

@@ -2,11 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 import dynamic from "next/dynamic";
-import { PenLine, BookOpen, RotateCcw } from "lucide-react";
+import { PenLine, BookOpen, RotateCcw, Columns2, Eye, Code2 } from "lucide-react";
 
 // TipTap is a large dependency graph and the home page is the SEO landing, so the editor stays
 // a separate chunk that is only requested when someone actually clicks Edit — the same rule the
 // hero video's click-to-play follows. `ssr: false` because the editor is browser-only.
+/** Which of the editor's two panes are on screen. */
+export type EditorView = "visual" | "split" | "markdown";
+
 const EditorDemo = dynamic(() => import("./EditorDemo").then((m) => m.EditorDemo), {
   ssr: false,
   loading: () => (
@@ -38,6 +41,9 @@ export function DocsFrame({ url }: { url: string | null }) {
   const [reloadKey, setReloadKey] = useState(0);
   // Sticky: true once Edit has been opened, so the editor survives a trip back to Read.
   const [everEdited, setEverEdited] = useState(false);
+  // Split by default: seeing the document and the MDX move together is the whole argument, and a
+  // reader who only wants one gets it in a click.
+  const [view, setView] = useState<EditorView>("split");
   const box = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -151,6 +157,33 @@ export function DocsFrame({ url }: { url: string | null }) {
         <div className="mono hidden min-w-0 flex-1 truncate rounded-lg bg-[rgba(var(--ink-rgb),0.05)] px-3 py-1 text-center text-xs text-[var(--muted)] sm:block">
           {mode === "read" ? address : "quickstart.mdx — press / to insert a block"}
         </div>
+        {mode === "edit" ? (
+          <div className="ml-auto flex shrink-0 items-center gap-1 rounded-lg bg-[rgba(var(--ink-rgb),0.05)] p-1 sm:ml-0 sm:mr-2">
+            {(
+              [
+                { id: "visual", icon: Eye, label: "Editor only" },
+                { id: "split", icon: Columns2, label: "Editor and Markdown" },
+                { id: "markdown", icon: Code2, label: "Markdown only" },
+              ] as const
+            ).map(({ id, icon: Icon, label }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setView(id)}
+                aria-pressed={view === id}
+                title={label}
+                aria-label={label}
+                className={`inline-flex items-center rounded-md px-2 py-1 transition-colors ${
+                  view === id
+                    ? "bg-[var(--surface)] text-[var(--fg)] shadow-sm"
+                    : "text-[var(--muted)] hover:text-[var(--fg)]"
+                }`}
+              >
+                <Icon className="h-3.5 w-3.5" />
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div className="ml-auto flex shrink-0 items-center gap-1 rounded-lg bg-[rgba(var(--ink-rgb),0.05)] p-1 sm:ml-0">
           <button
             type="button"
@@ -213,7 +246,7 @@ export function DocsFrame({ url }: { url: string | null }) {
             Read and returning doesn't discard what the visitor typed. Keyed off its own flag,
             not the iframe's reload counter — reusing that one mounted the whole editor chunk
             when someone pressed Reset in Read mode, which is the opposite of loading on intent. */}
-        {everEdited ? <EditorDemo /> : null}
+        {everEdited ? <EditorDemo view={view} /> : null}
       </div>
 
       <div className="flex items-center justify-between gap-3 border-t border-[rgba(var(--ink-rgb),0.08)] px-4 py-2.5">
