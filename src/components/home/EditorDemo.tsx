@@ -59,7 +59,7 @@ export function EditorDemo() {
       {/* A definite height: .pv-visual is h-full, and a percentage height resolves against the
           nearest definite-height ancestor — without one the editor collapses (the same
           flex/percentage trap that gave the Card component full-page height). */}
-      <div className="h-[560px] overflow-y-auto px-5 py-4">
+      <div className="h-[560px] lg:h-[660px] overflow-y-auto px-5 py-4">
         <VisualEditor
           value={value}
           onChange={onChange}
@@ -76,7 +76,7 @@ export function EditorDemo() {
           scrollbar hides the ends of the very lines the pane exists to show. */}
       <SourcePane
         value={value}
-        className="hidden h-[560px] overflow-y-auto border-l border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] text-[var(--muted)] md:block"
+        className="hidden h-[560px] lg:h-[660px] overflow-y-auto border-l border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] text-[var(--muted)] md:block"
       />
     </div>
   );

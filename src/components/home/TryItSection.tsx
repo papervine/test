@@ -68,7 +68,12 @@ export function TryItSection({
         }}
       />
 
-      <div className="mx-auto max-w-5xl px-6 py-24">
+      {/* The demo runs WIDER than the rest of the page — near-full-bleed with a gutter,
+          rather than the prose column the sections below use. It earns it: the frame holds a
+          real docs site (sidebar + content + TOC) in Read, and two panes side by side in
+          Edit, and both were cramped at the old 1024px. The heading above it keeps its own
+          narrow cap so the reading measure is unaffected. */}
+      <div className="mx-auto max-w-[88rem] px-6 py-24">
         <div className="mx-auto max-w-2xl text-center">
           <span className="db-ring mono inline-flex items-center rounded-full px-3 py-1 text-xs text-[var(--muted)]">
             Try it — no account needed

@@ -10,7 +10,7 @@ import { PenLine, BookOpen, RotateCcw } from "lucide-react";
 const EditorDemo = dynamic(() => import("./EditorDemo").then((m) => m.EditorDemo), {
   ssr: false,
   loading: () => (
-    <div className="grid h-[560px] place-items-center">
+    <div className="grid h-[560px] lg:h-[660px] place-items-center">
       <span className="mono text-xs text-[var(--muted)]">Loading the editor…</span>
     </div>
   ),
@@ -115,13 +115,13 @@ export function DocsFrame({ url }: { url: string | null }) {
             src={url}
             title="A documentation site rendered by Papervine"
             loading="lazy"
-            className="h-[560px] w-full border-0 bg-white"
+            className="h-[560px] lg:h-[660px] w-full border-0 bg-white"
             // The frame shows our own site, but it is still a separate document embedded in the
             // marketing page: keep it from navigating the top-level window or opening popups.
             sandbox="allow-scripts allow-same-origin allow-forms"
           />
         ) : (
-          <div className="grid h-[560px] place-items-center px-6 text-center">
+          <div className="grid h-[560px] lg:h-[660px] place-items-center px-6 text-center">
             <span className="mono text-xs text-[var(--muted)]">
               {url ? "Loading a live docs site…" : "A live docs site appears here."}
             </span>

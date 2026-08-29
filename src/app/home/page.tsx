@@ -176,7 +176,7 @@ export default async function LandingPage() {
     <PlatformShell variant="home">
       {/* Header */}
       <header className="db-glass sticky top-0 z-30 border-b border-[rgba(var(--ink-rgb),0.06)]">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
           <Link href="/" className="flex items-center">
             <Brand size="md" priority />
           </Link>
@@ -231,7 +231,7 @@ export default async function LandingPage() {
       {/* Hero. Left-aligned, with the tour reduced to a small pill on the right — the live demo
           below is the hero's real product shot now, and two big frames stacked read as a
           showreel rather than a product. */}
-      <section className="mx-auto max-w-6xl px-6 pb-10 pt-20 sm:pt-24">
+      <section className="mx-auto max-w-7xl px-6 pb-10 pt-20 sm:pt-24">
         <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_auto]">
           <div className="max-w-2xl">
             {/* Eyebrow. This slot used to be a "New · …" announcement linking to the reader-auth
@@ -342,7 +342,7 @@ export default async function LandingPage() {
       <TryItSection demo={demo} docsUrl={DOCS} frameUrl={frame?.url ?? null} />
 
       {/* What you get */}
-      <section className="mx-auto max-w-5xl px-6 pt-28">
+      <section className="mx-auto max-w-6xl px-6 pt-28">
         <div className="mx-auto max-w-2xl text-center">
           <h2 className="text-3xl font-semibold tracking-tight sm:text-4xl">
             What you get
@@ -368,7 +368,7 @@ export default async function LandingPage() {
       </section>
 
       {/* Concrete features — bento */}
-      <section className="mx-auto max-w-5xl px-6 py-28">
+      <section className="mx-auto max-w-6xl px-6 py-28">
         <h2 className="text-center text-sm font-medium uppercase tracking-[0.2em] text-[var(--muted)]">
           Everything a docs site needs
         </h2>
@@ -388,7 +388,7 @@ export default async function LandingPage() {
       </section>
 
       {/* CTA band */}
-      <section className="mx-auto max-w-5xl px-6 pb-28">
+      <section className="mx-auto max-w-6xl px-6 pb-28">
         <div
           className="relative overflow-hidden rounded-3xl p-[1px]"
           style={{
@@ -423,7 +423,7 @@ export default async function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-[rgba(var(--ink-rgb),0.06)]">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-3 px-6 py-8 text-sm text-[var(--muted)] sm:flex-row">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-3 px-6 py-8 text-sm text-[var(--muted)] sm:flex-row">
           <span className="flex items-center gap-1.5">
             <Brand size="sm" />
           </span>
