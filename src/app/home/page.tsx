@@ -21,7 +21,6 @@ import { Brand } from "@/components/Brand";
 import { HeroVideo } from "@/components/HeroVideo";
 import { TryItSection } from "@/components/home/TryItSection";
 import { SparklesText } from "@/components/home/SparklesText";
-import { AuthoringBeat } from "@/components/home/AuthoringCaret";
 import { resolveDocsFrame, resolveHomeDemo } from "@/lib/home-demo";
 import { appHostFor } from "@/lib/tenant-host";
 import { marketingMetadata } from "@/lib/marketing-seo";
@@ -240,45 +239,34 @@ export default async function LandingPage() {
                 went with the copy — no pulsing dot (it means *new*), and not a link (a tagline
                 that navigates somewhere unrelated is a link whose text doesn't describe its
                 destination). */}
-            <span className="relative block">
-              <AuthoringBeat beat="note" delay={0} />
-              <span
-                className="db-rise db-ring mono inline-flex items-center rounded-full px-3 py-1 text-xs text-[var(--muted)]"
-                style={{ animationDelay: "500ms" }}
-              >
-                Your product looks good when your docs look good.
-              </span>
+            <span
+              className="db-rise db-ring mono inline-flex items-center rounded-full px-3 py-1 text-xs text-[var(--muted)]"
+              style={{ animationDelay: "0ms" }}
+            >
+              Your product looks good when your docs look good.
             </span>
 
-            <span className="relative mt-7 block">
-              <AuthoringBeat beat="heading" delay={0.55} />
-              <h1
-                className="pv-insert text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
-                style={{ animationDelay: "1050ms" }}
-              >
-                <SparklesText>
-                  Publish <span className="db-grad">beautiful</span> docs.
-                </SparklesText>
-              </h1>
-            </span>
+            <h1
+              className="db-rise mt-7 text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
+              style={{ animationDelay: "80ms" }}
+            >
+              <SparklesText>
+                Publish <span className="db-grad">beautiful</span> docs.
+              </SparklesText>
+            </h1>
 
-            <span className="relative mt-6 block">
-              <AuthoringBeat beat="text" delay={1.1} />
-              <p
-                className="db-rise max-w-xl text-lg leading-relaxed text-[var(--muted)]"
-                style={{ animationDelay: "1600ms" }}
-              >
-                AI-powered self-updating knowledge platform. Open source or
-                hosted.
-              </p>
-            </span>
+            <p
+              className="db-rise mt-6 max-w-xl text-lg leading-relaxed text-[var(--muted)]"
+              style={{ animationDelay: "160ms" }}
+            >
+              AI-powered self-updating knowledge platform. Open source or
+              hosted.
+            </p>
 
-            <span className="relative mt-9 block">
-              <AuthoringBeat beat="card" delay={1.65} />
-              <div
-                className="db-rise flex flex-wrap items-center gap-x-5 gap-y-3"
-                style={{ animationDelay: "2150ms" }}
-              >
+            <div
+              className="db-rise mt-9 flex flex-wrap items-center gap-x-5 gap-y-3"
+              style={{ animationDelay: "240ms" }}
+            >
               <Link
                 href="/signup"
                 className="db-cta inline-flex items-center rounded-xl px-5 py-3 text-sm font-medium text-white"
@@ -316,11 +304,10 @@ export default async function LandingPage() {
                     {formatStars(stars)}
                   </span>
                 )}
-                </a>
-              </div>
-            </span>
+              </a>
+            </div>
 
-            <p className="db-rise mono mt-5 flex items-center gap-2 text-xs text-[var(--muted)]" style={{ animationDelay: "2400ms" }}>
+            <p className="db-rise mono mt-5 flex items-center gap-2 text-xs text-[var(--muted)]" style={{ animationDelay: "300ms" }}>
               <FileJson2 className="h-3.5 w-3.5" />
               With or without GitHub, we got you covered.
             </p>
@@ -329,7 +316,7 @@ export default async function LandingPage() {
                 the same config IS the migration story, and the link proves it. */}
             <p
               className="db-rise mt-4 max-w-lg text-sm leading-relaxed text-[var(--muted)]"
-              style={{ animationDelay: "2550ms" }}
+              style={{ animationDelay: "360ms" }}
             >
               Looking for a{" "}
               <span className="font-medium text-[var(--fg)]">docs platform alternative</span>? If you
@@ -345,7 +332,7 @@ export default async function LandingPage() {
             </p>
           </div>
 
-          <div className="db-rise lg:justify-self-end" style={{ animationDelay: "2700ms" }}>
+          <div className="db-rise lg:justify-self-end" style={{ animationDelay: "380ms" }}>
             <HeroVideo />
           </div>
         </div>
