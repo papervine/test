@@ -5,14 +5,14 @@ import Link from "next/link";
 import { signIn } from "@/lib/auth-client";
 import { Button } from "@/components/platform/Button";
 import { Field } from "@/components/platform/Field";
-import { GoogleSignIn } from "../GoogleSignIn";
+import { SocialProviders } from "../SocialSignIn";
 import {
   invitedEmailFromUrl,
   oauthErrorFromUrl,
   postAuthDest,
 } from "../post-auth-dest";
 
-export function LoginForm({ google, email: emailEnabled }: { google: boolean; email: boolean }) {
+export function LoginForm({ google, github, email: emailEnabled }: { google: boolean; github: boolean; email: boolean }) {
   const [email, setEmail] = useState("");
   // Prefill from a `?email=` invite param after mount (a useState initializer runs during SSR
   // with no `window`, and the client reuses that empty value). Same for a bounced-back social
@@ -101,7 +101,7 @@ export function LoginForm({ google, email: emailEnabled }: { google: boolean; em
           {pending ? "Signing in…" : "Sign in"}
         </Button>
       </form>
-      {google && <GoogleSignIn label="Continue with Google" />}
+      <SocialProviders google={google} github={github} action="Continue" />
       <p className="text-center text-sm text-[var(--muted)]">
         No account?{" "}
         <Link href="/signup" className="text-[var(--blue)] hover:underline">

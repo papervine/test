@@ -1,4 +1,4 @@
-import { googleOAuthFromEnv } from "@/lib/social-auth";
+import { githubOAuthFromEnv, googleOAuthFromEnv } from "@/lib/social-auth";
 import { emailStatusFromEnv } from "@/lib/email";
 import { LoginForm } from "./login-form";
 
@@ -10,6 +10,7 @@ export default function LoginPage() {
   return (
     <LoginForm
       google={googleOAuthFromEnv().enabled}
+      github={githubOAuthFromEnv().enabled}
       email={emailStatusFromEnv().enabled}
     />
   );

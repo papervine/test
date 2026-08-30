@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  githubOAuthStatus,
   googleOAuthStatus,
   isOAuthCallbackPath,
   oauthCallbackURI,
@@ -49,6 +50,31 @@ describe("googleOAuthStatus", () => {
   });
 });
 
+describe("githubOAuthStatus", () => {
+  it("enables GitHub from the App's user-OAuth credential, with the github callback", () => {
+    expect(githubOAuthStatus("Iv1.abc123", "secret", APEX)).toEqual({
+      enabled: true,
+      config: {
+        clientId: "Iv1.abc123",
+        clientSecret: "secret",
+        redirectURI: "https://papervine.io/api/auth/callback/github",
+      },
+    });
+  });
+
+  it("shares Google's off states: unconfigured halves, and credentials with no origin", () => {
+    expect(githubOAuthStatus(undefined, undefined, APEX)).toEqual({
+      enabled: false,
+      reason: "unconfigured",
+    });
+    expect(githubOAuthStatus("Iv1.abc123", "  ", APEX).enabled).toBe(false);
+    expect(githubOAuthStatus("Iv1.abc123", "secret", undefined)).toEqual({
+      enabled: false,
+      reason: "missing-base-url",
+    });
+  });
+});
+
 describe("oauthCallbackURI", () => {
   it("builds the URI on the apex origin — the one registered with the provider", () => {
     expect(oauthCallbackURI("http://localhost:3000", "google")).toBe(
@@ -84,8 +110,10 @@ describe("oauthErrorMessage", () => {
   });
 
   it("falls back to a generic message rather than leaking an unknown code", () => {
+    // Provider-neutral: the code lands back on the form with nothing saying which button
+    // was pressed, so the copy can't name one.
     const msg = oauthErrorMessage("some_internal_code");
-    expect(msg).toBe("Google sign-in didn't complete. Please try again.");
+    expect(msg).toBe("Sign-in didn't complete. Please try again.");
     expect(msg).not.toContain("some_internal_code");
   });
 

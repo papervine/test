@@ -5,14 +5,14 @@ import Link from "next/link";
 import { signUp } from "@/lib/auth-client";
 import { Button } from "@/components/platform/Button";
 import { Field } from "@/components/platform/Field";
-import { GoogleSignIn } from "../GoogleSignIn";
+import { SocialProviders } from "../SocialSignIn";
 import {
   invitedEmailFromUrl,
   oauthErrorFromUrl,
   postAuthDest,
 } from "../post-auth-dest";
 
-export function SignupForm({ google }: { google: boolean }) {
+export function SignupForm({ google, github }: { google: boolean; github: boolean }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   // Prefill from a `?email=` invite param after mount (not a useState initializer — that runs
@@ -75,7 +75,7 @@ export function SignupForm({ google }: { google: boolean }) {
           {pending ? "Creating account…" : "Sign up"}
         </Button>
       </form>
-      {google && <GoogleSignIn label="Sign up with Google" />}
+      <SocialProviders google={google} github={github} action="Sign up" />
       <p className="text-center text-sm text-[var(--muted)]">
         Already have an account?{" "}
         <Link href="/login" className="text-[var(--blue)] hover:underline">

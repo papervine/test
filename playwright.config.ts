@@ -60,6 +60,13 @@ export default defineConfig({
       // Forwarded so the GitHub App surfaces render their real shape. Without the client
       // credentials the hosted→Git page shows only its existing-repo view, and a spec
       // asserting the one-click choice would silently skip the thing it tests.
+      //
+      // Note the tension with the auth-isolation rule below: this same pair now also lights
+      // "Continue with GitHub" on /login and /signup (SPEC §10.1), so forwarding it makes the
+      // auth pages differ from CI's on a machine that exports it. Accepted rather than blanked
+      // — blanking would hollow out the one-click spec this forward exists for, GitHub sign-in
+      // makes no outbound call until the button is clicked (unlike Resend), and the auth specs
+      // match "Sign in"/"Sign up" exactly, which an "…with GitHub" label doesn't collide with.
       ...(process.env.GITHUB_APP_CLIENT_ID
         ? { GITHUB_APP_CLIENT_ID: process.env.GITHUB_APP_CLIENT_ID }
         : {}),

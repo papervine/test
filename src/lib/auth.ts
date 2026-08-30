@@ -8,7 +8,7 @@ import { db } from "./db";
 import * as schema from "./db/schema";
 import { isReservedOrgSlug } from "./slug";
 import { resolvePlatformRole } from "./platform-admin";
-import { googleOAuthFromEnv } from "./social-auth";
+import { githubOAuthFromEnv, googleOAuthFromEnv } from "./social-auth";
 import { appOriginFor } from "./tenant-host";
 import { sendEmail, emailStatusFromEnv } from "./email";
 import {
@@ -48,6 +48,14 @@ const google = googleOAuthFromEnv();
 if (!google.enabled && google.reason === "missing-base-url") {
   console.warn(
     "[auth] GOOGLE_CLIENT_ID/SECRET are set but BETTER_AUTH_URL is not — Google sign-in stays off (no origin for the OAuth redirect URI).",
+  );
+}
+// GitHub sign-in rides on the GitHub APP's user-OAuth credential (the one that already powers
+// one-click repo creation) — see githubOAuthStatus for the two App settings it needs.
+const github = githubOAuthFromEnv();
+if (!github.enabled && github.reason === "missing-base-url") {
+  console.warn(
+    "[auth] GITHUB_APP_CLIENT_ID/SECRET are set but BETTER_AUTH_URL is not — GitHub sign-in stays off (no origin for the OAuth redirect URI).",
   );
 }
 
@@ -126,13 +134,20 @@ export const auth = betterAuth({
   },
   // The explicit `redirectURI` matters: Better Auth would otherwise derive it from
   // BETTER_AUTH_URL/the request, and the two disagree here — sign-in starts on the app
-  // host while the URI registered with Google is the apex one (see oauthCallbackURI for
-  // why). Account LINKING keeps Better Auth's secure default: a Google identity only folds
+  // host while the URI registered with the provider is the apex one (see oauthCallbackURI
+  // for why). Account LINKING keeps Better Auth's secure default: a social identity only folds
   // into an existing account whose local email is already verified. We have no verification
   // flow yet, so same-email collisions surface as a "sign in with your password" message
   // rather than silently merging — which would make pre-registering someone else's address
   // a working account-takeover.
-  ...(google.enabled ? { socialProviders: { google: google.config } } : {}),
+  ...(google.enabled || github.enabled
+    ? {
+        socialProviders: {
+          ...(google.enabled ? { google: google.config } : {}),
+          ...(github.enabled ? { github: github.config } : {}),
+        },
+      }
+    : {}),
   trustedOrigins,
   databaseHooks: {
     session: {

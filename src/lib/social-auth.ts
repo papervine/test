@@ -6,7 +6,7 @@
 // simply absent from the auth config and its button never renders, so a bare checkout, CI,
 // and the zero-dep smoke gate all work without any OAuth setup.
 
-export type SocialProviderId = "google";
+export type SocialProviderId = "google" | "github";
 
 export type SocialProviderConfig = {
   clientId: string;
@@ -49,6 +49,33 @@ export function googleOAuthStatus(
   rawClientSecret: string | undefined,
   rawBaseUrl: string | undefined,
 ): SocialProviderStatus {
+  return providerStatus("google", rawClientId, rawClientSecret, rawBaseUrl);
+}
+
+/**
+ * GitHub sign-in, from the GitHub APP's user-OAuth credentials — the same
+ * `GITHUB_APP_CLIENT_ID`/`SECRET` that power one-click repo creation (github-user-auth.ts).
+ * GitHub's own guidance prefers a GitHub App's user authorization over a legacy OAuth app,
+ * and reusing it keeps one credential and one consent screen. Two things live on the App's
+ * settings page rather than in code: the apex callback URI below must be added as a Callback
+ * URL, and the App needs **Account permissions → Email addresses: Read-only** — GitHub Apps
+ * ignore OAuth scopes, so without that permission the callback returns no email and sign-in
+ * fails. See docs/auth/github-sign-in.
+ */
+export function githubOAuthStatus(
+  rawClientId: string | undefined,
+  rawClientSecret: string | undefined,
+  rawBaseUrl: string | undefined,
+): SocialProviderStatus {
+  return providerStatus("github", rawClientId, rawClientSecret, rawBaseUrl);
+}
+
+function providerStatus(
+  provider: SocialProviderId,
+  rawClientId: string | undefined,
+  rawClientSecret: string | undefined,
+  rawBaseUrl: string | undefined,
+): SocialProviderStatus {
   const clientId = rawClientId?.trim();
   const clientSecret = rawClientSecret?.trim();
   if (!clientId || !clientSecret) return { enabled: false, reason: "unconfigured" };
@@ -56,7 +83,7 @@ export function googleOAuthStatus(
   if (!baseUrl) return { enabled: false, reason: "missing-base-url" };
   return {
     enabled: true,
-    config: { clientId, clientSecret, redirectURI: oauthCallbackURI(baseUrl, "google") },
+    config: { clientId, clientSecret, redirectURI: oauthCallbackURI(baseUrl, provider) },
   };
 }
 
@@ -65,6 +92,15 @@ export function googleOAuthFromEnv(): SocialProviderStatus {
   return googleOAuthStatus(
     process.env.GOOGLE_CLIENT_ID,
     process.env.GOOGLE_CLIENT_SECRET,
+    process.env.BETTER_AUTH_URL,
+  );
+}
+
+/** Same, for GitHub — reading the GitHub App's user-OAuth credential. */
+export function githubOAuthFromEnv(): SocialProviderStatus {
+  return githubOAuthStatus(
+    process.env.GITHUB_APP_CLIENT_ID,
+    process.env.GITHUB_APP_CLIENT_SECRET,
     process.env.BETTER_AUTH_URL,
   );
 }
@@ -81,7 +117,7 @@ export function isOAuthCallbackPath(pathname: string): boolean {
 // `account_not_linked` is the one users actually hit: an email/password account already
 // owns that address. Papervine has no email-verification flow yet, so Better Auth's default
 // (link only onto a locally VERIFIED email) can't be satisfied — and loosening it would let
-// anyone pre-register a victim's address with a password and inherit their Google account on
+// anyone pre-register a victim's address with a password and inherit their social account on
 // first sign-in. So we keep the safe default and explain the situation instead. See SPEC §10.1.
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   account_not_linked:
@@ -91,7 +127,7 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
 
 export function oauthErrorMessage(code: string | null | undefined): string | null {
   if (!code) return null;
-  return (
-    OAUTH_ERROR_MESSAGES[code] ?? "Google sign-in didn't complete. Please try again."
-  );
+  // Provider-neutral on purpose: the error lands back on the form as a bare `?error=` code,
+  // with nothing saying which button was pressed.
+  return OAUTH_ERROR_MESSAGES[code] ?? "Sign-in didn't complete. Please try again.";
 }

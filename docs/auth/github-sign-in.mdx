@@ -1,0 +1,74 @@
+---
+title: GitHub sign-in
+description: Turn on "Continue with GitHub" for the Papervine dashboard — reusing the GitHub App you already have, the two App settings it needs, and how GitHub identities relate to password accounts.
+---
+
+Papervine accounts sign in with an email and password by default. Adding GitHub gives your
+users a one-click alternative on both `/login` and `/signup`, alongside — never instead of —
+the password form. It is part of [platform auth](/auth/platform-auth), the account system for
+dashboard users; it has nothing to do with [reader auth](/auth/reader-auth), which gates a
+customer's published docs.
+
+Like [Google sign-in](/auth/google-sign-in), it is **entirely optional**: with no credentials
+configured, the provider is absent from the auth server and the button never renders.
+
+## It reuses your GitHub App
+
+GitHub sign-in runs on the same `GITHUB_APP_CLIENT_ID` / `GITHUB_APP_CLIENT_SECRET` your
+GitHub App already uses for one-click repository creation — a GitHub App's *user authorization* flow,
+which is GitHub's own preference over legacy OAuth apps: fine-grained permissions instead of
+scopes, short-lived tokens, one credential and one consent screen for everything Papervine
+does with GitHub. There is no separate OAuth client to create.
+
+## Enabling it
+
+<Steps>
+  <Step title="Set the App's user-OAuth credential">
+    If you haven't already (repo creation uses the same pair): in your GitHub App's settings,
+    copy the **Client ID** and generate a **client secret**, then set:
+
+    ```bash
+    GITHUB_APP_CLIENT_ID=...
+    GITHUB_APP_CLIENT_SECRET=...
+    ```
+  </Step>
+  <Step title="Add the sign-in callback URL">
+    A GitHub App accepts up to ten **Callback URLs**. Add one built from your
+    `BETTER_AUTH_URL`, alongside any you already have:
+
+    ```
+    {BETTER_AUTH_URL}/api/auth/callback/github
+    ```
+
+    This is the **apex** origin, not the `app.` host — the middleware forwards the callback,
+    for the reasons explained in
+    [Why the callback lands on the apex](/auth/google-sign-in#why-the-callback-lands-on-the-apex).
+  </Step>
+  <Step title="Grant the email permission">
+    Under the App's **Permissions → Account permissions**, set **Email addresses** to
+    **Read-only**, and let installations accept the updated permissions.
+
+    This step is load-bearing: GitHub Apps ignore OAuth scopes on user tokens, so the usual
+    `user:email` scope request does nothing. Without this permission the callback returns no
+    email address and sign-in fails.
+  </Step>
+</Steps>
+
+Restart the server. "Continue with GitHub" now appears on the sign-in and sign-up pages.
+
+<Note>
+  Both halves of the credential are required — a client ID without its secret reads as a
+  half-finished setup, so the provider stays off rather than failing at the first sign-in
+  attempt. `BETTER_AUTH_URL` is required too; without it the server logs a warning explaining
+  that GitHub sign-in stayed off.
+</Note>
+
+## Same email, existing password account
+
+The linking rules are the same as Google's, and deliberately conservative: a GitHub identity
+only attaches to an existing Papervine account whose email is verified. Someone who signed up
+with a password and later presses "Continue with GitHub" on the same address is told to sign
+in with their password instead of being silently merged — the merge would let anyone
+pre-register someone else's address and inherit their account. GitHub adds one guarantee of
+its own here: it will not issue a user token at all for a GitHub account whose primary email
+is unverified.

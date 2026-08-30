@@ -7155,6 +7155,36 @@ write by hand.
 > the app host with `?code`/`?state` intact. **Unverified:** a real Google account completing
 > consent — that needs live credentials from the Google Cloud console.
 
+> **Status (2026-08-30) — GitHub sign-in, on the GitHub App's own credential.** Same optional
+> shape as Google (`githubOAuthStatus` beside `googleOAuthStatus`, both now thin wrappers over
+> one pure `providerStatus`; unset → no provider, no button), but deliberately NOT a new OAuth
+> client: it reads `GITHUB_APP_CLIENT_ID`/`SECRET` — the GitHub App's user-OAuth pair that
+> already powers one-click repo creation (§10.11). That is GitHub's own stated preference
+> ("GitHub Apps are preferred to OAuth apps"), and it keeps one credential, one consent screen
+> branded as the App, and one thing to rotate. Two settings live on the App, not in code, and
+> both are load-bearing: the apex `/api/auth/callback/github` added as a second Callback URL
+> (the middleware's `/api/auth/callback/*` forward is provider-generic, so no code changed
+> there), and **Account permissions → Email addresses: Read-only** — GitHub Apps ignore OAuth
+> scopes on user tokens, so without the permission the callback has no email and sign-in fails.
+> A quiet bonus of the App flow: GitHub refuses to mint a user token for an account whose
+> primary email is unverified (`unverified_user_email`), which is exactly the property the
+> account-linking guard wants. Linking itself keeps the same secure default as Google — a
+> same-email collision says "sign in with your password" rather than merging.
+>
+> The single-provider `GoogleSignIn` component became `SocialProviders` (one "or" divider, a
+> button per enabled provider) and `oauthErrorMessage`'s fallback went provider-neutral — the
+> error code lands back on the form with nothing saying which button was pressed, so the copy
+> can't name one. Docs: `docs/auth/github-sign-in` beside the Google page; `.env.example`
+> documents the two App settings on the existing `GITHUB_APP_CLIENT_*` block.
+>
+> Verified with dummy credentials (button on both pages, one divider, exact-match "Sign up"
+> intact, authorize URL carries the client id + our redirectURI + PKCE S256, console clean) —
+> and then **end-to-end with the real App**: the setup surfaced that GitHub Apps EXACT-match
+> `redirect_uri` against the Callback URLs list, so dev (`http://localhost:3000/...`) and prod
+> each need their own entry, added via the easy-to-miss "Add Callback URL" text link under the
+> existing field (up to 10; the repo-creation callback stays). With those added, a real GitHub
+> account completed consent and signed in.
+
 > **Status (2026-08-08) — transactional email, and the verification gap closed.** Papervine had
 > **no email at all**: invitations were a `console.log` + a Copy-link UI (the 2026-06-29
 > decision below), there was no password reset, and `emailVerified` was `false` for every

@@ -144,6 +144,7 @@
               "auth/overview",
               "auth/platform-auth",
               "auth/google-sign-in",
+              "auth/github-sign-in",
               "auth/transactional-email"
             ]
           },
