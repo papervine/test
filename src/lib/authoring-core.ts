@@ -21,6 +21,7 @@ import { runSync } from "./sync-runner";
 import { isNativeSite } from "./site-source";
 import { publishNative } from "./native-publish";
 import type { PublishResult } from "./publish-mode";
+import { recordPageVersions } from "./page-history-store";
 
 const PAGE_EXTS = [".mdx", ".md"];
 
@@ -301,6 +302,22 @@ export async function publishDraft(
     const moved = await updateRef(site.repoOwner!, site.repoName!, session.baseBranch, commit.commitSha, token);
     if (!moved.ok) return { ok: false, error: moved.error ?? "Failed to update the branch." };
     await closeSession(session.id, "published");
+    // One version row per changed page (SPEC §10.11). CONTENT IS NOT STORED for a Git site —
+    // the row carries the commit sha and the bytes come back from the repo on demand, because
+    // copying page bodies in here would be keeping a second copy of somebody's git history.
+    //
+    // Only publishes made THROUGH Papervine appear. A commit pushed straight to the repo won't,
+    // which is the known limit of recording rather than reading `git log` for the path; a Git
+    // user still has GitHub for the complete picture.
+    await recordPageVersions({
+      siteId: site.id,
+      pages: drafts
+        .filter((d) => !d.deleted && !d.binary)
+        .map((d) => ({ path: d.path, content: d.content })),
+      actorUserId: opts.actorUserId ?? null,
+      deploymentId: null,
+      commitSha: commit.commitSha,
+    });
     // The push webhook owns the sync (single sync path, no torn-tree race). Without the
     // App configured there's no webhook, so sync inline.
     if (!isGithubAppConfigured()) {

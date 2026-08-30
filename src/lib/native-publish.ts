@@ -4,6 +4,7 @@ import { db } from "./db";
 import { site as siteTable, deployment } from "./db/app-schema";
 import { findOpenSession, listDraftFiles, closeSession } from "./draft-store";
 import { putObject, deleteKeys, listKeys, copyObject } from "./storage";
+import { recordPageVersions } from "./page-history-store";
 import { planNativePublish } from "./native-publish-plan";
 import { openDeployment, resolveDeployment, markSiteLive } from "./deployment-log";
 import { revalidateSite } from "./s3-source";
@@ -92,6 +93,18 @@ export async function publishNative(
     ]);
     for (const w of plan.configPuts) await putObject(w.key, w.content, w.contentType);
     if (plan.deletes.length) await deleteKeys(plan.deletes);
+
+    // One version row per changed page (SPEC §10.11), from the same plan that just wrote the
+    // objects — a hosted publish overwrites in place, so this is the only record that the
+    // previous content ever existed. After the writes and never allowed to throw: losing a
+    // history row is a far smaller problem than a publish that reports failure once the bytes
+    // are already live.
+    await recordPageVersions({
+      siteId: site.id,
+      pages: plan.puts.map((w) => ({ path: w.key.slice(`sites/${site.id}/`.length), content: w.content })),
+      actorUserId: opts.actorUserId ?? null,
+      deploymentId,
+    });
 
     // Serve the new bytes immediately instead of the pre-publish copy.
     revalidateSite(site.id);

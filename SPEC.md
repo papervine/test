@@ -573,6 +573,41 @@ project that only exists in the cloud.
 is a poor trade for one local run: leave `TRIGGER_SECRET_KEY` unset and both the automations
 executor and skill generation fall back to running inline.
 
+**Status 2026-08-30 — page version history, at PUBLISH level.** The editor's History panel
+lists every published version of the open page, grouped by day, with author and time.
+
+The granularity was the decision. Save-level (what the incumbent's panel implies) means
+snapshots as you type, from an editor that autosaves and is collaborative — thousands of rows per
+page and a retention policy before it is useful at all. Publish-level is a meaningful unit
+("what did this page look like on Tuesday"), is naturally bounded, and save-level can layer onto
+the same table and panel later.
+
+**What we had before this: nothing, for the sites that need it most.** No version table existed;
+`draft_file` is unique on `(session, path)` so a save OVERWRITES it; a native publish `putObject`s
+over its own keys; and bucket versioning is off. Git-backed sites had full history all along — in
+GitHub — so the users with no other way to see it were the hosted ones.
+
+Consequences that shaped the schema:
+
+- **`content` is stored only for hosted sites**, where the bytes exist nowhere else. A Git site's
+  row carries `commitSha` and the content is fetched from the repo on demand — copying page
+  bodies in would be keeping a second copy of somebody's git history. Known limit, documented:
+  only publishes made THROUGH Papervine are recorded, so a commit pushed straight to the repo
+  doesn't appear.
+- **`contentSha` dedupes.** A publish writes every file in the draft buffer including ones opened
+  and left alone, so without it a page collects an identical version whenever anything else on
+  the site is published.
+- **Restore writes to the DRAFT, not to the live site.** On a Git site history can't be
+  rewritten, so a rollback is a new commit regardless; making it a draft edit means both site
+  kinds behave the same, the author sees what they are about to ship, and Publish stays the only
+  thing that changes what readers see. It goes through `applyExternalChange`, so the restore
+  broadcasts to collaborators like any other edit rather than updating one browser.
+- Recording never fails a publish (try/catch → warn). Losing a history row is a far smaller
+  problem than a publish reporting failure after the bytes are live.
+
+Retention is 50 versions per page, pruned on write. If it should vary,
+`analyticsRetentionDays` is the precedent for tying it to the plan.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,

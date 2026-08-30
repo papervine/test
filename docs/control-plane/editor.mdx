@@ -556,6 +556,33 @@ branch and shows the live content as-is.
 
 Nothing is live until you publish.
 
+## Version history
+
+**History** in the editor toolbar shows every published version of the page you're editing,
+newest first, grouped by day, with who published it and when.
+
+It's **publish**-level: a version is recorded each time a publish changes that page. Republishing
+a page you didn't touch doesn't add an entry, so the list stays a record of what actually changed
+rather than a log of how often you pressed Publish.
+
+Selecting a version shows what it contained. **Restore into draft** puts that content back into
+your draft — it doesn't publish it. You see the restored page in the editor, can keep editing,
+and Publish stays the one action that changes what readers see. On a Git-backed site that matters
+for a second reason: history can't be rewritten, so a "rollback" would be a new commit either
+way.
+
+<Note>
+  A page that has never been published has no history yet. The entry appears the first time you
+  publish it.
+</Note>
+
+<Warning>
+  On a Git-backed site, only publishes made **through Papervine** appear here. A commit pushed
+  straight to the repository won't — your repository's own history is the complete record.
+</Warning>
+
+The newest 50 versions of each page are kept.
+
 ## Publishing
 
 The **Publish** button carries the draft to Git. Its action follows the branch you're on, and the

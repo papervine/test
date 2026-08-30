@@ -2,6 +2,8 @@
 
 import matter from "gray-matter";
 import { revalidatePath } from "next/cache";
+import { getPageVersionContent, listPageVersions } from "@/lib/page-history-store";
+import { upsertDraftFile } from "@/lib/draft-store";
 import { siteRoute } from "@/lib/dashboard-nav";
 import { gateEditor } from "@/lib/editor-gate";
 import { mintCollabToken } from "@/lib/collab-token";
@@ -117,6 +119,73 @@ export async function readDraftPageAction(
   if ("error" in gate) return gate;
   const { path, raw } = await resolvePagePath(gate.site, branch, slug);
   return { path, markdown: raw ?? "" };
+}
+
+/**
+ * The Version history panel's list, for one page (SPEC §10.11).
+ *
+ * PUBLISH-level history: one entry per publish that changed this page. Dates are returned as
+ * epoch millis rather than Date objects — a server action's return value crosses the RSC
+ * boundary, and grouping them by day is the client's job (`groupVersionsByDay`), against the
+ * client's own clock.
+ */
+export async function listPageVersionsAction(
+  orgSlug: string,
+  siteSlug: string,
+  path: string,
+): Promise<{ versions: { id: string; at: number; authorName: string | null; isCurrent: boolean }[] } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const rows = await listPageVersions(gate.site.id, path);
+  return {
+    versions: rows.map((r) => ({
+      id: r.id,
+      at: r.publishedAt.getTime(),
+      authorName: r.authorName,
+      isCurrent: r.isCurrent,
+    })),
+  };
+}
+
+/** One version's MDX, for previewing it before restoring. */
+export async function readPageVersionAction(
+  orgSlug: string,
+  siteSlug: string,
+  versionId: string,
+): Promise<{ markdown: string; at: number } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const found = await getPageVersionContent(gate.site.id, versionId);
+  // Null is a real state for a Git-backed site whose token has expired or whose repo has been
+  // disconnected — the row is ours, the bytes are theirs.
+  if (!found) return { error: "That version's content could not be loaded." };
+  return { markdown: found.content, at: found.publishedAt.getTime() };
+}
+
+/**
+ * Restore a version — into the DRAFT, not straight to the live site.
+ *
+ * Deliberately not a publish. On a Git-backed site history can't be rewritten, so a "rollback"
+ * would have to be a new commit anyway; making it a draft edit means the same thing happens on
+ * both kinds of site, the author sees what they're about to ship, and Publish stays the one
+ * action that changes what readers see.
+ */
+export async function restorePageVersionAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  path: string,
+  versionId: string,
+): Promise<{ markdown: string } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  const found = await getPageVersionContent(gate.site.id, versionId);
+  if (!found) return { error: "That version's content could not be loaded." };
+
+  const session = await checkoutBranch(gate.site, { actorUserId: gate.userId, branchName: branch });
+  await upsertDraftFile({ sessionId: session.sessionId, path, content: found.content });
+  revalidatePath(siteRoute(orgSlug, siteSlug, "editor"));
+  return { markdown: found.content };
 }
 
 /** Load a page's published (base) MDX — for the editor's diff view (draft vs live). */

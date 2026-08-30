@@ -9,7 +9,18 @@ import {
   useTransition,
 } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { ChevronRight, Eye, X, ListTree, FolderOpen, type LucideIcon } from "lucide-react";
+// `History` is aliased because the bare name is the DOM's own global History type — an
+// unimported <History /> resolves to that and fails as a JSX component rather than as a
+// missing import, which reads like a React bug.
+import {
+  ChevronRight,
+  Eye,
+  X,
+  ListTree,
+  FolderOpen,
+  History as HistoryIcon,
+  type LucideIcon,
+} from "lucide-react";
 import { toast } from "sonner";
 import { unlistedPageSlugs } from "@/lib/nav-edit";
 import { moveGroupInSections, moveLeafInSections } from "@/lib/nav-tree-move";
@@ -20,6 +31,7 @@ import { BranchSwitcher } from "./BranchSwitcher";
 import { PreviewOverlay } from "./PreviewOverlay";
 import { PublishButton } from "./PublishButton";
 import { EditorAgentPanel } from "./EditorAgentPanel";
+import { PageHistoryPanel } from "./PageHistoryPanel";
 import { MdxEditorPane, type Mode, type MdxEditorHandle } from "./MdxEditorPane";
 import { PageSettings } from "./settings/PageSettings";
 import { GroupSettings } from "./settings/GroupSettings";
@@ -111,6 +123,7 @@ export function EditorShell({
   // The pane remounts per page, so a keystroke still inside its 700ms autosave debounce would be
   // lost on a fast nav click. We flush it through this handle BEFORE a user-initiated switch.
   const paneRef = useRef<MdxEditorHandle>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   // Keep the URL's ?slug=/&branch= in sync with whatever's actually open, so the current
   // page is linkable/bookmarkable and survives a refresh or browser back — EditorPage
@@ -538,6 +551,23 @@ export function EditorShell({
               <Eye className="h-3.5 w-3.5" />
               <span className="hidden sm:inline">Preview</span>
             </button>
+            {/* Publish-level history for the page in the pane. A plain button rather than an
+                overflow menu: there is no other overflow item yet, and a "…" holding one thing
+                hides it for no reason. */}
+            <button
+              type="button"
+              onClick={() => setHistoryOpen((open) => !open)}
+              aria-pressed={historyOpen}
+              title="Version history for this page"
+              className={`flex shrink-0 items-center gap-1.5 rounded-md border px-2.5 py-1.5 text-sm ${
+                historyOpen
+                  ? "border-neutral-400 bg-neutral-100 dark:border-neutral-600 dark:bg-neutral-900"
+                  : "border-neutral-300 hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-900"
+              }`}
+            >
+              <HistoryIcon className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">History</span>
+            </button>
             <span className="hidden min-w-0 items-center gap-1 text-sm text-neutral-500 lg:flex">
               <ChevronRight className="h-3.5 w-3.5 shrink-0" />
               <span className="truncate">{slug || "index"}</span>
@@ -615,6 +645,27 @@ export function EditorShell({
           />
         )}
       </main>
+
+      {/* Col 4 — version history, the mirror of the agent panel on the left. A 320px column from
+          lg up, a full-width sheet below it: a history list and an editor side by side don't both
+          fit on a phone, and splitting them leaves neither usable.
+
+          Unmounted when closed, unlike the agent panel — it holds no conversation worth
+          preserving, and a mounted-but-hidden panel would re-fetch on every page change. */}
+      {historyOpen && (
+        <aside className="fixed inset-0 z-40 flex w-full flex-col lg:static lg:z-auto lg:w-80 lg:shrink-0">
+          <PageHistoryPanel
+            org={org}
+            site={site}
+            branch={branch}
+            path={path}
+            onClose={() => setHistoryOpen(false)}
+            // Signals that the draft moved; the shell re-reads it and pushes the result through
+            // the pane's live binding, so collaborators see the restore too.
+            onRestored={() => applyExternalChange([path])}
+          />
+        </aside>
+      )}
       {previewOpen && (
         <PreviewOverlay
           org={org}

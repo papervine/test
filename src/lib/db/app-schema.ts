@@ -809,6 +809,48 @@ export const waitlistEntry = pgTable(
   (table) => [uniqueIndex("waitlistEntry_email_uidx").on(table.email)],
 );
 
+/**
+ * One published version of one page (SPEC §10.11) — the history behind the editor's Version
+ * history panel.
+ *
+ * PUBLISH-level, not save-level. A row per publish is a meaningful unit ("what did this page
+ * look like on Tuesday") and is naturally bounded; snapshotting every save would mean thousands
+ * of rows per page from an editor that autosaves, plus a retention policy before it was useful
+ * at all. Save-level history can layer onto this table later.
+ *
+ * `content` is stored only for Papervine-hosted sites, where the bytes exist nowhere else — a
+ * native publish overwrites its objects in place. A Git-backed site keeps `content` null and
+ * stores `commitSha`: the repo already holds every version, so duplicating page bodies into this
+ * table would be storing a second copy of somebody's git history.
+ */
+export const pageVersion = pgTable(
+  "page_version",
+  {
+    id: text("id").primaryKey(),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    // Docs-relative FILE path (`guides/auth.mdx`), not the URL slug — it's what both the draft
+    // buffer and the repo address, and a page can change slug without changing file.
+    path: text("path").notNull(),
+    // The page as published. Null on a Git-backed site; fetch by `commitSha` instead.
+    content: text("content"),
+    // sha256 of the content, so an unchanged page doesn't record a version on every publish.
+    contentSha: text("content_sha").notNull(),
+    // Git-backed sites only: the commit this version was published as.
+    commitSha: text("commit_sha"),
+    // Who published. Null for an automation's publish, which has no user behind it.
+    authorUserId: text("author_user_id").references(() => user.id, { onDelete: "set null" }),
+    // The deployment this belonged to — the join back to the activity feed.
+    deploymentId: text("deployment_id"),
+    publishedAt: timestamp("published_at").defaultNow().notNull(),
+  },
+  (table) => [
+    // The panel's only query: newest-first for one page of one site.
+    index("pageVersion_site_path_idx").on(table.siteId, table.path, table.publishedAt),
+  ],
+);
+
 export const rateLimit = pgTable("rate_limit", {
   // `{surface}:{hashed ip}` — see rateLimitKey(). Never contains a raw IP.
   key: text("key").primaryKey(),
