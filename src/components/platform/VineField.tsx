@@ -56,6 +56,13 @@ const LEAVES = [
 // `dur` and `delay` share no common factor and none repeat: with a shared duration the whole
 // field would pulse in unison, which is the one thing that would make it read as an animation
 // rather than as a plant.
+// `green` marks a leaf that unfurls in leaf-green rather than the brand gradient. Two of the
+// nine, and specifically the two with the LONGEST cycles (34s and 33s) — `dur` is the whole
+// grow-sit-fall-wait loop, so a longer one leaves a longer bare gap and the green leaf is
+// genuinely occasional. Marking two short-cycle leaves instead would have put green on the vine
+// almost continuously, which is a different thing entirely.
+//
+// They're also on opposite strands, so the green never appears twice in the same place.
 const NEW_GROWTH = [
   // center
   { x: 608.9, y: 597.3, r: 58, s: 0.85, dur: 23, delay: 2 },
@@ -64,10 +71,10 @@ const NEW_GROWTH = [
   // left
   { x: 338.9, y: 642.9, r: -64, s: 0.8, dur: 29, delay: 6 },
   { x: 344.5, y: 381, r: 31, s: 0.85, dur: 21, delay: 14 },
-  { x: 379.5, y: 173.8, r: -38, s: 0.7, dur: 34, delay: 25 },
+  { x: 379.5, y: 173.8, r: -38, s: 0.7, dur: 34, delay: 25, green: true },
   // right
   { x: 861.1, y: 642.9, r: 64, s: 0.8, dur: 26, delay: 9 },
-  { x: 855.5, y: 381, r: -31, s: 0.85, dur: 33, delay: 17 },
+  { x: 855.5, y: 381, r: -31, s: 0.85, dur: 33, delay: 17, green: true },
   { x: 820.5, y: 173.8, r: 38, s: 0.7, dur: 24, delay: 3 },
 ];
 
@@ -110,6 +117,13 @@ export function VineField() {
           <linearGradient id="db-vine-grad" x1="0" y1="1" x2="0.15" y2="0">
             <stop offset="0" stopColor="#5b8cff" />
             <stop offset="1" stopColor="#a974ff" />
+          </linearGradient>
+          {/* New growth. Deeper green at the base running to a yellow-green at the tip, the way
+              a young leaf catches light — the same axis as the brand gradient above so the two
+              kinds of leaf read as the same plant. */}
+          <linearGradient id="db-vine-grad-green" x1="0" y1="1" x2="0.15" y2="0">
+            <stop offset="0" stopColor="#22b573" />
+            <stop offset="1" stopColor="#a3e635" />
           </linearGradient>
         </defs>
         <g className="db-vine-sway">
@@ -155,7 +169,10 @@ export function VineField() {
                     }}
                   >
                     <g transform={`rotate(${l.r}) scale(${l.s})`}>
-                      <path className="db-leaf-still" d={LEAF} />
+                      <path
+                        className={`db-leaf-still${l.green ? " db-leaf-green" : ""}`}
+                        d={LEAF}
+                      />
                     </g>
                   </g>
                 </g>

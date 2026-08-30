@@ -254,6 +254,14 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   fill: url(#db-vine-grad);
   fill-opacity: 0.3;
 }
+/* Occasional new growth (VineField's `green` leaves). Carried a little higher than the brand
+   leaves: a mid-green at 0.3 on this near-black backdrop desaturates to grey and the whole point
+   is that you notice it's green. Still a backdrop — it should catch the eye in passing, not
+   compete with the headline in front of it. */
+.db-leaf-green {
+  fill: url(#db-vine-grad-green);
+  fill-opacity: 0.42;
+}
 .db-vine-bud {
   fill: #d7ddff;
   opacity: 0;
