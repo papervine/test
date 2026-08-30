@@ -43,6 +43,12 @@ test.afterAll(async () => {
 });
 
 test("an owner can promote a member to admin from the table", async ({ page }) => {
+  // This spec is the only visitor to `settings/members`, so its first navigation always
+  // cold-compiles that route AND, later, the server action behind the role picker — on a CI
+  // runner that is roughly 4× slower than a dev machine. `test.slow()` raises the TEST budget;
+  // the per-assertion 5s is separate and gets its own headroom below (the widget-settings
+  // pattern, CLAUDE.md).
+  test.slow();
   await page.goto(sitePath(SITE.slug, "settings/members"));
 
   const roleSelect = page.getByLabel(`Role of ${PEER.email}`);
@@ -54,7 +60,13 @@ test("an owner can promote a member to admin from the table", async ({ page }) =
   });
 
   await roleSelect.selectOption("admin");
-  await expect(roleSelect).toHaveValue("admin");
+  // The picker is CONTROLLED by server data (`value={m.role}`) with no optimistic state, so it
+  // snaps straight back to "member" and stays disabled until the whole round trip lands: server
+  // action → Better Auth → `router.refresh()` → the route re-rendered and streamed back. Five
+  // seconds is not that budget on a cold CI route, and the failure reads as "the select is
+  // broken" rather than "the request hasn't finished" — the log showed it resolving 13 times,
+  // still `disabled`, still "member".
+  await expect(roleSelect).toHaveValue("admin", { timeout: 30_000 });
 
   await expect(async () => {
     const sql = postgres(TEST_DB_URL, { max: 1 });

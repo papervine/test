@@ -314,6 +314,18 @@ Consequences worth knowing:
   7.6m there, 2.0m here), so the failure cannot be reproduced locally and one green local run
   isn't evidence. Put `e2e` in `needs:` after several consecutive green CI runs on `main`, not
   on the strength of the fix looking right.
+- **Same root cause, two more specs (2026-08-29): `members-roles` and `domain`.** Both own a
+  route nothing else visits, so both cold-compile it, and neither had `test.slow()`. They present
+  differently enough to look like separate bugs: `domain` overran the 30s test timeout *during*
+  its first `page.goto`, so the navigation was aborted and Playwright reported
+  `net::ERR_ABORTED; maybe frame was detached?` — which reads as a crashed page rather than a
+  clock running out. And `members-roles` asserted `toHaveValue("admin")` on a select that is
+  CONTROLLED by server data with no optimistic state, so the DOM cannot show the new value until
+  the whole round trip lands (server action → Better Auth → `router.refresh()` → route
+  re-rendered and streamed back); the 5s per-assertion budget is not that budget on a cold route.
+  The give-away in the log is the locator resolving over and over to a still-`disabled` select
+  holding the old value — pending, not broken. **When an e2e assertion watches a controlled input
+  change, the budget it needs is the server round trip, not the render.**
 - **A missing Vercel secret fails the job loudly**, unlike `deploy-trigger`, which exits 0 when
   unconfigured. A skip here would mean production silently stops receiving deploys.
 - The build still runs **on Vercel**, so `vercel.json`'s `buildCommand` stays the one definition

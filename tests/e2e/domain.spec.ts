@@ -30,11 +30,17 @@ test.describe("custom domain setup", () => {
   test("connects a domain, persists it, and toggles /docs hosting", async ({
     page,
   }) => {
+    // Same cold-route budget problem as members-roles: this spec owns `settings/domain`, so its
+    // first navigation compiles the route from scratch. When that overruns the 30s test timeout
+    // the navigation is aborted mid-flight and Playwright reports
+    // `net::ERR_ABORTED; maybe frame was detached?` — which reads like a crashed page rather
+    // than a clock running out, and is why this spec has looked flaky for weeks.
+    test.slow();
     // URL-scoped: open this site's settings directly — no shared active-site cookie.
     await page.goto(sitePath(SITE.slug, "settings/domain"));
     await expect(
       page.getByRole("heading", { name: "Set up your custom domain" }),
-    ).toBeVisible();
+    ).toBeVisible({ timeout: 60_000 });
 
     // Enter a domain and connect it.
     await page.getByPlaceholder("docs.example.com").fill(DOMAIN);
