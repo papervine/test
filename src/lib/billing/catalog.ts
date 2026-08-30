@@ -17,7 +17,11 @@ export type PlanFeatureKey =
   | "adminApis"
   | "advancedInsights"
   | "multiRepo"
-  | "scim";
+  | "scim"
+  // Not a capability but the absence of one: hides the "Powered by Papervine" badge on this
+  // org's docs sites. An entitlement rather than a hardcoded plan check so moving it down a
+  // tier is a catalog edit and a republish (see showsPoweredByBadge).
+  | "whiteLabel";
 
 export const PLAN_FEATURE_KEYS: readonly PlanFeatureKey[] = [
   "assistant",
@@ -30,6 +34,7 @@ export const PLAN_FEATURE_KEYS: readonly PlanFeatureKey[] = [
   "advancedInsights",
   "multiRepo",
   "scim",
+  "whiteLabel",
 ] as const;
 
 // Scale limits. -1 = custom/unlimited (Enterprise).

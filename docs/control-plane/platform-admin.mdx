@@ -63,6 +63,19 @@ those names can't be used as organization slugs: `admin`, `preview`, `app`, `api
 `signup`, `onboarding`, and `accept-invite`. Creating an organization whose name slugifies to one
 of these is rejected with a clear error — pick a different name.
 
+## The Papervine badge on customer sites
+
+Every tenant docs site below Enterprise renders a small **Powered by Papervine** link at the
+bottom of the page. Which plans carry it is a plan **entitlement** (`whiteLabel`), not something
+compiled in — so moving it to another tier is an edit to `catalog.json` followed by
+`billing:sync`, with no deploy.
+
+Two behaviours worth knowing when someone reports it looks wrong. A subscription stays pinned to
+the plan version it was bought on, so an Enterprise customer whose version predates the
+entitlement is handled by falling back to the plan itself — they never see the badge. And if the
+database is briefly unreachable the badge is **hidden** rather than shown, because putting it on
+a white-labelled site is a worse failure than leaving it off a Free one.
+
 ## The waitlist
 
 The marketing home's primary button opens a two-field form — an email address, and an optional

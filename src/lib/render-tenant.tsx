@@ -25,6 +25,8 @@ import { resolveTheme, themeCssVars } from "@papervine/renderer/lib/theme";
 import { Navbar } from "@papervine/renderer/components/Navbar";
 import { NavTabs } from "@papervine/renderer/components/NavTabs";
 import { Sidebar } from "@papervine/renderer/components/Sidebar";
+import { PoweredBy } from "@/components/PoweredBy";
+import { showsPoweredBy } from "@/lib/powered-by-store";
 import { TableOfContents } from "@papervine/renderer/components/TableOfContents";
 import { PageActions } from "@papervine/renderer/components/PageActions";
 import { mdHref } from "@papervine/renderer/lib/llms-format";
@@ -250,6 +252,10 @@ export async function TenantDocsShell({
   // so this shares the lookup buildNavCached already does.
   const record = await getSiteBySlug(slug);
   const assistantOn = record?.assistantEnabled ?? true;
+  // Rides the same per-request-cached site lookup, and is itself cached for a minute — this is
+  // the render path of every docs page, so it must not add a query per view. Hidden with no
+  // database and on any error (see powered-by-store).
+  const badge = await showsPoweredBy(record?.organizationId ?? null);
 
   const canAccess = draft?.showGated ? () => true : await readerAccess(slug);
   return contentContext.run(src, async () => {
@@ -292,6 +298,9 @@ export async function TenantDocsShell({
             component listens for. Tenant pages render outside the apex (docs) group's
             layout, so mount it here. Skipped when the kill switch is off. */}
         {assistantOn && <Assistant site={slug} />}
+        {/* Last in the shell so it sits under the content on every page — including the API
+            reference and the not-found page, which never touch TenantDocsArticle. */}
+        {badge && <PoweredBy />}
       </>
     );
   });

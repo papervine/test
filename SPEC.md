@@ -364,6 +364,42 @@ the closing band's *Get started — free* still create real accounts. A waitlist
 that's already open is friction, and the three CTAs currently contradict each other. This is only
 coherent once access is actually gated.
 
+**Status 2026-08-29 — "Powered by Papervine" on every plan below Enterprise.** A quiet text
+link at the bottom right of each tenant docs page, in the flow of the document rather than a
+`position: fixed` corner sticker: a fixed badge sits on top of what the reader is reading and
+follows them down every page, which is a heavier tax on a customer's site than the attribution is
+worth — and the assistant here is a full-height right-hand drawer, so that corner is occupied
+whenever it's open. Text only, because the brand logo exists in this repo as a PNG and nothing
+else; an approximated SVG path is worse than no mark.
+
+**It's an entitlement (`whiteLabel`), not a `planKey === "enterprise"` check.** That's how every
+other plan difference is expressed here, so moving the badge down a tier is a `catalog.json` edit
+plus `billing:sync` rather than a deploy. Trial deliberately does NOT get it: a trial that hides
+the badge and then shows it on expiry is a nasty surprise, and losing the badge should be
+something you buy rather than something you briefly had.
+
+Three properties the render path forced, all of them about a page that must never 500:
+
+- **Survives a missing database.** `PAPERVINE_CONTENT` (the CLI, the smoke gate) short-circuits
+  before touching the client, the same way `getSiteBySlug` does. Note the consequence, which is
+  a decision rather than a side effect: **self-hosted CLI sites carry no badge.** Putting one on
+  somebody's own Elastic-licensed deployment is a licensing and positioning question, not an
+  implementation detail — revisit deliberately if ever.
+- **Fails toward HIDING.** A transient DB error showing the badge on a paying Enterprise
+  customer's white-labelled docs is a regression of the exact thing they bought; not showing it
+  on a Free site for a minute costs nothing. The asymmetry is why the error branch returns false.
+- **Cached 60s** (`unstable_cache`), or every page view pays two queries for an answer that
+  changes a handful of times ever. Short enough that "I upgraded and it's still there" resolves
+  before anyone reports it. Note that `revalidate` is stale-while-revalidate: after the window,
+  the *next* request still gets the old answer and the one after it is fresh — which is exactly
+  what made this look broken while testing until a second request went through.
+
+**A subscription stays pinned to the plan version it was bought on**, so an Enterprise customer
+can legitimately hold entitlements with no `whiteLabel` key at all. Reading that `undefined` as
+falsy would brand the docs they pay to keep unbranded, so the decision falls back to the plan key
+for exactly that window (pinned by `powered-by.test.ts`, which also asserts the catalog has the
+key on every plan so nothing relies on the fallback once published).
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,

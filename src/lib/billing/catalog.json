@@ -29,7 +29,8 @@
           "adminApis": false,
           "advancedInsights": false,
           "multiRepo": false,
-          "scim": false
+          "scim": false,
+          "whiteLabel": false
         }
       },
       "display": {
@@ -72,7 +73,8 @@
           "adminApis": true,
           "advancedInsights": false,
           "multiRepo": false,
-          "scim": false
+          "scim": false,
+          "whiteLabel": false
         }
       },
       "display": {
@@ -114,7 +116,8 @@
           "adminApis": true,
           "advancedInsights": true,
           "multiRepo": true,
-          "scim": false
+          "scim": false,
+          "whiteLabel": false
         }
       },
       "display": {
@@ -156,7 +159,8 @@
           "adminApis": true,
           "advancedInsights": true,
           "multiRepo": true,
-          "scim": true
+          "scim": true,
+          "whiteLabel": true
         }
       },
       "display": {
@@ -201,7 +205,8 @@
           "adminApis": true,
           "advancedInsights": true,
           "multiRepo": true,
-          "scim": false
+          "scim": false,
+          "whiteLabel": false
         }
       }
     }
