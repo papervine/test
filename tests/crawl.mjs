@@ -41,7 +41,12 @@ function slugsIn(root) {
       if (statSync(full).isDirectory()) walk(full);
       else if (/\.mdx?$/.test(e)) {
         const rel = path.relative(root, full).replace(/\.mdx?$/, "");
-        out.push(rel === "index" ? "" : rel);
+        const slug = rel === "index" ? "" : rel;
+        // Mirrors `isPageSlug` (packages/renderer/lib/content.ts): `skill.md` is an agent
+        // surface served at /skill.md, not a page. Crawling it isn't harmful — it renders the
+        // not-found page, which counts as "fully rendered" — but it inflates the page count and
+        // quietly reports a URL as healthy that is meant not to exist.
+        if (slug !== "skill") out.push(slug);
       }
     }
   };

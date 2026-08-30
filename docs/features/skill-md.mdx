@@ -1,0 +1,129 @@
+---
+title: skill.md
+description: Publish a machine-readable summary of what agents can DO with your product, discoverable at /skill.md, at /.well-known/agent-skills/, and from an A2A agent card.
+public: true
+---
+
+`llms.txt` tells an agent where to **read**. `skill.md` tells it what it can **do**.
+
+They answer different questions and a site benefits from both. An agent that has read your
+`llms.txt` knows your documentation exists and how it's organised. An agent that has read your
+`skill.md` knows that your product can take a payment, what inputs that needs, and what
+constraints apply — so it can decide whether to act at all, before it goes looking for the page
+that explains how.
+
+Papervine serves whatever skill files your repository contains, at the paths agents already look
+for. Nothing to configure.
+
+## Add a skill
+
+Put a `skill.md` at the root of your docs directory — beside `docs.json` — with YAML frontmatter:
+
+```md skill.md
+---
+name: Acme Payments
+description: Take and refund payments. Use when charging a customer, issuing a refund, or reconciling a payout.
+license: MIT
+compatibility: Requires an API key with the payments scope.
+metadata:
+  author: acme
+  version: "1.0"
+---
+
+# Acme Payments
+
+## Capabilities
+...
+```
+
+| Field | Type | What it's for |
+| --- | --- | --- |
+| `name` | string | The skill's name. Its slug is what the discovery endpoints address it by. |
+| `description` | string | One or two sentences on what the skill does. Shown in every index. |
+| `license` | string | The skill's license, e.g. `MIT`. |
+| `compatibility` | string | Requirements or runtime notes. |
+| `metadata` | object | Anything else, as string key-value pairs. |
+| `groups` | array | Restrict the skill to reader groups. See [Private skills](#private-skills). |
+
+The file is served **verbatim**, frontmatter included — the metadata is what the agent reads, not
+chrome to strip.
+
+## More than one skill
+
+A product with several distinct capabilities can publish a skill for each. Give every skill its
+own subdirectory:
+
+```
+.papervine/
+  skills/
+    payments/
+      SKILL.md
+    analytics/
+      SKILL.md
+docs.json
+```
+
+With more than one skill, `/skill.md` redirects to the discovery index rather than picking one
+arbitrarily. A root `skill.md` and a skills directory can coexist; every skill appears in the
+index either way.
+
+
+## Where agents find them
+
+<ResponseField name="GET /skill.md" type="markdown">
+  The skill file. Redirects to the discovery index when the site publishes several.
+</ResponseField>
+
+<ResponseField name="GET /.well-known/agent-skills/index.json" type="json">
+  Discovery, following the agent-skills 0.2.0 specification. Each entry carries a `sha256`
+  digest of the file, so an agent can verify what it fetched.
+</ResponseField>
+
+<ResponseField name="GET /.well-known/agent-skills/{name}/SKILL.md" type="markdown">
+  One skill, by the slug the index advertises.
+</ResponseField>
+
+<ResponseField name="GET /.well-known/skills/index.json" type="json">
+  The same set in the older discovery format, for clients that look for it.
+</ResponseField>
+
+<ResponseField name="GET /.well-known/agent-card.json" type="json">
+  An [A2A](https://a2aproject.github.io/A2A/latest/) 0.3 agent card: your site's name,
+  description, and every skill, in one request. Useful for clients that discover by card instead
+  of walking the endpoints above.
+</ResponseField>
+
+Every URL in the agent card is absolute, so the card stays correct when an agent copies it
+somewhere else.
+
+## Private skills
+
+If your site uses [reader authentication](/auth/reader-auth), add a `groups` array to a skill's
+frontmatter to restrict it:
+
+```md
+---
+name: Internal Tooling
+description: Operations only.
+groups:
+  - staff
+---
+```
+
+These endpoints are public and carry no reader session, the same as `llms.txt` and the
+[assistant widget](/features/assistant-widget). A restricted skill is therefore withheld
+**entirely**: it doesn't appear in any index, it doesn't appear in the agent card, and its own
+URL answers `404` — the same answer a skill that doesn't exist gets, so the response can't be
+used to discover that it's there.
+
+## A skill file is not a page
+
+`skill.md` lives in your docs directory but isn't documentation. It doesn't render as a page,
+doesn't appear in your navigation, and isn't included in `llms.txt` — so a capability summary is
+never indexed as if it were a guide.
+
+<Note>
+  Skill files are served from your repository. Papervine doesn't generate one for you: a summary
+  of what your product can do is a claim about your product, and an inferred one is a claim
+  nobody checked.
+</Note>

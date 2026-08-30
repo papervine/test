@@ -70,7 +70,16 @@ function isAgentSurface(pathname: string): boolean {
     pathname === "/llms.txt" ||
     pathname === "/llms-full.txt" ||
     pathname === "/.well-known/llms.txt" ||
-    pathname === "/.well-known/llms-full.txt"
+    pathname === "/.well-known/llms-full.txt" ||
+    // skill.md and its discovery endpoints (SPEC §9.1). Prefix matches, not equality, because
+    // each skill is addressed individually under these directories. `/skill.md` also has to be
+    // named here explicitly for a second reason: it ends in `.md`, so without this it would be
+    // caught by the page-Markdown-twin rewrite below and looked up as a docs page called
+    // "skill" — which is exactly the page `isPageSlug` now refuses to serve.
+    pathname === "/skill.md" ||
+    pathname === "/.well-known/agent-card.json" ||
+    pathname.startsWith("/.well-known/agent-skills/") ||
+    pathname.startsWith("/.well-known/skills/")
   );
 }
 
@@ -377,7 +386,13 @@ export function middleware(req: NextRequest) {
 
   // Apex `.md` page twins. On the apex this matters most in single-repo preview mode
   // (`papervine dev` / the published CLI), which is where the docs being previewed live.
-  if (PAGE_MD_RE.test(pathname) && !pathname.startsWith("/api/")) {
+  //
+  // `isAgentSurface` is checked FIRST because two of those surfaces end in `.md` — `/skill.md`
+  // and `/.well-known/agent-skills/{name}/SKILL.md`. Without this they are rewritten to the
+  // page-Markdown twin and looked up as docs pages named "skill" and ".well-known/…", which is
+  // exactly the page `isPageSlug` refuses to serve: the route exists, the file exists, and the
+  // request 404s anyway.
+  if (!isAgentSurface(pathname) && PAGE_MD_RE.test(pathname) && !pathname.startsWith("/api/")) {
     const url = req.nextUrl.clone();
     url.pathname = pageMdPath(pathname);
     return NextResponse.rewrite(url);

@@ -400,6 +400,45 @@ falsy would brand the docs they pay to keep unbranded, so the decision falls bac
 for exactly that window (pinned by `powered-by.test.ts`, which also asserts the catalog has the
 key on every plan so nothing relies on the fallback once published).
 
+**Status 2026-08-30 — tenant sites serve `skill.md` and the agent discovery endpoints.**
+`llms.txt` tells an agent where to READ; `skill.md` tells it what it can DO. A site publishes
+whatever skill files its repo contains, at the paths agents already look for: `/skill.md`,
+`/.well-known/agent-skills/index.json` (+ `/{slug}/SKILL.md`, with a sha256 digest per the
+agent-skills 0.2.0 discovery spec), the older `/.well-known/skills/` pair, and an A2A 0.3
+`/.well-known/agent-card.json` that answers the whole thing in one request. Both a root
+`skill.md` and a `.papervine/skills/{name}/SKILL.md` directory are read — and a legacy skills directory
+too, so a repo migrating over keeps working with nothing moved (§10.6: match the format).
+
+**Author-supplied only, deliberately.** The obvious next step is generating a skill file from
+the docs with an agentic loop when the author ships none. Not done, and not just for cost: a
+capability summary is a *claim about the product*, and an inferred one is a claim nobody
+checked. An agent that acts on a hallucinated capability fails in the customer's product, not
+ours. If it lands later it should be opt-in and reviewable, not silently published.
+
+Four things this ran into, all of them about a file that lives in the docs tree without being
+documentation:
+
+- **`isPageSlug` had to guard `loadPage`, not just the listing.** Filtering only `listPageSlugs`
+  kept `skill` out of the nav and out of `llms.txt` while `/skill` still happily rendered the
+  capability summary as a docs page to anyone who typed the URL.
+- **Two of these paths end in `.md`**, so the apex's page-Markdown-twin rewrite claimed
+  `/skill.md` and `/.well-known/agent-skills/{name}/SKILL.md` and looked them up as pages —
+  which `isPageSlug` then refuses. Route present, file present, 404 anyway. `isAgentSurface` is
+  now checked first. Same class as the Sentry-tunnel gotcha, different rewrite.
+- **`loadSkills` must go through the renderer's `source()` accessor, not
+  `contentContext.getStore()`.** A tenant request has a source in context; the apex and
+  single-repo preview (the CLI, the smoke gate) have none and fall back to the default. Reading
+  the store directly made every skill vanish on exactly those hosts — and the smoke gate, which
+  runs in that mode, is what caught it.
+- **`ContentSource` gained `listRaw(prefix)`**, because a skills *directory* has no fixed names
+  to `loadRaw`. On the storage source it filters the same cached key listing `listPageSlugs`
+  already does, so discovery costs no extra LIST.
+
+The endpoints carry no reader session, like `llms.txt` and the widget, so they serve the public
+subset: a skill with `groups:` is withheld entirely — absent from every index and 404 at its own
+URL, indistinguishable from one that doesn't exist. Withheld rather than trimmed, because a
+capability summary is one document and there is no partial version of it that is safe.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,

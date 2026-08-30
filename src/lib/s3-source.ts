@@ -4,6 +4,7 @@ import { parseDocsConfig } from "@papervine/renderer/lib/config";
 import {
   parsePage,
   PAGE_EXTS,
+  isPageSlug,
   type AssetDimensions,
   type ContentSource,
 } from "@papervine/renderer/lib/content";
@@ -93,6 +94,7 @@ export function s3Source(siteId: string, version = ""): ContentSource {
       return config;
     },
     async loadPage(slug) {
+      if (!isPageSlug(slug)) return null;
       const normalized = slug === "" || slug === "/" ? "index" : slug;
       for (const ext of PAGE_EXTS) {
         const raw = await readPageRaw(`${normalized}${ext}`);
@@ -103,12 +105,20 @@ export function s3Source(siteId: string, version = ""): ContentSource {
     async loadRaw(relPath) {
       return readRaw(relPath.replace(/^\//, ""));
     },
+    async listRaw(rawPrefix) {
+      // Rides the SAME cached key listing as listPageSlugs — one LIST per site version, not one
+      // per lookup.
+      const keys = await readKeys();
+      const want = rawPrefix.replace(/^\//, "");
+      return keys.map((k) => k.slice(prefix.length)).filter((k) => k.startsWith(want));
+    },
     async listPageSlugs() {
       const keys = await readKeys();
       return keys
         .filter((k) => PAGE_EXTS.some((e) => k.endsWith(e)))
         .map((k) => k.slice(prefix.length).replace(/\.mdx?$/, ""))
-        .map((s) => (s === "index" ? "" : s));
+        .map((s) => (s === "index" ? "" : s))
+        .filter(isPageSlug);
     },
     async loadAssetDimensions() {
       const raw = await readDimensions();

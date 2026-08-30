@@ -863,6 +863,82 @@ async function run() {
       log(`  ${failures.length === before ? "✓" : "✗"} mcp server (/mcp tools/list + tools/call)`);
     }
 
+    // skill.md and its discovery endpoints (SPEC §9.1). The document shapes are unit-tested
+    // (`tests/unit/skills.test.ts`); what only a real request proves is that the files are
+    // discovered through the content source, that the routes survive the middleware, and — the
+    // one that matters — that a group-restricted skill never reaches a public endpoint.
+    {
+      const before = failures.length;
+      const get = (path) => fetch(`${BASE}${path}`, { signal: AbortSignal.timeout(30_000) });
+      try {
+        // Three fixture skills, one of them gated: /skill.md redirects rather than picking one.
+        const root = await get("/skill.md");
+        if (root.status !== 200 && root.status !== 307) {
+          failures.push(`[skill.md] expected 200 or 307, got ${root.status}`);
+        }
+
+        const idx = await get("/.well-known/agent-skills/index.json");
+        if (idx.status !== 200) {
+          failures.push(`[agent-skills] expected 200, got ${idx.status}`);
+        }
+        const index = await idx.json().catch(() => null);
+        const names = (index?.skills ?? []).map((k) => k.name);
+        for (const needle of ["fixtures-skill", "second-fixture"]) {
+          if (!names.includes(needle)) failures.push(`[agent-skills] missing skill "${needle}"`);
+        }
+        // The whole point of the gate: a `groups:` skill is absent from the index AND from its
+        // own URL, and the two must agree — an index that hides it while the URL serves it is
+        // worse than no gate at all.
+        if (names.includes("gated-fixture")) {
+          failures.push("[agent-skills] a group-restricted skill leaked into the index");
+        }
+        const gated = await get("/.well-known/agent-skills/gated-fixture/SKILL.md");
+        if (gated.status !== 404) {
+          failures.push(`[agent-skills] gated skill fetchable directly (${gated.status})`);
+        }
+        if ((index?.skills ?? []).some((k) => !/^sha256:[0-9a-f]{64}$/.test(k.digest ?? ""))) {
+          failures.push("[agent-skills] a skill is missing its content digest");
+        }
+
+        const one = await get("/.well-known/agent-skills/fixtures-skill/SKILL.md");
+        const oneBody = await one.text();
+        if (!oneBody.includes("SKILL_BODY_MARKER")) {
+          failures.push("[agent-skills] the skill file did not serve its body");
+        }
+        // Served verbatim — the frontmatter is metadata the agent reads, not chrome to strip.
+        if (!oneBody.includes("license: MIT")) {
+          failures.push("[agent-skills] the skill file lost its frontmatter");
+        }
+
+        // The older discovery format answers with the same set.
+        const legacy = await get("/.well-known/skills/index.json");
+        const legacyBody = await legacy.json().catch(() => null);
+        if ((legacyBody?.skills ?? []).length !== names.length) {
+          failures.push("[skills] the two discovery formats disagree on how many skills exist");
+        }
+
+        // The A2A card: one request, whole site.
+        const card = await (await get("/.well-known/agent-card.json")).json().catch(() => null);
+        if (card?.protocolVersion !== "0.3") {
+          failures.push("[agent-card] not an A2A 0.3 card");
+        }
+        if (!(card?.skills ?? []).every((k) => String(k.url).startsWith("http"))) {
+          failures.push("[agent-card] skill urls must be absolute — the card gets copied around");
+        }
+
+        // A skill file is NOT a docs page: `/skill` must not render it, and it must not appear
+        // in the llms.txt corpus as if it were documentation.
+        const asPage = await get("/skill");
+        const asPageBody = await asPage.text();
+        if (asPageBody.includes("SKILL_BODY_MARKER")) {
+          failures.push("[skill.md] the skill file renders as a docs page at /skill");
+        }
+      } catch (e) {
+        failures.push(`[skill.md] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} skill.md + discovery endpoints (public subset only)`);
+    }
+
     // llms.txt index (SPEC §9.1). Generated from the in-scope content source — here the
     // fixtures repo (DB-free, so the agent-analytics logging just no-ops). The format's rules
     // are unit-tested (`tests/unit/llms-format.test.ts`); what only a real request can prove is

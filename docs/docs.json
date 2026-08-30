@@ -68,7 +68,8 @@
               "features/assistant-widget",
               "features/api-playground",
               "features/mcp-servers",
-              "features/llms-txt"
+              "features/llms-txt",
+              "features/skill-md"
             ]
           },
           {
