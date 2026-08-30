@@ -13,6 +13,10 @@ import { Favicon } from "@papervine/renderer/components/Favicon";
 import { EnvBadge } from "@/components/platform/EnvBadge";
 import { LogRocketInit } from "@/components/platform/LogRocketInit";
 import { ChatwootWidget } from "@/components/platform/ChatwootWidget";
+import { SupportWidget } from "@/components/platform/SupportWidget";
+
+/** Flip back to `true` to restore the Chatwoot inbox and drop <SupportWidget /> above it. */
+const CHATWOOT_ENABLED = false;
 
 // The root layout renders for every host, including tenant docs. Read config within
 // the request's tenant content source (if any) so the title/theme/favicon — and, crucially,
@@ -113,13 +117,27 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <>
             <Analytics />
             <LogRocketInit appId={process.env.NEXT_PUBLIC_LOGROCKET_APP_ID} />
-            {/* Our support inbox. Same gate for a sharper reason: on a tenant's docs site this
+            {/* Our support channel. Same gate for a sharper reason: on a tenant's docs site this
                 would invite THEIR readers to chat with US, and it would collide with the
-                tenant's own assistant launcher in the same corner. */}
-            <ChatwootWidget
-              websiteToken={process.env.NEXT_PUBLIC_CHATWOOT_TOKEN}
-              baseUrl={process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL}
-            />
+                tenant's own assistant launcher in the same corner.
+
+                TEMPORARY: our own assistant widget stands in for the Chatwoot inbox — we sell
+                this, so we should be answering with it. Chatwoot is left mounted-but-inert
+                right below; putting it back is flipping CHATWOOT_ENABLED and dropping
+                <SupportWidget />.
+
+                PRODUCTION ONLY, and not squeamishness: the widget's chat endpoint checks the
+                request Origin against the site's allowlist, so from localhost or a preview URL
+                every call is refused and the failures land in the console — which the e2e specs
+                assert stays clean (editor.spec.ts). There is nothing to see locally anyway,
+                since the widget id below is a production row. */}
+            {process.env.VERCEL_ENV === "production" && <SupportWidget />}
+            {CHATWOOT_ENABLED && (
+              <ChatwootWidget
+                websiteToken={process.env.NEXT_PUBLIC_CHATWOOT_TOKEN}
+                baseUrl={process.env.NEXT_PUBLIC_CHATWOOT_BASE_URL}
+              />
+            )}
           </>
         )}
       </body>
