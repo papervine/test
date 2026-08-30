@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { Analytics } from "@vercel/analytics/next";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
@@ -7,6 +8,7 @@ import type { DocsConfig } from "@papervine/renderer/lib/config";
 import { contentContext, loadConfig } from "@papervine/renderer/lib/content";
 import { requestContentSource, requestAssetBase } from "@/lib/request-source";
 import { requestOrigin } from "@/lib/request-origin";
+import { isAppHost } from "@/lib/tenant-host";
 import { resolveTheme, themeCssVars } from "@papervine/renderer/lib/theme";
 import { appearanceInitScript } from "@papervine/renderer/lib/appearance";
 import { Favicon } from "@papervine/renderer/components/Favicon";
@@ -67,6 +69,14 @@ function buildPlatformThemeScript() {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const { config, assetBase, isTenant } = await loadRequestConfig();
+
+  // The dashboard now mounts the OWNER's own widget (SPEC §8.7, SiteAssistantWidget), and the
+  // embed loader is a per-document singleton whose first init() wins — so our support widget
+  // and theirs can't both live on the app host: whichever mounted first would take the corner
+  // and the other would silently no-op, at worst leaving an owner chatting with OUR docs from
+  // inside their dashboard. Ours yields there and keeps the marketing surfaces, where it's the
+  // only widget and the one people are looking for.
+  const onAppHost = isAppHost((await headers()).get("host"));
 
   const theme = resolveTheme(config.theme);
   const colors = config.colors;
@@ -131,7 +141,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 every call is refused and the failures land in the console — which the e2e specs
                 assert stays clean (editor.spec.ts). There is nothing to see locally anyway,
                 since the widget id below is a production row. */}
-            {process.env.VERCEL_ENV === "production" && <SupportWidget />}
+            {process.env.VERCEL_ENV === "production" && !onAppHost && <SupportWidget />}
             {CHATWOOT_ENABLED && (
               <ChatwootWidget
                 websiteToken={process.env.NEXT_PUBLIC_CHATWOOT_TOKEN}

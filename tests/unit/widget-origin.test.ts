@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { normalizeOrigin, isOriginAllowed, resolveDocsBaseUrl } from "@/lib/widget";
+import {
+  classifyWidgetCaller,
+  normalizeOrigin,
+  isOriginAllowed,
+  resolveDocsBaseUrl,
+} from "@/lib/widget";
 import { domains } from "@/lib/tenant-host";
 
 describe("normalizeOrigin", () => {
@@ -73,6 +78,50 @@ describe("isOriginAllowed", () => {
 
   it("rejects everything when the list is empty", () => {
     expect(isOriginAllowed("https://docs.example.com", [])).toBe(false);
+  });
+});
+
+describe("classifyWidgetCaller", () => {
+  const allowed = ["https://docs.example.com"];
+  const appOrigin = "https://app.papervine.io";
+
+  it("calls an allowlisted customer origin allowlisted", () => {
+    expect(classifyWidgetCaller("https://docs.example.com", allowed, appOrigin)).toBe(
+      "allowlisted",
+    );
+  });
+
+  it("calls our own dashboard origin `dashboard`, NOT allowlisted", () => {
+    // The distinction is the whole point: `dashboard` still owes a session check
+    // (sessionIsOrgMember) before the request is authorized. Collapsing the two would make
+    // the app host an implicit entry in every tenant's allowlist.
+    expect(classifyWidgetCaller(appOrigin, allowed, appOrigin)).toBe("dashboard");
+  });
+
+  it("prefers `allowlisted` when the owner really did allowlist the app host", () => {
+    expect(classifyWidgetCaller(appOrigin, [appOrigin], appOrigin)).toBe("allowlisted");
+  });
+
+  it("denies an unrelated origin", () => {
+    expect(classifyWidgetCaller("https://evil.example", allowed, appOrigin)).toBe("denied");
+  });
+
+  it("denies a missing Origin header", () => {
+    expect(classifyWidgetCaller(null, allowed, appOrigin)).toBe("denied");
+  });
+
+  it("denies everything but the allowlist when the app origin is unknown", () => {
+    // appOriginFor returns null for an unparseable request URL — that must fail closed, not
+    // turn a null origin into a match.
+    expect(classifyWidgetCaller(appOrigin, allowed, null)).toBe("denied");
+    expect(classifyWidgetCaller(null, allowed, null)).toBe("denied");
+    expect(classifyWidgetCaller("https://docs.example.com", allowed, null)).toBe("allowlisted");
+  });
+
+  it("denies a dashboard-looking origin that isn't the app origin", () => {
+    expect(classifyWidgetCaller("https://app.papervine.io.evil.test", allowed, appOrigin)).toBe(
+      "denied",
+    );
   });
 });
 

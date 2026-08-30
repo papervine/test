@@ -2,29 +2,16 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Sparkles } from "lucide-react";
-
-// The loader endpoint. Referenced only from this client component, so the server-rendered HTML
-// of a home page with no demo site contains no trace of the widget (asserted by the smoke gate).
-const EMBED_SRC = "/api/widget/embed.js";
-
-type PapervineAssistantApi = {
-  init: (opts: Record<string, unknown>) => Promise<unknown>;
-  ask: (question: string, options?: { open?: boolean }) => void;
-  update: (config: Record<string, unknown>) => void;
-};
-
-declare global {
-  interface Window {
-    PapervineAssistant?: PapervineAssistantApi;
-  }
-}
+// The loader is referenced only from client components, so the server-rendered HTML of a home
+// page with no demo site contains no trace of the widget (asserted by the smoke gate).
+import {
+  loadPapervineWidget,
+  platformWidgetTheme,
+  watchPlatformTheme,
+  type PapervineAssistantApi,
+} from "@/lib/widget-client";
 
 export type DemoQuestion = { q: string; href: string };
-
-/** The platform's current appearance, which the widget should match. */
-function currentTheme(): "dark" | "light" {
-  return document.documentElement.getAttribute("data-db-theme") === "light" ? "light" : "dark";
-}
 
 /**
  * The "ask" half of the home page's live demo.
@@ -52,27 +39,11 @@ export function AskDemo({
   const load = useCallback((): Promise<PapervineAssistantApi> => {
     if (ready.current) return ready.current;
 
-    ready.current = new Promise<PapervineAssistantApi>((resolve, reject) => {
-      const existing = window.PapervineAssistant;
-      if (existing) return resolve(existing);
-
-      // A module script: the loader reads `import.meta.url` to discover which origin to call
-      // back to, which is only defined for type="module".
-      const tag = document.createElement("script");
-      tag.type = "module";
-      tag.src = EMBED_SRC;
-      tag.onload = () => {
-        const api = window.PapervineAssistant;
-        if (api) resolve(api);
-        else reject(new Error("widget loader ran without defining PapervineAssistant"));
-      };
-      tag.onerror = () => reject(new Error("widget loader failed to load"));
-      document.head.appendChild(tag);
-    })
+    ready.current = loadPapervineWidget()
       .then(async (api) => {
         await api.init({
           id: widgetId,
-          theme: currentTheme(),
+          theme: platformWidgetTheme(),
           title: "Ask the Papervine docs",
           trigger: "Ask the docs",
           starterQuestions: questions.map((q) => q.q),
@@ -90,16 +61,10 @@ export function AskDemo({
 
   // Follow the platform's appearance toggle. The widget lives in a shadow root outside the `.db`
   // shell, so it can't inherit the theme through CSS — it has to be told.
-  useEffect(() => {
-    const observer = new MutationObserver(() => {
-      window.PapervineAssistant?.update({ theme: currentTheme() });
-    });
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["data-db-theme"],
-    });
-    return () => observer.disconnect();
-  }, []);
+  useEffect(
+    () => watchPlatformTheme((theme) => window.PapervineAssistant?.update({ theme })),
+    [],
+  );
 
   const ask = useCallback(
     async (question: string) => {

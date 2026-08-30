@@ -14,7 +14,17 @@ import { site } from "@/lib/db/app-schema";
 // sites are org-scoped, so a resolved site row is one the caller may read and mutate.
 
 export type SiteRow = typeof site.$inferSelect;
-type SiteListItem = { id: string; slug: string; name: string };
+// The rail's site list. It also carries each site's widget identity so the shell can mount
+// the owner's OWN assistant widget beside the dashboard (SPEC §8.7) without a second query
+// per navigation — the rail already derives the active site from the URL, and the widget
+// follows the same choice.
+export type SiteListItem = {
+  id: string;
+  slug: string;
+  name: string;
+  widgetId: string | null;
+  widgetEnabled: boolean;
+};
 
 export type OrgContext = {
   session: NonNullable<Awaited<ReturnType<typeof getSession>>>;
@@ -76,7 +86,13 @@ export async function requireOrg(orgSlug: string): Promise<OrgContext> {
 
 function orgSites(organizationId: string): Promise<SiteListItem[]> {
   return db
-    .select({ id: site.id, slug: site.slug, name: site.name })
+    .select({
+      id: site.id,
+      slug: site.slug,
+      name: site.name,
+      widgetId: site.widgetId,
+      widgetEnabled: site.widgetEnabled,
+    })
     .from(site)
     .where(eq(site.organizationId, organizationId))
     .orderBy(asc(site.createdAt));
@@ -99,6 +115,26 @@ export async function requireSite(
     .limit(1);
   if (!row) notFound();
   return { ...ctx, site: row };
+}
+
+/**
+ * Is the current request's user a member of this org? Non-throwing and membership-ONLY —
+ * for callers outside the dashboard's route tree that have already resolved a site row by
+ * some other key and just need to know whether the viewer owns it. The widget chat route
+ * uses it to authorize the owner's own widget running IN the dashboard, where the request
+ * Origin is our app host rather than an allowlisted customer origin (see
+ * `classifyWidgetCaller`).
+ *
+ * Deliberately does NOT honor the platform-admin bypass that requireOrg allows (SPEC
+ * §10.10): that bypass is a read-only cross-tenant *view*, and an assistant run spends the
+ * tenant's own AI allowance. An operator looking at a customer's dashboard shouldn't be
+ * able to bill them for it.
+ */
+export async function sessionIsOrgMember(organizationId: string): Promise<boolean> {
+  const session = await getSession();
+  if (!session) return false;
+  const orgs = await listOrganizations();
+  return Boolean(orgs?.some((o) => o.id === organizationId));
 }
 
 /**

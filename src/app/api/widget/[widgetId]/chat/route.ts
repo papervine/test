@@ -5,7 +5,9 @@ import { runAssistantConversation } from "@papervine/renderer/lib/assistant-run"
 import { requestContentSource, requestReaderAccess, requestSearchIndexKey } from "@/lib/request-source";
 import { aiRefusalResponse, authorizeAi } from "@/lib/billing/store";
 import { getSiteByWidgetId } from "@/lib/tenant";
-import { isOriginAllowed, resolveDocsBaseUrl } from "@/lib/widget";
+import { sessionIsOrgMember } from "@/lib/dashboard-context";
+import { appOriginFor } from "@/lib/tenant-host";
+import { classifyWidgetCaller, isOriginAllowed, resolveDocsBaseUrl } from "@/lib/widget";
 import { rateLimited } from "@/lib/rate-limit";
 import { checkRateLimit } from "@/lib/rate-limit-store";
 
@@ -55,6 +57,9 @@ export async function OPTIONS(
   const { widgetId } = await params;
   const origin = req.headers.get("origin");
   const site = await getSiteByWidgetId(widgetId);
+  // Allowlist-only, with no dashboard branch: a preflight carries no cookies (by spec), so
+  // there'd be no session to check — and it never needs one, because the dashboard's own
+  // widget calls this route SAME-origin, and a same-origin request is never preflighted.
   if (!site?.widgetEnabled || !isOriginAllowed(origin, site.widgetAllowedOrigins)) {
     return new Response(null, { status: 403 });
   }
@@ -72,9 +77,22 @@ export async function POST(
   if (!site) {
     return Response.json({ error: "Unknown widget." }, { status: 404 });
   }
-  // Opaque to a non-allowlisted origin (no CORS headers — the browser blocks it, and we
+  // Two kinds of authorized caller: an allowlisted customer page, and the owner's own
+  // widget mounted in OUR dashboard (SPEC §8.7) — the app host is in nobody's allowlist,
+  // so that one is authorized by a dashboard session with access to this site instead of
+  // by its origin. Note a same-origin POST still sends `Origin`, so the dashboard's calls
+  // land here looking exactly like a cross-origin one; without this branch they 403.
+  const caller = classifyWidgetCaller(
+    origin,
+    site.widgetAllowedOrigins,
+    appOriginFor(req.url),
+  );
+  const authorized =
+    caller === "allowlisted" ||
+    (caller === "dashboard" && (await sessionIsOrgMember(site.organizationId)));
+  // Opaque to an unauthorized origin (no CORS headers — the browser blocks it, and we
   // don't confirm/deny details beyond that). An already-allowed origin gets a real reason.
-  if (!isOriginAllowed(origin, site.widgetAllowedOrigins)) {
+  if (!authorized) {
     return Response.json({ error: "This origin isn't authorized for this widget." }, { status: 403 });
   }
   if (!site.widgetEnabled) {

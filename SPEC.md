@@ -2481,6 +2481,57 @@ precedent already in the codebase rather than inventing a new access model:
 > (with and without a known base) via `renderMarkdownHTML`'s new optional second
 > argument. Verified live: a widget embedded on a separate local origin now renders a
 > citation link pointing at the tenant's own docs host, not the embedding page's origin.
+>
+> **The widget runs in the owner's own dashboard (2026-08-30).** Enabling Availability now
+> also mounts the site's widget in the control plane itself — every app-host surface, the
+> editor included — so an owner can *use* the thing they just switched on instead of reading
+> a snippet about it. The real embed script, loaded from the same `/api/widget/embed.js`
+> against the same chat route: there is no preview implementation to drift, the same reasoning
+> that made the marketing home's demo (§2) the real widget rather than a bespoke chat UI.
+> Which site it answers from follows the rail's own `pickCurrentSite`, so the bubble is always
+> the site whose dashboard you're looking at, and it unmounts on a site whose widget is off.
+> Three things this needed:
+> - **A second kind of authorized caller.** The app host is in nobody's allowlist and must not
+>   become an implicit entry in everybody's — that would let anything presenting that `Origin`
+>   reach every tenant's widget. So `classifyWidgetCaller` (`src/lib/widget.ts`) separates
+>   `allowlisted` from `dashboard`, and a `dashboard` caller is authorized by
+>   `sessionIsOrgMember` instead: a real dashboard session with membership of the site's org.
+>   Non-obvious detail that makes this necessary at all — **a same-origin POST still sends
+>   `Origin`**, so the dashboard's own calls arrive looking exactly like a cross-origin one and
+>   403 without this branch. The preflight handler deliberately keeps allowlist-only logic: a
+>   preflight carries no cookies, and a same-origin request is never preflighted. Membership
+>   only, *not* the §10.10 platform-admin bypass — that's a read-only cross-tenant view, and an
+>   assistant run spends the tenant's own AI allowance.
+> - **Our support widget yields the app host** (`src/app/layout.tsx`). The embed loader is a
+>   per-document singleton whose first `init()` wins, so ours and theirs cannot coexist: in
+>   production ours auto-mounts from a `data-widget-id` tag, which would have taken the corner
+>   and left an owner chatting with *Papervine's* docs from inside their own dashboard while
+>   their widget silently no-op'd. Ours keeps the marketing surfaces, where it's the only
+>   widget and the one people are looking for.
+> - **`zIndex: 30`, against the loader's near-max default.** On a customer's page the widget
+>   should win over host-page content; in our dashboard it shouldn't win over our own dialogs
+>   and toasts, which share that corner.
+> - **The launcher is a labelled pill** (`trigger: "Ask Assistant"`, matching the docs site's
+>   own header button) rather than a bare bubble — in our own dashboard the corner is ours to
+>   explain. That surfaced a real bug in the shared embed script, fixed for every customer
+>   using `trigger`: the pill separates icon from label with flex `gap`, but the icon was
+>   appended as a **bare text node**, and gap applies only between flex *items* — an anonymous
+>   inline box isn't one, so the emoji sat flush against the label. Now wrapped in a
+>   `.pv-launcher-icon` span; pinned by an assertion in the same e2e case, since the CSS that
+>   makes it work is invisible to a DOM-only check.
+> Also extracted `src/lib/widget-client.ts` — one loader-injection helper, one platform-theme
+> reader/observer, one `Window` augmentation — now shared by the dashboard mount and the home
+> page's demo, which had grown its own copy of all three. An **iframe'd preview pane** on the
+> settings page was the other candidate and was rejected: it contains the widget's `position:
+> fixed` (so modal/panel variants preview honestly) but it is a preview, not the product in
+> place, and it needs the same session-authorized origin branch anyway. Pinned by
+> `classifyWidgetCaller` unit tests and a `tests/e2e/widget-settings.spec.ts` case that proves
+> both directions (no loader script at all while disabled; launcher + correctly-named panel
+> once enabled) with the console-clean assertion. Verified in a real browser, light and dark:
+> flipping Availability made the bubble appear without a reload, it answered from the site's
+> own docs with citations resolving to the tenant host (not the app host), the platform
+> appearance toggle re-themed the open panel without clearing the conversation, and the same
+> `Origin` with no session cookie still 403s.
 
 ---
 

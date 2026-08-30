@@ -461,6 +461,7 @@ export const WIDGET_EMBED_SCRIPT = `
     "  background: #111; color: #fff; border: none; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,0.35);",
     "  font-size: 24px; z-index: var(--pv-zindex); display: flex; align-items: center; justify-content: center; }",
     ".pv-launcher img { width: 28px; height: 28px; border-radius: 50%; }",
+    ".pv-launcher-icon { display: flex; align-items: center; line-height: 1; }",
     ".pv-launcher.pv-launcher-text { width: auto; height: 48px; padding: 0 20px; border-radius: 24px;",
     "  font-size: 14px; font-weight: 600; gap: 8px; }",
     ".pv-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: var(--pv-zindex);",
@@ -729,7 +730,11 @@ export const WIDGET_EMBED_SCRIPT = `
         typeof opts.logo === "string" ? opts.logo : opts.logo[theme] || opts.logo.dark || opts.logo.light;
       launcherChildren.push(el("img", { src: safeHref(logoSrc), alt: "" }));
     } else {
-      launcherChildren.push(text("💬"));
+      // Wrapped in a <span> rather than appended as a bare text node: the pill variant
+      // separates icon from label with flex \`gap\`, and gap applies between flex ITEMS —
+      // a raw text node is an anonymous inline box that doesn't participate, so the emoji
+      // sat flush against the label text.
+      launcherChildren.push(el("span", { class: "pv-launcher-icon" }, [text("💬")]));
     }
     // opts.trigger, if given, makes the launcher a pill with a text label instead of
     // the bare icon circle.

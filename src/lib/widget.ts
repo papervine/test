@@ -59,3 +59,30 @@ export function resolveDocsBaseUrl(
   const apexBase = host.replace(/^(app|www)\./, "");
   return `${proto}://${apexBase}/sites/${site.slug}`;
 }
+
+/**
+ * What kind of caller an incoming widget chat request is, judged from its `Origin` alone.
+ *
+ * - `allowlisted` — a customer page on an origin the owner authorized. Authorized, done.
+ * - `dashboard` — our own control plane (SPEC §10 serves it from the `app.` host), where the
+ *   owner's own widget is mounted so they can use the thing they're configuring. NOT
+ *   authorized by that origin: the app host is ours, not theirs, so it appears in no
+ *   allowlist and must never become an implicit one — that would let anything presenting
+ *   this Origin reach every tenant's widget. A `dashboard` caller still has to prove a
+ *   dashboard session with access to the site (`sessionIsOrgMember`).
+ * - `denied` — everything else.
+ *
+ * Pure, and deliberately separate from that session check, so the origin half of the
+ * decision is unit-testable on its own (tests/unit/widget-origin.test.ts).
+ */
+export type WidgetCaller = "allowlisted" | "dashboard" | "denied";
+
+export function classifyWidgetCaller(
+  origin: string | null,
+  allowedOrigins: string[],
+  appOrigin: string | null,
+): WidgetCaller {
+  if (isOriginAllowed(origin, allowedOrigins)) return "allowlisted";
+  if (origin && appOrigin && origin === appOrigin) return "dashboard";
+  return "denied";
+}

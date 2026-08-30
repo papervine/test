@@ -3,6 +3,7 @@ import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { getBillingLookup } from "@/lib/billing/store";
 import { trialStatus } from "@/lib/billing/core";
 import { AppRail } from "@/components/app/AppRail";
+import { SiteAssistantWidget } from "@/components/app/SiteAssistantWidget";
 import { PlatformAdminBanner } from "@/components/app/PlatformAdminBanner";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Toaster } from "@/components/ui/sonner";
@@ -63,6 +64,12 @@ export default async function OrgLayout({
         {/* Dashboard-wide action feedback (sonner) — the single mount for every app-host surface,
             the editor included. A second <Toaster/> inside a page renders every toast twice. */}
         <Toaster />
+        {/* The owner's OWN assistant widget, for whichever site the rail considers active
+            (SPEC §8.7) — the real embed script, not a preview, so enabling it on
+            Settings → Widget puts the thing you just enabled in the corner to try. Mounted
+            beside the Toaster for the same reason: one mount for every app-host surface,
+            the editor included. Renders nothing until a site has the widget enabled. */}
+        <SiteAssistantWidget sites={sites} />
         {/* Session replay, control plane ONLY — see LogRocketInit for why it is mounted here and
             not in the root layout (which also renders tenant docs). No-ops without
             NEXT_PUBLIC_LOGROCKET_APP_ID. */}
