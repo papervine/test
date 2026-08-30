@@ -487,6 +487,25 @@ Three things this cost, all found by running it rather than reading it:
 The template (name, metadata, Resources, the closing llms.txt line) is stamped by us rather than
 generated — those are facts we hold, and they're the likeliest place for a model to invent a URL.
 
+**The sweep schedules; Trigger.dev executes.** The cron route (`/api/skills/generate`) only runs
+the query and fans out one `skill-generate` task per due site. Generating inline there meant ten
+corpus-reading model calls sharing a 300s serverless budget — a ceiling you hit rather than a
+limit you respect, and a site that kept landing late in the batch would starve. On the queue each
+generation gets its own budget, its own run record, and a real failure surface; inline, a failure
+was a `console.warn` in a log nobody reads. The enqueue is keyed
+`skill:{siteId}:{skillStaleAt}` so two overlapping sweeps can't queue the same work twice — the
+key is stable for the staleness episode rather than freshly random, which is the bug that once
+defeated the automation fan-out's own breaker. With no executor configured (local dev without
+`TRIGGER_SECRET_KEY`) it falls back to generating inline, capped at 5, so the route stays
+runnable on its own.
+
+Breaking that out also forced `skills-source.ts` and `skill-generate.ts` apart: they had grown a
+circular import (the serving layer read the generated file, the generator asked the serving layer
+whether an authored one existed). tsc tolerates it because the bindings are functions called at
+runtime; the Trigger build is a different bundler deciding module order, which is not a bet worth
+taking. The generated-file helpers moved down into `skills-source`, so the dependency runs one
+way.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,

@@ -1,7 +1,8 @@
 import "server-only";
 import { listRaw, loadRaw } from "@papervine/renderer/lib/content";
-import { loadGeneratedSkill } from "./skill-generate";
+import { getObjectText } from "./storage";
 import {
+  GENERATED_SKILL_PATH,
   parseSkill,
   ROOT_SKILL_PATH,
   SKILL_DIRS,
@@ -56,6 +57,39 @@ export async function loadSkills(): Promise<Skill[]> {
   }
 
   return out;
+}
+
+/**
+ * OUTSIDE the synced content tree, and that placement is load-bearing.
+ *
+ * `skill.md` at the docs root is a file the sync manifest owns: writing there would be a content
+ * change, which marks the site stale, which regenerates it, which writes there again. That is
+ * the self-trigger loop `fireContentUpdateAutomations` exists to break, and this repo has
+ * already paid for it once (a random dedupe key that defeated the breaker and burned toward the
+ * daily cap). A dot-prefixed path outside the manifest can't be swept as stale by the sync and
+ * can't be picked up as a page (`isPageSlug`), so the loop has nowhere to close.
+ */
+export function generatedSkillKey(siteId: string): string {
+  return `sites/${siteId}/${GENERATED_SKILL_PATH}`;
+}
+
+/**
+ * Read the generated file for a site, if one exists.
+ *
+ * Straight from storage rather than through the content source's `loadRaw`, and that is not an
+ * optimisation — it's required. `loadRaw` is cached under the site's CONTENT version key
+ * (`${sha}:${updatedAt}`), and generation deliberately does not bump `updatedAt` (doing so would
+ * invalidate every page of a site whose pages didn't change, and would mark the site's content
+ * as moved — the loop). So a regenerated file written under an unchanged version key is
+ * invisible to `loadRaw` until something else changes the content: the file on disk is new and
+ * every reader keeps getting the old one. Caught by regenerating twice and watching the second
+ * one not appear.
+ *
+ * Uncached is fine here: these endpoints already carry `s-maxage=3600`, so the repeat fetches an
+ * agent crawl produces are absorbed at the edge, not by this call.
+ */
+export async function loadGeneratedSkill(siteId: string): Promise<string | null> {
+  return getObjectText(generatedSkillKey(siteId)).catch(() => null);
 }
 
 /**

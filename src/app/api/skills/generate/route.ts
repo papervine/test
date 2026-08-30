@@ -9,8 +9,12 @@ import { sweepSkillGeneration } from "@/lib/skill-generate";
 //
 // A missed run costs nothing permanent — the flag stays set and the next run picks the site up,
 // which is why this is a sweep over state rather than a queue of events.
+//
+// This route only DECIDES. The generation itself is a Trigger.dev task, one run per site, so a
+// corpus-reading model call never has to fit inside a serverless budget shared with nine others.
+// Hence the modest maxDuration: what happens here is a query and a fan-out of enqueues.
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 // Same cron auth contract as the other sweeps: Vercel sends
 // `Authorization: Bearer ${CRON_SECRET}`; when unset (local/dev), allow manual runs.

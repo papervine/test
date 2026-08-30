@@ -5,10 +5,10 @@ import { and, eq, isNotNull, or, isNull } from "drizzle-orm";
 import { aiConfigured, aiModel, aiModelId } from "@papervine/renderer/lib/ai-model";
 import { contentContext, listPageSlugs, loadPage, loadRaw } from "@papervine/renderer/lib/content";
 import { db } from "./db";
+import { putObject } from "./storage";
 import { site } from "./db/app-schema";
-import { getObjectText, putObject } from "./storage";
 import { s3Source } from "./s3-source";
-import { GENERATED_SKILL_PATH } from "./skills";
+import { isExecutorConfigured } from "./automations/executor";
 import {
   buildSkillPrompt,
   capabilityFingerprint,
@@ -16,7 +16,7 @@ import {
   shouldGenerate,
   type SkillPage,
 } from "./skill-generation";
-import { loadSkills } from "./skills-source";
+import { generatedSkillKey, loadSkills } from "./skills-source";
 
 /**
  * Generate a site's `skill.md` from its documentation.
@@ -30,39 +30,6 @@ import { loadSkills } from "./skills-source";
  * triggered is the kind of charge that ends up in a support ticket. So no `authorizeAi` gate and
  * no `recordAiUsage` debit — deliberately, and the reason is here so nobody "fixes" it later.
  */
-
-/**
- * OUTSIDE the synced content tree, and that placement is load-bearing.
- *
- * `skill.md` at the docs root is a file the sync manifest owns: writing there would be a content
- * change, which marks the site stale, which regenerates it, which writes there again. That is
- * the self-trigger loop `fireContentUpdateAutomations` exists to break, and this repo has
- * already paid for it once (a random dedupe key that defeated the breaker and burned toward the
- * daily cap). A dot-prefixed path outside the manifest can't be swept as stale by the sync and
- * can't be picked up as a page (`isPageSlug`), so the loop has nowhere to close.
- */
-function generatedKey(siteId: string): string {
-  return `sites/${siteId}/${GENERATED_SKILL_PATH}`;
-}
-
-/**
- * Read the generated file for a site, if one exists.
- *
- * Straight from storage rather than through the content source's `loadRaw`, and that is not an
- * optimisation — it's required. `loadRaw` is cached under the site's CONTENT version key
- * (`${sha}:${updatedAt}`), and generation deliberately does not bump `updatedAt` (doing so would
- * invalidate every page of a site whose pages didn't change, and would mark the site's content
- * as moved — the loop). So a regenerated file written under an unchanged version key is
- * invisible to `loadRaw` until something else changes the content: the file on disk is new and
- * every reader keeps getting the old one. Caught by regenerating twice and watching the second
- * one not appear.
- *
- * Uncached is fine here: these endpoints already carry `s-maxage=3600`, so the repeat fetches an
- * agent crawl produces are absorbed at the edge, not by this call.
- */
-export async function loadGeneratedSkill(siteId: string): Promise<string | null> {
-  return getObjectText(generatedKey(siteId)).catch(() => null);
-}
 
 type SiteRow = typeof site.$inferSelect;
 
@@ -158,7 +125,7 @@ export async function generateSkillForSite(
         object.description.trim() || parsedConfig?.description || `Documentation for ${row.name}.`,
     });
 
-    await putObject(generatedKey(row.id), file, "text/plain; charset=utf-8");
+    await putObject(generatedSkillKey(row.id), file, "text/plain; charset=utf-8");
     await db
       .update(site)
       .set({ skillStaleAt: null, skillFingerprint: fingerprint, skillGeneratedAt: new Date() })
@@ -190,16 +157,25 @@ function safeJson(raw: string): { name?: string; description?: string; navigatio
   }
 }
 
+/** The Trigger.dev task that generates for one site (src/trigger/skill-generate.ts). */
+export const SKILL_GENERATE_TASK_ID = "skill-generate";
+
 /**
- * The sweep. Picks up sites that have published since we last looked, plus sites that have never
- * been generated at all, and works through them one at a time.
+ * The sweep: decide WHO is due, and hand each one to the executor.
  *
- * Serial and capped rather than parallel: this is background work with no one waiting on it, and
- * a burst of concurrent model calls across every tenant is the shape that turns a quiet cron
- * into an incident.
+ * Only the decision lives here — a few milliseconds of SQL. The work is a model call over a
+ * whole corpus, and doing ten of those serially inside the cron route meant running at a 300s
+ * serverless ceiling, where a site that kept landing late in the batch would never get its turn.
+ * On the task queue each generation gets its own budget, its own retry, and its own run record;
+ * a failure here is a `console.warn` in a log nobody reads.
+ *
+ * With no executor configured (local dev without TRIGGER_SECRET_KEY) it generates inline
+ * instead, so the cron route stays runnable on its own — with a smaller cap, because that path
+ * *is* the one with the ceiling.
  */
-export async function sweepSkillGeneration(limit = 10): Promise<{
+export async function sweepSkillGeneration(limit = 25): Promise<{
   considered: number;
+  enqueued: number;
   generated: number;
   skipped: number;
 }> {
@@ -214,19 +190,38 @@ export async function sweepSkillGeneration(limit = 10): Promise<{
     )
     .limit(limit);
 
+  const executor = isExecutorConfigured();
+  let enqueued = 0;
   let generated = 0;
   let skipped = 0;
-  for (const row of rows) {
+
+  for (const row of rows.slice(0, executor ? rows.length : 5)) {
     try {
-      const result = await generateSkillForSite(row);
-      if (result.status === "generated") generated++;
-      else skipped++;
+      if (!executor) {
+        const result = await generateSkillForSite(row);
+        if (result.status === "generated") generated++;
+        else skipped++;
+        continue;
+      }
+      const { tasks } = await import("@trigger.dev/sdk/v3");
+      await tasks.trigger(
+        SKILL_GENERATE_TASK_ID,
+        { siteId: row.id },
+        {
+          // Keyed on the staleness episode, not just the site: two sweeps overlapping while a
+          // generation is still running must not queue the same work twice. Same shape as the
+          // automation fan-out's `ref` — and, like it, the key has to be STABLE for the episode
+          // rather than freshly random, which is the bug that once defeated that breaker.
+          idempotencyKey: `skill:${row.id}:${row.skillStaleAt?.toISOString() ?? "initial"}`,
+        },
+      );
+      enqueued++;
     } catch (err) {
-      // One site's failure must not stop the sweep — and the flag stays set, so it's retried on
-      // the next run rather than silently dropped.
+      // One site's failure must not stop the sweep — and the flag stays set, so it's picked up
+      // on the next run rather than silently dropped.
       console.warn(`[skills] generation failed for ${row.slug}:`, err);
       skipped++;
     }
   }
-  return { considered: rows.length, generated, skipped };
+  return { considered: rows.length, enqueued, generated, skipped };
 }
