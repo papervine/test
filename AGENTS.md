@@ -706,7 +706,24 @@ npm run prepack --workspace papervine     # rebuild that server (the bin now war
 node tests/crawl.mjs <dir>        # crawl a real repo, report rendered/degraded/500
 npm run widget:playground         # serve the embeddable widget on a real cross-origin test page
 npm run worktree:setup            # a fresh worktree: symlink .env.local to main (share one env), then npm ci
+npm run trigger:local up          # self-hosted Trigger.dev instead of their cloud (down / logs; --wipe to reset)
 ```
+
+**Background work runs on Trigger.dev's HOSTED cloud by default, including in dev.** Nothing in
+this repo points at it — the SDK and CLI both fall back to `https://api.trigger.dev` when
+`TRIGGER_API_URL` is unset, and the `tr_dev_*` key is a cloud key. So `trigger.dev dev` runs the
+worker on your machine but registers it against the cloud dev environment: enqueues leave the
+machine, queue there, and are dispatched back. Two consequences that look like bugs when you
+don't know this. **An enqueued run sits unclaimed when the connected worker belongs to a
+different worktree** — they share one dev environment (see the `worker` layer in
+`scripts/dev.mjs`), so a task defined only in your branch is never picked up by the worker
+running in someone else's. And task payloads and logs leave your machine.
+
+`npm run trigger:local up` runs the whole thing locally instead (`docs/contributing/trigger-local.mdx`).
+It's ~10 containers and their own guidance asks for 6–8GB of RAM, so for a one-off local run the
+cheaper trick is to **leave `TRIGGER_SECRET_KEY` unset**: both the automations executor and skill
+generation check for it and fall back to running the work inline, losing retries and run history
+but needing nothing.
 
 ## Working across worktrees (share one `.env.local`, not copies)
 

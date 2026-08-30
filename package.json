@@ -30,6 +30,7 @@
     "db:seed": "node --env-file=.env.local scripts/seed-dev.mjs",
     "widget:playground": "node --env-file=.env.local scripts/widget-playground.mjs",
     "billing:sync": "node --env-file=.env.local scripts/sync-billing.mjs",
+    "trigger:local": "node scripts/trigger-local.mjs",
     "billing:publish": "node --env-file=.env.local scripts/publish-stripe.mjs"
   },
   "dependencies": {

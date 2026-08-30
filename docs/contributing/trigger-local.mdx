@@ -1,0 +1,93 @@
+---
+title: Running Trigger.dev locally
+description: Automations and skill generation run on Trigger.dev, which talks to their hosted cloud by default. This is how to run the whole thing on your own machine instead.
+public: true
+---
+
+Background work — the automations executor and `skill.md` generation — runs on
+[Trigger.dev](https://trigger.dev). By default that means the **hosted cloud**, even in
+development.
+
+That surprises people, so it's worth stating plainly: `trigger.dev dev` runs the worker on your
+machine, but registers it against Trigger's cloud dev environment. Enqueues leave your machine,
+queue there, and are dispatched back. Nothing in this repository points at the cloud — it's the
+SDK and CLI default when `TRIGGER_API_URL` is unset, and the `tr_dev_*` key is a cloud key.
+
+For most work that's fine. Run it locally when you want task payloads and logs to stay on your
+machine, or to work offline.
+
+## Start it
+
+```bash
+npm run trigger:local up
+```
+
+The first run fetches Trigger's own hosting files at a pinned version and generates the stack's
+secrets. Then, once:
+
+<Steps>
+  <Step title="Sign in">
+    Open `http://localhost:8030`. It signs you in by emailed magic link, which is printed to the
+    container log rather than sent:
+
+    ```bash
+    npm run trigger:local logs
+    ```
+  </Step>
+  <Step title="Create an organization and project">
+    Copy the project ref (`proj_…`) and a dev API key (`tr_dev_…`).
+  </Step>
+  <Step title="Point the repo at it">
+    In `.env.local` — all three, or it won't line up:
+
+    ```bash
+    TRIGGER_API_URL=http://localhost:8030
+    TRIGGER_PROJECT_REF=proj_...
+    TRIGGER_SECRET_KEY=tr_dev_...
+    ```
+
+    The project ref is the one people forget. A self-hosted webapp mints its own refs, and
+    `trigger.config.ts` falls back to the hosted project without it — so the CLI would register
+    your tasks against a project that only exists in the cloud.
+  </Step>
+  <Step title="Restart the dev server">
+    `npm run dev` — the worker layer reads `.env.local`, so it picks the new target up.
+  </Step>
+</Steps>
+
+Stop it with `npm run trigger:local down`, or `down --wipe` to delete its data and the fetched
+files.
+
+## What it costs
+
+This is not a small addition. Trigger's self-hosted stack is around ten containers — webapp,
+Postgres, Redis, ClickHouse, Electric, a registry, MinIO, a Docker proxy and a supervisor — and
+their own guidance asks for 3+ vCPU / 6+ GB RAM for the webapp side and 4+ vCPU / 8+ GB for the
+worker. On a laptop already running this repo's Postgres, MinIO, collab and websocket services
+plus a Next dev server, that is a lot of machine.
+
+If all you want is for a background job to run without the cloud, there's a much cheaper option:
+**leave `TRIGGER_SECRET_KEY` unset**. Both the automations executor and skill generation check
+for it, and fall back to running the work inline in the process that scheduled it. You lose
+retries, run history and the dashboard — but for a single local run, that's usually the trade
+you want.
+
+<Note>
+  The two stacks are deliberately separate. Trigger's Postgres must not be the one `db:seed`
+  truncates, and its MinIO must not be the bucket content sync writes to.
+</Note>
+
+## How it's wired
+
+`scripts/trigger-local.mjs` fetches Trigger's `hosting/docker` directory at a pinned tag into
+`.trigger-local/` (gitignored) and runs **their** compose files unmodified. It doesn't vendor
+them: every image there is already pinned through an environment variable, and their docs are
+explicit that the self-hosted version must stay locked to your CLI version — so copying eleven
+kilobytes of someone else's YAML into this repo would just mean re-syncing it by hand on every
+upgrade. Upgrading is one constant at the top of that script.
+
+The single exception is `docker/trigger-local.override.yml`, which remaps Trigger's MinIO from
+`9000/9001` to `9010/9011`. Their compose is otherwise careful about collisions — Postgres on
+5433, Redis on 6389 — but those two are exactly where this repo's MinIO already listens, and
+without the override the stack fails with `port is already allocated` after most of its
+containers have started.

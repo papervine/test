@@ -43,5 +43,7 @@ _private/
 .env.sentry-build-plugin
 
 .trigger
+# Trigger.dev's own self-hosted stack, fetched from upstream (scripts/trigger-local.mjs).
+.trigger-local/
 # Model eval outputs (evals/run.mjs writes edited corpus copies here)
 evals/.out/

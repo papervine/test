@@ -1,0 +1,19 @@
+# Our only change to Trigger.dev's self-hosted stack (scripts/trigger-local.mjs fetches theirs
+# unmodified and layers this on top).
+#
+# Their compose is careful about collisions — postgres on 5433, redis on 6389, clickhouse on
+# 9123 — but its MinIO publishes 9000/9001, which is exactly where THIS repo's MinIO already is
+# (docker-compose.yml). Starting both stacks fails with "port is already allocated" on
+# trigger-minio-1, after most of the other containers have already come up.
+#
+# `!override` replaces the port list rather than appending to it: compose merges `ports` by
+# concatenation, so without it the original 9000 mapping survives and the clash remains. Needs
+# Compose 2.24+, which is below what their own prerequisites already ask for.
+#
+# Nothing else is touched. Trigger's MinIO is internal to its webapp; these mappings exist so its
+# console is reachable, not because anything of ours talks to it.
+services:
+  minio:
+    ports: !override
+      - ${MINIO_PUBLISH_IP:-127.0.0.1}:9010:9000
+      - ${MINIO_PUBLISH_IP:-127.0.0.1}:9011:9001

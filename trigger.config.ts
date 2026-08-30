@@ -16,7 +16,10 @@ const vercelEnvSync =
   process.env.VERCEL_ACCESS_TOKEN && process.env.VERCEL_PROJECT_ID ? [syncVercelEnvVars()] : [];
 
 export default defineConfig({
-  project: "proj_rjriwuagrstnzwseaytk",
+  // The hosted project by default; `TRIGGER_PROJECT_REF` points this at a self-hosted stack
+  // (scripts/trigger-local.mjs). A self-hosted webapp mints its own refs, so without this the
+  // CLI would register local tasks against a project that only exists in the cloud.
+  project: process.env.TRIGGER_PROJECT_REF ?? "proj_rjriwuagrstnzwseaytk",
   runtime: "node",
   logLevel: "log",
   // The max compute seconds a task is allowed to run. If the task run exceeds this duration, it will be stopped.

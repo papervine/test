@@ -545,6 +545,34 @@ as having none, purely because the alphabetically-first site had none. `loadSkil
 explicit `ContentSource` for callers that iterate; the ambient path stays for request-scoped
 serving, where the memoization is exactly what you want.
 
+**Status 2026-08-30 — Trigger.dev can run locally (`npm run trigger:local`).** Worth recording
+because it surprised us: background work talks to Trigger's HOSTED cloud by default, in dev too.
+Nothing here points at it — the SDK and CLI fall back to `https://api.trigger.dev` when
+`TRIGGER_API_URL` is unset, and the key in `.env.local` is a `tr_dev_*` cloud key. `trigger.dev
+dev` runs the worker on your machine and registers it against the cloud dev environment. That is
+also the explanation for enqueued runs sitting unclaimed while a worker is plainly running: the
+worker belonged to a **different worktree**, and a task defined only in one branch is never
+picked up by the worker running in another.
+
+Deliberately **not vendored**. Their self-hosted stack is ~10 containers with every image already
+pinned through an env var, and their docs require the version to stay locked to the CLI version,
+so `scripts/trigger-local.mjs` fetches *their* `hosting/docker` at a pinned tag into a gitignored
+directory and runs it unmodified — upgrading is one constant. The single exception is
+`docker/trigger-local.override.yml`, which remaps their MinIO off `9000/9001`: theirs is careful
+about collisions (Postgres 5433, Redis 6389) but those two are exactly where this repo's MinIO
+listens, and the stack fails with `port is already allocated` after most containers are already
+up. It uses `!override` because compose merges `ports` by concatenation — appending 9010 would
+leave the 9000 clash in place. The stacks stay separate on purpose: Trigger's Postgres must not
+be the one `db:seed` truncates.
+
+`trigger.config.ts` reads `TRIGGER_PROJECT_REF` (hosted ref as the fallback) — required, since a
+self-hosted webapp mints its own refs and the CLI would otherwise register local tasks against a
+project that only exists in the cloud.
+
+**And the cheap alternative is documented next to it**, because ~10 containers and 6–8GB of RAM
+is a poor trade for one local run: leave `TRIGGER_SECRET_KEY` unset and both the automations
+executor and skill generation fall back to running inline.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,

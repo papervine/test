@@ -129,7 +129,8 @@
             "pages": [
               "contributing/working-on-papervine",
               "contributing/testing",
-              "contributing/gotchas"
+              "contributing/gotchas",
+              "contributing/trigger-local"
             ]
           }
         ]
