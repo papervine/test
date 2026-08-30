@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { desc, gte, sql } from "drizzle-orm";
+import { desc, gte, inArray, sql } from "drizzle-orm";
 import { Building2, Globe, Rocket, Users } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/dashboard-context";
 import { db } from "@/lib/db";
@@ -76,13 +76,20 @@ export default async function AdminOverviewPage() {
   ]);
 
   // One extra lookup to name the sites the recent deploys belong to — bounded by RECENT.
+  //
+  // `inArray`, NOT a `sql` template around `any(...)`. Interpolating a JS array into a `sql`
+  // template expands it to a comma-separated list of placeholders, so `any(${missing})` renders
+  // as `any(($1, $2))` — a row constructor, which Postgres rejects with "op ANY/ALL (array)
+  // requires array on right side" and takes the whole Operator console down with a generic
+  // error. It only fires once a recent deploy belongs to a site outside the newest RECENT
+  // sites, which is why this worked until the deployment had enough of both.
   const siteNames = new Map(recentSites.map((s) => [s.id, s.name]));
   const missing = recentDeploys.map((d) => d.siteId).filter((id) => !siteNames.has(id));
   if (missing.length) {
     const rows = await db
       .select({ id: site.id, name: site.name })
       .from(site)
-      .where(sql`${site.id} = any(${missing})`);
+      .where(inArray(site.id, missing));
     for (const r of rows) siteNames.set(r.id, r.name);
   }
 
