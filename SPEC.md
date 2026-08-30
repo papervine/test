@@ -364,6 +364,13 @@ the closing band's *Get started — free* still create real accounts. A waitlist
 that's already open is friction, and the three CTAs currently contradict each other. This is only
 coherent once access is actually gated.
 
+> **Resolved the other way (2026-08-30): the hero CTA is *Start Now* → onboarding.** The
+> tension above lasted a day. Access isn't gated, so the primary action now does what the other
+> two already did — `/signup`, which the apex bounces to the app host and which lands a new
+> account on `/onboarding` (`signup-form.tsx`); a visitor who is already signed in goes to their
+> dashboard instead (middleware). The waitlist stays built — `POST /api/waitlist`, the table, and
+> *Operator → Waitlist* — so it can go back in front of the door in an afternoon if access is ever
+> gated; only the hero's `WaitlistDialog` mount went. Smoke pins the CTA text.
 
 **Status 2026-08-29 — "Powered by Papervine" on every plan below Enterprise.** A quiet text
 link at the bottom right of each tenant docs page, in the flow of the document rather than a

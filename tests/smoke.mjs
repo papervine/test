@@ -514,6 +514,9 @@ const CONTROL_PLANE_CHECKS = [
       // ("docs.json", MCP, llms.txt). Pinned on the subhead: the headline is split across
       // spans for the gradient word, so it has no contiguous string to match.
       "AI-powered self-updating knowledge platform",
+      // The primary CTA goes straight into onboarding via /signup — it was a waitlist dialog
+      // for a day, which queued people in front of a door the nav's "Sign up" left open.
+      "Start Now",
       // The two self-serve ways in, beside the trial CTA (SPEC §2). The clone URL is
       // asserted without its query separators because the HTML escapes them.
       "vercel.com/new/clone?repository-url=",
