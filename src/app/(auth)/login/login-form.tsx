@@ -28,9 +28,24 @@ export function LoginForm({ google, email: emailEnabled }: { google: boolean; em
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Validated here rather than by the browser (see `noValidate` below). With native
+    // validation, pressing Enter on a form whose email is empty or malformed does NOTHING
+    // VISIBLE: no submit event fires, so this handler never runs, the button never enters its
+    // pending state, and the only feedback is a bubble anchored to a field the reader may have
+    // scrolled past or never focused. It reads exactly like a broken button.
+    const address = email.trim();
+    if (!address || !password) {
+      setError("Enter your email address and password.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address)) {
+      setError("That doesn't look like an email address.");
+      return;
+    }
+
     setPending(true);
     setError(null);
-    const { error } = await signIn.email({ email, password });
+    const { error } = await signIn.email({ email: address, password });
     setPending(false);
     if (error) {
       setError(error.message ?? "Sign in failed");
@@ -44,21 +59,25 @@ export function LoginForm({ google, email: emailEnabled }: { google: boolean; em
 
   return (
     <div className="space-y-4">
-      <form onSubmit={onSubmit} className="space-y-4">
+      {/* `noValidate` so the messages above are the only ones: two validators disagreeing about
+          wording is worse than either alone, and the native one is the invisible half. */}
+      <form onSubmit={onSubmit} noValidate className="space-y-4">
         <h1 className="text-xl font-semibold">Sign in to Papervine</h1>
         <Field
           label="Email"
           type="email"
           value={email}
           autoFocus
-          required
+          // `aria-required` rather than `required`: still announced as mandatory, without
+          // handing constraint validation back to the browser.
+          aria-required
           onChange={(e) => setEmail(e.target.value)}
         />
         <Field
           label="Password"
           type="password"
           value={password}
-          required
+          aria-required
           onChange={(e) => setPassword(e.target.value)}
         />
         {/* Only offered when a provider can actually deliver the link — otherwise the flow
@@ -73,7 +92,11 @@ export function LoginForm({ google, email: emailEnabled }: { google: boolean; em
             </Link>
           </p>
         )}
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && (
+          <p role="alert" className="text-sm text-red-400">
+            {error}
+          </p>
+        )}
         <Button type="submit" full disabled={pending}>
           {pending ? "Signing in…" : "Sign in"}
         </Button>
