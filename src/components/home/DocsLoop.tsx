@@ -70,7 +70,9 @@ export function DocsLoop({ url }: { url: string | null }) {
       ref={box}
       className="overflow-hidden rounded-2xl border border-[rgba(var(--ink-rgb),0.1)] bg-[var(--surface)] shadow-2xl shadow-black/20"
     >
-      <div className="flex items-center gap-3 border-b border-[rgba(var(--ink-rgb),0.08)] px-4 py-3">
+      {/* `pr-14` on this row and the footer, because the card runs off the right of the screen
+          (see TryItSection): without it the address bar and the "Open it" link go with it. */}
+      <div className="flex items-center gap-3 border-b border-[rgba(var(--ink-rgb),0.08)] py-3 pl-4 pr-14">
         <div className="flex shrink-0 gap-1.5" aria-hidden>
           <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
           <span className="h-3 w-3 rounded-full bg-[#febc2e]" />
@@ -123,7 +125,7 @@ export function DocsLoop({ url }: { url: string | null }) {
         ) : null}
       </div>
 
-      <div className="flex items-center justify-between gap-3 border-t border-[rgba(var(--ink-rgb),0.08)] px-4 py-2.5">
+      <div className="flex items-center justify-between gap-3 border-t border-[rgba(var(--ink-rgb),0.08)] py-2.5 pl-4 pr-14">
         <span className="text-xs text-[var(--muted)]">A real Papervine site, being browsed.</span>
         {url ? (
           <a

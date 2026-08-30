@@ -46,7 +46,10 @@ export function TryItSection({
   frameUrl: string | null;
 }) {
   return (
-    <section className="relative mt-4">
+    // `overflow-hidden` is load-bearing, not tidiness: the phone treatment below deliberately
+    // runs the demo card past the right edge of the screen, and without a clipping ancestor that
+    // gives the whole PAGE a horizontal scrollbar.
+    <section className="relative mt-4 overflow-hidden">
       {/* The band: a saturated field behind the frame so the demo reads as a lit screen rather
           than another block of page, and so the browser chrome has something to sit on.
           Pointer-events-none and behind everything — it's scenery, not a surface.
@@ -101,7 +104,11 @@ export function TryItSection({
         <div className="mt-12 hidden md:block">
           <DocsFrame url={frameUrl} />
         </div>
-        <div className="mt-12 md:hidden">
+        {/* Bleeds off the right edge (-mr-14 against the section's px-6 gutter, so 32px of the
+            card sits off-screen). A docs site is wider than a phone; letting it run out of frame
+            says so, where a card that stops politely at the gutter reads as a small screenshot.
+            DocsLoop pads its chrome and footer rows to match, so nothing readable goes with it. */}
+        <div className="-mr-14 mt-12 md:hidden">
           <DocsLoop url={frameUrl} />
         </div>
 
