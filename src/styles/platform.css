@@ -97,6 +97,43 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   );
   mask-image: radial-gradient(120% 70% at 50% 0%, #000 35%, transparent 75%);
 }
+/* Interactive grid (InteractiveGrid.tsx) — the auth pages' alternative to `.db-grid`. Same
+   56px rhythm and the same top-anchored fade, but the cells light under the cursor.
+
+   Note what does NOT get `pointer-events: none` here: this is the one backdrop layer meant to
+   receive the pointer. It works because `.db-glow` and `.db-grain` above it both opt out, and
+   because `.db-content` sits at z-index 2 — so the form is never fighting the grid for a click.
+   The wrapper clips: the SVG is deliberately larger than the viewport (square cells at any
+   width), and an unclipped absolute child would hand a short screen a vertical scrollbar. */
+.db-igrid {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  -webkit-mask-image: radial-gradient(
+    120% 70% at 50% 0%,
+    #000 35%,
+    transparent 75%
+  );
+  mask-image: radial-gradient(120% 70% at 50% 0%, #000 35%, transparent 75%);
+}
+.db-igrid rect {
+  /* Explicit, rather than relying on the SVG default `visiblePainted` — which only counts a hit
+     over the interior when the fill is painted, and these are transparent until hovered. */
+  pointer-events: all;
+  fill: transparent;
+  stroke: var(--line);
+  stroke-width: 1;
+  /* Slow by default, fast on the way in — the cell lights at once and fades behind the cursor. */
+  transition: fill 900ms ease-out;
+}
+.db-igrid rect:hover {
+  /* Deliberately above `--line` (0.07): at the same value the lit cell read as nothing more
+     than the grid it sits in. */
+  fill: rgba(var(--ink-rgb), 0.14);
+  transition-duration: 90ms;
+}
+
 .db-grain {
   position: fixed;
   inset: 0;
@@ -519,6 +556,135 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
 .db-cta:disabled {
   transform: none;
   opacity: 0.5;
+}
+
+/* Shimmer CTA — MagicUI's ShimmerButton, rebuilt as plain CSS.
+   A spark travels the perimeter: a conic-gradient wedge spins inside a square that slides from
+   one end of the button to the other, everything but a 1px rim covered by `.pv-shimmer-bg`.
+
+   Rebuilt rather than installed for three reasons. The upstream component is written against
+   Tailwind v4 (`@container-[size]`, `inset-(--cut)`, theme-registered keyframes) and this repo
+   is on v3, so half of it wouldn't compile. It's a `<button>`, and the hero's primary CTA is a
+   `<Link>`. And it fills itself flat black — the brand gradient is kept here, because this is
+   the landing's primary action and the page's identity travels with it; the shimmer rides on
+   top of the gradient instead of replacing it.
+
+   The negative z-indexes are load-bearing and are the upstream's, not a workaround: a stacking
+   context paints its own background FIRST and negative-z descendants after, so the spark lands
+   above the gradient and below the label. Remove `z-index: 0` from `.pv-shimmer` and the whole
+   effect disappears behind the button. */
+.pv-shimmer {
+  --pv-shimmer-spread: 90deg;
+  --pv-shimmer-color: #fff;
+  --pv-shimmer-speed: 3s;
+  /* How much of the spark stays uncovered — the width of the lit rim. */
+  --pv-shimmer-cut: 1px;
+  position: relative;
+  z-index: 0;
+  overflow: hidden;
+  background: linear-gradient(110deg, var(--blue), var(--violet));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+    0 10px 30px -8px rgba(120, 120, 255, 0.55);
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.pv-shimmer:hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.16) inset,
+    0 14px 40px -8px rgba(120, 120, 255, 0.7);
+}
+.pv-shimmer:active {
+  transform: translateY(1px);
+}
+
+/* The lane the spark slides along. `container-type: size` is what makes the `100cqw`/`100cqh`
+   in the animation resolve against the BUTTON rather than the viewport, so one rule works at
+   any width. */
+.pv-shimmer-spark {
+  position: absolute;
+  inset: 0;
+  z-index: -30;
+  overflow: visible;
+  container-type: size;
+  filter: blur(2px);
+  pointer-events: none;
+}
+.pv-shimmer-spin {
+  position: absolute;
+  inset: 0;
+  height: 100cqh;
+  aspect-ratio: 1;
+  animation: pv-shimmer-slide var(--pv-shimmer-speed) ease-in-out infinite alternate;
+}
+.pv-shimmer-spin::before {
+  content: "";
+  position: absolute;
+  inset: -100%;
+  background: conic-gradient(
+    from calc(270deg - (var(--pv-shimmer-spread) * 0.5)),
+    transparent 0,
+    var(--pv-shimmer-color) var(--pv-shimmer-spread),
+    transparent var(--pv-shimmer-spread)
+  );
+  animation: pv-shimmer-spin calc(var(--pv-shimmer-speed) * 2) infinite linear;
+}
+@keyframes pv-shimmer-slide {
+  to {
+    transform: translate(calc(100cqw - 100%), 0);
+  }
+}
+/* Not a constant spin: it rests at each quarter turn, which is what keeps the spark reading as
+   a highlight running along an edge rather than a pinwheel. */
+@keyframes pv-shimmer-spin {
+  0% {
+    transform: translateZ(0) rotate(0);
+  }
+  15%,
+  35% {
+    transform: translateZ(0) rotate(90deg);
+  }
+  65%,
+  85% {
+    transform: translateZ(0) rotate(270deg);
+  }
+  100% {
+    transform: translateZ(0) rotate(360deg);
+  }
+}
+
+/* Covers the spark except for `--pv-shimmer-cut` of rim. */
+.pv-shimmer-bg {
+  position: absolute;
+  inset: var(--pv-shimmer-cut);
+  z-index: -20;
+  border-radius: inherit;
+  background: linear-gradient(110deg, var(--blue), var(--violet));
+  pointer-events: none;
+}
+/* The upstream's inner shine, which is what stops the pill reading flat. */
+.pv-shimmer-shine {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 -8px 10px #ffffff1f;
+  transition: box-shadow 0.3s ease-in-out;
+  pointer-events: none;
+}
+.pv-shimmer:hover .pv-shimmer-shine {
+  box-shadow: inset 0 -6px 10px #ffffff3f;
+}
+.pv-shimmer:active .pv-shimmer-shine {
+  box-shadow: inset 0 -10px 10px #ffffff3f;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pv-shimmer-spin,
+  .pv-shimmer-spin::before {
+    animation: none;
+  }
 }
 
 /* Destructive action — solid red fill for irreversible deletes (Danger zone, §10.5).

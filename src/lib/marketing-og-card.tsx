@@ -73,7 +73,7 @@ function Buttons(): ReactElement {
           color: "#ffffff",
         }}
       >
-        Free Trial
+        Join Waitlist
       </div>
       <div
         style={{
@@ -130,7 +130,7 @@ export type MarketingOgCard = {
   sublines: string[];
   /**
    * Draw the hero's three calls to action. Opt-in, because this card is shared with /pricing,
-   * whose card has its own story to tell — a "Free Trial / Deploy / Star" row there would be
+   * whose card has its own story to tell — a "Join Waitlist / Deploy / Star" row there would be
    * advertising the wrong page.
    */
   buttons?: boolean;

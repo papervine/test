@@ -20,6 +20,7 @@ import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Brand } from "@/components/Brand";
 import { HeroVideo } from "@/components/HeroVideo";
 import { TryItSection } from "@/components/home/TryItSection";
+import { WaitlistDialog } from "@/components/home/WaitlistDialog";
 import { SparklesText } from "@/components/home/SparklesText";
 import { resolveDocsFrame, resolveHomeDemo } from "@/lib/home-demo";
 import { appHostFor } from "@/lib/tenant-host";
@@ -262,12 +263,27 @@ export default async function LandingPage() {
               className="db-rise mt-9 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-x-5 sm:gap-y-3"
               style={{ animationDelay: "240ms" }}
             >
-              <Link
-                href="/signup"
-                className="db-cta col-span-2 inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-medium text-white"
-              >
-                Free Trial
-              </Link>
+              {/* A real <button>, not a link: it opens the waitlist form in place rather than
+                  navigating, because the hero's job is to convert what someone just read and a
+                  page change costs the context that persuaded them.
+
+                  The three decorative layers are the shimmer (see `.pv-shimmer` in
+                  platform.css); they sit behind the label on purpose. Kept `rounded-xl` rather
+                  than the upstream's pill, so the primary action still matches the two buttons
+                  beside it — a lone pill in a row of rounded rectangles reads as a mistake. */}
+              <WaitlistDialog>
+                <button
+                  type="button"
+                  className="pv-shimmer col-span-2 inline-flex cursor-pointer items-center justify-center rounded-xl px-5 py-3 text-sm font-medium text-white"
+                >
+                  <span className="pv-shimmer-spark" aria-hidden>
+                    <span className="pv-shimmer-spin" />
+                  </span>
+                  <span className="pv-shimmer-bg" aria-hidden />
+                  <span className="pv-shimmer-shine" aria-hidden />
+                  Join Waitlist
+                </button>
+              </WaitlistDialog>
 
               {/* Deploy-your-own, beside the trial CTA on purpose: the two ways in are hosted or
                   self-hosted, and the page claims both a sentence later. Same clone URL the CLI

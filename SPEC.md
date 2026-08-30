@@ -333,6 +333,37 @@ gets re-recorded whenever the docs chrome moves, and committing it would add a f
 history each time. Same caveat as `TOUR_VIDEO` too — it's on the rate-limited `r2.dev`
 development origin until the bucket gets a custom domain.
 
+**Status 2026-08-29 — the hero's primary action is a waitlist.** The CTA reads *Join Waitlist*
+and opens a dialog rather than navigating: the hero's job is to convert what someone just read,
+and a page change costs the context that persuaded them. Two fields, and the ratio is the design
+— **email required, one optional free-text line** ("What are you hoping to use it for?"). Every
+required field costs completions and the address is the only thing actually needed; the note is
+left as free text rather than a set of buckets because pre-launch the valuable part is how people
+describe their own problem, which is the copy we should be writing back at them. A bucket can be
+read out of a sentence later; a sentence can't be recovered from a bucket. The page they came
+from is captured rather than asked.
+
+`POST /api/waitlist` is public and unauthenticated by definition, so it carries the same two
+defences that surface needs: the per-IP limiter (5 per 10 min, tighter than the assistant's 20 —
+a person joins a waitlist once) and a honeypot field, whose response is deliberately identical to
+a success so a bot never learns it was caught. A repeat signup is a SUCCESS, upserted on the
+unique email index; a second visit can only ADD to what's recorded, since blanking someone's
+first answer or losing their original `source` is strictly worse than keeping it. Entries surface
+at **Operator → Waitlist** — without that page the table is only readable over psql, which in
+practice means nobody reads it, and a waitlist nobody reads is a form that discards intent.
+
+Two things that only showed up by exercising it against a real database. Drizzle's
+`onConflictDoUpdate` with an **empty `set`** emits `ON CONFLICT DO UPDATE SET` with nothing after
+it — a Postgres syntax error — and it builds that clause on the FIRST insert too, so an email
+with no note and no source 500'd every time until the code branched to `onConflictDoNothing`.
+And `rateLimited()`'s message was hardcoded to "You've asked a lot of questions", which is
+nonsense on a form that takes an email address; it takes an override now.
+
+**The open tension, recorded deliberately:** `/signup` still works, and the nav's *Sign up* and
+the closing band's *Get started — free* still create real accounts. A waitlist in front of a door
+that's already open is friction, and the three CTAs currently contradict each other. This is only
+coherent once access is actually gated.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,

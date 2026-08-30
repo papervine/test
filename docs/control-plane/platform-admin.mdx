@@ -63,6 +63,27 @@ those names can't be used as organization slugs: `admin`, `preview`, `app`, `api
 `signup`, `onboarding`, and `accept-invite`. Creating an organization whose name slugifies to one
 of these is rejected with a clear error — pick a different name.
 
+## The waitlist
+
+The marketing home's primary button opens a two-field form — an email address, and an optional
+line about what the person is hoping to use Papervine for. Signups land under
+**Operator → Waitlist**, newest first, with the note and the page they submitted from.
+
+The note is the column worth reading. It's free text rather than a set of categories on purpose:
+before launch, the useful thing is how people describe their own problem, which is the language
+your marketing copy should be using back at them.
+
+The form is public and unauthenticated, so it carries the defences that surface needs: each
+visitor can submit a handful of times per ten minutes, and a hidden field that only automated
+submissions ever fill is discarded silently. Signing up twice with the same address updates the
+existing entry rather than creating a second one, and a second visit can only add to what's
+recorded — leaving the note blank the second time keeps the first answer.
+
+<Note>
+  Entries are never emailed anywhere. The Waitlist page is the only place they surface, so make
+  it part of whatever rhythm you already have for checking the console.
+</Note>
+
 ## The marketing home's live demo
 
 The marketing home page carries a **Try it** section built from working product rather than

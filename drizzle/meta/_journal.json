@@ -183,6 +183,13 @@
       "when": 1788019628851,
       "tag": "0025_normal_loners",
       "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788058582971,
+      "tag": "0026_normal_kronos",
+      "breakpoints": true
     }
   ]
 }

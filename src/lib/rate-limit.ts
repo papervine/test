@@ -110,14 +110,17 @@ export function rateLimitKey(surface: string, ip: string | null): string {
  * The refusal. Shaped like the other AI-route errors ({ error, code }) so the widget script
  * and the in-docs Assistant, which both surface `body.error` for any non-2xx, show the
  * message in the conversation with no client change.
+ *
+ * `message` exists because this is no longer only used by the AI routes: the default talks
+ * about asking questions, which is nonsense on a form that takes an email address, and the
+ * refusal is read by the person who hit it.
  */
-export function rateLimited(retryAfterSec: number): Response {
+export function rateLimited(
+  retryAfterSec: number,
+  message = "You've asked a lot of questions in a short time — give it a minute and try again.",
+): Response {
   return Response.json(
-    {
-      error:
-        "You've asked a lot of questions in a short time — give it a minute and try again.",
-      code: "rate_limited",
-    },
+    { error: message, code: "rate_limited" },
     { status: 429, headers: { "Retry-After": String(retryAfterSec) } },
   );
 }

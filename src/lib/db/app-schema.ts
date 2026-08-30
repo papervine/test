@@ -780,6 +780,26 @@ export const draftFileRelations = relations(draftFile, ({ one }) => ({
 // be traced back to a reader, and there is nothing to cascade from. That also means
 // seed-dev's wipeDb() truncates it harmlessly, and rows are disposable — losing the table
 // costs at most one window of allowance, never data.
+// Pre-launch waitlist signups from the marketing home (SPEC §2). No FK to `user` or
+// `organization` on purpose: the whole point is that these people have no account yet, and a
+// nullable FK to a row that will never exist buys nothing. Read in the operator console.
+export const waitlistEntry = pgTable(
+  "waitlist_entry",
+  {
+    id: text("id").primaryKey(),
+    // Stored lowercased/trimmed by normalizeEmail(), which is what makes the unique index mean
+    // "one person" rather than "one spelling".
+    email: text("email").notNull(),
+    // What they said they were looking for — optional, and their words rather than a bucket we
+    // guessed. Bounded at WAITLIST_NOTE_MAX before it gets here.
+    note: text("note"),
+    // The page they submitted from, captured rather than typed.
+    source: text("source"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("waitlistEntry_email_uidx").on(table.email)],
+);
+
 export const rateLimit = pgTable("rate_limit", {
   // `{surface}:{hashed ip}` — see rateLimitKey(). Never contains a raw IP.
   key: text("key").primaryKey(),

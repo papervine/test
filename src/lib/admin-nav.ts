@@ -3,6 +3,7 @@ import {
   CreditCard,
   Globe,
   LayoutDashboard,
+  MailPlus,
   Rocket,
   type LucideIcon,
 } from "lucide-react";
@@ -32,7 +33,11 @@ export const ADMIN_NAV: AdminNavSection[] = [
   },
   {
     heading: "Commercial",
-    items: [{ slug: "billing", label: "Billing", icon: CreditCard }],
+    items: [
+      { slug: "billing", label: "Billing", icon: CreditCard },
+      // Under Commercial rather than Platform: it's demand, not infrastructure.
+      { slug: "waitlist", label: "Waitlist", icon: MailPlus },
+    ],
   },
 ];
 
