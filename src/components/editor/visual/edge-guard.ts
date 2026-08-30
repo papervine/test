@@ -1,6 +1,6 @@
 import { Extension, type Editor } from "@tiptap/core";
 import { enclosingContainers } from "./containers";
-import { edgeDeleteAction } from "./edge-guard-plan";
+import { edgeDeleteAction, guardsCodeGroupTab } from "./edge-guard-plan";
 
 // Backspace stops at a component's edge instead of eating the component.
 //
@@ -59,7 +59,21 @@ export const EdgeGuard = Extension.create({
   addKeyboardShortcuts() {
     const guard = (direction: "backward" | "forward") => () => {
       const { state } = this.editor;
-      const { from, to } = state.selection;
+      const { from, to, $from, empty } = state.selection;
+      // A <CodeGroup> tab first: this has to run BEFORE the in-container actions, whose "turn an
+      // emptied code block into a paragraph" is exactly the tab-destroying move inside a group —
+      // and before TipTap's CodeBlock shortcut and ProseMirror's join get their turn, which this
+      // extension's position in the list guarantees. See guardsCodeGroupTab.
+      const parent = $from.depth > 0 ? $from.node($from.depth - 1) : null;
+      if (
+        guardsCodeGroupTab(
+          { type: $from.parent.type.name, parentType: parent?.type.name ?? null },
+          { offset: $from.parentOffset, size: $from.parent.content.size, empty },
+          direction,
+        )
+      ) {
+        return true;
+      }
       // Only Backspace has in-container actions, so only it goes looking — `can()` runs each
       // command against a throwaway transaction, which isn't worth doing on a key that can't use
       // the answer.

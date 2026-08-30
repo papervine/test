@@ -3785,6 +3785,28 @@ layer.
 > an `editor.spec.ts` journey — switch, rename, language, add, remove, then assert the MDX in the
 > draft — with the console-clean assertion.
 >
+> **Backspace destroyed a tab (2026-08-30).** Reported exactly so. Reproduced by instrumenting the
+> keystroke rather than guessing: Backspace at the start of tab 2 ran ProseMirror's default
+> `joinBackward`, which merged the two fences into one — `npm i papervineyarn add papervine` — and
+> the strip went from two tabs to one. Two more defaults do the same damage from other angles: an
+> EMPTY fence on Backspace becomes a paragraph (TipTap's own CodeBlock shortcut runs `clearNodes`;
+> our edge guard's "turn an emptied code block back into a paragraph" action does likewise at the
+> group's leading edge), and a paragraph stops being a tab because the strip lists only code blocks;
+> and forward Delete at the end of a tab pulls the next one in. Inside a `<CodeGroup>` the fence IS
+> the tab, so none of those is what a delete key means there — the fix (`guardsCodeGroupTab` in
+> `edge-guard-plan.ts`) swallows Backspace at offset 0 and Delete at the end of any code block whose
+> parent is the group, empty or not, and runs ahead of the in-container actions. Removing a tab is
+> the strip's ✕. Two small things rode along because the repro exposed them: `+` now puts the caret
+> in the new block (it used to leave the selection wherever it was), and an empty `<code>` fills its
+> `<pre>` so a click on a fresh fence lands in the code rather than on padding.
+>
+> One testing lesson worth the ink: the first version of the regression step **passed with the
+> guard switched off**. `keyboard.press("Home")` resolves when the event is sent, and the Backspace
+> that followed landed before the caret had moved — deleting the typed character instead of
+> exercising the edge. The step now polls `Home` to offset 0 (idempotent, so a wait not a retry)
+> and checks ordinary deletion with forward `Delete` from that same position rather than racing a
+> second caret move. Verified failing without the guard (3 tabs → 2), then passing.
+>
 > **Syntax highlighting in the editor (2026-08-29).** Asked as "I imagine it should syntax
 > highlight (based on the language selected?)" — and it should. Published pages are highlighted by
 > **Shiki at compile time**: server-side, async, WASM-backed, none of which a keystroke can wait

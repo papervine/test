@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   blocksEdgeDelete,
   edgeDeleteAction,
+  guardsCodeGroupTab,
 } from "../../src/components/editor/visual/edge-guard-plan";
 
 // A <Tab> whose editable content spans 12..30, inside a <Tabs> spanning 10..80 — innermost first,
@@ -75,5 +76,43 @@ describe("edgeDeleteAction", () => {
     expect(edgeDeleteAction(CONTAINERS, { from: TAB.from, to: TAB.to }, "backward", true)).toBe(
       "allow",
     );
+  });
+});
+
+// A <CodeGroup> tab is a code block whose parent is the group. Every default for a delete key at
+// its edge destroyed the tab (an empty one became a paragraph and left the strip; a full one was
+// joined with its neighbour), so the rule is blunt on purpose: at the edge, inside a group, nothing.
+describe("guardsCodeGroupTab", () => {
+  const tab = { type: "codeBlock", parentType: "codeGroup" };
+  const at = (offset: number, size: number, empty = true) => ({ offset, size, empty });
+
+  it("swallows Backspace at the start of a tab, empty or not", () => {
+    expect(guardsCodeGroupTab(tab, at(0, 0), "backward")).toBe(true);
+    expect(guardsCodeGroupTab(tab, at(0, 12), "backward")).toBe(true);
+  });
+
+  it("swallows Delete at the end of a tab", () => {
+    expect(guardsCodeGroupTab(tab, at(12, 12), "forward")).toBe(true);
+    expect(guardsCodeGroupTab(tab, at(0, 0), "forward")).toBe(true);
+  });
+
+  it("lets a delete inside the tab's text run — that's editing code, not structure", () => {
+    expect(guardsCodeGroupTab(tab, at(5, 12), "backward")).toBe(false);
+    expect(guardsCodeGroupTab(tab, at(5, 12), "forward")).toBe(false);
+    // The far edge for each direction is an ordinary character delete too.
+    expect(guardsCodeGroupTab(tab, at(12, 12), "backward")).toBe(false);
+    expect(guardsCodeGroupTab(tab, at(0, 12), "forward")).toBe(false);
+  });
+
+  it("lets a real selection delete — the user picked what to remove", () => {
+    expect(guardsCodeGroupTab(tab, at(0, 12, false), "backward")).toBe(false);
+  });
+
+  it("only applies to a code block INSIDE a group", () => {
+    const backspace = (block: { type: string; parentType: string | null }) =>
+      guardsCodeGroupTab(block, at(0, 0), "backward");
+    expect(backspace({ type: "codeBlock", parentType: "accordion" })).toBe(false);
+    expect(backspace({ type: "codeBlock", parentType: null })).toBe(false);
+    expect(backspace({ type: "paragraph", parentType: "codeGroup" })).toBe(false);
   });
 });

@@ -33,6 +33,30 @@ export function blocksEdgeDelete(
   );
 }
 
+/**
+ * A code block that is a <CodeGroup> TAB, with the caret on the edge a delete key would cross.
+ *
+ * Every default for a code block at that edge destroys the tab, three different ways: TipTap's own
+ * CodeBlock shortcut turns an EMPTY block into a paragraph (`clearNodes`), which stops being a tab
+ * because the strip lists only code blocks; the in-container action below does the same at the
+ * group's leading edge; and for a block with content, ProseMirror's join merges it with the
+ * neighbouring block — two tabs become one. Inside a group the fence IS the tab, so none of those is
+ * what Backspace or Delete means there. Removing a tab is the strip's ✕. Reported as "pressing
+ * backspace while inside a code group destroys a tab".
+ *
+ * `offset`/`size` are the caret's offset in its block and the block's content size — pure numbers,
+ * so the boundary is testable without ProseMirror.
+ */
+export function guardsCodeGroupTab(
+  block: { type: string; parentType: string | null },
+  caret: { offset: number; size: number; empty: boolean },
+  direction: "backward" | "forward",
+): boolean {
+  if (!caret.empty) return false; // a real selection deletes real content, never structure
+  if (block.type !== "codeBlock" || block.parentType !== "codeGroup") return false;
+  return direction === "backward" ? caret.offset === 0 : caret.offset === caret.size;
+}
+
 /** What the key should do: run normally, be swallowed, or run the in-container action instead. */
 export type EdgeDeleteAction = "allow" | "block" | "handle";
 

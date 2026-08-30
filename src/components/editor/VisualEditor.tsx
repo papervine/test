@@ -156,8 +156,13 @@ export function VisualEditor({
     extensions: [
       ...buildMdxExtensions(makeNodeViewOpts(assetBase)),
       Placeholder.configure({
-        placeholder: ({ node }) =>
-          node.type.name === "heading" ? "Heading" : "Type '/' for commands…",
+        placeholder: ({ node }) => {
+          if (node.type.name === "heading") return "Heading";
+          // A code block draws its own hint (`// add code here`, in CodeBlockNodeView) and can't
+          // take a `/` command anyway; the generic text on top of it read as two placeholders.
+          if (node.type.name === "codeBlock") return "";
+          return "Type '/' for commands…";
+        },
       }),
       SlashCommand.configure({
         onOpen: (s) => setSlash(s),

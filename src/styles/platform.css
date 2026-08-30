@@ -1748,6 +1748,15 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
 .pv-visual .pv-codeblock pre {
   position: relative;
 }
+/* The <code> is the content hole, and an EMPTY inline one is 0×0 — a click on a fresh fence lands
+   on the <pre>'s padding instead, and the browser parks the caret in the nearest editable
+   position, which is the gap BETWEEN blocks in the parent's content hole. Typing there put text
+   into the <CodeGroup> itself, and Backspace at that gap deleted a whole tab. Filling the <pre>
+   makes every click inside the fence a click inside the code. */
+.pv-visual .pv-codeblock pre code {
+  display: block;
+  min-height: 1.5em;
+}
 .pv-visual .pv-code-placeholder {
   position: absolute;
   color: var(--muted);

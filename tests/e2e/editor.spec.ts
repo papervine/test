@@ -964,6 +964,39 @@ test.describe("web editor @external", () => {
     // An empty fence says what to do with itself rather than sitting there as a blank rectangle.
     await expect(blocks.nth(2)).toContainText("// add code here");
 
+    // Backspace inside a tab must never take the tab. Three defaults used to: an EMPTY code block
+    // became a paragraph (TipTap's own shortcut, and our edge guard at the first tab), which drops
+    // out of the strip because only code blocks are tabs; a block with content was JOINED with its
+    // neighbour on Backspace at its start. Reported as "pressing backspace while inside a code
+    // group destroys a tab". Pressed twice each: a second press must be as harmless as the first.
+    await blocks.nth(2).locator("code").click();
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+    await expect(blocks).toHaveCount(3);
+    await expect(blocks.nth(2).locator("pre code")).toHaveCount(1);
+    await page.keyboard.type("x");
+    await expect(blocks.nth(2).locator("pre code")).toHaveText("x");
+    // Home INSIDE the poll: `press` resolves when the event is sent, not when applied, and a
+    // Backspace that lands before the caret has moved just deletes the "x" — which made the first
+    // version of this step pass with the guard switched off. Re-asking for line start is
+    // idempotent, so this is a wait, not a retry.
+    await expect
+      .poll(async () => {
+        await page.keyboard.press("Home");
+        return page.evaluate(() => window.getSelection()?.anchorOffset ?? -1);
+      })
+      .toBe(0);
+    await page.keyboard.press("Backspace");
+    await page.keyboard.press("Backspace");
+    await expect(blocks).toHaveCount(3);
+    await expect(tabs).toHaveText(["npm", "pnpm", "python"]);
+    await expect(blocks.nth(2).locator("pre code")).toHaveText("x");
+    // An ordinary character delete still works: forward Delete from the same polled position
+    // (offset 0 with content after it is not the trailing edge), so no second caret move to race.
+    await page.keyboard.press("Delete");
+    await expect(blocks.nth(2).locator("pre code")).toHaveText("");
+    await expect(blocks).toHaveCount(3);
+
     // …and ✕ takes it back out. Only the active tab offers one, so a stray click can't delete a
     // block you aren't looking at.
     await expect(group.locator("button[aria-label^='Remove']")).toHaveCount(1);

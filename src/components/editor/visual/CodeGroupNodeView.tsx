@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
+import { TextSelection } from "@tiptap/pm/state";
 import { Check, Copy, Plus, Trash2, X } from "lucide-react";
 import { hiddenCodeRule } from "./tabs-plan";
 import { codeTabLabel, withCodeTitle } from "./code-meta";
@@ -78,7 +79,13 @@ export function CodeGroupNodeView({ node, editor, getPos }: NodeViewProps) {
     // "same as the last" is right more often than "none".
     const at = base + node.nodeSize - 1;
     const language = blocks[current]?.language || null;
-    editor.view.dispatch(editor.state.tr.insert(at, type.create({ language, meta: null })));
+    // The caret goes INTO the new block, so typing continues there. Without this the selection
+    // stayed wherever it was — outside the block you just added — and a click into the empty fence
+    // could land between blocks instead (see the pre/code rule in platform.css).
+    const tr = editor.state.tr.insert(at, type.create({ language, meta: null }));
+    tr.setSelection(TextSelection.create(tr.doc, at + 1));
+    editor.view.dispatch(tr);
+    editor.view.focus();
     setActive(blocks.length);
   };
 
