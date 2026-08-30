@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
+  appHostFor,
+  marketingHostFor,
   resolveTenantSlug,
   supportsSubdomainTenants,
   isPlatformHost,
@@ -139,5 +141,29 @@ describe("demoDocsHost", () => {
 
   it("lowercases, since Host is case-insensitive but the column isn't", () => {
     expect(demoDocsHost("Papervine.IO")).toBe("docs.papervine.io");
+  });
+});
+
+describe("marketingHostFor", () => {
+  it("strips the app label so a link off an auth page reaches the marketing home", () => {
+    // "/" on the app host is the dashboard resolver: it bounces a logged-out visitor back to
+    // /login, which made the brand link on the login page a loop.
+    expect(marketingHostFor("app.papervine.io")).toBe("papervine.io");
+    expect(marketingHostFor("app.localhost:3000")).toBe("localhost:3000");
+  });
+
+  it("leaves www alone — that IS the marketing home", () => {
+    expect(marketingHostFor("www.papervine.io")).toBe("www.papervine.io");
+    expect(marketingHostFor("papervine.io")).toBe("papervine.io");
+  });
+
+  it("only strips a LEADING app label", () => {
+    expect(marketingHostFor("app.app.papervine.io")).toBe("app.papervine.io");
+    expect(marketingHostFor("myapp.papervine.io")).toBe("myapp.papervine.io");
+  });
+
+  it("round-trips with appHostFor", () => {
+    expect(marketingHostFor(appHostFor("papervine.io"))).toBe("papervine.io");
+    expect(marketingHostFor(appHostFor("localhost:3000"))).toBe("localhost:3000");
   });
 });

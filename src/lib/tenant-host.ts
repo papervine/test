@@ -159,6 +159,24 @@ export function appHostFor(host: string): string {
 }
 
 /**
+ * The marketing apex for a given request host: strips a leading `app.` label, keeps the port.
+ * `app.papervine.io` → `papervine.io`, `app.localhost:3000` → `localhost:3000`.
+ *
+ * The inverse of `appHostFor`, and it exists because "/" means different things on the two
+ * hosts: on the app host it's the dashboard resolver, which bounces a logged-out visitor to
+ * `/login`. So a "go home" link on an auth page that points at `/` sends someone from the login
+ * page back to the login page.
+ *
+ * `www` is deliberately NOT stripped — `www.papervine.io` IS the marketing home, and rewriting
+ * it to the bare apex would add a redirect hop for no reason.
+ */
+export function marketingHostFor(host: string): string {
+  const [name, port] = host.split(":");
+  const base = name.replace(/^app\./, "");
+  return port ? `${base}:${port}` : base;
+}
+
+/**
  * The host whose site backs the marketing home's live demo: `docs.` on the apex the request
  * came in on (`papervine.io` / `www.papervine.io` → `docs.papervine.io`, `localhost:3000` →
  * `docs.localhost`). Convention instead of configuration — there is no env var to set, and
