@@ -33,6 +33,15 @@ export const site = pgTable(
     //              publish writes it straight to storage (src/lib/native-publish.ts).
     // Default 'git' so every pre-existing row keeps today's behavior with no backfill.
     // Read it through src/lib/site-source.ts, never by comparing the string inline.
+    // --- generated skill.md (SPEC §9.1) ---------------------------------------------------
+    // Set when the site publishes, cleared when generation runs. The cheap half of the
+    // staleness rule: it narrows the sweep to sites that actually shipped something, and the
+    // fingerprint below then decides whether that shipment changed anything worth a model call.
+    skillStaleAt: timestamp("skill_stale_at"),
+    // capabilityFingerprint() at the last generation. Null = never generated, which is the one
+    // case that generates immediately instead of waiting for a sweep.
+    skillFingerprint: text("skill_fingerprint"),
+    skillGeneratedAt: timestamp("skill_generated_at"),
     sourceKind: text("source_kind").default("git").notNull(),
     repoOwner: text("repo_owner"),
     repoName: text("repo_name"),

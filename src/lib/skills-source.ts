@@ -1,5 +1,6 @@
 import "server-only";
 import { listRaw, loadRaw } from "@papervine/renderer/lib/content";
+import { loadGeneratedSkill } from "./skill-generate";
 import {
   parseSkill,
   ROOT_SKILL_PATH,
@@ -55,4 +56,21 @@ export async function loadSkills(): Promise<Skill[]> {
   }
 
   return out;
+}
+
+/**
+ * Every skill a site publishes: the repo's own files, or — when it has none — the one we
+ * generated for it (SPEC §9.1).
+ *
+ * The fallback is checked last and only when the repo supplied nothing, so an author's own file
+ * always wins outright: we never publish a generated rival alongside a hand-written one.
+ */
+export async function loadSkillsWithGenerated(siteId: string | null): Promise<Skill[]> {
+  const authored = await loadSkills();
+  if (authored.length > 0 || !siteId) return authored;
+
+  const generated = await loadGeneratedSkill(siteId).catch(() => null);
+  if (!generated) return [];
+  const skill = parseSkill(generated, "skill");
+  return skill ? [skill] : [];
 }

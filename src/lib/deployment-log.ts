@@ -136,6 +136,11 @@ export async function markSiteLive(
       status: "live",
       lastSyncedCommitSha: opts.commitSha ?? null,
       updatedAt: new Date(),
+      // Mark the generated skill.md stale (SPEC §9.1) — MARK, not regenerate. A publish is a
+      // cheap signal that something MIGHT have changed; the sweep fingerprints the site and
+      // decides whether it actually did. Generating here would spend a model call on every typo
+      // fix, and would do it on the publish path, where someone is waiting.
+      skillStaleAt: new Date(),
     })
     .where(eq(siteTable.id, site.id));
 

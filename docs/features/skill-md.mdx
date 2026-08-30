@@ -13,7 +13,7 @@ constraints apply — so it can decide whether to act at all, before it goes loo
 that explains how.
 
 Papervine serves whatever skill files your repository contains, at the paths agents already look
-for. Nothing to configure.
+for — and writes one for you if you don't. Nothing to configure either way.
 
 ## Add a skill
 
@@ -122,8 +122,53 @@ used to discover that it's there.
 doesn't appear in your navigation, and isn't included in `llms.txt` — so a capability summary is
 never indexed as if it were a guide.
 
+## If you don't write one
+
+A site with no skill file gets one generated from its documentation. It follows the same
+structure described above, and it's served at the same paths — so agents find it whether you
+wrote it or we did.
+
+**Writing your own turns generation off.** The moment a `skill.md` or a skills directory appears
+in your repository, that's what gets served and nothing regenerates. There's no merge and no
+competition between the two: your file wins outright.
+
+### When it regenerates
+
+Not on every publish. A publish only marks the site as worth re-examining; a background sweep
+then compares the site's **structure** — its pages and its `docs.json` — against the last
+generation, and only spends a regeneration when that actually moved. Fixing a typo in a paragraph
+doesn't change what your product can do, so it doesn't trigger one.
+
+In practice:
+
+| What you did | What happens |
+| --- | --- |
+| Published a brand-new site | Generated within the hour |
+| Added, removed, or moved pages | Regenerated on the next sweep |
+| Changed navigation in `docs.json` | Regenerated on the next sweep |
+| Fixed typos, reworded a page | Nothing — the structure didn't change |
+| Added your own `skill.md` | Generation stops; your file is served |
+
 <Note>
-  Skill files are served from your repository. Papervine doesn't generate one for you: a summary
-  of what your product can do is a claim about your product, and an inferred one is a claim
-  nobody checked.
+  Generation doesn't consume your AI credits. It's background work you didn't ask for per-run, so
+  it's on us.
 </Note>
+
+### Reading a generated file
+
+A generated file identifies itself in its frontmatter:
+
+```yaml
+metadata:
+    papervine-generated: "true"
+```
+
+Use it as a starting point. If it gets something wrong about your product, the fix is to commit
+your own `skill.md` — an edit to the generated one would be replaced on the next regeneration,
+whereas your own file stops generation entirely.
+
+<Warning>
+  A generated skill describes your product as your documentation describes it. If your docs are
+  thin in a place, the skill will be too — and an agent acting on a capability summary is acting
+  on it inside your product. Read the generated file at least once.
+</Warning>

@@ -1,9 +1,9 @@
 import "server-only";
 import { type NextRequest } from "next/server";
 import { contentContext } from "@papervine/renderer/lib/content";
-import { requestContentSource } from "./request-source";
+import { requestContentSource, requestSiteRecord } from "./request-source";
 import { logAgentVisit } from "./agent-visit";
-import { loadSkills } from "./skills-source";
+import { loadSkillsWithGenerated } from "./skills-source";
 import { agentCard, agentSkillsIndex, publicSkills, skillsIndex, type Skill } from "./skills";
 
 /**
@@ -24,7 +24,11 @@ const SKILL_CONTENT_TYPE = "text/markdown; charset=utf-8";
 /** Resolve the tenant, read its skills, and hand them to `render` inside the content context. */
 async function withSkills<T>(fn: (skills: Skill[]) => T | Promise<T>): Promise<T | null> {
   const src = await requestContentSource();
-  const run = async () => publicSkills(await loadSkills());
+  // The site id is what lets the generated fallback be read: it lives outside the content tree,
+  // so it is addressed by site rather than through the content source. Null on the apex/preview,
+  // where there is no tenant and nothing was generated.
+  const record = await requestSiteRecord().catch(() => null);
+  const run = async () => publicSkills(await loadSkillsWithGenerated(record?.id ?? null));
   try {
     const skills = src ? await contentContext.run(src, run) : await run();
     return await fn(skills);
@@ -100,9 +104,10 @@ export async function handleAgentCard(req: NextRequest): Promise<Response> {
   const origin = host ? `${proto}://${host}` : "";
 
   const src = await requestContentSource();
+  const record = await requestSiteRecord().catch(() => null);
   const build = async () => {
     const config = await (src ?? null)?.loadConfig();
-    const skills = publicSkills(await loadSkills());
+    const skills = publicSkills(await loadSkillsWithGenerated(record?.id ?? null));
     return agentCard({
       origin,
       title: config?.name ?? host,

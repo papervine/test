@@ -33,6 +33,12 @@ export const ROOT_SKILL_PATH = "skill.md";
 export const SKILL_DIRS = [".papervine/skills/"];
 /** Inside a skills directory each skill is its own subdirectory holding this file. */
 export const SKILL_DIR_FILE = "SKILL.md";
+/**
+ * Where a GENERATED skill file lives — outside the synced content tree on purpose, so writing
+ * one can't register as a content change and re-trigger its own generation (skill-generate.ts).
+ * Dot-prefixed, so `isPageSlug` keeps it out of the page tree too.
+ */
+export const GENERATED_SKILL_PATH = ".generated/skill.md";
 
 /** The description field is capped in the discovery manifests. */
 const DESCRIPTION_MAX = 1024;

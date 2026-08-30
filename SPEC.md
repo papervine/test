@@ -439,6 +439,54 @@ subset: a skill with `groups:` is withheld entirely — absent from every index 
 URL, indistinguishable from one that doesn't exist. Withheld rather than trimmed, because a
 capability summary is one document and there is no partial version of it that is safe.
 
+**Status 2026-08-30 — `skill.md` is generated for sites that don't write one.** The scheduling
+question was the whole design, and the answer is **mark on publish, decide on a sweep**:
+
+- **Not on every edit.** An edit is a keystroke in the draft buffer; nothing is published and
+  nobody can fetch the result.
+- **Not on every publish**, tempting as it is. Twenty commits in an afternoon — a typo pass, a
+  batch of link fixes — would mean reading the whole corpus twenty times to produce the identical
+  document, on the path where someone is waiting for their site to go live.
+- **Not a blind schedule** either: regenerating every tenant nightly burns model calls on sites
+  that didn't change, and a site that just launched waits a day for its first skill.
+
+So `markSiteLive` sets `skill_stale_at` (free — it's already writing that row), and an hourly
+sweep (`/api/skills/generate`, Vercel Cron) decides. The decision is two-stage on purpose: the
+flag narrows the candidate set cheaply, then `capabilityFingerprint` — `docs.json` + the sorted
+page list, both already cached per site version — says whether the *capability surface* actually
+moved. A page rewritten in place doesn't regenerate; a page added, removed, or renamed does. The
+accepted blind spot is a retitled page lagging until the next structural change, which is the
+right side to err on. A site that has never generated (`skill_fingerprint IS NULL`) skips the
+debounce entirely — there is nothing to debounce, and a new site with no skill is where the delay
+would show.
+
+**Not metered**, by decision: no `authorizeAi` gate and no `recordAiUsage` debit. It's background
+work the customer didn't ask for per-run and can't see coming, and billing a Free site for it is
+the kind of charge that becomes a support ticket. An author's own `skill.md` disables generation
+outright — no merge, no rival file.
+
+Three things this cost, all found by running it rather than reading it:
+
+- **The generated file must live OUTSIDE the synced content tree** (`sites/{id}/.generated/`).
+  Writing to the docs root would be a content change → stale flag → regenerate → write. That is
+  the self-trigger loop `fireContentUpdateAutomations` exists to break, and this repo has already
+  paid for it once.
+- **…which means it can't be read through `loadRaw`.** That's cached under the site's CONTENT
+  version key (`${sha}:${updatedAt}`), and generation deliberately doesn't bump `updatedAt` — so
+  a regenerated file written under an unchanged key was invisible to every reader while sitting
+  correctly in storage. Caught only by regenerating twice and watching the second one not appear.
+  It's read straight from storage now; the endpoints' `s-maxage=3600` absorbs the volume.
+- **Asking for the trigger line in prose didn't work.** The frontmatter `description` is what an
+  agent matches on to decide a skill is relevant ("Use when <activity> — <trigger>, <trigger>"),
+  not a blurb about the product. Requesting it as a `DESCRIPTION:` first line in a long prompt
+  failed every time — the model started at the heading — and the code silently fell back to the
+  site's marketing description. `generateObject` with a two-field schema fixed it: two fields the
+  SDK guarantees beat one convention the model has to remember. **The two bugs masked each
+  other**, which is why the first fix looked like it hadn't worked.
+
+The template (name, metadata, Resources, the closing llms.txt line) is stamped by us rather than
+generated — those are facts we hold, and they're the likeliest place for a model to invent a URL.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,
