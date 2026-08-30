@@ -7,6 +7,8 @@
 //
 // "Papervine" — a vine sprouting from a page. The motion draws the eye up toward the headline.
 
+import { fallKeyframes, fallWindow, lifeKeyframes, simulateLeafFall } from "@/lib/leaf-fall";
+
 // Each strand: its path and the delay before it begins drawing (a staggered sprout).
 const VINES = [
   { d: "M600,772 C566,648 648,576 604,452 C566,344 648,300 600,176 C582,108 600,84 600,40", delay: "0s" },
@@ -79,6 +81,27 @@ const BUDS = [
 // A single leaf blade, base at the local origin so it unfurls (scales) from where it joins.
 const LEAF = "M0,0 C9,-4 16,-14 8,-28 C5,-18 -6,-11 0,0 Z";
 
+// How each new-growth leaf falls, worked out once here rather than drawn as a curve: gravity
+// against air resistance, the blade catching more air broadside than edge-on, lift, a little
+// wind. See src/lib/leaf-fall.ts. Each leaf gets its own pair of keyframes — the fall (a
+// screen-space translate + tumble) and the life around it (unfurl, hold, dark once out of
+// frame) — because a leaf near the top has three times as far to fall as one near the bottom,
+// and the release point has to move to make room. The viewBox is 760 tall; the frame the
+// leaves fall out of is taller than that on tall windows (`xMidYMin slice`), so the floor sits
+// well below it.
+const FALL_FLOOR = 900;
+const GROWTH = NEW_GROWTH.map((l, i) => {
+  const samples = simulateLeafFall({ seed: i, blade: l.r, startY: l.y, floorY: FALL_FLOOR });
+  const window = fallWindow(samples[samples.length - 1].t, l.dur);
+  return {
+    ...l,
+    fall: `db-leaf-fall-${i}`,
+    life: `db-leaf-life-${i}`,
+    css: fallKeyframes(`db-leaf-fall-${i}`, samples, window) + lifeKeyframes(`db-leaf-life-${i}`, window),
+  };
+});
+const GROWTH_CSS = GROWTH.map((g) => g.css).join("");
+
 export function VineField() {
   return (
     <div className="db-vine" aria-hidden="true">
@@ -105,18 +128,35 @@ export function VineField() {
                 <path className="db-leaf" d={LEAF} style={{ animationDelay: `${l.delay}s` }} />
               </g>
             ))}
+            {/* The per-leaf keyframes. Generated on the server from the physics above, so they
+                are as static as the rest of this SVG — no JS, no runtime cost beyond the CSS. */}
+            <style dangerouslySetInnerHTML={{ __html: GROWTH_CSS }} />
             {/* Nested transforms on purpose. The OUTER <g> only moves the leaf into place, so the
-                middle <g> — which owns the sprout/fall animation — translates in screen space and
-                a falling leaf drops downward. Rotating before translating would send each one off
-                along its own axis instead. */}
-            {NEW_GROWTH.map((l, i) => (
+                fall <g> — whose keyframes are a screen-space translate + tumble — drops downward
+                regardless of which way the blade points; rotating before translating would send
+                each leaf off along its own axis. The life <g> inside it owns the unfurl and the
+                opacity, so the two animations never fight over one transform. */}
+            {GROWTH.map((l, i) => (
               <g key={`n${i}`} transform={`translate(${l.x},${l.y})`}>
                 <g
-                  className="db-leaf-life"
-                  style={{ animationDuration: `${l.dur}s`, animationDelay: `${l.delay}s` }}
+                  className="db-leaf-fall"
+                  style={{
+                    animationName: l.fall,
+                    animationDuration: `${l.dur}s`,
+                    animationDelay: `${l.delay}s`,
+                  }}
                 >
-                  <g transform={`rotate(${l.r}) scale(${l.s})`}>
-                    <path className="db-leaf-still" d={LEAF} />
+                  <g
+                    className="db-leaf-life"
+                    style={{
+                      animationName: l.life,
+                      animationDuration: `${l.dur}s`,
+                      animationDelay: `${l.delay}s`,
+                    }}
+                  >
+                    <g transform={`rotate(${l.r}) scale(${l.s})`}>
+                      <path className="db-leaf-still" d={LEAF} />
+                    </g>
                   </g>
                 </g>
               </g>

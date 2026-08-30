@@ -364,6 +364,7 @@ the closing band's *Get started — free* still create real accounts. A waitlist
 that's already open is friction, and the three CTAs currently contradict each other. This is only
 coherent once access is actually gated.
 
+
 **Status 2026-08-29 — "Powered by Papervine" on every plan below Enterprise.** A quiet text
 link at the bottom right of each tenant docs page, in the flow of the document rather than a
 `position: fixed` corner sticker: a fixed badge sits on top of what the reader is reading and
@@ -567,6 +568,32 @@ grid — deterministic, no `Math.random`, so SSR is stable; keyed off `--ink-rgb
 grid, so it's theme-adaptive and stays barely-there) — ambient "little things growing"
 texture in place of the flat grid. Smoke asserts the landing renders `db-vine` + `pv-sprouts`
 and not `db-grid`.
+
+> **Status (2026-08-30): the leaves that drop now FALL — physics, not a fade.** Asked as "instead
+> of fading out, can we use physics to make it fall with wind resistance". The first drop was a
+> hand-drawn curve (54px down, fading to nothing over 14% of the cycle), which reads as
+> *disappearing*. It's now a simulation (`src/lib/leaf-fall.ts`): gravity against quadratic air
+> resistance with a low terminal velocity (68–98 px/s, seeded per leaf); drag split along and
+> across the blade so it slips edge-on and stalls broadside; lift proportional to `sin(2α)` so a
+> tilted blade glides sideways; a restoring torque toward broadside with inertia and damping, so
+> it rocks — and about a third of the leaves start with a real spin and tumble a turn before the
+> rocking takes over; and a steady drift plus a slow gust of wind, phased differently for each.
+> Integrated at 240 Hz, sampled at 12 Hz, until the leaf is below a floor set under the visible
+> frame (900 in a 760-tall viewBox — `xMidYMin slice` shows more than 760 on tall windows).
+>
+> **Still no JS.** The simulation runs once at module load in the server component and is
+> written out as two `@keyframes` per leaf in a `<style>` inside the SVG: the fall (screen-space
+> translate + tumble about the blade's centre, `linear` because the samples are the easing) and
+> the life around it (unfurl, hold, opaque through the whole fall, dark only once out of frame so
+> the cycle can restart). The two live on nested `<g>`s so they never fight over one transform.
+> Per-leaf keyframes were forced, not chosen: a leaf at the top of a vine takes ~10s to reach the
+> floor and one near the bottom ~3s, so the release point has to move earlier for the long
+> fallers (`fallWindow`) or the fall would overrun the cycle. Deterministic (seeded), so SSR and
+> client agree. Measured: falls of 3.2–9.9s, sideways drift up to ~180px, 0–7 direction changes,
+> rotation from a 30° rock to a half-turn tumble. Guards: `tests/unit/leaf-fall.test.ts` pins the
+> properties that make it read as a leaf — reaches the floor at 45–130 px/s average, never above
+> 200 px/s, never rises above its release point, rotation continuous, keyframes monotonic and
+> opaque through the fall.
 
 **UI primitives: shadcn/ui, mapped onto `.db` tokens.** The Control-Plane uses
 [shadcn/ui](https://ui.shadcn.com) for its component primitives (`src/components/ui/`,
