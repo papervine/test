@@ -304,6 +304,35 @@ stays on the page (it is a discovery surface, CLAUDE.md) but a paragraph of comp
 should not be the fourth thing under the headline, and at the bottom it reaches the people
 still scrolling, who are the ones actually weighing a move.
 
+**Status 2026-08-29 — the live demo is desktop-only; phones get a recording.** The "Try it"
+frame is an iframe of a real docs site, and below `md` that stops being an argument and starts
+being a liability: a desktop docs layout at 340px is unreadable, and a phone-width one loses
+both the sidebar and the search button (the renderer gates each at `md:`), so the frame would
+show a page you can only scroll. Below `md` the section now shows a short silent loop of the
+same site being browsed — search, results, a page, the sidebar — cropped rather than shrunk, so
+what survives is the shape of a docs site and the motion.
+
+Three things worth keeping:
+
+- **It's a screen recording of the live site, not an animated mock** (`scripts/record-docs-loop.mjs`
+  — Playwright drives docs.papervine.io with a drawn cursor, ffmpeg encodes; ~600KB for 13s).
+  A mock would have to be maintained forever and would teach visitors something we can't promise.
+  For contrast, the comparable surface on a competitor's home page *is* a mock: inspected at
+  390px it has no `<video>` and no `<iframe>`, just live DOM with working buttons for a generic
+  `docs.company.com` — the same interactive component as their desktop, scaled and clipped.
+- **`hidden md:block` does the loading gate for free.** DocsFrame only mounts the iframe once its
+  IntersectionObserver fires, and a `display:none` element never intersects — so on a phone the
+  third-party document is never fetched, and neither is the TipTap chunk behind Edit.
+- **Forcing the recording into dark mode needed localStorage, not `colorScheme`.** The renderer's
+  pre-paint script reads `localStorage['theme']` first and only consults `prefers-color-scheme`
+  when a site's appearance default is `system`; ours serves `d="light"`, so the Playwright
+  context's `colorScheme: "dark"` did nothing on its own and the clip came out white.
+
+The clip is served from the public R2 media bucket like the tour video, for the same reason: it
+gets re-recorded whenever the docs chrome moves, and committing it would add a fresh binary to
+history each time. Same caveat as `TOUR_VIDEO` too — it's on the rate-limited `r2.dev`
+development origin until the bucket gets a custom domain.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,

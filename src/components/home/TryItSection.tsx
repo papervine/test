@@ -1,5 +1,6 @@
 import { AskDemo, type DemoQuestion } from "./AskDemo";
 import { DocsFrame } from "./DocsFrame";
+import { DocsLoop } from "./DocsLoop";
 import type { HomeDemo } from "@/lib/home-demo";
 
 /**
@@ -83,12 +84,25 @@ export function TryItSection({
           </h2>
           <p className="mt-4 text-[var(--muted)]">
             This is the real product on this page — a live docs site, and the same editor your
-            team would write in. Switch between them.
+            team would write in.{" "}
+            {/* The last sentence is only true where the interactive frame renders. On a phone
+                the section shows a recording, so promising a switch would be a lie by layout. */}
+            <span className="hidden md:inline">Switch between them.</span>
+            <span className="md:hidden">Open it on a laptop to edit a page yourself.</span>
           </p>
         </div>
 
-        <div className="mt-12">
+        {/* Two treatments, chosen by width rather than by device. The interactive frame needs
+            room the phone hasn't got (see DocsLoop for why a phone-width iframe is worse than a
+            recording), and `hidden` does the right thing on both sides: DocsFrame only loads the
+            iframe once its IntersectionObserver fires, and a display:none element never
+            intersects — so on a phone the third-party document is never fetched at all, and
+            neither is the editor chunk behind it. */}
+        <div className="mt-12 hidden md:block">
           <DocsFrame url={frameUrl} />
+        </div>
+        <div className="mt-12 md:hidden">
+          <DocsLoop url={frameUrl} />
         </div>
 
         <div className="mt-16">
