@@ -37,6 +37,13 @@ async function withSkills<T>(fn: (skills: Skill[]) => T | Promise<T>): Promise<T
   }
 }
 
+/** The origin the CLIENT used, from the Host header — see the redirect below for why. */
+function requestOrigin(req: NextRequest): string {
+  const host = req.headers.get("host") ?? "";
+  const proto = req.headers.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
+  return host ? `${proto}://${host}` : "";
+}
+
 const notFound = () => new Response("Not found", { status: 404 });
 
 const json = (body: unknown) =>
@@ -55,7 +62,19 @@ export async function handleSkillMd(req: NextRequest): Promise<Response> {
   const res = await withSkills((skills) => {
     if (skills.length === 0) return notFound();
     if (skills.length > 1) {
-      return Response.redirect(new URL("/.well-known/agent-skills/index.json", req.url), 307);
+      // Built from the HOST HEADER, never from `req.url`. After the middleware Host rewrite
+      // `req.url` is the internal address (`localhost:3000/sites/{slug}/…`), so
+      // `new URL(path, req.url)` sent a reader on `starter.papervine.io/skill.md` to the APEX —
+      // which publishes no skills and answers 404. A relative Location doesn't save you either:
+      // the platform absolutises it against the same internal URL. Same trap as the GitHub App
+      // callback (CLAUDE.md): on a rewritten host, `req.url` is not the URL the client used.
+      return new Response(null, {
+        status: 307,
+        headers: {
+          location: `${requestOrigin(req)}/.well-known/agent-skills/index.json`,
+          "cache-control": CACHE,
+        },
+      });
     }
     return new Response(skills[0].raw, {
       headers: { "content-type": SKILL_CONTENT_TYPE, "cache-control": CACHE },
@@ -100,8 +119,7 @@ export async function handleSkillBySlug(req: NextRequest, slug: string): Promise
  */
 export async function handleAgentCard(req: NextRequest): Promise<Response> {
   const host = req.headers.get("host") ?? "";
-  const proto = req.headers.get("x-forwarded-proto") ?? "https";
-  const origin = host ? `${proto}://${host}` : "";
+  const origin = requestOrigin(req);
 
   const src = await requestContentSource();
   const record = await requestSiteRecord().catch(() => null);

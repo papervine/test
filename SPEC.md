@@ -506,6 +506,15 @@ runtime; the Trigger build is a different bundler deciding module order, which i
 taking. The generated-file helpers moved down into `skills-source`, so the dependency runs one
 way.
 
+**The multi-skill redirect must not trust `req.url`.** `/skill.md` on a site with several skills
+307s to the discovery index, and building that target with `new URL(path, req.url)` inherited the
+INTERNAL address — after the middleware Host rewrite that is `localhost:3000/sites/{slug}/…`, so
+a reader on `starter.papervine.io/skill.md` was sent to the APEX, which publishes no skills and
+answers 404. A relative `Location` doesn't rescue it either: the platform absolutises it against
+the same internal URL. It's built from the Host header now, like the agent card beside it. Third
+instance of this trap (the tenant login redirect, the GitHub App callback, this) — on a rewritten
+host, `req.url` is never the URL the client used.
+
 **Operator → Skills** (§10.10) is where this becomes operable: every live site with what it
 publishes at `/skill.md`, whether that file is authored or generated, when it was last generated,
 and a **Regenerate** button. That button is the only path to `force: true` — the sweep
