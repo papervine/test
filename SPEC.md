@@ -506,6 +506,28 @@ runtime; the Trigger build is a different bundler deciding module order, which i
 taking. The generated-file helpers moved down into `skills-source`, so the dependency runs one
 way.
 
+**Operator → Skills** (§10.10) is where this becomes operable: every live site with what it
+publishes at `/skill.md`, whether that file is authored or generated, when it was last generated,
+and a **Regenerate** button. That button is the only path to `force: true` — the sweep
+deliberately skips a site whose fingerprint hasn't moved, which is right for a background job and
+useless when you're looking at a generation that got something wrong. Before it existed, the only
+way to re-run one site was to null `skill_fingerprint` in SQL.
+
+A forced enqueue is the one place the idempotency key carries a timestamp
+(`skill:{siteId}:force:{now}`) rather than being stable. That is not the random-key mistake
+repeated: the rule is that a key must be stable for the EVENT it represents, and for the sweep
+the event is a publish while here it is the press — an operator clicking twice means "do it
+again".
+
+**And building that page surfaced a real bug in the reading layer.** The renderer's `loadRaw` /
+`listRaw` are React-`cache`d **by arguments only**, so anything that loops over several sites
+inside ONE request — this table, and the sweep's inline fallback — gets the FIRST site's answer
+for every later one: `loadRaw("skill.md")` is the identical call each time, whatever source is in
+context. It fails silently and looks like data. The table showed a site with two authored skills
+as having none, purely because the alphabetically-first site had none. `loadSkills` now takes an
+explicit `ContentSource` for callers that iterate; the ambient path stays for request-scoped
+serving, where the memoization is exactly what you want.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,

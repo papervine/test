@@ -1,5 +1,5 @@
 import "server-only";
-import { listRaw, loadRaw } from "@papervine/renderer/lib/content";
+import { listRaw, loadRaw, type ContentSource } from "@papervine/renderer/lib/content";
 import { getObjectText } from "./storage";
 import {
   GENERATED_SKILL_PATH,
@@ -23,11 +23,28 @@ import {
  * manifests and the agent card are cached and copied around by agents, and a set that reshuffles
  * per request makes their digests look like changes.
  */
-export async function loadSkills(): Promise<Skill[]> {
-  // Through the package's `source()` accessor, NOT `contentContext.getStore()` directly: a
-  // tenant request has a source in context, but the apex and single-repo preview (the CLI, the
-  // smoke gate) have none and fall back to the local default. Reading the store directly makes
-  // every skill silently vanish on exactly those hosts.
+export async function loadSkills(from?: ContentSource): Promise<Skill[]> {
+  // Two ways in, and the distinction is load-bearing.
+  //
+  // With no argument this goes through the package's `loadRaw`/`listRaw`, which resolve the
+  // AMBIENT source — `contentContext` if a tenant request set one, the local default otherwise.
+  // That fallback is why it isn't `contentContext.getStore()` directly: the apex and single-repo
+  // preview (the CLI, the smoke gate) have no source in context, and reading the store would
+  // make every skill vanish on exactly those hosts.
+  //
+  // But those helpers are React-`cache`d BY ARGUMENTS ONLY. Anything that loops over several
+  // sites inside one request — the operator console's Skills table, the sweep's inline fallback
+  // — gets the FIRST site's answer for every later one, because `loadRaw("skill.md")` is the
+  // same call each time no matter which source is in context. It fails silently and looks like
+  // data: every site after the first reports whatever the first one had. Those callers pass the
+  // source explicitly and read from it directly.
+  const read = from
+    ? (path: string) => from.loadRaw?.(path) ?? Promise.resolve(null)
+    : loadRaw;
+  const list = from
+    ? (prefix: string) => from.listRaw?.(prefix) ?? Promise.resolve([] as string[])
+    : listRaw;
+
   const out: Skill[] = [];
   const seen = new Set<string>();
 
@@ -42,17 +59,17 @@ export async function loadSkills(): Promise<Skill[]> {
     }
   };
 
-  add(await loadRaw(ROOT_SKILL_PATH).catch(() => null), "skill");
+  add(await read(ROOT_SKILL_PATH).catch(() => null), "skill");
 
   for (const dir of SKILL_DIRS) {
-    const keys = await listRaw(dir).catch(() => [] as string[]);
+    const keys = await list(dir).catch(() => [] as string[]);
     const names = keys
       .filter((k) => k.endsWith(`/${SKILL_DIR_FILE}`))
       .map((k) => k.slice(dir.length).split("/")[0])
       .filter(Boolean)
       .sort();
     for (const name of names) {
-      add(await loadRaw(`${dir}${name}/${SKILL_DIR_FILE}`).catch(() => null), name);
+      add(await read(`${dir}${name}/${SKILL_DIR_FILE}`).catch(() => null), name);
     }
   }
 
@@ -99,8 +116,11 @@ export async function loadGeneratedSkill(siteId: string): Promise<string | null>
  * The fallback is checked last and only when the repo supplied nothing, so an author's own file
  * always wins outright: we never publish a generated rival alongside a hand-written one.
  */
-export async function loadSkillsWithGenerated(siteId: string | null): Promise<Skill[]> {
-  const authored = await loadSkills();
+export async function loadSkillsWithGenerated(
+  siteId: string | null,
+  from?: ContentSource,
+): Promise<Skill[]> {
+  const authored = await loadSkills(from);
   if (authored.length > 0 || !siteId) return authored;
 
   const generated = await loadGeneratedSkill(siteId).catch(() => null);

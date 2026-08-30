@@ -52,7 +52,10 @@ export async function generateSkillForSite(
 
   return contentContext.run(src, async () => {
     // An author's own file wins outright — we neither overwrite it nor publish a rival.
-    const authored = await loadSkills();
+    // The source is passed EXPLICITLY: the sweep's inline path calls this once per site inside a
+    // single request, where the ambient helpers' arg-keyed memoization would hand site B the
+    // answer it computed for site A.
+    const authored = await loadSkills(src);
     if (authored.length > 0) return { status: "skipped", reason: "authored" as const };
 
     const config = (await loadRaw("docs.json").catch(() => null)) ?? "";
@@ -160,6 +163,47 @@ function safeJson(raw: string): { name?: string; description?: string; navigatio
 /** The Trigger.dev task that generates for one site (src/trigger/skill-generate.ts). */
 export const SKILL_GENERATE_TASK_ID = "skill-generate";
 
+/** How many sites the inline fallback will do in one request — that path has the ceiling. */
+const INLINE_CAP = 5;
+
+/**
+ * Hand one site to the executor, or generate it here when there is no executor.
+ *
+ * Shared by the hourly sweep and the operator console's Regenerate button so the two can't drift
+ * on the thing that matters: whether a run is queued or done inline, and how it's deduped.
+ * Returns true when it was queued, false when it ran inline.
+ */
+export async function enqueueSkillGeneration(
+  row: SiteRow,
+  opts: { force?: boolean } = {},
+): Promise<boolean> {
+  if (!isExecutorConfigured()) {
+    await generateSkillForSite(row, opts);
+    return false;
+  }
+
+  const { tasks } = await import("@trigger.dev/sdk/v3");
+  await tasks.trigger(
+    SKILL_GENERATE_TASK_ID,
+    { siteId: row.id, force: opts.force },
+    {
+      // Keyed on the staleness EPISODE, not just the site: two sweeps overlapping while a
+      // generation is still running must not queue the same work twice. Same shape as the
+      // automation fan-out's `ref` — and, like it, stable for the episode rather than freshly
+      // random, which is the bug that once defeated that breaker.
+      //
+      // A forced run is the deliberate exception, and it is not the same mistake: an operator
+      // pressing Regenerate twice means "do it again", so that key carries a timestamp. The rule
+      // is that a key must be stable for the EVENT it represents — for the sweep the event is a
+      // publish, for this it is the press.
+      idempotencyKey: opts.force
+        ? `skill:${row.id}:force:${Date.now()}`
+        : `skill:${row.id}:${row.skillStaleAt?.toISOString() ?? "initial"}`,
+    },
+  );
+  return true;
+}
+
 /**
  * The sweep: decide WHO is due, and hand each one to the executor.
  *
@@ -195,27 +239,10 @@ export async function sweepSkillGeneration(limit = 25): Promise<{
   let generated = 0;
   let skipped = 0;
 
-  for (const row of rows.slice(0, executor ? rows.length : 5)) {
+  for (const row of rows.slice(0, executor ? rows.length : INLINE_CAP)) {
     try {
-      if (!executor) {
-        const result = await generateSkillForSite(row);
-        if (result.status === "generated") generated++;
-        else skipped++;
-        continue;
-      }
-      const { tasks } = await import("@trigger.dev/sdk/v3");
-      await tasks.trigger(
-        SKILL_GENERATE_TASK_ID,
-        { siteId: row.id },
-        {
-          // Keyed on the staleness episode, not just the site: two sweeps overlapping while a
-          // generation is still running must not queue the same work twice. Same shape as the
-          // automation fan-out's `ref` — and, like it, the key has to be STABLE for the episode
-          // rather than freshly random, which is the bug that once defeated that breaker.
-          idempotencyKey: `skill:${row.id}:${row.skillStaleAt?.toISOString() ?? "initial"}`,
-        },
-      );
-      enqueued++;
+      if (await enqueueSkillGeneration(row)) enqueued++;
+      else generated++;
     } catch (err) {
       // One site's failure must not stop the sweep — and the flag stays set, so it's picked up
       // on the next run rather than silently dropped.

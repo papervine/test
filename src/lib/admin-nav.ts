@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   MailPlus,
   Rocket,
+  Sparkles,
   type LucideIcon,
 } from "lucide-react";
 
@@ -37,6 +38,9 @@ export const ADMIN_NAV: AdminNavSection[] = [
       { slug: "billing", label: "Billing", icon: CreditCard },
       // Under Commercial rather than Platform: it's demand, not infrastructure.
       { slug: "waitlist", label: "Waitlist", icon: MailPlus },
+      // Under Platform would be defensible too, but what an operator does here is decide whether
+      // a customer's agent surface reads right — that's product, not infrastructure.
+      { slug: "skills", label: "Skills", icon: Sparkles },
     ],
   },
 ];
