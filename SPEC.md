@@ -294,6 +294,16 @@ The smoke gate that pinned the microcopy string still exists; it moved to the su
 regressing to jargon-only, not to pin one particular sentence. The headline itself can't be
 asserted — the gradient word splits it across spans, so it has no contiguous string.
 
+The same pass fixed the hero on a phone. Three CTAs in a `flex-wrap` row left the third one
+alone on its own line at whatever width its text happened to be, which reads as a bug rather
+than a layout: it is now a two-column grid below `sm` — the trial CTA spanning both columns,
+Deploy and Star sharing the row beneath — and the tour pill goes `w-full` to close the stack.
+From `sm` up all four revert to the inline row, so the desktop hero is unchanged. The
+"docs platform alternative" paragraph moved out of the hero to its own band above the footer: it
+stays on the page (it is a discovery surface, CLAUDE.md) but a paragraph of comparison copy
+should not be the fourth thing under the headline, and at the bottom it reaches the people
+still scrolling, who are the ones actually weighing a move.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,

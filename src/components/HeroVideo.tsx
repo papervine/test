@@ -55,11 +55,14 @@ export function HeroVideo() {
 
   return (
     <>
+      {/* Full width on phones: the pill sits directly under the hero's CTA grid there, and one
+          sized to its own text reads as a stray third row rather than the last item in a stack.
+          From `sm` up it returns to a pill and moves to the right of the hero copy. */}
       <button
         type="button"
         onClick={() => setOpen(true)}
         aria-label={`Play the Papervine product tour, ${RUNTIME} long`}
-        className="db-feature group flex items-center gap-3 rounded-2xl p-2 pr-4 text-left transition-colors"
+        className="db-feature group flex w-full items-center gap-3 rounded-2xl p-2 pr-4 text-left transition-colors sm:w-auto"
       >
         <span className="relative block h-11 w-20 shrink-0 overflow-hidden rounded-xl bg-[#0a0a12]">
           <Image

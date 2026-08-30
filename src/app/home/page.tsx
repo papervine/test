@@ -254,13 +254,17 @@ export default async function LandingPage() {
               hosted.
             </p>
 
+            {/* A two-column grid on phones, an inline row from `sm` up. Wrapping three buttons
+                with `flex-wrap` left the third one alone on its own line at an arbitrary width,
+                which reads as a mistake; the grid gives the trial CTA the full width it deserves
+                and pairs the two secondary actions evenly beneath it. */}
             <div
-              className="db-rise mt-9 flex flex-wrap items-center gap-x-5 gap-y-3"
+              className="db-rise mt-9 grid grid-cols-2 gap-3 sm:flex sm:flex-wrap sm:items-center sm:gap-x-5 sm:gap-y-3"
               style={{ animationDelay: "240ms" }}
             >
               <Link
                 href="/signup"
-                className="db-cta inline-flex items-center rounded-xl px-5 py-3 text-sm font-medium text-white"
+                className="db-cta col-span-2 inline-flex items-center justify-center rounded-xl px-5 py-3 text-sm font-medium text-white"
               >
                 Free Trial
               </Link>
@@ -271,7 +275,7 @@ export default async function LandingPage() {
                   at the CLI app rather than the monorepo. */}
               <a
                 href={DEPLOY_TO_VERCEL}
-                className="db-ring inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-[var(--fg)] transition-colors hover:bg-[rgba(var(--ink-rgb),0.05)]"
+                className="db-ring inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-[var(--fg)] transition-colors hover:bg-[rgba(var(--ink-rgb),0.05)]"
               >
                 {/* Vercel's mark is a plain triangle; inlined rather than loading their button
                     image so the hero pulls nothing from a third-party origin. */}
@@ -283,7 +287,7 @@ export default async function LandingPage() {
 
               <a
                 href={GITHUB}
-                className="db-ring inline-flex items-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-[var(--fg)] transition-colors hover:bg-[rgba(var(--ink-rgb),0.05)]"
+                className="db-ring inline-flex items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-medium text-[var(--fg)] transition-colors hover:bg-[rgba(var(--ink-rgb),0.05)]"
               >
                 <Github className="h-4 w-4" />
                 Star
@@ -297,25 +301,6 @@ export default async function LandingPage() {
                 )}
               </a>
             </div>
-
-            {/* The same claim, said the way people search for it. Not keyword stuffing: reading
-                the same config IS the migration story, and the link proves it. */}
-            <p
-              className="db-rise mt-4 max-w-lg text-sm leading-relaxed text-[var(--muted)]"
-              style={{ animationDelay: "360ms" }}
-            >
-              Looking for a{" "}
-              <span className="font-medium text-[var(--fg)]">docs platform alternative</span>? If you
-              already have docs, they work here without a rewrite — Papervine reads the same{" "}
-              <span className="mono text-[var(--fg)]">docs.json</span>.{" "}
-              <a
-                href={DOCS_MIGRATE}
-                className="underline decoration-dotted underline-offset-4 transition-colors hover:text-[var(--fg)]"
-              >
-                migrate in minutes
-              </a>
-              .
-            </p>
           </div>
 
           <div className="db-rise lg:justify-self-end" style={{ animationDelay: "380ms" }}>
@@ -405,6 +390,26 @@ export default async function LandingPage() {
             </Link>
           </div>
         </div>
+      </section>
+
+      {/* The migration claim, said the way people search for it — kept on the page (it's a
+          discovery surface, CLAUDE.md) but moved off the hero, where a paragraph of comparison
+          copy competed with the three buttons above it for the first thing a visitor reads.
+          Down here it lands on the people still scrolling, who are the ones weighing a move. */}
+      <section className="mx-auto max-w-6xl px-6 pb-20">
+        <p className="mx-auto max-w-2xl text-center text-sm leading-relaxed text-[var(--muted)]">
+          Looking for a{" "}
+          <span className="font-medium text-[var(--fg)]">docs platform alternative</span>? If you
+          already have docs, they work here without a rewrite — Papervine reads the same{" "}
+          <span className="mono text-[var(--fg)]">docs.json</span>.{" "}
+          <a
+            href={DOCS_MIGRATE}
+            className="underline decoration-dotted underline-offset-4 transition-colors hover:text-[var(--fg)]"
+          >
+            migrate in minutes
+          </a>
+          .
+        </p>
       </section>
 
       {/* Footer */}
