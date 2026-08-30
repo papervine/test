@@ -510,10 +510,10 @@ const CONTROL_PLANE_CHECKS = [
       'href="/signup"',
       "db-vine",
       "pv-sprouts",
-      // Distinctive beginner copy so we don't silently regress to jargon-only
-      // ("docs.json", MCP, llms.txt). The headline is split across a <br>/span, so
-      // assert a contiguous phrase from the hero chip instead.
-      "With or without GitHub, we got you covered",
+      // Distinctive plain-language copy, so the hero can't silently regress to jargon-only
+      // ("docs.json", MCP, llms.txt). Pinned on the subhead: the headline is split across
+      // spans for the gradient word, so it has no contiguous string to match.
+      "AI-powered self-updating knowledge platform",
       // The two self-serve ways in, beside the trial CTA (SPEC §2). The clone URL is
       // asserted without its query separators because the HTML escapes them.
       "vercel.com/new/clone?repository-url=",

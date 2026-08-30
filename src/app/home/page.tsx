@@ -234,21 +234,12 @@ export default async function LandingPage() {
       <section className="mx-auto max-w-7xl px-6 pb-10 pt-20 sm:pt-24">
         <div className="grid items-center gap-10 lg:grid-cols-[minmax(0,1fr)_auto]">
           <div className="max-w-2xl">
-            {/* Eyebrow. This slot used to be a "New · …" announcement linking to the reader-auth
-                docs; it now carries the tagline, so the affordances that said "announcement"
-                went with the copy — no pulsing dot (it means *new*), and not a link (a tagline
-                that navigates somewhere unrelated is a link whose text doesn't describe its
-                destination). */}
-            <span
-              className="db-rise db-ring mono inline-flex items-center rounded-full px-3 py-1 text-xs text-[var(--muted)]"
-              style={{ animationDelay: "0ms" }}
-            >
-              Your product looks good when your docs look good.
-            </span>
-
+            {/* No eyebrow above the headline. The slot has carried a "New · …" announcement and
+                then a tagline; both were saying less than the headline directly under them, and
+                the hero reads better starting on the claim itself. */}
             <h1
-              className="db-rise mt-7 text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
-              style={{ animationDelay: "80ms" }}
+              className="db-rise text-5xl font-semibold leading-[1.05] tracking-tight sm:text-6xl"
+              style={{ animationDelay: "0ms" }}
             >
               <SparklesText>
                 Publish <span className="db-grad">beautiful</span> docs.
@@ -306,11 +297,6 @@ export default async function LandingPage() {
                 )}
               </a>
             </div>
-
-            <p className="db-rise mono mt-5 flex items-center gap-2 text-xs text-[var(--muted)]" style={{ animationDelay: "300ms" }}>
-              <FileJson2 className="h-3.5 w-3.5" />
-              With or without GitHub, we got you covered.
-            </p>
 
             {/* The same claim, said the way people search for it. Not keyword stuffing: reading
                 the same config IS the migration story, and the link proves it. */}

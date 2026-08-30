@@ -284,6 +284,16 @@ and the bug that reached production lived in `src/lib/`, not in the page. The tw
 genuinely crisp scopes (`cli-package`, the starter `crawl`) could be path-filtered later; the
 rest can't be, honestly.
 
+**Status 2026-08-29 — the hero lost its eyebrow and its microcopy.** Two slots came off the
+top of the marketing home: the eyebrow chip (which had carried a "New · …" announcement, then a
+tagline) and the small line under the CTA row. Both were saying less than the copy immediately
+beside them — the eyebrow above a headline that states the claim outright, the microcopy under
+three buttons that already show the ways in — and the hero reads better opening on the headline.
+The smoke gate that pinned the microcopy string still exists; it moved to the subhead
+("AI-powered self-updating knowledge platform"), because its job is to catch the hero silently
+regressing to jargon-only, not to pin one particular sentence. The headline itself can't be
+asserted — the gradient word splits it across spans, so it has no contiguous string.
+
 **Pricing thesis: all features included, paid by scale (drafted 2026-07-07).** The
 incumbent pattern is to make public docs cheap while gating security and AI behind
 high tiers. Papervine's sharper public wedge is **feature-complete by default**: auth,
