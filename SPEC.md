@@ -715,6 +715,21 @@ tracked public docs; locally, `_private/` is gitignored for that work. The curre
 next page update; the billing backend's schema + versioned catalog + credit core landed
 2026-07-16, with enforcement, Stripe, and surfaces to follow (§10 "Billing").
 
+> **Status (2026-08-31): pricing revised to 5-column structure with self-host OSS.** The
+> public pricing page and catalog now present five tiers: **Self-host** ($0 OSS, Elastic
+> License 2.0, npm `papervine`, BYOK AI only, no control plane), **Cloud** ($0 hosted hobby,
+> 1 site/5 editors, Studio/widget/auth/analytics), **Team** ($29/mo · $19/mo annual, was
+> $50/$40 — SSO/RBAC/preview deploys/admin APIs, 3 sites/8 editors/90d analytics),
+> **Pro** ($149/mo · $129/mo annual, was $99/$79 — scheduled workflows/routines + Insights,
+> 10 sites/25 editors/1y analytics/priority support), and **Enterprise** (contact us for
+> SCIM/SLA/migration). BYOK AI assistant available on all tiers including self-host and Cloud;
+> hosted AI credits remain optional pools. **Multi-repo removed** (doesn't exist as a product
+> feature); **"Advanced insights" → "Insights"** (gated Pro+). Workflows moved from Team to
+> Pro (now "Scheduled workflows"). Widget row added to matrix (no on self-host, yes Cloud+).
+> Striped the old $450 pro price and $50 Team from every marketing surface. New Stripe prices
+> pending: Team 2900/22800 cents, Pro 14900/154800 cents (follow-up: create prices, run
+> `billing:publish`).
+
 **Landing backdrop: a growing vine, not a grid (landed 2026-06-28).** The marketing
 landing swaps the static `.db-grid` for `VineField` (`src/components/platform/VineField.tsx`,
 the `"home"` variant) — three vines that slowly *draw* upward via an animated
