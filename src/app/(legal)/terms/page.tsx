@@ -118,7 +118,7 @@ export default function TermsOfService() {
 
       <h2>15. Contact</h2>
       <p>
-        Papervine, LLC — [MAILING ADDRESS]
+        Papervine, LLC
         <br />
         <a href="mailto:hello@papervine.io">hello@papervine.io</a>
       </p>

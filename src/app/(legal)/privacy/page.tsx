@@ -119,7 +119,7 @@ export default function PrivacyPolicy() {
 
       <h2>11. Contact</h2>
       <p>
-        Papervine, LLC — [MAILING ADDRESS]
+        Papervine, LLC
         <br />
         <a href="mailto:hello@papervine.io">hello@papervine.io</a>
       </p>
