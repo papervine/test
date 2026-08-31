@@ -58,6 +58,20 @@ const ASSET_RE =
 const SENTRY_TUNNEL = "/monitoring";
 
 /**
+ * The crawler files (`src/app/robots.ts`, `src/app/sitemap.ts`). ROOT routes, so they hit the
+ * same wall the Sentry tunnel did above: on the app host `/robots.txt` would be rewritten to
+ * `/app/robots.txt`, meet the auth gate, and 307 to `/login` — a crawler asking what it may
+ * index would be told "log in". Both routes resolve the host themselves and answer per host
+ * (src/lib/seo-routes.ts), so they pass through untouched on the hosts that are OURS.
+ *
+ * NOT bypassed on tenant subdomains or custom domains, deliberately: there they keep exactly
+ * today's behavior (rewritten into the tenant's own path space). Letting them through would
+ * mean answering for a customer's domain, and what belongs there is a sitemap of THEIR pages —
+ * a renderer feature, not this file's call to make.
+ */
+const CRAWLER_FILES = new Set(["/robots.txt", "/sitemap.xml"]);
+
+/**
  * The AI-discovery surfaces (SPEC §9.1/§10.1). Like the Sentry tunnel these are ROOT paths
  * that resolve the tenant from the Host themselves, so they must NOT be rewritten under
  * `/sites/{slug}` or `/custom-domain` — they're stamped with the tenant and passed through.
@@ -186,6 +200,7 @@ export function middleware(req: NextRequest) {
       pathname.startsWith("/app/") || // already internal (defensive; links are bare)
       pathname === "/app" ||
       pathname === SENTRY_TUNNEL ||
+      CRAWLER_FILES.has(pathname) ||
       ASSET_RE.test(pathname)
     ) {
       return syncFlag(NextResponse.next());

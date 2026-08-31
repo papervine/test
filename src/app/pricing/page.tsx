@@ -280,9 +280,17 @@ export default async function PricingPage() {
           <span className="flex items-center gap-1.5">
             <Brand size="sm" />
           </span>
-          <div className="flex gap-5">
+          <div className="flex flex-wrap justify-center gap-5">
             <Link href="/pricing" className="transition-colors hover:text-[var(--fg)]">
               Pricing
+            </Link>
+            {/* The comparison page is reached from here and from the landing page — an
+                unlinked page is one search engines have no reason to crawl or trust. */}
+            <Link
+              href="/docs-platform-alternatives"
+              className="transition-colors hover:text-[var(--fg)]"
+            >
+              Compare
             </Link>
             <a href={GITHUB} className="transition-colors hover:text-[var(--fg)]">
               GitHub

@@ -391,6 +391,35 @@ const CONTROL_PLANE_CHECKS = [
     rejectRedirectTo: "/login",
   },
   {
+    // Same ROOT-route trap as the tunnel above: /robots.txt would become /app/robots.txt, meet
+    // the auth gate, and answer a crawler asking what it may index with a bounce to /login.
+    host: "app.localhost",
+    path: "/robots.txt",
+    desc: "robots.txt on the app host is not rewritten onto /app, and disallows crawling",
+    rejectRedirectTo: "/login",
+    include: ["Disallow: /"],
+    // The authenticated app must never advertise the marketing sitemap.
+    exclude: ["Sitemap:"],
+  },
+  {
+    // This gate runs in single-repo mode (PAPERVINE_CONTENT=tests/fixtures) — i.e. exactly the
+    // shape `npx papervine dev` / `papervine serve` has, where the apex IS somebody else's
+    // docs repo. It must not publish OUR sitemap at their root. The marketing branch is
+    // covered by tests/unit/seo-routes.test.ts, which needs no host to assert.
+    path: "/robots.txt",
+    desc: "a CLI-served repo gets a neutral robots.txt, never our sitemap pointer",
+    // "User-Agent" with a capital A — that's how Next serializes MetadataRoute.Robots, and
+    // pinning the real spelling is the point of asserting on the body at all.
+    include: ["User-Agent: *", "Allow: /"],
+    exclude: ["Sitemap:", "papervine.io"],
+  },
+  {
+    path: "/sitemap.xml",
+    desc: "a CLI-served repo gets an empty sitemap, not the platform's marketing URLs",
+    include: ["<urlset"],
+    exclude: ["/docs-platform-alternatives", "/pricing"],
+  },
+  {
     host: "app.localhost",
     path: "/acme/docs",
     desc: "unauthenticated app host /:org/:site redirects to /login",
@@ -587,6 +616,38 @@ const CONTROL_PLANE_CHECKS = [
     ],
     // The 90-day promo is dead; its copy must not resurface.
     exclude: ["Free for 90 days"],
+  },
+  {
+    path: "/docs-platform-alternatives",
+    desc: "the comparison page renders its table, its sources, the FAQ rich result, and the disclaimer",
+    // A page that exists to be FOUND, so the gate watches the parts that make it findable and
+    // the parts that make it legitimate, not the prose. The JSON-LD block is the fragile one:
+    // it is injected with dangerouslySetInnerHTML, so a copy edit that slipped a "<" into an
+    // answer would end the <script> early and spill JSON into the document.
+    include: [
+      '"@type":"FAQPage"',
+      'name="twitter:site" content="@papervine_io"',
+      "opengraph-image",
+      'rel="canonical" href="https://www.papervine.io/docs-platform-alternatives"',
+      "Incumbent",
+      "GitBook",
+      "Docusaurus",
+      // The table's own columns — chrome alone renders without them.
+      "Top self-serve tier",
+      "Content format",
+      // Non-negotiables of naming a competitor at all (SPEC §10.6).
+      "not affiliated",
+      "trademarks",
+      // Every competitor entry states the trade it asks for, sourced (the label the page
+      // renders for that block — it changed once already when the page stopped being a
+      // neutral survey, which is exactly why it's pinned here).
+      "The trade:",
+      'href="/signup"',
+    ],
+    // No logos and no borrowed authority. NOT "endorsed by" — the disclaimer itself says
+    // "not affiliated with, endorsed by, or sponsored by", so excluding the phrase would fail
+    // on the very sentence that makes the page legitimate.
+    exclude: ["example.com/logo", "official partner", "in partnership with"],
   },
 ];
 

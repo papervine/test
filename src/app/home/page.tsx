@@ -415,9 +415,14 @@ export default async function LandingPage() {
       <section className="mx-auto max-w-6xl px-6 pb-20">
         <p className="mx-auto max-w-2xl text-center text-sm leading-relaxed text-[var(--muted)]">
           Looking for a{" "}
-          <span className="font-medium text-[var(--fg)]">docs platform alternative</span>? If you
-          already have docs, they work here without a rewrite — Papervine reads the same{" "}
-          <span className="mono text-[var(--fg)]">docs.json</span>.{" "}
+          <Link
+            href="/docs-platform-alternatives"
+            className="font-medium text-[var(--fg)] underline decoration-dotted underline-offset-4"
+          >
+            docs platform alternative
+          </Link>
+          ? If you already have docs, they work here without a rewrite — Papervine reads the
+          same <span className="mono text-[var(--fg)]">docs.json</span>.{" "}
           <a
             href={DOCS_MIGRATE}
             className="underline decoration-dotted underline-offset-4 transition-colors hover:text-[var(--fg)]"

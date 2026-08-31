@@ -154,6 +154,12 @@ served directory updates the site — no rebuild and no restart. The costly half
 (MDX compilation and syntax highlighting) is cached, so repeat requests don't recompile, and
 the search index is fingerprinted by content and rebuilt only when the files change.
 
+**Crawlers get a permissive answer.** A served site responds to `/robots.txt` with
+`User-Agent: *` / `Allow: /` and nothing else — no rules invented for you, and no pointer to
+anybody else's sitemap. `/sitemap.xml` answers with a valid but empty document: listing your
+pages there is on the roadmap, not in this release, so add your own rules in front of the
+process (a reverse proxy is the natural place) if you need something stricter.
+
 **Know what isn't included.** One site per process, no caching layer or CDN, no reader
 authentication, no analytics. The assistant and the [MCP server](/features/mcp-servers) *are*
 included — a self-hosted site serves `/mcp` with the same tools a hosted one does. Those are the control plane, and none of it is in this package —

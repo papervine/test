@@ -104,6 +104,98 @@ follow. **Kept:** "docs platform alternative" (this page is a discovery surface;
 factual — we read the same `docs.json`) and the migrate-guide link that proves it.
 Jargon lives in `docs/`, not on the storefront.
 
+**Status 2026-08-31 — host-aware `robots.txt` + `sitemap.xml`.** The apex had neither (both
+404'd), so the comparison page below was discoverable only by internal link, with no `lastmod`
+signal and nothing to submit to Search Console. Added `src/app/robots.ts` and
+`src/app/sitemap.ts` using Next's file conventions, over a pure core in
+`src/lib/seo-routes.ts` (`isMarketingHost` / `robotsPolicyFor` / `sitemapFor`).
+**Host-awareness is the whole design, not a refinement.** One Next app answers on four host
+classes, so a static `public/robots.txt` would have described the wrong site on three of them —
+publishing OUR sitemap at `customer.com/robots.txt`. Per class: the marketing apex gets
+`Allow: /` plus a `Sitemap:` pointer at the **canonical** origin (never the requesting host, so
+a preview deployment sends crawlers to the real apex rather than to itself); the app host gets
+`Disallow: /` (an authenticated app whose only crawlable pages are thin duplicates of marketing
+ones); tenant subdomains and custom domains are told nothing about us. Reading `headers()` is
+what opts these routes out of Next's default caching for the convention — without it the first
+host crawled would have its answer served to every other one, which is precisely the leak.
+**The fourth case isn't a host at all: single-repo mode.** With `PAPERVINE_CONTENT` set
+(`npx papervine dev` / `papervine serve` / the smoke gate) the apex IS somebody else's docs
+repo, so it must not advertise our sitemap either — same class of leak as the Sentry DSN that
+got compiled into the public CLI tarball (§10.6), arriving by *serving* rather than by
+packaging. A CLI-served site now answers `/robots.txt` with a bare permissive rule and
+`/sitemap.xml` with an empty document (documented in `docs/cli.mdx`); listing a served repo's
+own pages is the tenant-sitemap feature, which stays out of scope.
+Both are ROOT routes, so they needed the **middleware bypass** the Sentry tunnel already
+taught us about (`CRAWLER_FILES`): on the app host `/robots.txt` would otherwise be rewritten
+to `/app/robots.txt`, meet the auth gate, and answer a crawler asking what it may index with a
+307 to `/login`. Deliberately NOT bypassed on tenant hosts — there they keep exactly today's
+behavior (rewritten into the tenant's path space, where they render the docs 404), because what
+belongs on a customer's domain is a sitemap of THEIR pages and that's a renderer feature.
+Coverage: `tests/unit/seo-routes.test.ts` (12 cases — every host class, both directions, plus
+"is EMPTY on every host that isn't ours") and three smoke checks that only a server can prove:
+the app host serves `Disallow` and is NOT bounced to `/login`, and the CLI-mode apex gets
+neither our `Sitemap:` line nor our marketing URLs. *Verified by curl against a real dev
+server on all three hosts: apex → `Allow` + the canonical sitemap pointer with the comparison
+page carrying `lastmod 2026-08-31`; `app.localhost` → `Disallow: /`; `starter.localhost` →
+zero occurrences of our sitemap or marketing URLs.* Known and unchanged: a tenant host answers
+`/robots.txt` with its docs-site 404 HTML rather than a robots file — pre-existing, and what
+the tenant-sitemap work should fix.
+
+**Status 2026-08-31 — `/docs-platform-alternatives`, the comparison page.** The category's
+highest-intent search is "docs platform alternatives", and the entire first page of results is
+listicles written by competitors about each other. Added our own at
+`src/app/docs-platform-alternatives/page.tsx` — a real apex route (the middleware serves any
+route on the apex, no allowlist), with its own `opengraph-image.tsx`. This is squarely the
+§10.6 discovery-surface exception to the house style: the phrase is what people type, and
+the claim under it is factual rather than positioning.
+Content, sources and the FAQ live in `src/lib/marketing-alternatives.ts` — data, not JSX,
+so the table and the ten per-platform sections render from one list, the FAQ and its
+`FAQPage` JSON-LD are built from the same array (a rich result can't advertise an answer
+the page doesn't contain), and every competitor claim is *forced* to carry a `source`.
+**It is a sales page, and the first draft wasn't** (same-day correction). Draft one was a
+neutral market survey: it opened with four cards routing readers to GitBook, ReadMe and
+Docusaurus before making a single argument, gave our own entry a longer self-critique than
+any competitor's, and led each rival with "Best for:". Accurate, and the wrong genre for a
+storefront. Every section now argues a position — the format decides the switch, we read
+the one you already have, $50 buys what the category holds for an enterprise call — and
+the labels moved with it ("Best for" → the pitch, "Watch out for" → "The trade" on
+competitors, one short "One thing to know" on ours).
+What did NOT move is the part that keeps the page an asset rather than a liability, and
+it's enforced by `tests/unit/marketing-alternatives.test.ts` (10 cases) rather than
+remembered: every price quoted from the vendor's own pricing page, linked and stamped with
+`PRICES_CHECKED`; no logos, nothing pejorative, and the non-affiliation disclaimer on the
+page; a substantive sourced `caveat` on every competitor (>120 chars — a one-liner would be
+a swipe, not information); and our own licence described accurately, with a test that
+forbids the *claim* "is open source" while allowing the disclaiming sentence. Selling hard
+on true numbers is marketing; selling on a number that moved last quarter is how this page
+becomes the thing a competitor screenshots.
+**That last one caught a real inaccuracy:** `apps/cli` is **Elastic License 2.0**, which is
+source-available and *not* OSI open source — but the marketing home's description says
+"Open source or hosted". This page says "source-available (Elastic License 2.0), which is
+not the same thing as OSI open source", and a unit test forbids the positive claim in this
+module's copy. **The home page's wording is still wrong and is not fixed here** (it's
+someone's positioning call, not a bug to quietly rewrite): either relicense, or change that
+line to "source-available".
+The page's own wedge — and the reason it can be better than every competitor's version
+rather than just another entry — is the section on moving OFF the format: because we read
+the same `docs.json`, leaving is a DNS change, and nobody else writing this listicle has an
+incentive to cover the exit. Research also found that content gap directly: there is
+plenty written about migrating *to* each platform and essentially nothing about migrating
+*away*. Linked from the landing page's alternative paragraph and the pricing footer (an
+unlinked page is one nothing crawls). Smoke gate asserts the JSON-LD, the canonical, the
+table headers, the disclaimer and the absence of borrowed authority ("official partner",
+"in partnership with" — but NOT "endorsed by", which the disclaimer itself contains).
+The page wears `PlatformShell variant="lite"`, not the marketing `full`: the grid + grain
+the landing pages wear sit *behind* a wide table and ten dense cards, which is the
+documented reason that variant exists.
+*Verified in a real browser at 1280px and 390px in both platform themes, console clean;
+three things only the browser caught — the OG card's first headline overflowed (satori
+doesn't wrap, it runs past the edge) and was re-authored to two short lines; an inline
+`<code>` inside the hero pill made it wrap mid-phrase; and the claim cards printed literal
+backticks until they were routed through the same inline-code pass as the rest of the copy.* **The sitemap gap this note originally
+deferred was closed the same day** — see the host-aware `robots.txt`/`sitemap.xml` status note
+above; the page is in the sitemap with its prices-checked date as `lastmod`.
+
 **Status 2026-08-27 — GitHub on the marketing home.** The landing header (desktop) and
 footer link to the public CLI repo (`github.com/papervine/papervine` — the mirror; renamed
 from `papervine/cli` on 2026-08-28). Absolute `<a>`, not `<Link>` — it's a different host.
