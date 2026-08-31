@@ -39,22 +39,20 @@ describe("plan content vs. enforced catalog (drift guard)", () => {
     }
   });
 
-  it("matrix 'AI credits' row reflects each plan's included monthly credits", () => {
-    // Paid plans state the exact number; free/enterprise are editorial (trial/committed).
-    for (const t of ["team", "pro"] as const) {
-      const credits = catalogPlan(t).includedMonthlyCredits;
-      expect(String(row("AI credits")[t]), `credits/${t}`).toContain(
-        credits.toLocaleString(),
-      );
-    }
+  it("matrix 'Hosted AI credits' row reflects optional credit pools", () => {
+    // Matrix now shows hosted credits as optional pools, not the primary feature.
+    // Team and Pro mention the pool size as optional; Free shows trial-only.
+    expect(String(row("Hosted AI credits").team), "team hosted credits").toContain("5k");
+    expect(String(row("Hosted AI credits").pro), "pro hosted credits").toContain("25k");
+    expect(String(row("Hosted AI credits").free), "free hosted credits").toContain("Trial only");
   });
 
   it("matrix feature-flag rows match entitlement feature flags exactly", () => {
     // Matrix row label → the entitlement feature key it advertises. Any drift (e.g.
     // moving SSO to a different tier in entitlements but not the matrix) fails here.
+    // Note: "BYOK assistant" row is all-true (available on all plans including Free).
+    // "Assistant, writing agent" row combines both features (both true on Team+, both BYOK on Free).
     const ROW_TO_FEATURE: Record<string, PlanFeatureKey> = {
-      Assistant: "assistant",
-      "Writing agent": "writerAgent",
       Routines: "workflows",
       "Admin APIs": "adminApis",
       "Advanced insights": "advancedInsights",
@@ -70,6 +68,10 @@ describe("plan content vs. enforced catalog (drift guard)", () => {
           catalogPlan(t).entitlements.features[feature],
         );
       }
+    }
+    // BYOK assistant is available on all plans
+    for (const t of TIERS) {
+      expect(row("BYOK assistant")[t], `BYOK assistant/${t}`).toBe(true);
     }
   });
 

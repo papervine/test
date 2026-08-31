@@ -152,7 +152,8 @@ function sub(over: Partial<SubscriptionState>): SubscriptionState {
 describe("resolveEntitlements", () => {
   it("no billing row => Free (legacy orgs / DB-free paths must not throw or over-gate)", () => {
     expect(resolveEntitlements(null, now)).toBe(FREE_ENTITLEMENTS);
-    expect(FREE_ENTITLEMENTS.features.assistant).toBe(false);
+    // Free now has BYOK assistant support
+    expect(FREE_ENTITLEMENTS.features.assistant).toBe(true);
   });
   it("active keeps plan entitlements", () => {
     expect(resolveEntitlements(sub({}), now).features.sso).toBe(true);
@@ -175,7 +176,8 @@ describe("resolveEntitlements", () => {
     ).toBe(FREE_ENTITLEMENTS);
   });
   it("hasFeature mirrors resolution", () => {
-    expect(hasFeature(null, "assistant", now)).toBe(false);
+    // Free now has BYOK assistant, so null billing row gives assistant=true
+    expect(hasFeature(null, "assistant", now)).toBe(true);
     expect(hasFeature(sub({}), "assistant", now)).toBe(true);
   });
 });
@@ -190,16 +192,18 @@ describe("authorizeAiDecision (the gate in front of every AI route)", () => {
       metered: false,
     });
   });
-  it("no billing row gates like Free (AI features refused)", () => {
+  it("no billing row allows BYOK AI (Free has assistant with BYOK, unmetered)", () => {
+    // Free now supports BYOK assistant, so no billing row allows AI but unmetered
     expect(authorizeAiDecision({ state: "none" }, "assistant", now)).toEqual({
-      allowed: false,
-      code: "upgrade_required",
+      allowed: true,
+      metered: false,
     });
   });
-  it("plan without the feature -> upgrade_required (canceled sub collapses to Free)", () => {
+  it("canceled sub collapses to Free, which now supports BYOK AI (unmetered)", () => {
+    // Free supports BYOK assistant, so canceled plans allow AI but unmetered
     expect(
       authorizeAiDecision({ ...okLookup, sub: sub({ status: "canceled" }) }, "assistant", now),
-    ).toEqual({ allowed: false, code: "upgrade_required" });
+    ).toEqual({ allowed: true, metered: true });
   });
   it("in-plan feature with credits -> allowed and metered", () => {
     expect(authorizeAiDecision(okLookup, "assistant", now)).toEqual({
@@ -225,7 +229,7 @@ describe("authorizeAiDecision (the gate in front of every AI route)", () => {
       metered: true,
     });
   });
-  it("expired trial refuses even before the expiry cron runs", () => {
+  it("expired trial collapses to Free, which supports BYOK AI (metered=true for hosted credit tracking)", () => {
     const expired = {
       ...okLookup,
       buckets: { trial: 5000, monthly: 0, pack: 0 },
@@ -235,9 +239,10 @@ describe("authorizeAiDecision (the gate in front of every AI route)", () => {
         entitlements: catalogPlan("trial").entitlements,
       }),
     };
+    // Expired trial collapses to Free, which now has BYOK assistant
     expect(authorizeAiDecision(expired, "assistant", now)).toEqual({
-      allowed: false,
-      code: "upgrade_required",
+      allowed: true,
+      metered: true,
     });
   });
 });
@@ -326,12 +331,13 @@ describe("catalog", () => {
     expect(cents("pro", "month")).toBe(9900);
     expect(cents("pro", "year")).toBe(79 * 12 * 100);
   });
-  it("credit pools: Team 5k, Pro 25k; Free has no AI and no overage path", () => {
+  it("credit pools: Team 5k, Pro 25k; Free has BYOK AI but no hosted credits/overage", () => {
     expect(catalogPlan("team").includedMonthlyCredits).toBe(5000);
     expect(catalogPlan("pro").includedMonthlyCredits).toBe(25000);
     expect(catalogPlan("free").includedMonthlyCredits).toBe(0);
     expect(catalogPlan("free").overageCentsPerThousandCredits).toBeNull();
-    expect(catalogPlan("free").entitlements.features.assistant).toBe(false);
+    // Free now has BYOK AI assistant (true), but no hosted monthly credits
+    expect(catalogPlan("free").entitlements.features.assistant).toBe(true);
   });
   it("the wedge: SSO/RBAC start at Team, SCIM is Enterprise-only", () => {
     expect(catalogPlan("team").entitlements.features.sso).toBe(true);
