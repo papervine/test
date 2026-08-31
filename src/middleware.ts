@@ -57,6 +57,17 @@ const ASSET_RE =
 // passes straight through untouched.
 const SENTRY_TUNNEL = "/monitoring";
 
+// The authoring MCP (SPEC §9.2) — same root-route trap as the tunnel above, one host class in.
+// It lives at `/authoring/mcp` and is only meaningful on the APP host (it authenticates by the
+// app-host session cookie), but the app host rewrites its whole path space onto `/app/*`, so it
+// resolved to `/app/authoring/mcp` — a path no route backs — and 404'd for an authenticated
+// client. Unauthenticated it never got that far: the edge cookie gate 307'd it to `/login`,
+// which an MCP client reports as a connection failure rather than as "sign in". Either way the
+// endpoint had never been reachable. Bypassed here so the route handler answers, which is also
+// where the real authorization lives — it resolves the session itself and returns a JSON-RPC
+// error rather than a redirect.
+const AUTHORING_MCP = "/authoring/mcp";
+
 /**
  * The crawler files (`src/app/robots.ts`, `src/app/sitemap.ts`). ROOT routes, so they hit the
  * same wall the Sentry tunnel did above: on the app host `/robots.txt` would be rewritten to
@@ -200,6 +211,7 @@ export function middleware(req: NextRequest) {
       pathname.startsWith("/app/") || // already internal (defensive; links are bare)
       pathname === "/app" ||
       pathname === SENTRY_TUNNEL ||
+      pathname === AUTHORING_MCP ||
       CRAWLER_FILES.has(pathname) ||
       ASSET_RE.test(pathname)
     ) {

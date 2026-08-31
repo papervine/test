@@ -2,9 +2,10 @@
 /**
  * Publish the public-facing parts of this monorepo to their own GitHub repos.
  *
- * Two targets (`--target`), one mechanism:
- *   - `cli`     → `papervine/papervine`, the source-available (ELv2) CLI + render engine
- *   - `starter` → `papervine/starter`, the forkable example docs site
+ * Three targets (`--target`), one mechanism:
+ *   - `cli`           → `papervine/papervine`, the source-available (ELv2) CLI + render engine
+ *   - `starter`       → `papervine/starter`, the forkable example docs site
+ *   - `cursor-plugin` → `papervine/cursor-plugin`, the Cursor plugin (skill + rules + MCP)
  *
  * The monorepo is the single source of truth. This is a **one-directional** publish:
  * monorepo → public repo, never the reverse. That is deliberate — the renderer is shared
@@ -27,7 +28,7 @@
  *   node scripts/mirror-cli.mjs --push                        # replay new commits, then push
  *
  * Flags:
- *   --target <cli|starter>  Which repo to publish (default: cli).
+ *   --target <cli|starter|cursor-plugin>  Which repo to publish (default: cli).
  *   --dry-run      Build the snapshot and validate it; never clone/commit/push.
  *   --initial      Seed a repo with a single squashed "Initial import" commit.
  *   --push         Actually push (otherwise it commits locally and tells you the command).
@@ -52,6 +53,7 @@ import os from "node:os";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
+import { checkCursorPlugin } from "./lib/check-cursor-plugin.mjs";
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TEMPLATES = path.join(REPO, "scripts", "mirror-cli");
@@ -67,7 +69,7 @@ const KEEP = has("--keep");
 const VALIDATE = !has("--no-validate");
 
 /**
- * Two publish targets, same machinery.
+ * Three publish targets, same machinery.
  *
  *  - **cli** → `papervine/papervine`: the public, source-available half of the monorepo (the CLI and the
  *    render engine it's built from), plus a generated workspace root, tests and CI.
@@ -77,11 +79,19 @@ const VALIDATE = !has("--no-validate");
  *    `internal/*` pages carry the `groups:` frontmatter that exercises SPEC §11.2. A test
  *    fixture defined in a repo we don't version is a fixture that can change under the tests
  *    that rely on it.
+ *  - **cursor-plugin** → `papervine/cursor-plugin`: the Cursor plugin. Same reason it lives
+ *    here: it *documents* the renderer's component set, config surface and CLI flags, so it
+ *    goes stale the moment any of those change in a commit that can't touch it. Publishing it
+ *    from the monorepo makes "add a component, update the skill" one reviewable change.
  */
 const TARGET = val("--target", "cli");
 const TARGETS = {
   cli: { remote: "git@github.com:papervine/papervine.git", label: "the CLI + render engine" },
   starter: { remote: "git@github.com:papervine/starter.git", label: "the example docs site" },
+  "cursor-plugin": {
+    remote: "git@github.com:papervine/cursor-plugin.git",
+    label: "the Cursor plugin",
+  },
 };
 if (!TARGETS[TARGET]) {
   console.error(`mirror: unknown --target "${TARGET}". Use one of: ${Object.keys(TARGETS).join(", ")}`);
@@ -115,6 +125,11 @@ const MIRRORED_TEST_DATA = ["tests/fixtures"];
 // hello-world in the CLI templates — which is exactly the drift this collapses.
 const STARTER = "examples/starter";
 
+// The Cursor plugin's source tree, published to `papervine/cursor-plugin` and laid out exactly
+// as Cursor expects at a repo root (`.cursor-plugin/plugin.json`, `skills/`, `rules/`,
+// `mcp.json`) so the mirror is a straight lift rather than a generator.
+const AGENT_CONTEXT = "agent-context";
+
 // Everything whose change can alter the published snapshot, used to select which commits to
 // replay. Wider than the mirrored paths on purpose: the templates and this script *generate*
 // part of the output, so a fix to either has to be publishable. Without them a generator fix
@@ -133,13 +148,14 @@ const SOURCE_PATHS = {
   // The starter repo is *only* the docs site, so only its own content and the generator can
   // change what gets published.
   starter: [STARTER, "scripts/mirror-cli.mjs"],
+  "cursor-plugin": [AGENT_CONTEXT, "scripts/mirror-cli.mjs"],
 }[TARGET];
 
 /** One-line description of what a snapshot contains, shaped to the target. */
 function summarize(info) {
-  return TARGET === "starter"
-    ? `${info.fileCount} files`
-    : `${info.fileCount} mirrored files, ${info.testCount} portable unit tests, v${info.version}`;
+  return TARGET === "cli"
+    ? `${info.fileCount} mirrored files, ${info.testCount} portable unit tests, v${info.version}`
+    : `${info.fileCount} files`;
 }
 
 const log = (m) => console.log(m);
@@ -329,7 +345,56 @@ next-env.d.ts
 /** Build the complete public-repo tree for monorepo commit `sha` into `dest`. */
 /** Dispatch to the right builder for `--target`. */
 function buildSnapshot(sha, dest) {
-  return TARGET === "starter" ? buildStarterSnapshot(sha, dest) : buildCliSnapshot(sha, dest);
+  if (TARGET === "starter") return buildStarterSnapshot(sha, dest);
+  if (TARGET === "cursor-plugin") return buildCursorPluginSnapshot(sha, dest);
+  return buildCliSnapshot(sha, dest);
+}
+
+/**
+ * Extract one monorepo directory and hoist its contents to `dest`'s root.
+ *
+ * `extractPath` writes repo-relative paths, so the content lands at <dest>/<rel>/… — which is
+ * one directory deeper than the published repo wants. Staging and hoisting is how both
+ * directory-lift targets (starter, cursor-plugin) get a root that looks hand-made.
+ * `readdirSync` includes dotfiles, which matters: `.cursor-plugin/plugin.json` is the Cursor
+ * plugin's manifest, and dropping it would publish a repo Cursor can't load.
+ */
+function hoistDirectory(sha, rel, dest) {
+  const staged = path.join(dest, "__staged");
+  const fileCount = extractPath(sha, rel, staged);
+  if (!fileCount) fail(`no files under ${rel} at ${sha}`);
+
+  for (const entry of readdirSync(path.join(staged, rel))) {
+    cpSync(path.join(staged, rel, entry), path.join(dest, entry), {
+      recursive: true,
+      dereference: true,
+    });
+  }
+  rmSync(staged, { recursive: true, force: true });
+  return fileCount;
+}
+
+/**
+ * The Cursor plugin repo is `agent-context` lifted to the root — a manifest, a skill, a rules
+ * file and an `mcp.json`. Nothing to install or build, so there's no manifest to generate and
+ * no lockfile: Cursor reads the tree as it stands.
+ */
+function buildCursorPluginSnapshot(sha, dest) {
+  rmSync(dest, { recursive: true, force: true });
+  mkdirSync(dest, { recursive: true });
+
+  const fileCount = hoistDirectory(sha, AGENT_CONTEXT, dest);
+
+  // Same one-directional flow as the other two, and the same reason to say so up front: this
+  // repo is listed on the Cursor marketplace, so it attracts drive-by fixes to the reference
+  // prose that would be reverted by the next publish.
+  cpSync(
+    path.join(TEMPLATES, "CONTRIBUTING-cursor-plugin.md"),
+    path.join(dest, "CONTRIBUTING.md"),
+  );
+
+  writeFileSync(path.join(dest, STAMP), `${sha}\n`);
+  return { fileCount, version: "" };
 }
 
 /**
@@ -341,19 +406,7 @@ function buildStarterSnapshot(sha, dest) {
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dest, { recursive: true });
 
-  const staged = path.join(dest, "__staged");
-  const fileCount = extractPath(sha, STARTER, staged);
-  if (!fileCount) fail(`no files under ${STARTER} at ${sha}`);
-
-  // `extractPath` writes repo-relative paths, so the content lands at
-  // <staged>/examples/starter/… — hoist it to the root the forked repo expects.
-  for (const entry of readdirSync(path.join(staged, STARTER))) {
-    cpSync(path.join(staged, STARTER, entry), path.join(dest, entry), {
-      recursive: true,
-      dereference: true,
-    });
-  }
-  rmSync(staged, { recursive: true, force: true });
+  const fileCount = hoistDirectory(sha, STARTER, dest);
 
   // A starter template attracts drive-by PRs far more than a CLI does, and every one of them
   // hits the "reviewed here, merged upstream" flow. Explaining that before someone does the
@@ -434,6 +487,7 @@ function buildCliSnapshot(sha, dest) {
 
 function validateSnapshot(dir) {
   if (TARGET === "starter") return validateStarterSnapshot(dir);
+  if (TARGET === "cursor-plugin") return validateCursorPluginSnapshot(dir);
 
   step("validating the snapshot (npm ci + typecheck + unit)");
   // `npm ci`, not `npm install` — it's what the public repo's CI runs, and it fails if the
@@ -496,6 +550,21 @@ function validateStarterSnapshot(dir) {
     fail(`docs.json references pages that don't exist:\n  ${missing.join("\n  ")}`);
   }
   ok(`${slugs.size} navigation pages all present`);
+}
+
+/**
+ * A plugin repo has nothing to install or typecheck, so validation is structural: the manifest,
+ * the MCP config, the rules, and whether the skill's reference index matches the files beside
+ * it. Every failure mode here is silent in Cursor — a plugin that won't load looks identical to
+ * one nobody installed — which is why it's a publish gate rather than a lint.
+ */
+function validateCursorPluginSnapshot(dir) {
+  step("validating the snapshot (manifest + skills + rules + mcp.json)");
+  const problems = checkCursorPlugin(dir);
+  if (problems.length) {
+    fail(`the plugin snapshot is not loadable:\n  ${problems.join("\n  ")}`);
+  }
+  ok("manifest, mcp.json, rules and skill references all check out");
 }
 
 // ---------------------------------------------------------------------------

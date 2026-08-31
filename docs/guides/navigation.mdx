@@ -105,22 +105,42 @@ from their pages rather than carrying their own visibility.
   looks like it should work, which is exactly why it's worth knowing. Mark the groups instead.
 </Warning>
 
-## Anchors and external links
+## Anchors and dropdowns
 
-Anchors sit above the sidebar and can point anywhere, including off-site — a community
-forum, a status page, or your main product.
+`anchors` and `dropdowns` are labelled containers of pages — the same shape as a group, with
+`anchor` or `dropdown` as the label key. They render as sections of the sidebar.
 
 ```json
 {
   "navigation": {
-    "global": {
-      "anchors": [
-        { "anchor": "Community", "href": "https://discord.gg/…", "icon": "discord" }
-      ]
-    }
+    "anchors": [
+      { "anchor": "Documentation", "pages": ["index", "quickstart"] },
+      { "anchor": "SDKs", "groups": [{ "group": "JavaScript", "pages": ["sdk/js"] }] }
+    ]
   }
 }
 ```
+
+## Links to somewhere else
+
+Off-site links — a community forum, a status page, your main product — go in `navbar`, which
+renders them at the top right:
+
+```json
+{
+  "navbar": {
+    "links": [{ "label": "Community", "href": "https://discord.gg/…" }],
+    "primary": { "label": "Dashboard", "href": "https://acme.com/app" }
+  }
+}
+```
+
+<Warning>
+  An anchor with a `href` and no pages renders **nothing**. An anchor is a container, and a
+  container with no reachable pages is dropped — the same rule that makes a fully gated group
+  disappear. `navigation.global` is likewise parsed but not rendered; put divisions directly on
+  `navigation`.
+</Warning>
 
 ## Branding
 

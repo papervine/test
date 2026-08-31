@@ -391,6 +391,17 @@ const CONTROL_PLANE_CHECKS = [
     rejectRedirectTo: "/login",
   },
   {
+    // The authoring MCP (SPEC §9.2) is the same ROOT-route trap, and it had been live: the app
+    // host rewrote it to /app/authoring/mcp (404 with a session) and the edge gate bounced it to
+    // /login without one — so no MCP client could ever reach it. Asserting "not bounced to
+    // /login" rather than a status, because the route answers a JSON-RPC error for an
+    // unauthenticated caller, which is the correct answer and not a 200.
+    host: "app.localhost",
+    path: "/authoring/mcp",
+    desc: "the authoring MCP is not rewritten onto /app or bounced to /login",
+    rejectRedirectTo: "/login",
+  },
+  {
     // Same ROOT-route trap as the tunnel above: /robots.txt would become /app/robots.txt, meet
     // the auth gate, and answer a crawler asking what it may index with a bounce to /login.
     host: "app.localhost",

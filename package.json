@@ -22,6 +22,7 @@
     "test:cli": "node tests/cli-package.mjs",
     "mirror:cli": "node scripts/mirror-cli.mjs --target cli",
     "mirror:starter": "node scripts/mirror-cli.mjs --target starter",
+    "mirror:cursor-plugin": "node scripts/mirror-cli.mjs --target cursor-plugin",
     "eval": "node --env-file=.env.local evals/run.mjs",
     "eval:web": "node --env-file=.env.local evals/serve.mjs",
     "worktree:setup": "bash bin/setup-worktree.sh",

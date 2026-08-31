@@ -22,16 +22,13 @@ A single `docs.json` at the repo root configures a Papervine site. It matches th
           { "group": "Getting Started", "pages": ["index", "quickstart", "guides/auth"] }
         ]
       },
-      { "tab": "API Reference", "openapi": "/openapi.yaml" }
-    ],
-    "global": {
-      "anchors": [{ "anchor": "Community", "href": "https://...", "icon": "discord" }]
-    }
+      { "tab": "API Reference", "openapi": "openapi.yaml" }
+    ]
   },
-  "navbar": { "links": [], "primary": { "type": "button", "label": "Dashboard", "href": "..." } },
-  "footer": { "socials": { "github": "https://..." } },
-  "search": { "prompt": "Search docs..." },
-  "ai": { "assistant": true },
+  "navbar": {
+    "links": [{ "label": "Community", "href": "https://..." }],
+    "primary": { "label": "Dashboard", "href": "..." }
+  },
   "seo": { "metatags": { "og:image": "/social.png", "twitter:site": "@acme" } }
 }
 ```
@@ -84,12 +81,15 @@ empty sidebar even though its config parsed fine.
 
 <Accordion title="Navigation layers, top to bottom">
   - **`languages`** — top-level locale split (e.g. `en`, `es`); each language carries its own
-    subtree.
-  - **`versions`** — product/version split within a language.
-  - **`tabs`** — render as a horizontal tab bar; the sidebar is scoped to the active tab.
-  - **`anchors` / `dropdowns`** — labeled links and grouped menus (often global, via
-    `navigation.global`).
-  - **`groups`** — collapsible sidebar sections; support `group.root` and `group.icon`.
+    subtree. **Only the first entry renders** — there is no switcher yet.
+  - **`versions`** — product/version split within a language. Same rule: first entry only.
+  - **`tabs`** — render as a horizontal tab bar (from two tabs up); the sidebar is scoped to
+    the active tab.
+  - **`anchors` / `dropdowns`** — labeled containers of pages, rendered as sidebar sections.
+    They are not link slots: an anchor with a `href` and no pages is dropped. Off-site links
+    are `navbar.links`, and `navigation.global` is parsed but not rendered.
+  - **`groups`** — collapsible sidebar sections; support `group.root`, `group.icon`,
+    `group.tag`, `group.expanded` and `group.hidden`.
   - **`pages`** — leaf slugs (or further nested groups).
 </Accordion>
 

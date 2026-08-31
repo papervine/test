@@ -17,15 +17,30 @@ copy-paste code samples in several languages.
 
 ## Input
 
-The spec is referenced from your [`docs.json`](/rendering/config) by a path **relative to your
-docs root** — it lives in your repo alongside your MDX, and Papervine reads it through the same
-content layer it uses for every page:
+The spec is referenced from a **navigation division** in your [`docs.json`](/rendering/config),
+by a path **relative to your docs root** — it lives in your repo alongside your MDX, and
+Papervine reads it through the same content layer it uses for every page:
 
 ```json docs.json
 {
-  "openapi": "openapi.json"
+  "navigation": {
+    "tabs": [{ "tab": "API Reference", "openapi": "openapi.json" }]
+  }
 }
 ```
+
+A group works the same way, when the API is one section of a larger site:
+
+```json docs.json
+{ "group": "Widgets", "openapi": "openapi.json" }
+```
+
+<Note>
+  It has to be on a division. A top-level `"openapi"` key beside `name` and `theme` is passed
+  through and ignored, and there is no page-level `openapi:` frontmatter — endpoint pages are
+  generated from the navigation, not declared by a page. See
+  [organizing your docs](/guides/navigation).
+</Note>
 
 Because the spec is loaded through that shared content layer — not fetched from a hardcoded
 location — it resolves identically whether you're previewing locally with the

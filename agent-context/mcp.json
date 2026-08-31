@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "Papervine Docs": {
+      "type": "http",
+      "url": "https://docs.papervine.io/mcp"
+    }
+  }
+}

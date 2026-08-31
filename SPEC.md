@@ -7240,6 +7240,82 @@ the hosted API over HTTPS, they don't embed it.
 > previously created a file on disk is refused outright (dynamic `import()` is a contract
 > violation), and the env probe renders `unreachable`. What remains, and is stated, is that it is
 > still someone else's JavaScript in your browser on the preview's origin.
+>
+> **A third mirror target: the Cursor plugin (2026-08-31).** `agent-context/` in this repo is
+> published to `papervine/cursor-plugin` — a Cursor marketplace plugin carrying a `papervine`
+> skill (a routing core plus six reference files), a rules file scoped to `**/*.mdx` and
+> `**/docs.json`, and an `mcp.json` pointing at `https://docs.papervine.io/mcp`.
+> `npm run mirror:cursor-plugin`, matrix entry in `mirror.yml`, seeded 2026-08-31.
+>
+> **Why it lives in the monorepo rather than being maintained over there.** The same argument as
+> the starter, one step stronger: the plugin *describes* the renderer — its component set, its
+> `docs.json` handling, its CLI flags — so it goes stale the moment any of those change in a
+> commit that can't touch it. Here, "add a component, update the skill" is one reviewable change.
+> The mirror machinery needed almost nothing new: `buildStarterSnapshot`'s extract-and-hoist was
+> factored out as `hoistDirectory` and both targets call it, so a plugin snapshot is a directory
+> lift plus a `CONTRIBUTING.md` and the `.mirror-source` stamp.
+>
+> **The content is written from the code, not translated from the upstream plugin**, and that is
+> where the value is. Repurposing the equivalent plugin by find-and-replace would have shipped an
+> agent confidently wrong about a dozen things, each of which costs a debugging session for
+> whoever believes it. What the audit turned up, all now stated explicitly:
+>
+> - **`navigation.global` renders nothing.** `buildNav` walks `tabs`, else `pages`/`groups`/
+>   `anchors`/`dropdowns` on the nav root; `global` is in neither path. And an anchor with no
+>   pages is *pruned* (the empty-group rule), so the `{ anchor, href, icon }` external-link form —
+>   which both `docs/rendering/config.mdx` and `docs/guides/navigation.mdx` use as their
+>   example — renders nothing at all. Off-site links are `navbar.links`. **Our own docs were
+>   wrong here**; fixed in the same change.
+> - **Only the first entry of a `versions` / `languages` wrapper renders.** Documented in the
+>   plugin as a hazard rather than a feature, because adding a second version to a config
+>   silently hides it.
+> - **No page-level `openapi:` / `api:` frontmatter, and no top-level `openapi` key.**
+>   `collectSpecRefs` walks `config.navigation` alone. `docs/features/api-playground.mdx` showed
+>   `{ "openapi": "openapi.json" }` at the root, which does nothing; also fixed.
+> - **No `mode` frontmatter**, no `searchable`/`boost`/`deprecated`/`related` — all four are in
+>   the upstream schema and none is read here.
+> - **`footer` is parsed and in `KNOWN_KEYS`, but no component renders it.** Listed as
+>   accepted-and-ignored rather than as a feature.
+> - **Icons are Lucide-only**, everywhere an `icon` prop appears — the one fidelity gap an agent
+>   reaches for by reflex, since the upstream docs' examples use Font Awesome names.
+> - **The CLI has three commands.** `validate`, `broken-links`, `a11y`, `score`, `automations`,
+>   `deploy` and `login` are all things a model will otherwise invent, so they are named as
+>   not existing.
+>
+> **Guarded at two layers, one implementation.** `scripts/lib/check-cursor-plugin.mjs` is a pure
+> `(dir) => problems[]` over the tree's structure — manifest parses and has a `name`, every MCP
+> server has a `url`, every rules file has frontmatter, every skill has `name` + `description`,
+> and the SKILL.md reference index matches `reference/` **in both directions**. The mirror runs it
+> as a publish gate; `tests/unit/cursor-plugin.test.ts` runs it on every `npm run test:unit`, plus
+> a negative case that renames a reference file and asserts both halves of the mismatch are
+> reported. Two layers matter because every failure here is silent: a plugin Cursor can't parse
+> looks exactly like a plugin nobody installed, and a skill routing to a file that was renamed
+> reads to the agent as "nothing more to know".
+>
+> **`mcp.json` ships one server, not two.** The read MCP (`docs.papervine.io/mcp`) works today
+> with no auth — verified live, three tools, `search_api` correctly absent since our own docs
+> reference no OpenAPI spec. The authoring MCP is deliberately **not** shipped: it authenticates
+> by dashboard session cookie, which an editor has no way to send, so listing it would put a
+> permanently-failing server in every install. The README instead shows how to add the user's own
+> site's `/mcp` (including `localhost:3000` against a running `papervine dev`), which is the
+> genuinely useful per-project entry, and says token-scoped authoring access is the follow-up.
+>
+> **Found while probing that endpoint: `/authoring/mcp` was unreachable on the app host** — the
+> §10 root-route trap again (the Sentry-tunnel gotcha). Unauthenticated it 307'd to `/login`
+> instead of answering JSON-RPC; authenticated it rewrote to `/app/authoring/mcp`, which no route
+> backs, and 404'd. So the authoring MCP had never been reachable in production by any client.
+> Added to the app-host bypass list beside `SENTRY_TUNNEL` and pinned by a smoke check.
+>
+> **And `banner` had never been in `KNOWN_KEYS`.** Writing the plugin's "keys accepted but not
+> acted on" table meant checking each one against the code rather than against the docs, which
+> turned up the inverse error: `banner` is declared in the schema, parsed, and rendered site-wide
+> above the navbar — and every site using one was told `Unsupported docs.json keys (ignored):
+> banner` in the CLI and the editor. The warning's implied advice is "delete this key", which
+> would have removed a working banner. One word to fix; the interesting part is the test.
+> `docs-config-warnings.test.ts` pins the *invariant* rather than today's list — for every field
+> `docsConfigSchema.shape` declares, parsing a config containing it must produce no warning — so
+> the next field added can't reintroduce it, plus a negative case (`redirects`) proving the
+> warning still fires for a key nothing acts on.
 
 ### 10.7 Error resilience (route boundaries)
 

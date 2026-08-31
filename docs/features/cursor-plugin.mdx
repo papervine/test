@@ -1,0 +1,103 @@
+---
+title: Cursor plugin
+description: Install the Papervine plugin so Cursor knows the component set, docs.json schema, and CLI it is writing against.
+public: true
+---
+
+An AI editor writing docs without a reference invents things: a component that doesn't exist, a
+Font Awesome icon name, a `mint`-style CLI command. Every invention costs you the time to notice
+it and the time to undo it.
+
+The Papervine plugin for [Cursor](https://cursor.com) supplies the reference, so the editor is
+working from what Papervine actually does.
+
+<Card title="papervine/cursor-plugin" icon="github" href="https://github.com/papervine/cursor-plugin">
+  The plugin's source — a skill, a rules file, and an MCP server.
+</Card>
+
+## Install it
+
+Find **Papervine** in the [Cursor marketplace](https://cursor.com/marketplace) and install it.
+A plugin can be installed for your user or scoped to one project; scope it to the project if you
+work on several docs sites with different conventions.
+
+## What you get
+
+<CardGroup cols={2}>
+  <Card title="A skill" icon="book-open">
+    Every component and its props, the full `docs.json` surface, navigation patterns, OpenAPI
+    setup, and the CLI. Loaded on demand, so it costs nothing on unrelated tasks.
+  </Card>
+  <Card title="Writing rules" icon="pencil">
+    File conventions, link format, frontmatter fields, and writing standards — active whenever
+    you edit an `.mdx` file or `docs.json`.
+  </Card>
+  <Card title="A docs MCP server" icon="plug">
+    Read-only search over Papervine's own documentation, for anything the skill doesn't cover.
+  </Card>
+  <Card title="The negative space" icon="circle-slash">
+    What *doesn't* exist — the frontmatter fields, config keys, and CLI commands a model would
+    otherwise invent because a similar product has them.
+  </Card>
+</CardGroup>
+
+That last one earns its place. Papervine reads the same `docs.json` schema as other platforms,
+which is what makes [migrating](/guides/migrate) easy — and also what makes an editor confidently
+write a `mode: wide` frontmatter field, or tell you to run `papervine validate`. The plugin names
+those explicitly so they don't get written.
+
+## Point it at your own docs
+
+Every Papervine site serves an [MCP endpoint](/features/mcp-servers) at `/mcp` — hosted,
+self-hosted, or a running `papervine dev`. Adding your own site gives the editor live search over
+the pages you're writing, not just Papervine's.
+
+Add it to `.cursor/mcp.json` in your docs repo:
+
+```json .cursor/mcp.json
+{
+  "mcpServers": {
+    "My Docs": { "type": "http", "url": "https://docs.example.com/mcp" }
+  }
+}
+```
+
+<Tip>
+  Use `http://localhost:3000/mcp` against a running [`papervine dev`](/cli) and the editor sees
+  your unpublished drafts as you write them.
+</Tip>
+
+## Editing and publishing
+
+A Papervine site is a Git repository, so the editor edits files and you publish the way you
+already do — a push, or a pull request. Nothing needs to round-trip through a service.
+
+<Note>
+  Papervine's [authoring MCP](/features/mcp-servers#authoring-mcp-admin-write) is a separate
+  surface for agents that *aren't* sitting in your repository. It authenticates with a dashboard
+  session today, so an editor can't connect to it; token-scoped access is the follow-up. The
+  plugin doesn't ship it for that reason.
+</Note>
+
+## Other editors
+
+The plugin is packaged in Cursor's format, but the material inside it is plain Markdown — a
+`SKILL.md` and six reference files. Any agent that can read a skill directory can use it: clone
+the repository and point your tool at `skills/papervine/`.
+
+## Keeping it accurate
+
+The plugin is published from the same repository as the renderer it describes, so a change to a
+component and the change to its documented props land together. A structural check runs before
+each publish and on every test run: the manifest has to parse, and the skill's reference index
+and the files beside it have to agree in both directions.
+
+If the plugin tells you something Papervine doesn't do,
+[open an issue](https://github.com/papervine/cursor-plugin/issues) — that's a bug in the same
+sense a broken component is.
+
+## Related
+
+- [Component library](/rendering/components) — the components the skill documents.
+- [MCP servers](/features/mcp-servers) — the read and authoring endpoints in full.
+- [Writing content](/guides/authoring) — the page conventions the rules file enforces.

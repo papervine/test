@@ -1,22 +1,24 @@
-# Publishes the two public snapshots this monorepo is the source of truth for:
+# Publishes the three public snapshots this monorepo is the source of truth for:
 #
-#   cli      → papervine/papervine      (the CLI + render engine; what `npm publish` ships from)
-#   starter  → papervine/starter  (the forkable example docs site)
+#   cli            → papervine/papervine       (the CLI + render engine; what `npm publish` ships from)
+#   starter        → papervine/starter         (the forkable example docs site)
+#   cursor-plugin  → papervine/cursor-plugin   (the Cursor plugin: skill + rules + MCP config)
 #
 # Dormant until a `MIRROR_TOKEN` secret exists. Without it the job runs, says so, and exits
 # green — a missing optional secret shouldn't show up as a broken build on every push to main.
 # The token needs `contents:write` on BOTH public repos; a token scoped to only one of them
 # fails at the push step of the other, not here.
 #
-# Both targets must be seeded once, by hand, before their first automated run:
+# Every target must be seeded once, by hand, before its first automated run:
 #
 #     npm run mirror:cli -- --initial --push
 #     npm run mirror:starter -- --initial --push
+#     npm run mirror:cursor-plugin -- --initial --push
 #
 # That writes the `.mirror-source` stamp every later run compares against; without it the
 # divergence guard refuses to publish over a repo it can't prove it created. Seeding stays
 # manual deliberately — `--initial` squashes history into one commit, which is not a thing to
-# automate. Both are seeded as of 2026-08-24.
+# automate. cli and starter are seeded as of 2026-08-24, cursor-plugin as of 2026-08-31.
 #
 # WHY AUTOMATING THE CLI IS SAFE. This used to mirror only the starter, on the reasoning that
 # pushing the CLI moves the source an npm package is built from, and an immutable publish
@@ -56,7 +58,7 @@ jobs:
       # cancel a starter publish that would have succeeded.
       fail-fast: false
       matrix:
-        target: [cli, starter]
+        target: [cli, starter, cursor-plugin]
 
     # One publish at a time PER TARGET. Two triggers can fire within seconds of each other — a
     # manual dispatch alongside the automatic `workflow_run` did exactly that on the first live

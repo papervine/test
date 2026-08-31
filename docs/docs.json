@@ -40,7 +40,8 @@
               "guides/authoring",
               "guides/navigation",
               "rendering/components",
-              "rendering/react-components"
+              "rendering/react-components",
+              "features/cursor-plugin"
             ]
           },
           {

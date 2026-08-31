@@ -1,0 +1,17 @@
+{
+  "name": "papervine",
+  "version": "0.1.0",
+  "description": "Complete reference for building Papervine docs sites — components, docs.json, navigation, API references, and the CLI.",
+  "author": {
+    "name": "Papervine",
+    "email": "support@papervine.io"
+  },
+  "license": "MIT",
+  "homepage": "https://docs.papervine.io",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/papervine/cursor-plugin.git"
+  },
+  "keywords": ["papervine", "docs", "documentation", "mdx", "docs.json"],
+  "skills": "./skills/"
+}
