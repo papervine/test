@@ -10,7 +10,7 @@
     {
       "key": "selfhost",
       "name": "Self-host",
-      "blurb": "Open-source docs renderer you can run anywhere",
+      "blurb": "Run the docs renderer on your machine. No account.",
       "listed": false,
       "sort": -1,
       "includedMonthlyCredits": 0,
@@ -38,7 +38,7 @@
         "highlight": false,
         "priceOverride": "$0",
         "cta": { "label": "GitHub", "href": "https://github.com/papervine/papervine" },
-        "lead": "Elastic License 2.0 • npm papervine",
+        "lead": "Run the same renderer on your machine. BYOK assistant and MCP. No account.",
         "features": [
           "docs.json + MDX renderer",
           "OpenAPI playground",
@@ -53,7 +53,7 @@
     {
       "key": "free",
       "name": "Cloud",
-      "blurb": "Hosted hobby tier with Studio, custom domain, and auth",
+      "blurb": "For open-source and small docs sites",
       "listed": true,
       "sort": 0,
       "includedMonthlyCredits": 0,
@@ -81,7 +81,7 @@
         "highlight": false,
         "priceOverride": "$0",
         "cta": { "label": "Get started", "href": "/signup" },
-        "lead": "Free hosted • Compete GitBook Free",
+        "lead": "Hosted docs with custom domain, auth, and Studio",
         "features": [
           "Studio WYSIWYG editor",
           "Custom domain & Git sync",
@@ -95,7 +95,7 @@
     {
       "key": "team",
       "name": "Team",
-      "blurb": "For small teams that want SSO and preview deploys",
+      "blurb": "SSO, roles, and previews for small teams",
       "listed": true,
       "sort": 1,
       "includedMonthlyCredits": 5000,
@@ -137,7 +137,7 @@
     {
       "key": "pro",
       "name": "Pro",
-      "blurb": "For production docs teams with scheduled workflows",
+      "blurb": "Workflows, insights, and production limits",
       "listed": true,
       "sort": 2,
       "includedMonthlyCredits": 25000,
