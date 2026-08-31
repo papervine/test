@@ -17,11 +17,12 @@ import { PlanMatrix } from "@/components/billing/PlanMatrix";
 
 // Pricing for the SaaS apex (SPEC §2, §10 Billing). Uses the landing page chrome +
 // `.db` design language, and positions against the docs-platform category's shape
-// (free tier, then a ~$450+ jump, SSO held for enterprise) by filling the gap: a $50
-// Team plan that already carries SSO/RBAC + AI credits, a $300 Pro that undercuts the
-// category's flagship with a bigger credit pool, and a 30-day everything trial on
-// every account. Numbers mirror src/lib/billing/catalog.json — change them THERE
-// (catalog is the source of truth; this page is marketing copy over it).
+// (free tier, then a ~$450+ jump, SSO held for enterprise) by filling the gap: a $29
+// Team plan that already carries SSO/RBAC, a $99 Pro for production docs teams, and
+// a 30-day everything trial on every account. BYOK is available from day one on all plans;
+// hosted AI credits are optional add-ons, not the primary differentiator. Numbers mirror
+// src/lib/billing/catalog.json — change them THERE (catalog is the source of truth;
+// this page is marketing copy over it).
 // Shared marketing metadata: canonical host, `og:`/`twitter:` tags and our X handle (see
 // marketing-seo.ts). It also fixes the title, which the root layout's `%s · Papervine` template
 // was turning into "Pricing — Papervine · Papervine". The card image is the sibling
@@ -30,7 +31,7 @@ import { PlanMatrix } from "@/components/billing/PlanMatrix";
 export const metadata: Metadata = marketingMetadata({
   title: "Pricing — Papervine",
   description:
-    "Every new account starts with 30 days of everything. Free for small docs sites; Team at $50/mo with SSO, RBAC, and AI credits; Pro at $300/mo for production docs; Enterprise for SCIM, SLAs, and migration.",
+    "Every new account starts with 30 days of everything + 5,000 AI credits. BYOK available from day one. Free for small docs sites; Team at $29/mo with SSO & RBAC; Pro at $99/mo for production docs; Enterprise for SCIM, SLAs, and migration.",
   path: "/pricing",
 });
 
@@ -104,7 +105,7 @@ export default async function PricingPage() {
           className="db-rise mx-auto mt-6 max-w-lg text-lg leading-relaxed text-[var(--muted)]"
           style={{ animationDelay: "80ms" }}
         >
-          Every feature, from day one. SSO from $50, not from a sales call.
+          Every feature, from day one. SSO from $29, not from a sales call.
         </p>
         <p
           className="db-rise mx-auto mt-5 inline-flex items-center gap-2 rounded-full border border-[rgba(var(--ink-rgb),0.1)] bg-[rgba(var(--ink-rgb),0.04)] px-4 py-2 text-sm text-[var(--fg)]"
@@ -112,7 +113,7 @@ export default async function PricingPage() {
         >
           <Sparkles className="h-4 w-4 text-[var(--blue)]" />
           Every new account starts with 30 days of everything + 5,000 AI credits — no card
-          required.
+          required. BYOK available from day one.
         </p>
       </section>
 

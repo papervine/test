@@ -317,14 +317,14 @@ describe("catalog", () => {
       representsPlanKey: "pro",
     });
   });
-  it("locked pricing shape: Team $50/mo, Pro $300/mo, annual $40/$250-per-month equiv", () => {
+  it("locked pricing shape: Team $29/mo, Pro $99/mo, annual $19/$79-per-month equiv", () => {
     const cents = (plan: string, interval: string) =>
       CATALOG.prices.find((p) => p.planKey === plan && p.interval === interval)!
         .unitAmountCents;
-    expect(cents("team", "month")).toBe(5000);
-    expect(cents("team", "year")).toBe(40 * 12 * 100);
-    expect(cents("pro", "month")).toBe(30000);
-    expect(cents("pro", "year")).toBe(250 * 12 * 100);
+    expect(cents("team", "month")).toBe(2900);
+    expect(cents("team", "year")).toBe(19 * 12 * 100);
+    expect(cents("pro", "month")).toBe(9900);
+    expect(cents("pro", "year")).toBe(79 * 12 * 100);
   });
   it("credit pools: Team 5k, Pro 25k; Free has no AI and no overage path", () => {
     expect(catalogPlan("team").includedMonthlyCredits).toBe(5000);

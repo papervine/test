@@ -122,7 +122,7 @@ test.describe("billing settings", () => {
     await expect(page.getByText(/Trial — \d+ days? left/)).toBeVisible();
     // Change-plan card with its price (button exists; clicking needs Stripe).
     await expect(page.getByRole("heading", { name: "Plans", exact: true })).toBeVisible();
-    await expect(page.getByText("$50")).toBeVisible();
+    await expect(page.getByText("$29")).toBeVisible();
     // Feature bullets on the cards + the shared comparison matrix (same content as
     // /pricing, via the reused PlanMatrix component).
     await expect(page.getByText("SSO & RBAC")).toBeVisible();

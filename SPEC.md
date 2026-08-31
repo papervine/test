@@ -4893,6 +4893,15 @@ Minimum to operate the SaaS:
   light + dark 2026-07-16, console clean; `node tests/crawl.mjs docs` 30/30, 0×500.*
   §2's pricing-thesis paragraph is superseded by this section for plan shape; the
   wedge ("all features from day one, security before procurement") is unchanged.
+  **Pricing repriced 2026-08-31 — cheaper list prices, BYOK from day one.** Team $50/$40 →
+  $29/$19; Pro $300/$250 → $99/$79. Free editors 3 → 5. BYOK assistant available on all
+  plans including Free (entitlements updated: `assistant: true, writerAgent: true` on
+  Free). Hosted AI credits repositioned as optional add-ons, not the primary
+  differentiator. Copy updated across `/pricing`, `/docs-platform-alternatives`,
+  `docs/control-plane/billing.mdx`, `catalog.json` (source of truth), tests, and SPEC
+  references. Stripe price IDs to be created separately via `billing:publish` after
+  approval. Positioning: "SSO from $29, not from a sales call" / "Production docs at
+  $99" / "BYOK available from day one". Tests updated to match new prices.
   **Plan switching + downgrade landed 2026-07-17** (gap found dogfooding: no way to
   downgrade). `changePlan` routes by billing state — a live Stripe sub gets an
   in-place `subscriptions.update` with proration (a second Checkout would mint a

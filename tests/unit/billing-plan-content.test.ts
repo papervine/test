@@ -21,11 +21,11 @@ function row(label: string): MatrixRow {
 }
 
 describe("plan content vs. enforced catalog (drift guard)", () => {
-  it("derives card prices from prices[] (Team $50, Pro $300, annual $40/$250)", () => {
-    expect(PLAN_TIER_BY_KEY.team.price).toBe("$50");
-    expect(PLAN_TIER_BY_KEY.team.priceNote).toContain("$40/mo billed annually");
-    expect(PLAN_TIER_BY_KEY.pro.price).toBe("$300");
-    expect(PLAN_TIER_BY_KEY.pro.priceNote).toContain("$250/mo billed annually");
+  it("derives card prices from prices[] (Team $29, Pro $99, annual $19/$79)", () => {
+    expect(PLAN_TIER_BY_KEY.team.price).toBe("$29");
+    expect(PLAN_TIER_BY_KEY.team.priceNote).toContain("$19/mo billed annually");
+    expect(PLAN_TIER_BY_KEY.pro.price).toBe("$99");
+    expect(PLAN_TIER_BY_KEY.pro.priceNote).toContain("$79/mo billed annually");
     expect(PLAN_TIER_BY_KEY.free.price).toBe("$0");
     expect(PLAN_TIER_BY_KEY.enterprise.price).toBe("Contact us");
   });
