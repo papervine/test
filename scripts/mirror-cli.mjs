@@ -604,7 +604,16 @@ try {
   step(`cloning ${REMOTE}`);
   const PUBLIC = path.join(WORK, "public");
   const clone = shSoft("git", ["clone", REMOTE, PUBLIC]);
-  const isEmpty = clone.code !== 0 || !existsSync(path.join(PUBLIC, ".git"));
+  // Three ways a target can have nothing to build on, and only two were handled. A GitHub repo
+  // created with NO files at all clones **successfully** — exit 0, a real `.git`, and a warning
+  // on stderr — leaving an unborn HEAD. The first two mirrors never hit it because both were
+  // created with the "add a license" checkbox, so both had a commit; a repo created bare 404s
+  // every `rev-parse` instead, and the run died on `git rev-parse --short HEAD` with
+  // "fatal: Needed a single revision" — which reads like a broken clone rather than "there is
+  // nothing here yet."
+  const hasCommits = shSoft("git", ["rev-parse", "--verify", "HEAD"], { cwd: PUBLIC }).code === 0;
+  const isEmpty =
+    clone.code !== 0 || !existsSync(path.join(PUBLIC, ".git")) || !hasCommits;
 
   if (isEmpty && !INITIAL) {
     fail(
