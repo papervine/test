@@ -17,6 +17,23 @@ two people are never the same colour by accident. Live cursors come from the cro
 collaboration service below — two tabs of *your own* browser stay in sync but don't draw cursors
 for each other.
 
+## Live mouse cursors
+
+Alongside the text cursors, Visual mode shows each collaborator's **mouse pointer** — an arrow in
+their colour, labelled with their name, moving as they move. A text cursor tells you where someone
+is *typing*; the pointer tells you where they're *looking*, which is what makes "this paragraph
+here" work while you're talking to each other.
+
+They travel relative to the **text**, not to the window: a teammate pointing a third of the way
+across a line lands in the same place on your screen even though your window is a different size
+and you're scrolled somewhere else. A pointer that scrolls out of your view isn't drawn, and one
+whose owner moves their mouse out of the editor disappears rather than parking in place.
+
+Turn them off with the **cursor button** in the editor toolbar, beside the presence avatars. It
+appears once somebody else is in the page, and the choice sticks in that browser. Off means off in
+**both directions**: your editor stops drawing other people's pointers *and* stops sending yours,
+so it's a privacy switch rather than a display one.
+
 <Info>
   Collaboration is a **strict enhancement**: two of your own tabs always stay in sync, and if
   live multiplayer is unavailable on a deployment, editing behaves exactly as it does solo.

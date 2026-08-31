@@ -15,6 +15,7 @@ import { resolveEditorLink } from "@/lib/editor-link";
 import { buildMdxExtensions } from "./visual/nodes";
 import { makeNodeViewOpts } from "./visual/NodeViews";
 import { CollabCarets, collabCaretsKey } from "./visual/CollabCarets";
+import { CollabPointers } from "./visual/CollabPointers";
 import { SlashCommand, type SlashState } from "./visual/SlashCommand";
 import { SlashMenu, type SlashMenuHandle } from "./visual/SlashMenu";
 import { MediaDialog } from "./visual/MediaDialog";
@@ -68,6 +69,7 @@ export function VisualEditor({
   assetBase,
   awareness,
   media,
+  pointers,
   org,
   site,
   branch,
@@ -81,6 +83,9 @@ export function VisualEditor({
   // Remote-collaborator carets are rendered from this awareness. Null when collaboration is off or
   // the shared doc hasn't connected yet; the editor rebuilds (see the useEditor deps) once it arrives.
   awareness?: Awareness | null;
+  // Draw (and publish) live mouse pointers for the other people in the room. The toolbar owns the
+  // switch; off means we broadcast nothing either, not just that we stop looking (CollabPointers).
+  pointers?: boolean;
   // The page being edited + every page in the site — what a clicked link is resolved against.
   slug: string;
   slugs: string[];
@@ -97,6 +102,8 @@ export function VisualEditor({
   // last non-null block: moving the mouse onto the handle itself fires onNodeChange(null), and
   // clearing then would leave nothing to insert after when "+" is clicked.
   const hovered = useRef<{ pos: number; node: PMNode } | null>(null);
+  // The scroll container, held in state so the pointer overlay's effects re-run once it exists.
+  const [scrollEl, setScrollEl] = useState<HTMLDivElement | null>(null);
 
   // Frontmatter title/description are edited as first-class fields (blinking cursor), kept in
   // the YAML — not the body — so they round-trip like the reader-facing article header.
@@ -312,7 +319,10 @@ export function VisualEditor({
   // padding so the title still lines up with the body.
   return (
     <div
-      className="pv-visual h-full overflow-auto py-6 pr-8"
+      // A callback ref into state, not a plain ref: CollabPointers measures this element inside an
+      // effect, so it has to re-run when the element arrives rather than read null once.
+      ref={setScrollEl}
+      className="pv-visual relative h-full overflow-auto py-6 pr-8"
       // Capture phase: this must beat the `<Link>` a component node view renders. Middle-click
       // (auxclick) would open the wrong host in a new tab, so it follows the same route — and
       // unlike a left click it's never an editing gesture, so it never places a caret.
@@ -392,6 +402,17 @@ export function VisualEditor({
         </DragHandle>
       )}
       <EditorContent editor={editor} />
+      {/* Live mouse pointers for everyone else in the room. An overlay rather than ProseMirror
+          decorations: a pointer isn't anchored to a document position, and 60 mouse events a
+          second must not rebuild anybody's decorations. */}
+      {editor && (
+        <CollabPointers
+          container={scrollEl}
+          content={editor.view.dom as HTMLElement}
+          awareness={awareness ?? null}
+          enabled={pointers !== false}
+        />
+      )}
       {picker && editor && (
         <BlockPicker
           editor={editor}

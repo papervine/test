@@ -1,7 +1,7 @@
 "use client";
 
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import { Eye, Code2, Diff, Copy } from "lucide-react";
+import { Eye, Code2, Diff, Copy, MousePointer2 } from "lucide-react";
 import { toast } from "sonner";
 import { VisualEditor } from "./VisualEditor";
 import { SourceEditor } from "./SourceEditor";
@@ -11,6 +11,9 @@ import { PresenceDots } from "./collab/PresenceDots";
 import { readBasePageAction } from "@/lib/actions/authoring";
 
 export type Mode = "visual" | "source";
+
+/** Where the live-cursors preference lives. Per browser, like the platform theme. */
+const POINTERS_KEY = "pv-collab-pointers";
 
 /**
  * The editor pane (SPEC §9.2): two *editable* views over ONE MDX draft — Visual (WYSIWYG,
@@ -57,6 +60,24 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
   const [diffing, setDiffing] = useState(false);
   const [baseContent, setBaseContent] = useState<string | null>(null);
   const [modKey, setModKey] = useState("⌘");
+  // Live mouse pointers, on by default. Read from localStorage in an effect rather than in the
+  // initializer: this component server-renders, and reading storage during the first render is a
+  // hydration mismatch waiting to happen.
+  const [pointers, setPointers] = useState(true);
+  useEffect(() => {
+    try {
+      setPointers(localStorage.getItem(POINTERS_KEY) !== "off");
+    } catch {
+      // A browser with site data blocked still gets the default; nothing here is worth failing for.
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(POINTERS_KEY, pointers ? "on" : "off");
+    } catch {
+      /* see above */
+    }
+  }, [pointers]);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedValue = useRef(initialMarkdown);
 
@@ -187,6 +208,17 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
         <span className="truncate text-xs text-neutral-500">{path}</span>
         <div className="flex items-center gap-2">
           <PresenceDots peers={peers} />
+          {/* Live mouse pointers, switchable — and only offered when there's somebody to see or be
+              seen by, so a solo session isn't given a control that can't do anything. The choice
+              persists per browser, so turning it off stays off for the next room too. */}
+          {peers.length > 0 && (
+            <ToolbarButton
+              icon={MousePointer2}
+              label={pointers ? "Hide live cursors" : "Show live cursors"}
+              active={pointers}
+              onClick={() => setPointers(!pointers)}
+            />
+          )}
           <span className="text-[11px] text-neutral-400">
             {savedAt === "saving" ? "Saving…" : savedAt === "saved" ? "Draft saved" : ""}
           </span>
@@ -240,6 +272,7 @@ export const MdxEditorPane = forwardRef<MdxEditorHandle, MdxEditorPaneProps>(fun
             onChange={change}
             assetBase={`/api/tenant-asset/${site}`}
             awareness={awareness}
+            pointers={pointers}
             org={org}
             site={site}
             branch={branch}

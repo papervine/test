@@ -3191,6 +3191,38 @@ layer.
 > name. Verified with two seeded accounts against the real collab service: each side's caret reads
 > the other's actual name in their own colour.
 >
+> **Live mouse pointers, with a switch (2026-08-31).** The caret says where someone is *typing*; the
+> pointer says where they're *looking*, which is what makes "this paragraph here" work while two
+> people are talking. Rides the same awareness under its own `pointer` field, so there's no second
+> transport and each arrow inherits that person's presence name and colour.
+>
+> **Coordinates are relative to the TEXT, not the window** (`visual/pointer-plan.ts`). Sending
+> `clientX/clientY` is wrong the moment two people have different window sizes, a sidebar open, or
+> different scroll positions — a pointer at the top of my viewport is halfway down yours. A document
+> editor has something better to hang coordinates on: x is a **fraction of the content column**
+> (0…1) and y is a **document-space distance** from the top of the content, so the receiver
+> multiplies by its own column width and subtracts its own scroll. A teammate pointing a third of
+> the way across a line lands in the same place relative to the words on a differently-sized screen.
+> It can't survive a genuinely different layout (a wild zoom, a font that wraps differently) — no
+> scheme can — the same "cosmetic" bargain the carets make.
+>
+> **Off means off in both directions.** The toolbar toggle (beside the presence avatars, shown only
+> once there IS a peer, persisted per browser) stops drawing other people's pointers *and* stops
+> publishing ours. A switch that only hid other people's while still broadcasting yours would be
+> worse than not having one — you'd think you were private. Also cleared on `mouseleave`, so a
+> parked arrow doesn't sit on someone's screen pointing at a paragraph nobody is looking at.
+>
+> An **overlay, not ProseMirror decorations**: a pointer isn't anchored to a document position, and
+> pushing 60 mouse events a second through a decoration rebuild would re-render every peer's editor
+> on every twitch of somebody else's hand. Publishing is throttled to one write per animation frame
+> for the same reason — awareness is a broadcast to the whole room. Pinned by
+> `tests/unit/collab-pointers.test.ts` (16 cases: self-filtering, absent/garbage coordinates,
+> fraction clamping, scroll subtraction, off-screen dropping, and a round trip between two
+> differently-sized windows landing at the same place in the text) plus a two-context
+> `editor.spec.ts` case, gated on `NEXT_PUBLIC_COLLAB_URL` like the caret one, that proves a real
+> mousemove reaches the peer's screen, follows, clears on leave, and that the toggle silences both
+> directions. Verified with two seeded accounts against the real collab service, light and dark.
+>
 > **A pre-sync local write doubled the whole page — the settle gate (2026-08-30).** Reported from
 > real use: with two people in a document, **refreshing either screen saved the page doubled up on
 > itself**. Mechanism, and it's a one-liner once seen: the panes render immediately from the

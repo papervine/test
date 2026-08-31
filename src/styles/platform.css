@@ -795,6 +795,42 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
 .pv-visual .pv-doc-header {
   padding-left: 4rem;
 }
+
+/* Remote collaborators' live mouse pointers (CollabPointers). Absolutely positioned against the
+   scroll container — hence `position: relative` on `.pv-visual` — and `pointer-events: none`
+   throughout, or somebody else's cursor would eat your clicks. Above the text, below the portaled
+   menus (which sit on <body>, so they outrank this by stacking context anyway). */
+.pv-pointer-layer {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 30;
+}
+.pv-pointer {
+  position: fixed;
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  /* The arrow's tip is its top-left, which is where the pointer actually is. */
+  transform: translate(-1px, -1px);
+  transition: left 80ms linear, top 80ms linear;
+  will-change: left, top;
+}
+.pv-pointer-arrow {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.45));
+}
+.pv-pointer-name {
+  margin-top: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: #fff;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
 .pv-visual .ProseMirror:focus {
   outline: none;
 }

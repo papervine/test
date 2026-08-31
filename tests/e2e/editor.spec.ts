@@ -2327,4 +2327,77 @@ test.describe("web editor @external", () => {
       await ctxB.close();
     }
   });
+
+  // Live MOUSE pointers (SPEC §9.2), the companion to the carets above: where someone is *looking*,
+  // not where they're typing. Same gate — awareness is only shared over the collab service, and two
+  // Playwright contexts don't share a BroadcastChannel. The coordinate maths has its own unit tests
+  // (collab-pointers.test.ts); what needs a browser is that a real mousemove reaches awareness, the
+  // arrow lands on the peer's screen, and the toggle silences BOTH directions.
+  test("shows a peer's live mouse pointer, and the toggle stops sending as well as drawing", async ({
+    browser,
+  }) => {
+    test.skip(
+      !process.env.NEXT_PUBLIC_COLLAB_URL,
+      "needs the collab service — set NEXT_PUBLIC_COLLAB_URL and start apps/collab",
+    );
+    const state = "tests/e2e/.auth/user.json";
+    const ctxA = await browser.newContext({ storageState: state });
+    const ctxB = await browser.newContext({ storageState: state });
+    try {
+      const a = await ctxA.newPage();
+      const b = await ctxB.newPage();
+      await a.goto(sitePath(SLUG, "editor"));
+      await b.goto(sitePath(SLUG, "editor"));
+      await expect(a.locator(".pv-visual .ProseMirror")).toBeVisible({ timeout: 15_000 });
+      await expect(b.locator(".pv-visual .ProseMirror")).toBeVisible({ timeout: 15_000 });
+
+      const box = (await a.locator(".pv-visual .ProseMirror p").first().boundingBox())!;
+      const pointerOnB = b.locator(".pv-pointer");
+
+      // Nobody has moved a mouse over the editor yet.
+      await expect(pointerOnB).toHaveCount(0);
+
+      await a.mouse.move(box.x + 120, box.y + 10);
+      await a.mouse.move(box.x + 122, box.y + 12); // a second move: publishing is per-frame
+      await expect(pointerOnB).toHaveCount(1, { timeout: 10_000 });
+      await expect(b.locator(".pv-pointer-name").first()).toHaveText(TEST_USER.name);
+
+      // It follows: a further move must land somewhere else on B's screen, not stick.
+      const first = (await pointerOnB.boundingBox())!;
+      await a.mouse.move(box.x + 420, box.y + 90);
+      await a.mouse.move(box.x + 422, box.y + 92);
+      await expect
+        .poll(async () => Math.round(((await pointerOnB.boundingBox()) ?? first).x), { timeout: 10_000 })
+        .not.toBe(Math.round(first.x));
+
+      // A's mouse leaving the editor clears it, rather than parking a stale arrow on B's screen.
+      await a.mouse.move(2, 2);
+      await expect(pointerOnB).toHaveCount(0, { timeout: 10_000 });
+
+      // The toggle appears once there's a peer, and switches BOTH directions off: B draws nothing,
+      // and A stops seeing B. A one-way switch would be worse than none — you'd think you were
+      // private while still broadcasting.
+      const toggle = b.getByRole("button", { name: /live cursors/i });
+      await expect(toggle).toBeVisible();
+      await toggle.click();
+
+      const bBox = (await b.locator(".pv-visual .ProseMirror p").first().boundingBox())!;
+      await b.mouse.move(bBox.x + 200, bBox.y + 20);
+      await b.mouse.move(bBox.x + 202, bBox.y + 22);
+      await expect(a.locator(".pv-pointer")).toHaveCount(0);
+
+      await a.mouse.move(box.x + 150, box.y + 20);
+      await a.mouse.move(box.x + 152, box.y + 22);
+      await expect(pointerOnB).toHaveCount(0);
+
+      // Back on, and A's pointer is drawn again.
+      await toggle.click();
+      await a.mouse.move(box.x + 180, box.y + 30);
+      await a.mouse.move(box.x + 182, box.y + 32);
+      await expect(pointerOnB).toHaveCount(1, { timeout: 10_000 });
+    } finally {
+      await ctxA.close();
+      await ctxB.close();
+    }
+  });
 });
