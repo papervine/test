@@ -52,7 +52,17 @@ export default defineConfig({
       // its memory threshold and SELF-RESTARTS mid-run ("Server is approaching the used memory
       // threshold, restarting…"), and each restart is a brief window where page.goto hits
       // ERR_CONNECTION_REFUSED and cascades spec failures. Same fix the CI build step already uses.
-      NODE_OPTIONS: "--max-old-space-size=6144",
+      // 6144 was too generous, and the failure it caused is nastier than the one it fixed: a CI
+      // runner has ~8GB (measured — `free -m` on the e2e job reported 1257MB used / 6681MB
+      // available), and this cap licenses the dev server alone to take 6GB of it while Postgres,
+      // MinIO, Chromium and the Playwright process share what's left. When the peak compile (the
+      // marketing home, which pulls the whole editor bundle) landed near the ceiling, the KERNEL
+      // picked a victim: the job died with `##[error]The operation was canceled.`, no failing spec,
+      // no output, and once with no retrievable log at all — intermittently, on identical code, so
+      // it read like a code regression and cost a five-PR bisect to disprove. 3072 still comfortably
+      // clears the ~2GB cgroup default that caused the self-restarts this cap was added for, and
+      // leaves the rest of the box room to exist.
+      NODE_OPTIONS: "--max-old-space-size=3072",
       // Own build output, so the suite runs alongside `npm run dev` instead of fighting it
       // over `.next` (one dev server per distDir — see next.config.mjs). reset-db.mjs reads
       // the same value to check the right lock.
