@@ -385,6 +385,19 @@ Visual mode treats them that way:
   That form can't be modelled as a single value, and showing you the source is better than
   silently keeping one of the two colours. Edit those in Source mode.
 
+## Editing changelog entries
+
+`<Update>` is one entry in a changelog — a label on the left, what changed on the right — and
+Visual mode edits it as that shape rather than as source:
+
+- **`/update`** inserts an entry, labelled with today's date and ready to type into. The label is
+  what readers link to (it becomes the entry's anchor), so it's filled in rather than left empty.
+- The **label**, an optional **description** under it, and **tags** (comma separated) are fields in
+  the left column; the entry's body is the content beside them. <kbd>Enter</kbd> in any of the
+  fields moves down into the body.
+- An entry using `rss={…}` shows as its own MDX instead — per-entry feed metadata is an object, and
+  showing you the source beats keeping a part of it. Edit those in Source mode.
+
 ## The `/` menu
 
 Type `/` anywhere in Visual mode to insert a block. Filter by typing, move with

@@ -127,6 +127,11 @@ describe("known components parse to typed nodes and round-trip", () => {
     },
     Expandable: { mdx: '<Expandable title="attrs">\n  Nested.\n</Expandable>\n', node: "expandable" },
     Frame: { mdx: '<Frame caption="A figure">\n  ![x](/y.png)\n</Frame>\n', node: "frame" },
+    Update: {
+      mdx: '<Update label="2026-08-31" description="v1.2.0">\n  Shipped the thing.\n</Update>\n',
+      node: "update",
+      attrs: { mdxName: "Update", label: "2026-08-31", description: "v1.2.0" },
+    },
   };
   for (const [name, { mdx, node, attrs }] of Object.entries(components)) {
     it(name, () => {
@@ -374,6 +379,61 @@ describe("unmodelable MDX is preserved verbatim (raw passthrough)", () => {
     const doc = mdxToProseMirror(mdx);
     expect(doc.content[0].type).toBe("mdxUnknownFlow");
     expect(norm(mdx)).toContain("cols={cols}");
+  });
+
+  // `tags={["api"]}` is the one expression shape the model reads rather than demoting — a changelog
+  // entry's tags are authored content, not code, and the starter's own Updates gallery writes them,
+  // so demoting would have made the component's flagship example the one page Visual mode couldn't
+  // edit. The literal-only reader is the line: anything less literal still demotes.
+  describe("<Update> tags", () => {
+    it("reads a literal string list onto the node and writes it back byte-exact", () => {
+      const mdx = '<Update label="2026-08-23" description="v0.2.0" tags={["release"]}>\n  Body.\n</Update>\n';
+      const doc = mdxToProseMirror(mdx);
+      expect(doc.content[0].type).toBe("update");
+      expect(doc.content[0].attrs?.tags).toEqual(["release"]);
+      expect(norm(mdx)).toBe(mdx);
+    });
+
+    it("round-trips several tags", () => {
+      const mdx = '<Update label="2026-08-23" tags={["api", "beta"]}>\n  Body.\n</Update>\n';
+      expect(mdxToProseMirror(mdx).content[0].attrs?.tags).toEqual(["api", "beta"]);
+      expect(norm(mdx)).toBe(mdx);
+    });
+
+    // Two documented normalizations. Neither is byte-exact, and both are STABLE — which is the
+    // converter's actual contract (see the idempotency gate at the top of this file): formatting
+    // settles to one canonical form on the first pass and never drifts again.
+    it("normalizes tight spacing to one canonical form, then holds", () => {
+      const mdx = '<Update label="2026-08-23" tags={["api","beta"]}>\n  Body.\n</Update>\n';
+      const once = norm(mdx);
+      expect(once).toContain('tags={["api", "beta"]}');
+      expect(norm(once)).toBe(once);
+    });
+
+    it("drops an empty list rather than writing tags={[]}", () => {
+      const mdx = '<Update label="2026-08-23" tags={[]}>\n  Body.\n</Update>\n';
+      const once = norm(mdx);
+      expect(once).toBe('<Update label="2026-08-23">\n  Body.\n</Update>\n');
+      expect(norm(once)).toBe(once);
+    });
+
+    for (const [name, expr] of Object.entries({
+      "a variable": "TAGS",
+      "a spread": '[...base, "x"]',
+      "a non-string member": '["api", 2]',
+    })) {
+      it(`demotes ${name} to raw, byte-exact`, () => {
+        const mdx = `<Update label="2026-08-23" tags={${expr}}>\n  Body.\n</Update>\n`;
+        expect(mdxToProseMirror(mdx).content[0].type).toBe("mdxUnknownFlow");
+        expect(norm(mdx)).toBe(mdx);
+      });
+    }
+
+    it("still demotes an entry carrying rss, which is an object", () => {
+      const mdx = '<Update label="2026-08-23" rss={{ title: "x" }}>\n  Body.\n</Update>\n';
+      expect(mdxToProseMirror(mdx).content[0].type).toBe("mdxUnknownFlow");
+      expect(norm(mdx)).toBe(mdx);
+    });
   });
 
   it("arithmetic/complex expression attrs still demote to raw", () => {

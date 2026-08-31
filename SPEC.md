@@ -3743,6 +3743,50 @@ layer.
 > warning already told operators their bucket needs the rule; that sentence is now backed by
 > configuration rather than by a default nobody had written down.
 >
+> **`<Update>` is a modeled block now, and `tags` taught the converter string lists (2026-08-31).**
+> The component already rendered for readers (`components/mdx/Update.tsx`, in the extended-components
+> fixture since §7's coverage push) — what it lacked was the *editor*: no `COMPONENTS` entry, so no
+> node, no `/update`, and an entry in Visual mode was raw MDX. Now `Update: { node: "update", attrs:
+> { label, description, tags } }`, with `UpdateNodeView` mirroring the published two-column layout
+> and handing the three authored parts back as fields (the reader's version renders the label as an
+> `<a>`, so there is nothing there to type into — same reasoning as the tree and the colour swatches
+> being drawn by the editor rather than reused). `/update` inserts one labelled with **today's date
+> in ISO**, because the label is the reader's anchor and an insert that left it empty would put a
+> broken entry on the page.
+>
+> The interesting part is `tags`. It's an **array**, i.e. an expression attr, and the rule until now
+> was "any expression demotes the whole element to a raw passthrough". That rule would have made the
+> component's own flagship example — `examples/starter/components/updates.mdx`, which writes
+> `tags={["release"]}` — the one page the Visual editor couldn't edit. So `AttrKind` gained
+> **`"strings"`**: a literal list of plain quoted strings is read onto the node and written back as
+> the expression it came in as. The line stays literal-only, deliberately — `tags={TAGS}`,
+> `tags={[...base, "x"]}`, `tags={["api", 2]}` and `rss={{…}}` all still demote, byte-exact, rather
+> than have the model flatten something it can't reproduce. Two **documented normalizations** come
+> with it, both idempotent (which is the converter's actual contract): tight spacing settles to
+> `["api", "beta"]`, and `tags={[]}` is dropped like every other empty value.
+>
+> **The label renders as an emerald chip, in both surfaces.** A changelog is scanned down its left
+> edge, and a filled pill gives the eye a rail that plain bold text doesn't — so the reader's label
+> became a chip (still a real anchor; the chip is what you copy the link from), and the editor's
+> label FIELD is styled as the same chip so Visual mode looks like what publishes. Emerald rather
+> than the theme's primary: a release marker reading as "new" is the convention, and it keeps meaning
+> on a site whose primary colour is doing other work. One trap worth recording: the colour needs `!`
+> utilities, because this repo hand-rolls its prose styles and `.prose a.card-link { text-inherit }`
+> (the opt-out every component link uses) outranks a plain `text-emerald-700` — `Prompt`'s chip link
+> already had the same collision and the same fix. The field is `field-sizing: content` with a
+> min-width, so it hugs the label instead of stretching across the column.
+>
+> Tags are editable in the node view as one **comma-separated field** rather than a chip editor: that
+> is exactly how the attr reads in source, it needs no new UI vocabulary, and — more importantly — a
+> modeled attr the editor ignored would read as "my tags disappeared". The richer control belongs to
+> the component-properties panel when that lands. Guards: the catalogue-wide
+> `slash-items-schema.test.ts` picked the new item up for free, `mdx-prosemirror-roundtrip.test.ts`
+> gained the typed-attr case plus eight tag cases (round trip, both normalizations, and each demotion
+> shape), and an `editor.spec.ts` case inserts one from `/update` and asserts the edited label and
+> description land as real attrs in the draft. Verified in a real browser: `/update` inserts and
+> serializes as `<Update label="…" description="…">`, and the starter's own gallery page — raw MDX
+> before this — opens as two editable entries whose tag edit writes `tags={["release", "api"]}`.
+>
 > **The block controls' hover zone was the block, not the row (2026-08-31).** Reported as "I should
 > not have to hover over the component itself to show the left margin options — hovering the whole
 > line should do it." The gutter those controls float in was `pl-16` on the editor's **scroll

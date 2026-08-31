@@ -14,6 +14,7 @@ import { StepNodeView, StepsNodeView } from "./StepsNodeView";
 import { AccordionGroupNodeView, AccordionNodeView } from "./AccordionNodeView";
 import { CodeGroupNodeView } from "./CodeGroupNodeView";
 import { CardNodeView } from "./CardNodeView";
+import { UpdateNodeView } from "./UpdateNodeView";
 import { IconNodeView } from "./IconNodeView";
 import { TreeFileNodeView, TreeFolderNodeView, TreeNodeView } from "./TreeNodeView";
 import { ColorItemNodeView, ColorNodeView, ColorRowNodeView } from "./ColorNodeView";
@@ -117,6 +118,10 @@ function ComponentNodeView(props: NodeViewProps) {
   // A card's icon and title are attrs, so the generic view can render them but not edit them —
   // this one hands both back as controls inside the published card.
   if (name === "Card") return <CardNodeView {...props} />;
+
+  // A changelog entry's label and description are attrs too, and the reader's component renders the
+  // label as an anchor — nothing there is editable in place. See UpdateNodeView.
+  if (name === "Update") return <UpdateNodeView {...props} />;
 
   // A file tree's rows are named entirely by attrs — there is no content hole in a `<Tree.File>`
   // to type into — so the rows are drawn here with real fields. See TreeNodeView.

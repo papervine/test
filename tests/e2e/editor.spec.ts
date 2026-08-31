@@ -242,6 +242,8 @@ test.describe("web editor @external", () => {
       `${prefix}emptytaskpage.mdx`,
       "---\ntitle: Empty task\n---\n\n- [ ] asasassa\n-\n",
     );
+    // An empty page for the changelog-entry insert test to build on.
+    await put(`${prefix}updatepage.mdx`, "---\ntitle: Changelog\n---\n\nRelease notes below.\n");
     await put(`${prefix}uploadpage.mdx`, "---\ntitle: Upload\n---\n\nUpload anchor line.\n");
     await put(`${prefix}failpage.mdx`, "---\ntitle: Fail\n---\n\nFail anchor line.\n");
     await put(
@@ -1151,6 +1153,15 @@ test.describe("web editor @external", () => {
   // for the same reason as <Tabs> — which block is showing is a scoped CSS rule, and the label,
   // language and add/remove controls are all view-layer over the fence's own `meta`.
   test("the code group is an editable tab strip over its fences", async ({ page }) => {
+    // The heaviest case in the file: it cold-compiles its own page, then drives the language picker,
+    // a rename, an add, a delete, four keystroke guards and two draft polls. On the default 30s
+    // budget it intermittently overran — always as `Error: aborted` on a navigation, the signature
+    // CLAUDE.md records for a test running out of clock rather than a broken page (the `domain` and
+    // `members-roles` specs presented identically). `test.slow()` gives it the budget the work
+    // actually needs; it is not masking a failure, and if this ever fails on an assertion instead of
+    // a timeout, that IS a real one.
+    test.slow();
+
     // Own the starting content: this test renames tabs and removes a block, then asserts on the
     // MDX, so a draft left by an earlier run would have it asserting against a different group.
     await clearDrafts(["codegrouppage.mdx"]);
@@ -1508,6 +1519,51 @@ test.describe("web editor @external", () => {
     expect(mdx).toContain('<Color.Item name="new-color"');
 
     await clearDrafts(["colorpage.mdx"]);
+  });
+
+  // `<Update>` — a changelog entry. It rendered for readers already; what's new is that the editor
+  // MODELS it: `/update` inserts one, and its two authored parts (the label readers link to, and
+  // the description) are fields rather than a Source-mode job. Asserted through the draft MDX,
+  // because the point is that editing the fields writes real attrs on the real element.
+  test("inserts a changelog entry and edits its label and description", async ({ page }) => {
+    await clearDrafts(["updatepage.mdx"]);
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=updatepage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    // Insert from the `/` menu at the end of the page.
+    await pm.click();
+    await page.keyboard.press("Meta+ArrowDown");
+    await page.keyboard.press("Enter");
+    await page.keyboard.type("/update");
+    await expect(page.locator(".pv-slash-menu")).toContainText("Changelog entry");
+    await page.keyboard.press("Enter");
+
+    const entry = pm.locator(".pv-update");
+    await expect(entry).toBeVisible();
+    // The label defaults to today's date in ISO — it's required (it's the reader's anchor), so an
+    // insert that left it empty would put a broken entry on the page.
+    const today = new Date().toISOString().slice(0, 10);
+    await expect(entry.locator(".pv-update-label")).toHaveValue(today);
+
+    // Type the body, then fill the description — both parts of one entry.
+    await entry.locator(".pv-update-body").click();
+    await page.keyboard.type("Shipped the thing.");
+    await entry.locator(".pv-update-desc").fill("v1.2.0");
+
+    const draft = async () => {
+      const rows = await sql<{ content: string }[]>`
+        select content from draft_file d
+        join editor_session s on s.id = d.session_id
+        where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'updatepage.mdx'`;
+      return rows[0]?.content ?? "";
+    };
+    await expect.poll(draft, { timeout: 10_000 }).toContain('description="v1.2.0"');
+    const mdx = await draft();
+    expect(mdx).toContain(`<Update label="${today}"`);
+    expect(mdx).toContain("Shipped the thing.");
+
+    await clearDrafts(["updatepage.mdx"]);
   });
 
   // The draft Preview renders the tenant's own pages with a link/asset base — and THAT is the

@@ -5,7 +5,11 @@ import type { MdxAttr, MdxJsxElement, PMNode } from "./types";
 // typed attrs. Several tags share a node type (Note/Info/... → callout; CardGroup/Columns →
 // cardGroup; ParamField/ResponseField/ApiField → apiField); the original tag name is stored
 // on the node so serialization round-trips the exact element, aliases included.
-type AttrKind = "string" | "boolean" | "number";
+// "strings" is a LIST of plain strings, written as an expression attr (`tags={["api","beta"]}`) —
+// the one expression shape modeled rather than demoted, because a changelog entry's tags are
+// ordinary authored content, not code. Anything less literal (a variable, a computed array, an
+// object inside it) still demotes to a raw passthrough like every other expression.
+type AttrKind = "string" | "boolean" | "number" | "strings";
 
 interface ComponentSpec {
   node: string;
@@ -65,6 +69,12 @@ export const COMPONENTS: Record<string, ComponentSpec> = {
     attrs: { name: "string", type: "string", required: "boolean", deprecated: "boolean", defaultValue: "string" },
   },
   Expandable: { node: "expandable", attrs: { title: "string", defaultOpen: "boolean" } },
+  // A changelog entry. `label` (the anchor readers link to) and `description` are plain strings;
+  // `tags` is a list of them, which is why "strings" exists — the starter's own Updates gallery
+  // writes `tags={["release"]}`, so demoting over it would have meant the flagship example of the
+  // component was the one page the Visual editor couldn't edit. `rss` stays unmodeled (it's an
+  // object), so an entry carrying one is still kept as raw MDX, byte-exact.
+  Update: { node: "update", attrs: { label: "string", description: "string", tags: "strings" } },
   // The one inline component we model. `iconType` is carried through the typed model even though
   // the renderer ignores it (it selects a Font Awesome weight): dropping an attr an author wrote
   // would lose information, and demoting the whole badge to raw source over it would take it out
@@ -180,6 +190,29 @@ function literalFromExpression(expr: string): string | undefined {
 }
 
 /**
+ * `["api", "beta"]` → `["api", "beta"]`; anything else → undefined (demote).
+ *
+ * Deliberately a literal-only reader, like `literalFromExpression` above: an array of plain quoted
+ * strings, no escapes, no nesting, no trailing garbage. A repo that writes `tags={TAGS}` or
+ * `tags={[...base, "x"]}` keeps its element as raw source rather than having the model quietly
+ * flatten something it can't reproduce.
+ */
+function stringListFromExpression(expr: string): string[] | undefined {
+  const src = expr.trim();
+  if (!src.startsWith("[") || !src.endsWith("]")) return undefined;
+  const inner = src.slice(1, -1).trim();
+  if (inner === "") return [];
+  const out: string[] = [];
+  for (const part of inner.split(",")) {
+    const literal = literalFromExpression(part);
+    // A number or boolean in the list isn't a string list — demote rather than coerce.
+    if (literal === undefined || !/^["']/.test(part.trim())) return undefined;
+    out.push(literal);
+  }
+  return out;
+}
+
+/**
  * Extract typed attrs from a known component's JSX attributes. Returns null to signal the
  * element must be **demoted to a raw passthrough** — the fidelity guard from the plan: any
  * unknown attr, expression-valued attr (`prop={expr}`), or spread (`{...x}`) would lose
@@ -198,6 +231,15 @@ export function extractAttrs(name: string, attributes: MdxAttr[]): Record<string
     if (!kind) return null; // unknown attribute for this component → demote
 
     let value = attr.value;
+    // A string list only ever arrives as an expression (`tags={["api"]}`) — read it before the
+    // scalar path below, which has no way to represent one.
+    if (kind === "strings") {
+      if (value === null || typeof value !== "object") return null; // `tags` or `tags="api"` → demote
+      const list = stringListFromExpression(value.value);
+      if (list === undefined) return null;
+      out[attr.name] = list;
+      continue;
+    }
     // Expression-valued attribute (`prop={…}`). Simple JS literals — `cols={2}`,
     // `defaultOpen={true}`, `title={"x"}` (the common hosted docs platforms idiom) — resolve to their
     // value so the component stays a real typed node. Non-literal expressions (variables,
@@ -239,6 +281,16 @@ export function buildAttributes(attrs: Record<string, unknown> | undefined): Mdx
     if (spec.attrs[key] === "boolean") {
       // Only emit truthy booleans, as a bare attribute (`required`).
       if (value === true) out.push({ type: "mdxJsxAttribute", name: key, value: null });
+    } else if (spec.attrs[key] === "strings") {
+      // Back out as the expression it came in as. An empty list is omitted rather than written as
+      // `tags={[]}`, matching how every other empty value serializes away.
+      if (!Array.isArray(value) || value.length === 0) continue;
+      const list = value.map((v) => JSON.stringify(String(v))).join(", ");
+      out.push({
+        type: "mdxJsxAttribute",
+        name: key,
+        value: { type: "mdxJsxAttributeValueExpression", value: `[${list}]` },
+      });
     } else {
       out.push({ type: "mdxJsxAttribute", name: key, value: String(value) });
     }

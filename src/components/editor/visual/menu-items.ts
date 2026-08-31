@@ -23,6 +23,7 @@ import {
   CheckCircle2,
   Pencil,
   LayoutGrid,
+  Columns2,
   Columns3,
   Columns4,
   ListChecks,
@@ -171,6 +172,16 @@ const icon = () => ({ type: "icon", attrs: { mdxName: "Icon" } });
 // a box with nothing in it, and the rows are what the component IS.
 // One swatch to start, the way a tree starts with one row: an empty palette is a box with nothing
 // in it, and the "+" beside it is how you add the rest.
+// A changelog entry, labelled with today's date because that is what a changelog entry almost
+// always is — and the label is required (it's the anchor readers link to), so an insert that left it
+// empty would put a broken entry on the page. ISO rather than a locale format: it's what the
+// component's own examples use, it sorts, it slugifies to a sane `#2026-08-31` anchor, and it means
+// the same thing to every reader. Retyping it is one field either way.
+const update = () => ({
+  type: "update",
+  attrs: { mdxName: "Update", label: new Date().toISOString().slice(0, 10), description: null },
+  content: [paragraph()],
+});
 const color = () => ({
   type: "color",
   attrs: { mdxName: "Color", variant: "compact" },
@@ -379,6 +390,14 @@ export const SLASH_ITEMS: SlashItem[] = [
   insertItem("Icon", "Inline icon", "Components", Shapes, ["icon", "symbol", "glyph", "lucide"], icon),
   insertItem("File tree", "Files and folders", "Components", FolderTree, ["tree", "file", "files", "folder", "directory"], tree),
   insertItem("Colors", "Swatches with names", "Components", Palette, ["color", "colour", "swatch", "palette", "brand"], color),
+  insertItem(
+    "Update",
+    "Changelog entry",
+    "Components",
+    Columns2,
+    ["update", "changelog", "release", "version", "entry", "news"],
+    update,
+  ),
 ];
 
 /**
