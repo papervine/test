@@ -28,6 +28,30 @@ overview).
     The agent panel is **hidden by default** so the page has room to write; open it with the
     **Ask agent** button (or <kbd>⌘I</kbd> / <kbd>Ctrl I</kbd>) and close it from the button, the
     panel’s ✕, or the same shortcut. Your conversation is kept while it’s closed.
+
+    **New chat** starts a fresh conversation, and the clock icon opens your recent ones as a
+    list — each entry shows what you asked, how long ago, and the branch you were on; click
+    one to pick the conversation back up, or **Back** to return. History lives in your
+    browser (not on the server), keeps your last 20 chats on this device, and doesn’t keep
+    attachment files — a restored chat shows what was attached by name, but the file itself
+    isn’t stored.
+
+    Under each reply you can **copy the message** or mark it a **good or bad response** —
+    ratings are recorded with your site’s analytics, so they show up in the Insights
+    feedback count and tell us (and you) where the agent falls short.
+
+    You can **attach files as context** — paste a screenshot straight into the composer, drop a
+    file onto it, or use the paperclip. Images and PDFs go to the model as-is (“make the hero
+    look like this”); Markdown, text, CSV, JSON and SVG are handed over as text, so they work
+    with any model, including a local one. The agent is always told what’s attached — name,
+    type, size — and which page you have open, so “add this logo to the page” works even on a
+    model that can’t see images. Up to four files, 3MB together per message.
+
+    An attached image can also **end up on a page**: ask the agent to add it (“put this
+    screenshot in the quickstart”), and it saves the image into your site’s files — through
+    the same draft buffer as an upload of your own, so it shows in the change list and goes
+    live only on publish — then embeds it with ordinary image markdown. Attachments you don’t
+    ask it to save live only in the conversation and are never stored with your site.
   </Step>
   <Step title="Navigation (middle)">
     Your `docs.json` navigation, rendered from the **draft** of the current branch. Click any

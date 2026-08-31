@@ -15,6 +15,11 @@ import {
 import { listBranches } from "./github";
 import { repoTokenForSite } from "./github-token";
 import { hasGitRepo } from "./site-source";
+import { findOpenSession, listDraftFiles, upsertDraftFile } from "./draft-store";
+import { listKeys, putObject } from "./storage";
+import { mimeForPath } from "./sync-plan";
+import { draftAssetKey, uploadTargetPath, validateUpload } from "./media-upload";
+import { bytesFromDataUrl, type ImageAttachment } from "./agent-attachments";
 
 /**
  * The editing agent's WRITE tools (SPEC §9.2) — the agent-native half of the authoring
@@ -34,7 +39,11 @@ export function draftContentSource(site: SiteRow, branch: string): ContentSource
   return draftSource(site.id, branch, site.lastSyncedCommitSha ?? "");
 }
 
-export function authoringTools(site: SiteRow, branch: string): ToolSet {
+export function authoringTools(
+  site: SiteRow,
+  branch: string,
+  opts: { attachments?: ImageAttachment[] } = {},
+): ToolSet {
   // A Papervine-hosted site has no repo and no PR target (SPEC §10.11). Rather than let the
   // agent call a tool that would hit GitHub with a null owner — or offer it a publish mode
   // the server will ignore — the Git-only capabilities are omitted from its toolset
@@ -147,5 +156,62 @@ export function authoringTools(site: SiteRow, branch: string): ToolSet {
       inputSchema: z.object({}),
       execute: async () => discardSession(site, branch),
     }),
+
+    // Only offered when the conversation actually carries an image, so the model is never
+    // shown a capability with nothing to use it on (the same rule that hides list_branches
+    // on a hosted site).
+    ...(opts.attachments?.length
+      ? {
+          save_attachment: tool({
+            description:
+              "Save an image the user ATTACHED to this conversation into the site's assets, " +
+              "so a page can show it. Returns the markdown to embed. The bytes buffer to the " +
+              "draft like any other edit — nothing is live until publish. Call this BEFORE " +
+              "adding an attached image to a page; page edits must reference the returned " +
+              "path, never the raw attachment.",
+            inputSchema: z.object({
+              filename: z
+                .string()
+                .describe("The attachment's filename as it appears in the conversation."),
+              alt: z.string().optional().describe("Alt text for the image."),
+            }),
+            execute: async ({ filename, alt }) => {
+              // Newest-first, so "screenshot.png" means the one just sent when names repeat.
+              const attachment = opts.attachments!.find(
+                (a) => a.filename.toLowerCase() === filename.toLowerCase(),
+              );
+              if (!attachment) {
+                return {
+                  error: `No attached image named "${filename}". Attached: ${opts
+                    .attachments!.map((a) => a.filename)
+                    .join(", ")}.`,
+                };
+              }
+              const bytes = bytesFromDataUrl(attachment.url);
+              const valid = validateUpload("image", attachment.filename, bytes.length);
+              if ("error" in valid) return valid;
+
+              // The same pipeline as a human upload (src/lib/actions/media.ts), minus the
+              // presign hop — the bytes are already server-side, in the conversation. The
+              // route checked the session out before any tool can run, so it exists.
+              const session = await findOpenSession(site.id, branch);
+              if (!session) return { error: "No open edit session for this branch." };
+              const prefix = `sites/${site.id}/`;
+              const published = (await listKeys(prefix)).map((k) => k.slice(prefix.length));
+              const drafted = (await listDraftFiles(session.id)).map((f) => f.path);
+              const path = uploadTargetPath("image", attachment.filename, [
+                ...published,
+                ...drafted,
+              ]);
+              if (!path) return { error: "That file type isn't supported here." };
+
+              await putObject(draftAssetKey(session.id, path), bytes, mimeForPath(path));
+              // content stays empty: `binary` says the bytes are in storage, not in Postgres.
+              await upsertDraftFile({ sessionId: session.id, path, content: "", binary: true });
+              return { ok: true, path, markdown: `![${alt ?? ""}](/${path})` };
+            },
+          }),
+        }
+      : {}),
   };
 }

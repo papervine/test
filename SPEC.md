@@ -2863,6 +2863,124 @@ layer.
 > the model is never offered a capability the site doesn't have. Editor chrome follows: no
 > branch switcher and a single **Publish** action (`publishModeFor` → `'native'`).
 >
+> **Status (2026-08-30) — the editor agent takes attachments.** Asked for with a mock of the
+> composer carrying a paperclip: "we should be able to add attachments so the AI can use it as
+> context". They travel **inside the chat message** as data-URL file parts — the AI SDK's own
+> shape (`FileUIPart`, `sendMessage({ files })`, `convertToModelMessages`) — not through object
+> storage: an attachment is conversation context, not site content, so nothing persists it and
+> the feature needed zero new infrastructure. The cost of inlining is a hard budget, enforced by
+> ONE pure gate (`src/lib/agent-attachments.ts`) applied on both sides — the composer refuses
+> next to the paperclip, the route refuses with a 400 before spending model tokens: ≤4 files,
+> ≤3MB decoded per message (base64 ×1.37 + the conversation must fit Vercel's ~4.5MB request
+> cap), accepted types only, and **inline bytes only** — a remote URL would make the server or
+> provider fetch on the author's behalf, an SSRF surface this feature doesn't need.
+>
+> The type split is about which models can use what: images and PDFs stay file parts (the
+> vision/file pipeline — every hosted default reads them; a local text-only model will refuse,
+> readably), while Markdown/text/CSV/JSON are rewritten server-side into labeled fenced TEXT
+> parts (`inlineTextAttachments`) before `convertToModelMessages` — so a text attachment works
+> on EVERY provider, including local OpenAI-compatible servers with no file support at all. The
+> rewrite applies to the whole history, not just the last message, because the conversation is
+> resent to the model each turn. Composer UX: paperclip, paste (screenshots from the clipboard —
+> the gesture the feature is for), and drop; chips with thumbnails and per-file remove; the sent
+> bubble renders what went. Guards: `tests/unit/agent-attachments.test.ts` (14 cases: decoded
+> size from base64 without decoding, the budget across files, remote-URL refusal, the text
+> inlining incl. history) and an `editor.spec.ts` journey that intercepts `/api/editor-agent`
+> and asserts the actual wire shape — two data-URL file parts with the right media types and
+> filenames — plus chip removal and the in-place size refusal, deterministic with no AI
+> provider configured.
+>
+> **And an attached image can land ON a page (same day):** "if I paste an image in as context
+> and ask the AI to add it to the page, it should know how to upload it to the tenant, then add
+> the appropriate markdown." That's a TOOL, `save_attachment` (authoring-tools.ts): it takes an
+> attachment by filename (newest-first when names repeat), runs the SAME pipeline as a human
+> upload — `validateUpload`, collision-suffixed `uploadTargetPath`, bytes to the session's
+> draft-asset prefix, a `binary` draft_file row — minus the presign hop, because the bytes are
+> already server-side inside the message. So the image shows in the change list, reverts
+> per-file, renders immediately in the editor (the tenant-asset route already serves draft
+> assets), and goes live only on publish. It returns the embed markdown, and the system prompt
+> says to call it before referencing an attached image — never to invent a path. The tool is
+> **only offered when the conversation actually carries an image** (the list_branches rule:
+> never show the model a capability with nothing to use it on). Pinned in
+> `authoring-tools.test.ts`: absent without attachments, exact draft key + binary row, the
+> collision suffix, and the filename-miss error naming what IS attached.
+>
+> **Field report, same day: "I attached a logo and asked to add it — the agent said it sees no
+> image."** Two real gaps, neither needing a vision model to fix. First: the configured model
+> (`deepseek-v4-flash`) is TEXT-ONLY, and a provider without vision silently DROPS image
+> content — the model answered truthfully. But `save_attachment` never needed the model to see
+> pixels, only to know the file exists — so the system prompt now carries an **attachment
+> inventory** (`attachmentInventory`: name, type, size for every file in the conversation) plus
+> the instruction to save-then-embed and never claim there is no attachment. Works on any
+> model; vision models additionally still get the image itself. Second: nothing ever told the
+> agent WHICH page is open — "add it to this page" was unanswerable by construction. The panel
+> now sends the open page's `slug` with every message and the prompt says "this page" means it.
+> And since logos are usually SVGs: `image/svg+xml` is now attachable — inlined to the model as
+> its SOURCE (any model reads markup; vision APIs reject svg as an image) while staying savable
+> by `save_attachment` (`UPLOAD_KINDS` already takes `.svg`).
+>
+> **Status (2026-08-30) — New chat + chat history on the agent panel.** Asked for with a mock:
+> `[+ New chat] … [clock] [✕]`. The panel now owns its whole header (the shell handed over its
+> static label and ✕ — the controls act on chat state that lives inside the panel). History is
+> **localStorage, deliberately not Postgres**: a conversation with the editing agent is a
+> per-person working context like an unsent draft — the drafts the agent WROTE are already in
+> the draft buffer; the words around them are a viewer convenience that may vanish without
+> breaking anything. Pure rules in `src/lib/agent-chats.ts`, all pinned in unit tests: titled by
+> the first thing the user asked; stored **minus attachment bytes** (two 3MB screenshots would
+> evict every other chat from localStorage's ~5MB — the chips keep filename/type and render
+> without a thumbnail on restore); upserted by chat id, newest first, capped at 20; corrupt
+> storage parses as "no history", and a storage that throws leaves the live chat untouched.
+> Restoring a transcript moves the write-tool watermark first, so completed edits in an old
+> conversation don't re-trigger the editor-refresh signal. The e2e journey (route intercepted —
+> user bubbles render optimistically, so no AI needed): send, New chat clears, history lists it
+> by title, restore brings it back, a second chat lists both newest-first.
+>
+> **Status (2026-08-30) — history is a panel view, and replies grew Copy/Good/Bad.** Two
+> follow-ups from mocks. The history dropdown became a full **view of the panel** (Back header,
+> one row per chat: title, age, branch with a branch icon, chevron) — `StoredChat` gained
+> `branch` (display metadata; chats stay keyed per site, not per branch) and the youngest
+> `chatAge` bucket reads "less than a minute ago" per the mock. And each settled assistant
+> reply carries **Copy message / Good response / Bad response**: copy puts the reply's text
+> parts on the clipboard; the thumbs write a real analytics row via
+> `POST /api/editor-agent/feedback` (same auth gate as the agent route) into
+> `analytics_event` — the FIRST writer of the `type='feedback'` slot the schema reserved —
+> as `status: 'up'|'down'`, `path: '/editor-agent'` (the discriminator so future reader-widget
+> feedback shares the table without mixing), `query` = the user ask the rated reply answered
+> (`questionBefore`), `sessionId` = the chat id. Ratings also persist in the stored chat
+> (`ratings` by message id) so a restored conversation keeps its thumbs; clicking the same
+> thumb twice logs nothing new, switching thumbs logs the new choice as its own event (the
+> table is append-only — analytics reads the latest per message if it ever cares). Pure rules
+> (`agent-feedback.ts`: body validation, copy text, question lookup) are unit-tested; the
+> journey (fabricated SSE reply → thumbs → DB row; copy → clipboard) is an e2e spec.
+
+> **Status (2026-08-30) — "refreshing this page keeps saving a duplicate of the data": a
+> converter fixed-point bug, found by sweeping the corpora we never swept.** The report was on a
+> start-from-scratch site. Clean repros passed — Git-backed and hosted alike, three reloads,
+> zero drafts — so the difference had to be the CONTENT, and a three-pass idempotency sweep over
+> every `.mdx` we ship found it: 3 files grew on every parse→serialize cycle, all one shape — a
+> **multi-line RAW atom inside an indented parent** (the starter's `<Tile>` holding a literal
+> `<img>`; the multi-line `<iframe>` in the media fixture). `rawSlice` stored continuation lines
+> with their ABSOLUTE indentation, and remark-stringify prefixes the surrounding context's
+> indent onto every line of the raw handler's output — +2 spaces per line per cycle, forever.
+> The editor saves what it normalizes, so a fresh hosted site (seeded with the starter, tiles
+> page included) mutated and re-saved on every open. Fix: `rawSlice` dedents continuation lines
+> by the node's own starting column — the stored value is relative to the atom's first
+> character, so re-indentation lands exactly where the source was: a fixed point. Only spaces,
+> at most column−1 of them, so deliberately deeper-indented inner lines keep their depth.
+>
+> Why no gate caught it: the corpus idempotency test swept **`docs/` only**, and our own docs
+> never use that shape. It now sweeps `docs` + `examples/starter` + `tests/fixtures` — the
+> starter is what every hosted site is seeded with, so anything non-idempotent there is a bug
+> every new user gets on day one. Also pinned by `mdx-prosemirror-raw-indent.test.ts` (the tile
+> shape reaches a fixed point; a top-level multi-line raw atom stays byte-exact; an inner line
+> indented deeper than the atom keeps its extra depth) and a browser repro that opens a hosted
+> site seeded with the tile shape and reloads three times, asserting the draft settles at one
+> stable size instead of growing. (The repro also shows a pre-existing, lesser cousin: on the
+> FIRST open of a page whose source isn't already in normalized form, the editor saves the
+> normalization as a draft — one phantom "changed file" with no human edit. One-time, stable,
+> and separate from the growth bug; left as is for now and recorded here so it isn't
+> rediscovered as new.)
+
 > **Authoring backend + editor — BUILT (2026-06-14).** The shared authoring backend and both
 > its front-ends shipped together. Architecture, as built:
 > - **One backend, two transports.** `authoring-core.ts` (`checkoutBranch` / `saveDraft` /

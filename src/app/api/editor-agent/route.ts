@@ -8,6 +8,12 @@ import { getSession, listOrganizations, getMemberRole } from "@/lib/session";
 import { canSeeFeature } from "@/lib/features";
 import { checkoutBranch } from "@/lib/authoring-core";
 import { aiRefusalResponse, authorizeAi, recordAiUsage } from "@/lib/billing/store";
+import {
+  attachmentInventory,
+  imageAttachmentsOf,
+  inlineTextAttachments,
+  validateMessageAttachments,
+} from "@/lib/agent-attachments";
 
 /**
  * The editor's left-panel agent (SPEC §9.2) — a read/WRITE assistant. It shares the read
@@ -21,12 +27,21 @@ export async function POST(req: Request) {
     return Response.json({ error: provider.error }, { status: 503 });
   }
 
-  const { messages, org, site, branch } = (await req.json()) as {
+  const { messages, org, site, branch, slug } = (await req.json()) as {
     messages: UIMessage[];
     org: string;
     site: string;
     branch?: string;
+    // The page open in the editor when the message was sent — what "this page" refers to.
+    slug?: string;
   };
+
+  // Attachments: the same gate the composer applies, re-checked here before any model tokens
+  // are spent — the client-side check is a courtesy, this one is the rule (size budget,
+  // accepted types, and inline-bytes-only so nothing here ever fetches a URL on the author's
+  // behalf). See src/lib/agent-attachments.ts.
+  const attachmentError = validateMessageAttachments(messages);
+  if (attachmentError) return Response.json({ error: attachmentError }, { status: 400 });
 
   // Authorize: signed-in org member with the editor feature.
   const session = await getSession();
@@ -55,20 +70,40 @@ export async function POST(req: Request) {
   // Scope every read AND write to the draft overlay for this branch.
   return contentContext.run(draftContentSource(siteRow, editBranch), async () => {
     const config = await loadConfig();
+    // The images attached anywhere in this conversation — what save_attachment may store.
+    const attachments = imageAttachmentsOf(messages);
+    // Spelled out in the system prompt, not left to the message parts: a text-only model's
+    // provider silently DROPS image content, and the model then truthfully answers "I don't see
+    // an attached image" — while save_attachment never needed it to see the pixels, only to
+    // know the file exists and call the tool by name. The inventory works on any model.
+    const inventory = attachmentInventory(messages);
     const system =
       `You are the documentation editor agent for "${config.name}". You can read the docs ` +
       `(searchDocs / readPage / listPages) and EDIT them (write_page, edit_page, delete_page). ` +
       `You are editing the draft branch "${editBranch}"; edits buffer there and are not live. ` +
+      (slug
+        ? `The user currently has the page "${slug}" open in the editor — "this page" or ` +
+          `"the page" means that one unless they name another. `
+        : ``) +
       `Make the smallest change that satisfies the request, and explain what you changed. ` +
       `NEVER publish or open a PR unless the user explicitly asks — only then call publish. ` +
+      (inventory.length
+        ? `The user has attached the following file(s) to this conversation: ${inventory.join(", ")}. ` +
+          `To put an attached image onto a page, first call save_attachment to store it, then ` +
+          `embed the markdown it returns — never invent an image path, and never claim there ` +
+          `is no attachment. `
+        : ``) +
       `Use Markdown in your replies.`;
 
     const model = aiModelId();
     const result = streamText({
       model: aiModel(model),
       system,
-      messages: await convertToModelMessages(messages),
-      tools: { ...assistantTools, ...authoringTools(siteRow, editBranch) },
+      // Text-ish attachments become fenced text BEFORE the model conversion, so a .md/.csv
+      // attachment works on every provider — including local models with no file inputs.
+      // Images and PDFs stay file parts for the vision-capable providers.
+      messages: await convertToModelMessages(inlineTextAttachments(messages)),
+      tools: { ...assistantTools, ...authoringTools(siteRow, editBranch, { attachments }) },
       providerOptions: aiProviderOptions(model),
       stopWhen: stepCountIs(12),
       // Meter the whole run. Fire-and-forget — a metering failure drops the charge,

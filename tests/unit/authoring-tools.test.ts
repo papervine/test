@@ -13,6 +13,20 @@ vi.mock("../../src/lib/draft-source", () => ({ draftSource: () => ({}) }));
 vi.mock("../../src/lib/github", () => ({ listBranches: vi.fn(async () => ["main", "dev"]) }));
 vi.mock("../../src/lib/github-token", () => ({ repoTokenForSite: vi.fn(async () => "tok") }));
 
+// The save_attachment tool's effects: the draft buffer and object storage.
+const store = vi.hoisted(() => ({
+  findOpenSession: vi.fn(async () => ({ id: "sess1" })),
+  listDraftFiles: vi.fn(async () => [] as { path: string }[]),
+  upsertDraftFile: vi.fn(async () => undefined),
+}));
+vi.mock("../../src/lib/draft-store", () => store);
+const storage = vi.hoisted(() => ({
+  listKeys: vi.fn(async () => [] as string[]),
+  putObject: vi.fn(async () => undefined),
+}));
+vi.mock("../../src/lib/storage", () => storage);
+vi.mock("../../src/lib/sync-plan", () => ({ mimeForPath: (p: string) => (p.endsWith(".png") ? "image/png" : "application/octet-stream") }));
+
 import { authoringTools } from "../../src/lib/authoring-tools";
 
 const site = { id: "s1", repoOwner: "o", repoName: "r", lastSyncedCommitSha: "sha" } as never;
@@ -128,5 +142,59 @@ describe("authoringTools — Papervine-hosted site", () => {
       );
     expect(shape(nativeSite)).toEqual(["message"]);
     expect(shape(site)).toContain("mode");
+  });
+});
+
+// save_attachment: the bridge from "image in the conversation" to "image on a page" — the same
+// pipeline as a human upload (draft-prefixed object + a binary draft_file row), minus the presign
+// hop, because the bytes are already server-side inside the message.
+describe("save_attachment", () => {
+  const png = `data:image/png;base64,${Buffer.alloc(64, 7).toString("base64")}`;
+  const attachments = [{ filename: "shot.png", mediaType: "image/png", url: png }];
+  const callWith = (input: unknown) =>
+    (authoringTools(site, BRANCH, { attachments }).save_attachment.execute as (
+      i: unknown,
+      o: unknown,
+    ) => Promise<unknown>)(input, {});
+
+  it("is absent when the conversation carries no image — no capability with nothing to use it on", () => {
+    expect(authoringTools(site, BRANCH).save_attachment).toBeUndefined();
+    expect(authoringTools(site, BRANCH, { attachments }).save_attachment).toBeDefined();
+  });
+
+  it("stores the bytes under the session's draft prefix and records the binary draft row", async () => {
+    const res = (await callWith({ filename: "shot.png", alt: "the hero" })) as {
+      ok?: boolean;
+      path?: string;
+      markdown?: string;
+    };
+    expect(res).toEqual({ ok: true, path: "images/shot.png", markdown: "![the hero](/images/shot.png)" });
+    // The mock declares no parameters, so its calls tuple needs telling what landed in it.
+    const [key, bytes, contentType] = storage.putObject.mock.calls[0] as unknown as [
+      string,
+      Uint8Array,
+      string,
+    ];
+    expect(key).toBe("drafts/sess1/images/shot.png");
+    expect(bytes.length).toBe(64);
+    expect(contentType).toBe("image/png");
+    expect(store.upsertDraftFile).toHaveBeenCalledWith({
+      sessionId: "sess1",
+      path: "images/shot.png",
+      content: "",
+      binary: true,
+    });
+  });
+
+  it("suffixes instead of overwriting when the name is taken, like a human upload", async () => {
+    storage.listKeys.mockResolvedValueOnce(["sites/s1/images/shot.png"]);
+    const res = (await callWith({ filename: "shot.png" })) as { path?: string };
+    expect(res.path).toBe("images/shot-2.png");
+  });
+
+  it("names the attachments it DOES have when the filename misses", async () => {
+    const res = (await callWith({ filename: "nope.png" })) as { error?: string };
+    expect(res.error).toContain("shot.png");
+    expect(storage.putObject).not.toHaveBeenCalled();
   });
 });

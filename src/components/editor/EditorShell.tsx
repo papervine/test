@@ -407,18 +407,16 @@ export function EditorShell({
           agentOpen ? "fixed inset-0 z-40 flex w-full" : "hidden"
         } flex-col border-r border-neutral-200 bg-white lg:static lg:z-auto lg:w-80 lg:shrink-0 dark:border-neutral-800 dark:bg-neutral-950`}
       >
-        <div className="flex items-center justify-between border-b border-neutral-200 px-3 py-3 text-sm font-semibold dark:border-neutral-800">
-          <span>New chat</span>
-          <button
-            type="button"
-            aria-label="Close agent"
-            onClick={() => setAgentOpen(false)}
-            className="rounded p-1 text-neutral-500 hover:bg-neutral-100 dark:hover:bg-neutral-800"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <EditorAgentPanel org={org} site={site} branch={branch} onAgentWrite={refreshActive} />
+        {/* The panel owns its whole header (New chat / history / close): those controls act on
+            chat state that lives inside it, and reaching in for them would invert the seam. */}
+        <EditorAgentPanel
+          org={org}
+          site={site}
+          branch={branch}
+          slug={slug}
+          onAgentWrite={refreshActive}
+          onClose={() => setAgentOpen(false)}
+        />
       </aside>
 
       {/* Backdrop for the mobile tree drawer. Below lg the tree is `fixed`, so without this

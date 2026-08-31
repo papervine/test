@@ -443,6 +443,176 @@ test.describe("web editor @external", () => {
     await expect(composer).toBeHidden();
   });
 
+  // New chat + history (SPEC §9.2): past agent conversations are a per-person convenience, so
+  // they live in localStorage — which makes the journey fully deterministic with the API route
+  // intercepted: user bubbles render optimistically, no AI required.
+  test("starts a new agent chat and restores the old one from history", async ({ page }) => {
+    await page.route("**/api/editor-agent", (route) =>
+      route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ error: "off" }) }),
+    );
+    await page.goto(sitePath(SLUG, "editor"));
+    await page.getByRole("button", { name: /Ask agent/ }).click();
+    const composer = page.getByPlaceholder('Try "expand more about…"');
+    await expect(composer).toBeVisible();
+
+    await composer.fill("first conversation marker");
+    await composer.press("Enter");
+    await expect(page.getByText("first conversation marker")).toBeVisible();
+
+    // New chat clears the thread back to the empty prompt…
+    await page.getByRole("button", { name: "New chat" }).click();
+    await expect(page.getByText("first conversation marker")).toBeHidden();
+    await expect(page.getByText(/Ask the agent to edit your docs/)).toBeVisible();
+
+    // …and the old one is in history, titled by what was asked, and restorable.
+    await page.getByRole("button", { name: "Chat history" }).click();
+    // History is a view of the panel (not a dropdown): Back header, rows with age + branch.
+    await expect(page.getByRole("button", { name: "Back" })).toBeVisible();
+    await expect(page.getByText("less than a minute ago").first()).toBeVisible();
+    await page.getByRole("button", { name: /first conversation marker/ }).click();
+    await expect(page.getByText("first conversation marker")).toBeVisible();
+
+    // A second chat lists BOTH, newest first, and switching between them round-trips.
+    await page.getByRole("button", { name: "New chat" }).click();
+    await composer.fill("second conversation marker");
+    await composer.press("Enter");
+    await expect(page.getByText("second conversation marker")).toBeVisible();
+    await page.getByRole("button", { name: "Chat history" }).click();
+    const entries = page.locator("button", { hasText: /conversation marker/ });
+    await expect(entries.first()).toContainText("second conversation marker");
+    await expect(entries.nth(1)).toContainText("first conversation marker");
+  });
+
+  // Copy/Good/Bad under agent replies (SPEC §9.2). The reply is a fabricated AI SDK UI-message
+  // stream (deterministic — no provider), but the feedback POST goes through the REAL route, so
+  // the durable assertion is the analytics_event row itself: type='feedback', path='/editor-agent',
+  // query = the ask the reply answered.
+  test("rates an agent reply and copies it", async ({ page, context }) => {
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await sql`delete from analytics_event where site_id = ${SITE_ID}`; // own precondition
+    const sse =
+      [
+        { type: "start" },
+        { type: "text-start", id: "t1" },
+        { type: "text-delta", id: "t1", delta: "A deterministic reply." },
+        { type: "text-end", id: "t1" },
+        { type: "finish" },
+      ]
+        .map((c) => `data: ${JSON.stringify(c)}\n\n`)
+        .join("") + "data: [DONE]\n\n";
+    await page.route("**/api/editor-agent", (route) =>
+      route.fulfill({
+        status: 200,
+        headers: { "content-type": "text/event-stream", "x-vercel-ai-ui-message-stream": "v1" },
+        body: sse,
+      }),
+    );
+    await page.goto(sitePath(SLUG, "editor"));
+    await page.getByRole("button", { name: /Ask agent/ }).click();
+    const composer = page.getByPlaceholder('Try "expand more about…"');
+    await composer.fill("rate this please");
+    await composer.press("Enter");
+    await expect(page.getByText("A deterministic reply.")).toBeVisible();
+
+    // Copy message → the reply's text lands on the clipboard.
+    await page.getByRole("button", { name: "Copy message" }).click();
+    await expect
+      .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+      .toBe("A deterministic reply.");
+
+    // Good response → highlighted, and a REAL feedback row lands in analytics.
+    const good = page.getByRole("button", { name: "Good response" });
+    await good.click();
+    await expect(good).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(async () => {
+        const rows = await sql<{ status: string; path: string; query: string }[]>`
+          select status, path, query from analytics_event
+          where site_id = ${SITE_ID} and type = 'feedback'`;
+        return rows.map((r) => `${r.status} ${r.path} ${r.query}`);
+      })
+      .toEqual(["up /editor-agent rate this please"]);
+
+    // The same thumb twice logs nothing new; switching thumbs logs the new choice.
+    await good.click();
+    await page.getByRole("button", { name: "Bad response" }).click();
+    await expect
+      .poll(async () => {
+        const rows = await sql<{ status: string }[]>`
+          select status from analytics_event
+          where site_id = ${SITE_ID} and type = 'feedback' order by created_at`;
+        return rows.map((r) => r.status);
+      })
+      .toEqual(["up", "down"]);
+  });
+
+  // Attachments ride INSIDE the chat message as data-URL file parts (SPEC §9.2) — no storage,
+  // no extra endpoint — so the thing to pin is the wire shape: what the composer actually POSTs.
+  // The route is intercepted, which also makes this deterministic with no AI provider at all.
+  test("attaches files to the agent message as inline context", async ({ page }) => {
+    let captured: { messages: { parts: { type: string; mediaType?: string; url?: string; filename?: string }[] }[] } | null = null;
+    await page.route("**/api/editor-agent", async (route) => {
+      captured = route.request().postDataJSON();
+      await route.fulfill({
+        status: 503,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "not configured" }),
+      });
+    });
+
+    await page.goto(sitePath(SLUG, "editor"));
+    await page.getByRole("button", { name: /Ask agent/ }).click();
+    const composer = page.getByPlaceholder('Try "expand more about…"');
+    await expect(composer).toBeVisible();
+
+    // Attach through the paperclip: a markdown file and a (1×1 PNG) screenshot.
+    const png = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNgYGBgAAAABQABh6FO1AAAAABJRU5ErkJggg==",
+      "base64",
+    );
+    const chooser1 = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Attach a file" }).click();
+    await (await chooser1).setFiles([
+      { name: "notes.md", mimeType: "text/markdown", buffer: Buffer.from("# Notes\nfold this in") },
+      { name: "shot.png", mimeType: "image/png", buffer: png },
+    ]);
+    await expect(page.getByText("notes.md")).toBeVisible();
+    await expect(page.getByText("shot.png")).toBeVisible();
+
+    // Removal really removes — attach a third, take it back off, and it must not be sent.
+    const chooser2 = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Attach a file" }).click();
+    await (await chooser2).setFiles({ name: "stray.txt", mimeType: "text/plain", buffer: Buffer.from("no") });
+    await page.getByRole("button", { name: "Remove stray.txt" }).click();
+    await expect(page.getByText("stray.txt")).toHaveCount(0);
+
+    await composer.fill("use the attached notes");
+    await composer.press("Enter");
+    await expect.poll(() => captured !== null).toBe(true);
+
+    const parts = captured!.messages.at(-1)!.parts;
+    const files = parts.filter((q) => q.type === "file");
+    expect(files.map((f) => f.filename)).toEqual(["notes.md", "shot.png"]);
+    expect(files.every((f) => f.url?.startsWith("data:"))).toBe(true);
+    expect(files.map((f) => f.mediaType)).toEqual(["text/markdown", "image/png"]);
+    // …and the sent bubble shows them (the chip and the thumbnail), with the composer cleared.
+    await expect(page.getByRole("img", { name: "shot.png" })).toBeVisible();
+    await expect(composer).toHaveValue("");
+    await expect(page.getByRole("button", { name: "Attach a file" })).toBeVisible();
+
+    // The size budget refuses in place, before any request: one file over the total cap.
+    const chooser3 = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Attach a file" }).click();
+    await (await chooser3).setFiles({
+      name: "huge.png",
+      mimeType: "image/png",
+      buffer: Buffer.alloc(3 * 1024 * 1024 + 4096, 1),
+    });
+    // Filtered: the intercepted 503 puts the chat's own error alert on the page too.
+    await expect(page.getByRole("alert").filter({ hasText: "limit" })).toBeVisible();
+    await expect(page.getByText("huge.png")).toHaveCount(0);
+  });
+
   // Below lg the tree and agent panels are off-canvas drawers, not columns. They used to be
   // in-flow at every width, so a 256px tree plus the rail left the editor 38px of a 390px
   // phone — one character per line, with Publish pushed off-screen. A width assertion is the
@@ -1760,7 +1930,10 @@ test.describe("web editor @external", () => {
 
     // Arbitrary bytes with an .mp4 name: what's under test is the transfer and the bookkeeping,
     // and the allowlist goes by extension — so no binary fixture needs committing.
-    await page.setInputFiles('input[type="file"]', {
+    // Scoped to the dialog: the editor page now carries a second hidden file input (the agent
+    // composer's paperclip — mounted even while the panel is closed), and a page-level selector
+    // fed the test video to THAT, where video/mp4 is rightly refused as an attachment.
+    await dialog.locator('input[type="file"]').setInputFiles({
       name: "e2e clip.mp4",
       mimeType: "video/mp4",
       buffer: Buffer.alloc(4096, 7),
@@ -1856,7 +2029,10 @@ test.describe("web editor @external", () => {
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
-    await page.setInputFiles('input[type="file"]', {
+    // Scoped to the dialog: the editor page now carries a second hidden file input (the agent
+    // composer's paperclip — mounted even while the panel is closed), and a page-level selector
+    // fed the test video to THAT, where video/mp4 is rightly refused as an attachment.
+    await dialog.locator('input[type="file"]').setInputFiles({
       name: "refused.mp4",
       mimeType: "video/mp4",
       buffer: Buffer.alloc(2048, 3),
