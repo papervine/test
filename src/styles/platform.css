@@ -781,8 +781,19 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
    bubble toolbar portal to <body> (outside the .db shell), so they carry
    self-contained styling tuned to the platform's dark surface.
    ============================================================================ */
+/* The drag-handle gutter lives INSIDE the editor element, not on the scroll container: DragHandle
+   resolves the hovered block from a ProseMirror mousemove (so the pointer has to be over
+   `.ProseMirror`) and clamps the x into the content column anyway — so padding here turns the whole
+   row, gutter included, into a hover target for that block's controls. Padding on the wrapper made
+   the gutter dead space, and you had to hover the block's own text or component to reveal them. */
 .pv-visual .ProseMirror {
   min-height: 100%;
+  padding-left: 4rem;
+}
+/* The frontmatter header sits outside `.ProseMirror` (it's not a block), so it carries the same
+   inset itself to stay aligned with the body text. */
+.pv-visual .pv-doc-header {
+  padding-left: 4rem;
 }
 .pv-visual .ProseMirror:focus {
   outline: none;

@@ -3695,6 +3695,46 @@ layer.
 > replaying it proves nothing either way. The error-surfacing above is what closes this: the next
 > attempt says which of the two it is.
 >
+> **…and the next report WAS the CORS half (2026-08-31).** A video upload from `app.localhost:3001`
+> failed the preflight to `127.0.0.1:9000` with `Access-Control-Allow-Origin: http://127.0.0.1` —
+> port-less, so not equal to the requesting origin. Still not reproducible against this container:
+> MinIO answers that exact preflight (presigned query string, `Access-Control-Request-Headers:
+> content-type` and all) with a 204 echoing the real origin, and the container hadn't restarted
+> since two days before the failure. A port-less value is nothing MinIO derives and nothing this
+> repo sets — we configure no bucket CORS anywhere — so the likeliest source is something else
+> answering on :9000, or a cached preflight from an earlier state. What's actionable is that the dev
+> path *depended on a default*: MinIO echoes whatever Origin it is sent, so nothing in the repo
+> stated the requirement, and there was no configuration to be wrong or right. `docker-compose.yml`
+> now pins `MINIO_API_CORS_ALLOW_ORIGIN: "*"` on the MinIO service — correct for a throwaway dev
+> bucket where the presigned PUT sends no credentials, and explicitly NOT the shape a production
+> R2/S3 bucket should use (which wants the deployment's own origins). The editor docs' self-hosting
+> warning already told operators their bucket needs the rule; that sentence is now backed by
+> configuration rather than by a default nobody had written down.
+>
+> **The block controls' hover zone was the block, not the row (2026-08-31).** Reported as "I should
+> not have to hover over the component itself to show the left margin options — hovering the whole
+> line should do it." The gutter those controls float in was `pl-16` on the editor's **scroll
+> container**, and `DragHandle` resolves the hovered block from a ProseMirror
+> `handleDOMEvents.mousemove`, which only fires for events on the editor's own element. So the
+> gutter was dead space: 64px of the row where nothing happened, right where the controls actually
+> appear. The padding moved onto `.pv-visual .ProseMirror` (the header keeps its own matching inset,
+> since it isn't a block), which is enough on its own — the plugin already clamps the x it is given
+> into the content column (`clampToContent`), so a pointer in the padding resolves to that row's
+> block. Verified by comparison in one page: injecting the old geometry makes the gutter hover stop
+> working and the text hover keep working, which is exactly the reported shape. Pinned by an
+> `editor.spec.ts` case that hovers both positions — pure geometry, so nothing but a browser can
+> see it (the DOM is identical either way).
+>
+> **Inserting a table threw `Invalid content for node tableCell: <>` (2026-08-31).** The `/table`
+> factory built `{ type: "tableCell" }` with no content, and this schema's cells hold **blocks**
+> (TipTap's default, which is what lets a cell contain a list) — so the node was invalid and the
+> insert threw in the user's face instead of adding a table. Each cell now gets its one paragraph.
+> The guard is deliberately not table-shaped, because the mistake wasn't: `tests/unit/
+> slash-items-schema.test.ts` builds the real editor schema in jsdom and runs **every** `SLASH_ITEMS`
+> entry's `make()` through `Node.fromJSON` + ProseMirror's own `check()`, which is precisely the
+> assertion that was missing anywhere in the codebase. Confirmed it fails against the bug (`× Table`,
+> same RangeError) before fixing it, and the real editor now inserts a 2×2 grid with a clean console.
+>
 > **Backspace stops at a component's edge (2026-08-25).** Reported as "pressing backspace until
 > there are no more characters should just stop — it should not keep going and destroy the tab."
 > ProseMirror's default Backspace at the start of a block joins it with what precedes it, and

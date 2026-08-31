@@ -302,10 +302,17 @@ export function VisualEditor({
     setPicker({ x, y, insertPos: pos, replaceRange: { from: pos, to: pos + node.nodeSize } });
   };
 
-  // Extra left padding = gutter for the drag handle + "+" that float left of each block.
+  // The gutter the drag handle and "+" float in is LEFT PADDING ON `.ProseMirror` (platform.css),
+  // not on this wrapper — that's what makes hovering anywhere on a block's row reveal its controls.
+  // DragHandle finds the block under the pointer from a ProseMirror `handleDOMEvents.mousemove`,
+  // which only fires for events on the editor's own element, and it clamps the x it was given into
+  // the content column itself. So a gutter outside the editor was dead space: you had to be over
+  // the block's own text (or the component) for the handle to appear, which is exactly what was
+  // reported. Inside it, the whole row is a hover target. The header keeps its own matching
+  // padding so the title still lines up with the body.
   return (
     <div
-      className="pv-visual h-full overflow-auto py-6 pl-16 pr-8"
+      className="pv-visual h-full overflow-auto py-6 pr-8"
       // Capture phase: this must beat the `<Link>` a component node view renders. Middle-click
       // (auxclick) would open the wrong host in a new tab, so it follows the same route — and
       // unlike a left click it's never an editing gesture, so it never places a caret.

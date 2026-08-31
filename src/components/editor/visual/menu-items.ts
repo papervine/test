@@ -99,13 +99,14 @@ const taskList = () => ({
 });
 const codeBlock = () => ({ type: "codeBlock", attrs: { language: null, meta: null }, content: [] });
 const divider = () => ({ type: "thematicBreak" });
-const table = () => ({
-  type: "table",
-  content: [
-    { type: "tableRow", content: [{ type: "tableCell" }, { type: "tableCell" }] },
-    { type: "tableRow", content: [{ type: "tableCell" }, { type: "tableCell" }] },
-  ],
-});
+// A cell holds BLOCKS (TipTap's default `TableCell`, which is what lets you put a list in one), so
+// an empty `{ type: "tableCell" }` is not a valid cell — inserting the table threw `Invalid content
+// for node tableCell: <>` and no table appeared. Every cell gets its one paragraph. The first row
+// is `tableCell` like the rest, not `tableHeader`: the converter never emits header cells, and GFM
+// writes the first row as the header on serialize regardless.
+const tableCell = () => ({ type: "tableCell", content: [paragraph()] });
+const tableRow = () => ({ type: "tableRow", content: [tableCell(), tableCell()] });
+const table = () => ({ type: "table", content: [tableRow(), tableRow()] });
 const mermaid = () => ({ type: "codeBlock", attrs: { language: "mermaid", meta: null }, content: [{ type: "text", text: "graph TD;\n  A --> B;" }] });
 const image = (src?: string) =>
   src

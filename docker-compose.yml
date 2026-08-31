@@ -32,6 +32,19 @@ services:
     environment:
       MINIO_ROOT_USER: papervine
       MINIO_ROOT_PASSWORD: papervinesecret
+      # The editor uploads media STRAIGHT to storage with a presigned PUT (the bytes never pass
+      # through the app), so storage itself has to allow the app's browser origin —
+      # `app.localhost:3000+` talking to `127.0.0.1:9000` is cross-origin. MinIO's default is to
+      # echo whatever Origin it is sent, which works until it doesn't: a preflight answered with a
+      # different value (a stale cached one, or anything else that ends up on :9000) fails the
+      # upload with a bare `TypeError: Failed to fetch`, and the editor can only report "blocked by
+      # CORS or storage unreachable" (MediaDialog's uploadThrewMessage) because that is genuinely
+      # all the browser tells it. Pinning it here removes the guesswork for every worktree and
+      # every port `next dev` picks. `*` is right for THIS container — a throwaway dev bucket with
+      # no cookies in play (the presigned PUT sends no credentials) — and is NOT what a real
+      # bucket should say: R2/S3 in production want the deployment's own origins listed (see
+      # docs/self-hosting/storage or the operator's bucket CORS rule).
+      MINIO_API_CORS_ALLOW_ORIGIN: "*"
     ports:
       - "9000:9000"
       - "9001:9001"

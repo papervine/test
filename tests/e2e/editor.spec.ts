@@ -889,6 +889,39 @@ test.describe("web editor @external", () => {
     await clearDrafts(["emptytaskpage.mdx"]);
   });
 
+  // Reported: "I should not have to hover over the component itself to show the left margin
+  // options — hovering the whole line should do it." DragHandle resolves the hovered block from a
+  // ProseMirror mousemove, so the pointer has to be over `.ProseMirror`; with the gutter as padding
+  // on the scroll container it was dead space. Pure geometry, so only a browser shows it: the DOM
+  // is identical either way, and both positions are inside the same row.
+  test("hovering a row's left margin reveals that block's controls", async ({ page }) => {
+    await page.goto(sitePath(SLUG, "editor"));
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+    const controls = page.locator(".pv-block-controls");
+
+    const box = (await pm.locator("p").first().boundingBox())!;
+    const midY = box.y + box.height / 2;
+
+    // Move away first: the handle is only hidden when nothing is hovered, so a stale hover from
+    // page load would make either assertion pass.
+    await page.mouse.move(4, 4);
+    await expect(controls).toBeHidden();
+
+    // Over the text — the case that always worked.
+    await page.mouse.move(box.x + 40, midY);
+    await expect(controls).toBeVisible();
+
+    // And now the gutter to its left, which is the reported case.
+    await page.mouse.move(4, 4);
+    await expect(controls).toBeHidden();
+    await page.mouse.move(box.x - 30, midY);
+    await expect(controls).toBeVisible();
+    // The handle sits in that gutter, i.e. left of the text it belongs to.
+    const handle = (await page.locator(".pv-drag-handle").boundingBox())!;
+    expect(handle.x).toBeLessThan(box.x);
+  });
+
   // Backspace stops at a component's edge (SPEC §9.2). ProseMirror's default joins the block with
   // what precedes it, and inside a <Tab> that's the tab's own opening — so emptying a tab and
   // holding Backspace a beat longer lifted the content out and destroyed the tab. Only a browser
