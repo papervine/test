@@ -10,7 +10,13 @@ import { mdxToProseMirror, proseMirrorToMdx, splitFrontmatter } from "@papervine
 //   2. IDEMPOTENT — norm(norm(x)) === norm(x) — except a documented allowlist of known
 //      upstream edges. Any NEW drift fails the build, so fidelity can't silently regress.
 
-const DOCS = join(process.cwd(), "docs");
+// Three corpora, not one. `docs/` alone missed the raw-indent growth bug for weeks: the shape
+// that triggered it (a multi-line unknown component inside an indented parent — the starter's
+// <Tile> with a literal <img>) never appears in our own docs, but `examples/starter` is what
+// EVERY start-from-scratch site is seeded with, and `tests/fixtures` is deliberately the ugly
+// edge cases. The editor normalizes-and-saves whatever it opens, so any non-idempotent file in
+// the starter grows on every open of a fresh site ("refreshing keeps saving a duplicate").
+const ROOTS = ["docs", "examples/starter", "tests/fixtures"].map((d) => join(process.cwd(), d));
 
 // Documented-exception mechanism for known non-idempotent files. Currently EMPTY: the whole
 // corpus round-trips to a fixed point. Kept as a guard so a future upstream edge can be pinned
@@ -26,15 +32,15 @@ function walk(dir: string): string[] {
 
 const norm = (mdx: string) => proseMirrorToMdx(mdxToProseMirror(mdx));
 
-describe("docs corpus round-trips through the converter", () => {
-  const files = walk(DOCS);
+describe("docs + starter + fixtures corpora round-trip through the converter", () => {
+  const files = ROOTS.flatMap(walk);
 
   it("finds a non-trivial corpus", () => {
-    expect(files.length).toBeGreaterThan(10);
+    expect(files.length).toBeGreaterThan(50);
   });
 
   for (const file of files) {
-    const rel = relative(DOCS, file);
+    const rel = relative(process.cwd(), file);
     it(rel, () => {
       const body = splitFrontmatter(readFileSync(file, "utf8")).body;
       const once = norm(body); // never throws (invariant 1)

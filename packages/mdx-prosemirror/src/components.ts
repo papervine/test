@@ -255,10 +255,34 @@ export function tagForNode(node: PMNode): string {
   return fallback ?? node.type;
 }
 
-/** Reads the raw source slice for an mdast node that carries `position` offsets. */
-export function rawSlice(source: string, node: { position?: MdxJsxElement["position"] }): string {
+/**
+ * Reads the raw source slice for an mdast node that carries `position` offsets.
+ *
+ * Continuation lines are DEDENTED by the node's own starting column. The serializer's raw
+ * handler emits the stored value verbatim, and remark-stringify then prefixes the surrounding
+ * context's indentation onto every line — so a multi-line raw atom stored with its absolute
+ * indentation gained two more spaces per line on every parse→serialize pass. That is not a
+ * cosmetic drift: the editor saves what it normalizes, so a page holding an indented unknown
+ * component (the starter's <Tile> with a literal <img> inside) grew on every single open —
+ * reported as "refreshing this page keeps saving a duplicate of the data". Storing the lines
+ * relative to the node's first character makes re-indentation land exactly where the source
+ * was: a fixed point. Only spaces are stripped, and at most (column - 1) of them, so a line
+ * that was deliberately indented deeper keeps its extra depth.
+ */
+export function rawSlice(
+  source: string,
+  // The local position type only declares `offset`; mdast nodes carry `column` too (1-based).
+  node: { position?: MdxJsxElement["position"] & { start?: { column?: number } } },
+): string {
   const start = node.position?.start?.offset;
   const end = node.position?.end?.offset;
-  if (typeof start === "number" && typeof end === "number") return source.slice(start, end);
-  return "";
+  if (typeof start !== "number" || typeof end !== "number") return "";
+  const sliced = source.slice(start, end);
+  const column = node.position?.start?.column ?? 1;
+  if (column <= 1 || !sliced.includes("\n")) return sliced;
+  const dedent = new RegExp(`^ {1,${column - 1}}`);
+  return sliced
+    .split("\n")
+    .map((line, i) => (i === 0 ? line : line.replace(dedent, "")))
+    .join("\n");
 }
