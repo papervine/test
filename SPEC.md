@@ -7316,6 +7316,85 @@ the hosted API over HTTPS, they don't embed it.
 > `docsConfigSchema.shape` declares, parsing a config containing it must produce no warning — so
 > the next field added can't reintroduce it, plus a negative case (`redirects`) proving the
 > warning still fires for a key nothing acts on.
+>
+> **The authoring MCP is OAuth-authenticated, so clients can actually use it (2026-08-31).**
+> Enabling it started as a one-line plugin add and turned into six findings, every one of them
+> in the "looks right, silently isn't" class.
+>
+> **The premise.** `/authoring/mcp` accepted exactly one credential: the dashboard session
+> cookie, host-only on `app.` No MCP client can send that, so the write surface — documented as
+> Built — had never been reachable by a single tool it exists for. (And per the note above, the
+> route 404'd on the app host anyway.) Better Auth 1.6.15 ships an `mcp` plugin implementing
+> OAuth 2.1 + discovery, which is the flow MCP clients already speak; a pasted PAT was the
+> alternative and is worse on every axis that matters here — no discovery, no expiry, no
+> revocation, and a long-lived write secret sitting in a config file.
+>
+> Three OIDC tables (`oauth_application` / `oauth_access_token` / `oauth_consent`), migration
+> `0029`, purely additive. `mcp` comes off the `better-auth/plugins` barrel — there is no
+> `plugins/mcp` subpath export, only `plugins/mcp/client`.
+>
+> **Dual credentials behind one authorization core.** `src/lib/authoring-auth.ts` resolves the
+> actor from an OAuth token *or* the cookie (token wins — a request presenting one is asking to
+> act as that grant), then answers one question for both. It had to be new code rather than
+> `findSite`/`listOrganizations`: those read the *current request's cookies*, so a
+> token-bearing request resolves to "signed out" however valid its token is. Keying on an
+> explicit `userId` is also the stricter shape. `authoringDecision` is pure and unit-tested,
+> including the property that makes its check ORDER load-bearing: identity → membership → role
+> → existence, so a caller who hasn't proved membership gets an identical refusal whether or not
+> the org and site exist. Checking existence first would turn a write endpoint into a directory
+> of who our customers are.
+>
+> **A 200 with refusing tools is a dead end; a 401 is the protocol.** The endpoint used to mount
+> its tools and refuse each call. An MCP client reads that as "you're in" and never starts the
+> OAuth flow, so the user just watches every tool fail. It now answers `401` +
+> `WWW-Authenticate: Bearer resource_metadata="…"`, which is the authorization spec's "go get a
+> token". Only the *unauthenticated* case is a 401 — a known user asking about a site they can't
+> reach is a normal tool error, since re-authorizing wouldn't help.
+>
+> **Three URL bugs, one root cause: a configured origin where the request's own was needed.**
+> This deployment answers on the app host, on preview URLs, and on `app.localhost:<port>`, so
+> any single configured origin is wrong somewhere.
+>
+> - Better Auth's own discovery builders derive every URL from `baseURL` — here the **apex** —
+>   and throw outright (`new URL("")`) when it's unset, which 500s the document whose entire job
+>   is being fetchable before anything is configured. Replaced with
+>   `src/lib/mcp-oauth-metadata.ts`, which builds both documents from one resolved origin so they
+>   can't disagree with each other.
+> - **`req.url` does not carry the `Host` header** inside a Next route handler. A request to
+>   `app.localhost:3001` reads back as `localhost:3001`, so the first version of both the
+>   metadata and the `WWW-Authenticate` challenge named a host the client never asked for and
+>   where its session cookie doesn't exist. Caught by curling the route with an explicit Host and
+>   watching it come back wrong. Now `originFromHost` — the helper the SEO path already uses.
+> - **`loginPage` had the same disease.** Built from `APP_ORIGIN` it pointed at
+>   `app.localhost:3000` while the server ran on 3001 — mid-flow, the browser was handed to *a
+>   different application in another worktree*. It's relative now (`/login`), which the plugin
+>   redirects with verbatim, so it resolves against whichever host the authorize request arrived
+>   on. `postAuthDestFor` resumes the authorization after sign-in, and prefers it over a pending
+>   invite: an authorization is a flow with a client waiting on the other end.
+>
+> **The security finding: consent was optional, and that is a silent write-token grant.** The
+> plugin shows a consent screen only when the client passes `prompt=consent`. Combined with
+> dynamic client registration — anyone may register a client, naming any redirect URI — a page
+> that redirects a signed-in user to an authorize URL receives a **write-scoped token for their
+> docs**, with nothing shown to the user at any point. A client asking to skip consent is
+> precisely the request not to honour, so `src/app/api/auth/mcp/authorize/route.ts` shadows
+> Better Auth's catch-all, forces `prompt=consent`, and hands off to the same handler (no second
+> implementation of the flow to drift). The screen at `/oauth/consent` names the client, says
+> plainly that the name is self-reported, and translates scopes into what they let someone do.
+> Pinned by a smoke check, because it's the kind of default that would quietly regress.
+>
+> **Verified end to end, not asserted.** Against the seeded dev DB: register → authorize →
+> forced consent → approve → code → token → `tools/list`, `list_pages` and `edit_page` (which
+> opened `papervine/edit-…` and buffered the draft). Then every refusal: an org the user isn't in
+> ("No such organization, or you are not a member of it" — deliberately not distinguishing),
+> missing headers, an unknown site, a bogus token (401), and **Deny** (`error=access_denied`,
+> no code issued). The consent screen was screenshotted in the platform theme.
+>
+> **The plugin now ships both servers**, which is what prompted the work: `mcp.json` carries the
+> read endpoint and `app.papervine.io/authoring/mcp`. Its guidance is that an editor with the
+> repo checked out should **edit the files** — the authoring MCP earns its place when the
+> repository *isn't* open, and using both on one page gives you two uncoordinated copies where
+> the last publish silently wins.
 
 ### 10.7 Error resilience (route boundaries)
 

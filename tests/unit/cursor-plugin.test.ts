@@ -34,14 +34,20 @@ describe("cursor plugin tree", () => {
     }
   });
 
-  it("points its MCP server at a real docs host", () => {
+  it("points its MCP servers at endpoints Papervine actually serves", () => {
     const mcp = JSON.parse(readFileSync(path.join(PLUGIN, "mcp.json"), "utf8"));
-    // The read MCP is served at `/mcp` on the docs host itself — a URL pointing anywhere else
-    // (an app host, an /api path) is a server that answers 404 or bounces to a login page,
-    // which an MCP client reports as an unhelpful connection failure.
+    // Two endpoints exist and they are not interchangeable: the read MCP is `/mcp` on a docs
+    // host, and the authoring (write) MCP is `/authoring/mcp` on the app host, where the
+    // session and the OAuth flow live. Anything else is a URL that 404s or bounces to a login
+    // page — which an MCP client reports as an unhelpful connection failure.
     for (const server of Object.values(mcp.mcpServers) as { url: string }[]) {
-      expect(server.url).toMatch(/^https:\/\/[^/]+\/mcp$/);
+      expect(server.url).toMatch(/^https:\/\/[^/]+\/(authoring\/)?mcp$/);
     }
+
+    // The authoring server must be on the app host specifically. `docs.papervine.io/authoring/mcp`
+    // would look right and answer 404: the route only exists on the control plane.
+    const authoring = mcp.mcpServers["Papervine Authoring"];
+    if (authoring) expect(authoring.url).toBe("https://app.papervine.io/authoring/mcp");
   });
 
   it("keeps the rules file scoped to docs files", () => {

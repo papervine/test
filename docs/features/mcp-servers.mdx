@@ -10,9 +10,9 @@ very different maturity and trust models.
 
 <Info>
   Both are **built**. The read MCP is auto-generated per site and needs no auth. The authoring
-  (write) MCP shares its backend with the [web editor](/control-plane/editor) and is
-  authenticated — today via the dashboard session; token-scoped external access
-  ([platform-auth](/auth/platform-auth)) is the follow-up.
+  (write) MCP shares its backend with the [web editor](/control-plane/editor) and authenticates
+  with **OAuth**, so any MCP client can connect to it — you approve the request in a browser and
+  the client holds an expiring token.
 </Info>
 
 ## Generated read MCP (per docs site)
@@ -87,11 +87,36 @@ backend.
 
 <Warning>
   Edits happen on a **session branch** and land via **commit or Pull Request** — never silently
-  on the deploy branch. The authoring MCP is authenticated: it requires a dashboard session and
-  the `x-papervine-org` / `x-papervine-site` headers naming the target site, with the editor
-  feature enabled for your role. Token-scoped external access ([platform-auth](/auth/platform-auth))
-  is the follow-up.
+  on the deploy branch. The authoring MCP is authenticated: an OAuth grant (or a dashboard
+  session, in a browser), plus the `x-papervine-org` / `x-papervine-site` headers naming the
+  target site, with the editor feature enabled for your role.
 </Warning>
+
+### Connecting a client
+
+Point any MCP client at `https://app.papervine.io/authoring/mcp` and it authorizes itself:
+
+<Steps>
+  <Step title="The client discovers how to authenticate">
+    The endpoint answers an unauthenticated request with `401` and a `WWW-Authenticate` header
+    naming its metadata document, which is how a client learns where to get a token. It
+    registers itself, no credentials to issue by hand.
+  </Step>
+  <Step title="You approve, in a browser">
+    A tab opens on the app host asking whether this client may read and edit your docs. Approve
+    or deny. **Consent is always asked** — a client cannot skip the screen.
+  </Step>
+  <Step title="The client holds an expiring token">
+    Access tokens last an hour and refresh. Nothing is pasted into a config file, and nothing
+    needs revoking by hand.
+  </Step>
+</Steps>
+
+<Note>
+  Working in a Git checkout of your docs? Edit the files. The authoring MCP earns its place when
+  the repository *isn't* open — a hosted site, another machine, an agent working somewhere you
+  aren't. Editing the same page both ways at once gives you two uncoordinated copies.
+</Note>
 
 It serves at `/authoring/mcp`. The tools, grouped by what they touch:
 
@@ -108,8 +133,8 @@ Editing the `navigation` structure and `docs.json` from the MCP (`create_node` /
 The authoring MCP and the web editor are **not separate write paths**. They operate on the
 **same session branch and the same server-side draft buffer**:
 
-- `checkout`'s response includes an `editorUrl` you can open to "follow along" in the
-  dashboard editor on that same branch.
+- A working branch is opened on first write (or named with an `x-papervine-branch` header),
+  and you can open the dashboard editor on that same branch to "follow along".
 - Edits **buffer on the session branch in real time**, persisted server-side across tabs and
   devices.
 - Nothing reaches the deploy branch until `save` / publish — a **direct commit** if you're on
@@ -127,7 +152,8 @@ commit-or-PR — and both the MCP and the [web editor](/control-plane/editor) si
     `list_pages`, `search_api`). For docs *readers'* tools. **Shipped.**
   </Card>
   <Card title="Authoring MCP">
-    Owner-connected, authenticated. Reads + writes (`write_page`, `edit_page`, `save`) via a
-    session branch → commit/PR. Shares the editor's backend. For docs *owners*. **Built.**
+    Owner-connected, OAuth-authenticated. Reads + writes (`write_page`, `edit_page`, `save`)
+    via a session branch → commit/PR. Shares the editor's backend. For docs *owners*.
+    **Shipped.**
   </Card>
 </CardGroup>

@@ -36,15 +36,35 @@ at the user level or scoped to a project.
 
 ## MCP setup
 
-The plugin activates one MCP server on install:
+The plugin activates two MCP servers on install. They are different surfaces:
 
 - **Papervine Docs** — read-only access to Papervine's published documentation at
-  `https://docs.papervine.io/mcp`. Three tools: `search_docs`, `read_page`, `list_pages`. Use it
-  to look up a component signature or config option the skill doesn't cover.
+  `https://docs.papervine.io/mcp`. No authentication. Tools: `search_docs`, `read_page`,
+  `list_pages`. Use it to look up a component signature or config option the skill doesn't
+  cover.
+- **Papervine Authoring** — read *and edit* your own docs sites, at
+  `https://app.papervine.io/authoring/mcp`. Authorize on first use: a browser tab opens, you
+  approve the request, and the grant is an expiring OAuth token. Nothing to paste into a config
+  file.
 
-### Add your own docs site
+### Editing through the authoring server
 
-Every Papervine site serves the same tools at `/mcp`, scoped to its own content — hosted,
+Name the target site with two headers, `x-papervine-org` and `x-papervine-site`. Tools:
+`read`, `search`, `list_pages`, `write_page`, `edit_page`, and `save`.
+
+Edits buffer on a **draft branch** and are not live until `save` — `mode: "pr"` opens a pull
+request, `mode: "commit"` writes to the deploy branch. The same draft buffer backs Papervine's
+browser editor, so you can open the site and watch an agent's changes as they land. It requires
+an organization role that can edit docs.
+
+**In an editor, prefer editing the files.** If you have the docs repository open, a normal file
+edit keeps the change in your usual review and commit flow. The authoring server earns its place
+when the repository *isn't* open — a hosted site, a quick fix from another machine, an agent
+working somewhere you aren't.
+
+### Add your own docs site's read endpoint
+
+Every Papervine site serves the read tools at `/mcp`, scoped to its own content — hosted,
 self-hosted, or a running `papervine dev`. To give Cursor a live view of the docs you're
 writing, add your host to `~/.cursor/mcp.json` (user-wide) or `.cursor/mcp.json` (this project):
 
@@ -58,13 +78,6 @@ writing, add your host to `~/.cursor/mcp.json` (user-wide) or `.cursor/mcp.json`
 
 `http://localhost:3000/mcp` works against `papervine dev`. A site with an OpenAPI reference also
 exposes `search_api`.
-
-### Editing
-
-There is no write MCP an editor can authenticate to yet — Papervine's authoring MCP requires a
-dashboard session today, and token-scoped access is the follow-up. That is no great loss in
-Cursor: a Papervine site *is* a Git repository, so edits are ordinary file edits, and publishing
-is a push or a pull request.
 
 ## Skills included
 

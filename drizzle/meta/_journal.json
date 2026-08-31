@@ -204,6 +204,13 @@
       "when": 1788126573411,
       "tag": "0028_loving_drax",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1788215156734,
+      "tag": "0029_abandoned_nick_fury",
+      "breakpoints": true
     }
   ]
 }

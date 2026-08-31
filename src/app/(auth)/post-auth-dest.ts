@@ -10,11 +10,36 @@ export function invitedEmailFromUrl(): string {
   return new URLSearchParams(window.location.search).get("email") ?? "";
 }
 
+/**
+ * Where to land after a successful sign-in/up, given the auth page's own query string.
+ *
+ * Pure so it can be unit-tested without a browser; `postAuthDest()` supplies `window`'s search
+ * for the two call sites. Order matters: an OAuth authorization is a flow the user is already
+ * *inside*, so resuming it beats every other destination — dropping them on the dashboard
+ * instead strands the client that sent them, with no way back but starting over.
+ */
+export function postAuthDestFor(search: string): string {
+  const params = new URLSearchParams(search);
+
+  // Resuming an OAuth authorization (SPEC §9.2/§11 — the authoring MCP). Better Auth's `mcp`
+  // plugin sends an unauthenticated `/api/auth/mcp/authorize` here with the whole authorize
+  // query appended, and expects the app to come back once there's a session. `client_id` +
+  // `response_type` together are what identify that round trip; neither appears on this page
+  // otherwise.
+  if (params.get("client_id") && params.get("response_type")) {
+    // Relative, so it resolves against whichever host the user is on. An absolute URL built
+    // from configuration is what sent dev users from :3001 to a different server on :3000.
+    return `/api/auth/mcp/authorize?${search.replace(/^\?/, "")}`;
+  }
+
+  const invite = params.get("invite");
+  return invite ? `/accept-invite?id=${encodeURIComponent(invite)}` : "/";
+}
+
 /** Where to land after a successful sign-in/up: the accept page for a pending invite, else "/". */
 export function postAuthDest(): string {
   if (typeof window === "undefined") return "/";
-  const invite = new URLSearchParams(window.location.search).get("invite");
-  return invite ? `/accept-invite?id=${encodeURIComponent(invite)}` : "/";
+  return postAuthDestFor(window.location.search);
 }
 
 /**

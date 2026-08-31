@@ -12,7 +12,7 @@ The Papervine plugin for [Cursor](https://cursor.com) supplies the reference, so
 working from what Papervine actually does.
 
 <Card title="papervine/cursor-plugin" icon="github" href="https://github.com/papervine/cursor-plugin">
-  The plugin's source — a skill, a rules file, and an MCP server.
+  The plugin's source — a skill, a rules file, and two MCP servers.
 </Card>
 
 ## Install it
@@ -32,8 +32,10 @@ work on several docs sites with different conventions.
     File conventions, link format, frontmatter fields, and writing standards — active whenever
     you edit an `.mdx` file or `docs.json`.
   </Card>
-  <Card title="A docs MCP server" icon="plug">
-    Read-only search over Papervine's own documentation, for anything the skill doesn't cover.
+  <Card title="Two MCP servers" icon="plug">
+    Read-only search over Papervine's own documentation, and the
+    [authoring server](/features/mcp-servers#authoring-mcp-admin-write) for editing a site you
+    don't have checked out.
   </Card>
   <Card title="The negative space" icon="circle-slash">
     What *doesn't* exist — the frontmatter fields, config keys, and CLI commands a model would
@@ -70,14 +72,19 @@ Add it to `.cursor/mcp.json` in your docs repo:
 ## Editing and publishing
 
 A Papervine site is a Git repository, so the editor edits files and you publish the way you
-already do — a push, or a pull request. Nothing needs to round-trip through a service.
+already do — a push, or a pull request. Nothing needs to round-trip through a service. **In an
+editor, that is the path to prefer**: the change stays in your normal review and commit flow.
 
-<Note>
-  Papervine's [authoring MCP](/features/mcp-servers#authoring-mcp-admin-write) is a separate
-  surface for agents that *aren't* sitting in your repository. It authenticates with a dashboard
-  session today, so an editor can't connect to it; token-scoped access is the follow-up. The
-  plugin doesn't ship it for that reason.
-</Note>
+The plugin also ships the
+[authoring MCP](/features/mcp-servers#authoring-mcp-admin-write), which reads and edits a site
+*through Papervine* rather than through your filesystem. Authorize it once in a browser and the
+editor holds an expiring token. It earns its place when the repository isn't open — a hosted
+site, a quick fix from another machine, an agent working somewhere you aren't.
+
+<Warning>
+  Don't edit the same page both ways in one task. A file edit and a draft-branch edit are two
+  uncoordinated copies, and whichever publishes last silently wins.
+</Warning>
 
 ## Other editors
 

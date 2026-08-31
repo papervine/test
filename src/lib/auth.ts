@@ -1,7 +1,9 @@
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { admin, organization } from "better-auth/plugins";
+// `mcp` has no `better-auth/plugins/mcp` subpath export (only its client half does) — it
+// comes off the barrel, unlike admin/organization which have both.
+import { admin, mcp, organization } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
@@ -224,6 +226,35 @@ export const auth = betterAuth({
           }),
         );
       },
+    }),
+    // OAuth 2.1 for the authoring MCP (SPEC §9.2/§11). Until this, `/authoring/mcp`
+    // authenticated by the dashboard session cookie alone — which no MCP client can send, so
+    // the write surface was reachable only from a browser that was already signed in. That is
+    // to say: not reachable at all, by the tools it exists for.
+    //
+    // A pasted personal access token would have been less code. It's the wrong shape: MCP
+    // clients already implement the OAuth discovery + authorize dance (it's in the spec), so
+    // the user's flow becomes "a browser tab opens, you approve, done" instead of "mint a
+    // secret, paste it into a config file, and hope you remember to revoke it". Revocation and
+    // expiry come with the grant rather than needing a surface of their own.
+    //
+    // `loginPage` is RELATIVE on purpose. The plugin redirects with it verbatim
+    // (`ctx.redirect(loginPage + "?" + query)`), so a relative path resolves against whichever
+    // host the authorize request arrived on — the app host in production, `app.localhost:<port>`
+    // in dev. An absolute one built from `APP_ORIGIN` looked more careful and was worse: with
+    // `BETTER_AUTH_URL` pinned to :3000, a dev server on :3001 sent the user to a *different
+    // application* on :3000 mid-flow, and in production it breaks the moment the app host and
+    // `BETTER_AUTH_URL` disagree.
+    //
+    // The login page resumes the authorization itself — see `postAuthDestFor`, which sends a
+    // freshly signed-in user back to `/api/auth/mcp/authorize` with the query intact.
+    mcp({
+      loginPage: "/login",
+      // Consent is FORCED — see src/app/api/auth/mcp/authorize/route.ts for why, and for the
+      // wrapper that sets `prompt=consent` so a client can't decline to ask.
+      // `loginPage` is repeated because OIDCOptions requires its own copy; it must match the
+      // outer one or the two halves of the flow would send people to different pages.
+      oidcConfig: { loginPage: "/login", consentPage: "/oauth/consent" },
     }),
     nextCookies(),
   ],

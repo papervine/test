@@ -4,9 +4,12 @@ import { z } from "zod";
 import { headers } from "next/headers";
 import { searchDocs, readPage, listPages } from "@papervine/renderer/lib/docs-tools";
 import { contentContext } from "@papervine/renderer/lib/content";
-import { findSite } from "@/lib/dashboard-context";
-import { getSession, listOrganizations, getMemberRole } from "@/lib/session";
-import { canSeeFeature } from "@/lib/features";
+import {
+  resolveActorUserId,
+  resolveAuthoringTarget,
+  denialMessage,
+} from "@/lib/authoring-auth";
+import { requestOrigin } from "@/lib/mcp-oauth-metadata";
 import { draftContentSource } from "@/lib/authoring-tools";
 import {
   resolvePagePath,
@@ -21,11 +24,21 @@ import {
  * AI clients read AND edit a site's docs on a draft branch; edits land via the same draft
  * buffer + publish (commit/PR) path the human editor uses.
  *
- * Unlike the public read MCP (`/mcp`), this WRITES, so it's authenticated: a signed-in org
- * member with the editor feature, identified by the session cookie (app host). The target
- * site + branch come from request headers (`x-papervine-org`, `x-papervine-site`,
- * `x-papervine-branch`). Token-scoped external auth (a platform-auth PAT, SPEC §11) is the
- * follow-up; this is the authenticated-session slice.
+ * Unlike the public read MCP (`/mcp`), this WRITES, so it's authenticated: an org member whose
+ * role clears the editor feature. Two credentials are accepted, resolved in
+ * `@/lib/authoring-auth`:
+ *
+ *   - an **OAuth 2.1 access token** from Better Auth's `mcp` plugin — what an MCP client uses,
+ *     obtained by the standard discovery + authorize flow (a browser tab, one approval);
+ *   - the **dashboard session cookie**, for a browser already signed in on the app host.
+ *
+ * The token half is what makes this surface usable at all. Before it, the only accepted
+ * credential was a cookie no MCP client can send, so the write MCP was reachable only from a
+ * signed-in browser — that is, not by the tools it exists for.
+ *
+ * The target site + branch still come from request headers (`x-papervine-org`,
+ * `x-papervine-site`, `x-papervine-branch`): the OAuth grant identifies the *person*, and a
+ * person's sites change without their token needing to.
  */
 const json = (data: unknown) => ({
   content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
@@ -45,39 +58,70 @@ const err = (message: string) => json({ error: message });
  */
 export const dynamic = "force-dynamic";
 
+/**
+ * Where a client should look up who can issue tokens for this resource.
+ *
+ * Built from the request's `Host`, not from `req.url` and not from a configured base URL. This
+ * route answers on the app host, on preview deployments, and on `app.localhost:<port>` in dev,
+ * and a client that reached one of those must not be sent to another — its session cookie is
+ * host-only and wouldn't follow. `req.url` looks like it would work and doesn't: inside a Next
+ * route handler it carries the server's internal origin, so a request to `app.localhost:3001`
+ * produced a challenge pointing at `localhost:3001` (i.e. the apex, where there is no session).
+ */
+function protectedResourceUrl(req: Request): string {
+  return `${requestOrigin(req)}/.well-known/oauth-protected-resource`;
+}
+
 async function handle(req: Request): Promise<Response> {
+  const h = await headers();
+  const userId = await resolveActorUserId(h);
+
+  // No credential at all → 401 with `WWW-Authenticate`, which is the MCP authorization spec's
+  // signal for "go get a token": a client reads `resource_metadata`, fetches it, discovers the
+  // authorization server, and runs the OAuth flow. Answering 200-with-a-refusing-tool instead
+  // (what this did before) is a dead end — the client has been told it can proceed, so it never
+  // starts the flow and the user just sees every tool fail.
+  //
+  // Only the *unauthenticated* case is a 401. A known user asking about a site they can't reach
+  // is a normal tool error, below: their credential is fine and re-authorizing won't help.
+  if (!userId) {
+    return new Response(
+      JSON.stringify({ error: denialMessage("unauthenticated") }),
+      {
+        status: 401,
+        headers: {
+          "content-type": "application/json",
+          "WWW-Authenticate": `Bearer resource_metadata="${protectedResourceUrl(req)}"`,
+        },
+      },
+    );
+  }
+
   const server = new McpServer(
     { name: "Papervine Authoring", version: "0.1.0" },
     { capabilities: { tools: {} } },
   );
 
   {
-    const h = await headers();
-    const org = h.get("x-papervine-org");
-    const siteSlug = h.get("x-papervine-site");
-
-    // Authorize once per connection. If anything fails, the tools still mount but refuse —
-    // an MCP client gets a clear error rather than a dead endpoint.
-    const session = await getSession();
-    const organization = org ? (await listOrganizations())?.find((o) => o.slug === org) : null;
-    const role =
-      session && organization ? await getMemberRole(organization.id, session.user.id) : null;
-    const site =
-      session && org && siteSlug && canSeeFeature("editor.workspace", role)
-        ? await findSite(org, siteSlug)
-        : null;
+    // Authorize the target once per connection. If it fails, the tools still mount but refuse —
+    // a client gets a named reason on the tool it called rather than a dead endpoint.
+    const resolved = await resolveAuthoringTarget({
+      userId,
+      orgSlug: h.get("x-papervine-org"),
+      siteSlug: h.get("x-papervine-site"),
+    });
+    const site = resolved.ok ? resolved.target.site : null;
+    const NOAUTH = resolved.ok ? "" : denialMessage(resolved.denial);
 
     // Resolve / open the edit branch up front so every tool shares one session.
     let branch = h.get("x-papervine-branch") ?? "";
-    if (site) {
-      const res = await checkoutBranch(site, {
-        actorUserId: session!.user.id,
+    if (resolved.ok) {
+      const res = await checkoutBranch(resolved.target.site, {
+        actorUserId: resolved.target.userId,
         branchName: branch || undefined,
       });
       branch = res.branch;
     }
-
-    const NOAUTH = "Not authorized. Sign in and set x-papervine-org / x-papervine-site headers.";
     const draft = <T>(s: NonNullable<typeof site>, fn: () => Promise<T>): Promise<T> =>
       contentContext.run(draftContentSource(s, branch), fn);
 

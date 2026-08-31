@@ -25,38 +25,52 @@ The files below live in the `reference/` directory next to this one.
 | `reference/cli.md` | Running the CLI (`papervine new`, `dev`, `serve`) and serving a site in production. |
 | `reference/product-context.md` | Before substantial content work (new site, broad restructure, first-time section setup) — check for and maintain `.papervine/product-brief.md`. |
 
-## MCP server
+## MCP servers
 
-**Papervine Docs** — read-only access to Papervine's own published documentation, at
-`https://docs.papervine.io/mcp`. Reach for it when these reference files don't cover a detail,
-or to check current behavior before telling the user something is unsupported.
+Two servers ship with this plugin. They are different surfaces, not two halves of one.
 
-Tools: `search_docs` (full-text search; call this first), `read_page` (read a page's Markdown
-by slug), `list_pages` (every page's title and href).
+### Papervine Docs (read)
 
-### The user's own docs site also serves an MCP endpoint
+`https://docs.papervine.io/mcp` — read-only access to Papervine's own published documentation,
+no authentication. Reach for it when these reference files don't cover a detail, or to check
+current behavior before telling the user something is unsupported.
 
-Every Papervine site — hosted, self-hosted, or a running `papervine dev` — serves the same
-three tools at `/mcp`, scoped to that site's content. If the user wants their own docs
-searchable from Cursor, add their host to `~/.cursor/mcp.json` or the project's `.cursor/mcp.json`:
+Tools: `search_docs` (full-text search; call this first), `read_page` (a page's Markdown by
+slug), `list_pages` (every page's title and href).
 
-```json
-{
-  "mcpServers": {
-    "My Docs": { "type": "http", "url": "https://docs.example.com/mcp" }
-  }
-}
+### Papervine Authoring (write)
+
+`https://app.papervine.io/authoring/mcp` — read **and edit** a docs site the user can edit.
+Authorize on first use: the client opens a browser tab, the user approves the request, and the
+grant is an expiring OAuth token. Nothing to paste, nothing to revoke by hand.
+
+Name the target site with two headers on every request:
+
+```
+x-papervine-org: acme
+x-papervine-site: docs
 ```
 
-`http://localhost:3000/mcp` works against a running `papervine dev`, which gives the agent a
-live view of the pages being written. A site with an OpenAPI reference also exposes `search_api`.
+Tools: `read`, `search`, `list_pages` (all draft-aware), `write_page` (full MDX, frontmatter
+included), `edit_page` (find/replace on the raw MDX), and `save` (`mode: "pr" | "commit"`).
 
-<!-- The authoring (write) MCP at /authoring/mcp needs a dashboard session today, so it can't
-     be wired up from an editor yet. Token-scoped access is the follow-up. Until then, edits
-     go through the repository — which is where Cursor is already working. -->
+**Edits buffer on a draft branch and are not live until `save`.** A working branch is checked
+out automatically on first write (or name one with `x-papervine-branch`). `save` with
+`mode: "pr"` opens a pull request; `mode: "commit"` writes to the deploy branch. The same draft
+buffer backs Papervine's browser editor, so a person can open the site and watch the changes.
 
-Papervine has no write MCP an editor can authenticate to yet, so **make edits in the
-repository**, not through a service. Commit and push, or open a PR, exactly as with any repo.
+Requires an org role that can edit docs. A refusal names its reason — not signed in, not a
+member, role too low, no such site — so read the message rather than retrying.
+
+### Which one, and when
+
+**Working in a Git checkout of the docs? Edit the files.** That is the ordinary case in an
+editor, and it keeps the change in the user's normal review and commit flow. The authoring MCP
+is for editing a site whose repository you do *not* have open — a hosted site, someone else's
+repo, a quick fix from a machine with no checkout.
+
+Never use both on the same site in one task: a file edit and a draft-branch edit are two
+uncoordinated copies of the same page, and whichever publishes last silently wins.
 
 ## Before you start
 

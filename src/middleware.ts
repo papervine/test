@@ -68,6 +68,19 @@ const SENTRY_TUNNEL = "/monitoring";
 // error rather than a redirect.
 const AUTHORING_MCP = "/authoring/mcp";
 
+// The OAuth discovery documents the authoring MCP's 401 points clients at (RFC 8414 / RFC
+// 9728). Root routes for the same reason `/mcp` is one — a client fetches them at a fixed,
+// spec-defined path — so they hit the identical rewrite trap, and a 404 here presents to the
+// user as "this server doesn't support authorization" rather than as a routing bug.
+//
+// Unauthenticated by necessity: discovery is what a client reads BEFORE it has a token, so
+// these sit above the edge cookie gate too. They publish endpoint URLs and supported grant
+// types, which is public information by design.
+const WELL_KNOWN_OAUTH = new Set([
+  "/.well-known/oauth-authorization-server",
+  "/.well-known/oauth-protected-resource",
+]);
+
 /**
  * The crawler files (`src/app/robots.ts`, `src/app/sitemap.ts`). ROOT routes, so they hit the
  * same wall the Sentry tunnel did above: on the app host `/robots.txt` would be rewritten to
@@ -212,6 +225,7 @@ export function middleware(req: NextRequest) {
       pathname === "/app" ||
       pathname === SENTRY_TUNNEL ||
       pathname === AUTHORING_MCP ||
+      WELL_KNOWN_OAUTH.has(pathname) ||
       CRAWLER_FILES.has(pathname) ||
       ASSET_RE.test(pathname)
     ) {
@@ -222,6 +236,14 @@ export function middleware(req: NextRequest) {
     // bounces a signed-in user to the dashboard nor rewrites onto /app. The page handles each
     // state itself (SPEC §10 invitations).
     if (pathname === "/accept-invite") {
+      return syncFlag(NextResponse.next());
+    }
+    // OAuth consent (SPEC §9.2/§11) keeps its bare URL for the same reason, and needs the same
+    // exemption from BOTH behaviors around it: rewritten onto /app it 404s, and treated as an
+    // auth path it would bounce a signed-in user to the dashboard — which is every user who
+    // reaches it, since consenting requires a session. The page renders its own signed-out
+    // state rather than relying on the edge gate.
+    if (pathname === "/oauth/consent") {
       return syncFlag(NextResponse.next());
     }
     if (isAuthPath(pathname)) {

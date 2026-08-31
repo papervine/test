@@ -402,6 +402,45 @@ const CONTROL_PLANE_CHECKS = [
     rejectRedirectTo: "/login",
   },
   {
+    // The 401 that starts the OAuth flow (SPEC §9.2/§11). The status alone isn't the contract
+    // — `WWW-Authenticate: Bearer resource_metadata="…"` is what tells an MCP client where to
+    // go and get a token. Without the header a client sees "unauthorized" and stops, which is
+    // exactly the dead end this endpoint spent its whole life in.
+    host: "app.localhost",
+    path: "/authoring/mcp",
+    expectStatus: 401,
+    expectHeader: ["www-authenticate", 'Bearer resource_metadata="[^"]*/\\.well-known/oauth-protected-resource"'],
+    desc: "an unauthenticated authoring MCP request answers 401 + WWW-Authenticate, not a redirect",
+  },
+  {
+    // Both discovery documents are ROOT routes on the app host — the same rewrite trap — and
+    // both must answer BEFORE any credential exists, since discovery is what a client reads to
+    // find out how to get one.
+    host: "app.localhost",
+    path: "/.well-known/oauth-protected-resource",
+    expectStatus: 200,
+    desc: "OAuth protected-resource metadata is served on the app host (not rewritten onto /app)",
+  },
+  {
+    host: "app.localhost",
+    path: "/.well-known/oauth-authorization-server",
+    expectStatus: 200,
+    desc: "OAuth authorization-server metadata is served on the app host (not rewritten onto /app)",
+  },
+  {
+    // Consent is FORCED on the authoring MCP's authorize endpoint (SPEC §9.2/§11), and this is
+    // a security property, not a nicety. Better Auth shows consent only when the client asks
+    // (`prompt=consent`); combined with dynamic client registration, skipping it means any page
+    // that redirects a signed-in user to an authorize URL silently receives a WRITE-scoped token
+    // for their docs. Our wrapper adds the parameter before handing off, so a request without
+    // one must always come back as a redirect that has it.
+    host: "app.localhost",
+    path: "/api/auth/mcp/authorize?response_type=code&client_id=smoke",
+    expectStatus: 302,
+    expectHeader: ["location", "prompt=consent"],
+    desc: "the MCP authorize endpoint forces prompt=consent (no silent write-token grants)",
+  },
+  {
     // Same ROOT-route trap as the tunnel above: /robots.txt would become /app/robots.txt, meet
     // the auth gate, and answer a crawler asking what it may index with a bounce to /login.
     host: "app.localhost",
@@ -690,6 +729,10 @@ function rawGet(pathname, hostHeader, cookie) {
             status: res.statusCode,
             location: res.headers.location ?? "",
             setCookie: res.headers["set-cookie"] ?? [],
+            // The authoring MCP's 401 carries WWW-Authenticate, and that header IS the
+            // behavior — it's what tells an MCP client to start the OAuth flow rather than
+            // give up. A bare 401 would pass a status-only assertion and still be broken.
+            headers: res.headers,
             body,
           }),
         );
@@ -1194,6 +1237,14 @@ async function run() {
         if (check.expectStatus) {
           if (res.status !== check.expectStatus) {
             failures.push(`[${tag}] expected ${check.expectStatus}, got ${res.status} → "${res.location}" — ${check.desc}`);
+          } else if (check.expectHeader) {
+            const [name, pattern] = check.expectHeader;
+            const value = res.headers[name.toLowerCase()] ?? "";
+            if (!new RegExp(pattern).test(String(value))) {
+              failures.push(
+                `[${tag}] expected ${name} matching /${pattern}/, got "${value}" — ${check.desc}`,
+              );
+            }
           } else if (check.clearsCookie) {
             const cleared = res.setCookie.some(
               (c) => c.startsWith(`${check.clearsCookie}=`) && /max-age=0|expires=/i.test(c),
