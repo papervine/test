@@ -68,6 +68,13 @@ export function formatRangeLabel(start: Date, lastDay: Date): string {
   return `${left} – ${right}`;
 }
 
+/** "Jan 26, 2026" — a single day, spelled out (chart tooltips, where "Jan 26" is ambiguous
+ *  across a year boundary). Formatted here rather than with Intl in a client component,
+ *  so the server and the browser can't disagree and trip a hydration mismatch. */
+export function formatDayFull(d: Date): string {
+  return `${MONTHS[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
 export function resolveRange(key: RangeKey, now: Date): ResolvedRange {
   const preset = RANGE_PRESETS.find((r) => r.key === key) ?? RANGE_PRESETS[0];
   const lastDay = startOfDay(now);

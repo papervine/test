@@ -18,6 +18,14 @@ const SITE = "billing-e2e"; // seeded site slug; the settings surfaces hang unde
 const billingPath = `/${ORG_SLUG}/${SITE}/settings/billing`;
 const usagePath = `/${ORG_SLUG}/${SITE}/settings/usage`;
 
+// The chart's day columns are keyed by local day, the same way dayBuckets() keys them —
+// a UTC key would slide a bar by one and the hover would miss.
+const dayKeyLocal = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+const chartDays: string[] = [];
+
 test.describe("billing settings", () => {
   test.beforeAll(async () => {
     // Minimal catalog: trial + free + one paid plan with a price, mirroring what
@@ -64,6 +72,28 @@ test.describe("billing settings", () => {
               values (${org.id}, 5000)
               on conflict (organization_id) do update set trial_credits = 5000, monthly_credits = 0`;
 
+    // Metered history for the usage chart: two days inside the 30-day window, split
+    // 50/30/20 across the three features so the legend's percentages are exact rather
+    // than "whatever the data happened to be". Only usage_event — the chart reads it
+    // directly, and leaving the ledger/balance alone keeps the meter assertions above.
+    await sql`delete from usage_event where organization_id = ${org.id}`;
+    for (const back of [3, 2]) {
+      const at = new Date();
+      at.setDate(at.getDate() - back);
+      at.setHours(12, 0, 0, 0);
+      chartDays.push(dayKeyLocal(at));
+      for (const [feature, credits] of [
+        ["assistant", 1000],
+        ["writer", 600],
+        ["workflow", 400],
+      ] as const) {
+        await sql`insert into usage_event
+                  (id, organization_id, feature, model, tokens_in, tokens_out, credits, rate_version, created_at)
+                  values (${`ue-${back}-${feature}`}, ${org.id}, ${feature}, 'test-model',
+                          ${credits * 90}, ${credits * 30}, ${credits}, 1, ${at})`;
+      }
+    }
+
     // The settings surfaces live under a site, and the rail's per-site nav (Automate
     // items + their Trialing pills) needs a site to render. Content isn't needed.
     await sql`insert into site (id, organization_id, name, slug, branch, status)
@@ -73,6 +103,7 @@ test.describe("billing settings", () => {
 
   test.afterAll(async () => {
     await sql`delete from site where id = 'billing-e2e-site'`;
+    await sql`delete from usage_event where id like 'ue-%'`;
     await sql.end();
   });
 
@@ -126,6 +157,52 @@ test.describe("billing settings", () => {
     await expect(page.getByRole("switch")).toBeVisible();
 
     expect(errors, `usage console must stay clean:\n${errors.join("\n")}`).toEqual([]);
+  });
+
+  test("usage chart: stacked days, legend totals, hover tooltip, clean console", async ({
+    page,
+  }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() === "error") errors.push(`console.error: ${m.text()}`);
+    });
+
+    await page.goto(usagePath);
+
+    const chart = page.getByTestId("usage-chart");
+    await expect(chart.getByRole("heading", { name: "Credit usage" })).toBeVisible();
+    // 30 day columns whatever the data — the window is dense, not just the days with usage.
+    await expect(chart.locator("[data-day]")).toHaveCount(30);
+
+    // Legend: every series named with its total and its share (2K/1.2K/800 of 4K).
+    const legend = page.getByTestId("usage-legend");
+    await expect(legend).toContainText("Assistant");
+    await expect(legend).toContainText("2K");
+    await expect(legend).toContainText("50%");
+    await expect(legend).toContainText("Editor agent");
+    await expect(legend).toContainText("30%");
+    await expect(legend).toContainText("Automations");
+    await expect(legend).toContainText("20%");
+
+    // Hovering a day opens the tooltip with THAT day's split (1K/600/400), not the total.
+    await expect(page.getByTestId("usage-tooltip")).toHaveCount(0);
+    await chart.locator(`[data-day="${chartDays[0]}"]`).hover();
+    const tip = page.getByTestId("usage-tooltip");
+    await expect(tip).toBeVisible();
+    await expect(tip).toContainText("1K");
+    await expect(tip).toContainText("600");
+    await expect(tip).toContainText("400");
+
+    // A day with no usage has no tooltip to show (and must not crash trying).
+    const quiet = new Date();
+    quiet.setDate(quiet.getDate() - 20);
+    await chart.locator(`[data-day="${dayKeyLocal(quiet)}"]`).hover();
+    await expect(page.getByTestId("usage-tooltip")).toHaveCount(0);
+
+    expect(errors, `usage chart console must stay clean:\n${errors.join("\n")}`).toEqual(
+      [],
+    );
   });
 
   test("settings nav has Billing + Usage, and the rail badges trial-gated items", async ({

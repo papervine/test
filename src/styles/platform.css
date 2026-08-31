@@ -28,6 +28,23 @@
   --violet: #a974ff;
   --danger: #e5484d;
   --amber: #f5a623;
+  /* Categorical chart series — a FIXED slot order (see src/lib/usage-series.ts), stepped
+     per surface and validated as a SET, not eyeballed: every pair (not just neighbours —
+     a stacked segment can be missing, which puts any two slots side by side) clears the
+     colorblind and normal-vision separation floors, sits in the surface's lightness band,
+     and holds 3:1 against it. Unlike the brand/semantic tokens these are NOT theme-constant:
+     the steps that separate on #060609 are not the steps that separate on a near-white card,
+     so light has its own below — re-validate BOTH when you touch one.
+
+     Two deliberate exceptions to the palette rules, both about neutrals: slot 1 is a
+     neutral by design (the dominant baseline series reads as the bulk, with the hues for
+     what's stacked on top), and slot 0 is the "Other" bucket for a feature the catalog
+     gains later — neither carries a hue, so the chroma floor doesn't apply. Slot 0 is
+     stepped well away from slot 1 so the two neutrals can't be confused. */
+  --series-0: #565664;
+  --series-1: #7c7c8c;
+  --series-2: #6c5ce7;
+  --series-3: #d45fbe;
   --line: rgba(var(--ink-rgb), 0.07);
   --card: rgba(var(--ink-rgb), 0.025);
   --glass: rgba(10, 10, 16, 0.6); /* frosted sticky chrome */
@@ -46,6 +63,15 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   --line: rgba(var(--ink-rgb), 0.1);
   --glass: rgba(250, 250, 252, 0.72);
   --option-bg: #ffffff;
+  /* The same four roles, re-stepped for the light card (and validated there): the baseline
+     neutral darkens to hold contrast, and the magenta darkens a long way — on light it has
+     to stay distinguishable from that neutral for a deuteranope, who sees both as grays.
+     Slot 0 recedes toward the surface in both modes (darker on dark, lighter on light) —
+     it's the unnamed bucket, and its legend label carries the identity. */
+  --series-0: #b6b6c2;
+  --series-1: #8b8b99;
+  --series-2: #5a4bd4;
+  --series-3: #9c2f8a;
 }
 .db {
   background: var(--bg);

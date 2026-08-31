@@ -498,13 +498,81 @@ if (!proVersion) {
     insert into credit_ledger (id, organization_id, delta, kind, bucket, period_key, expires_at, reason)
     values (${randomUUID()}, ${orgId}, ${proVersion.included_monthly_credits}, 'grant_monthly',
             'monthly', ${period}, ${periodEnd}, 'seed: Pro monthly grant')`;
+
+  // 30 days of metered history, so Settings → Usage has a chart to draw (an org that has
+  // never called an AI route shows an empty one, which tells you nothing about whether
+  // the surface works). Deterministic, not random: a fixed per-day pattern per feature so
+  // two seeds produce the same bars and a screenshot diff means something. Written as
+  // usage_event + a matching 'usage' ledger burn per event — the same pair recordUsage
+  // writes — so the meter, the ledger and the chart can't disagree.
+  const MODELS = {
+    assistant: "claude-haiku-4-5-20251001",
+    writer: "claude-sonnet-5",
+    workflow: "claude-sonnet-5",
+  };
+  const usageRows = [];
+  const ledgerRows = [];
+  for (let back = 29; back >= 0; back--) {
+    const day = new Date(now.getTime() - back * 86_400_000);
+    // A weekday-ish rhythm (quiet weekends) with each feature at its own scale:
+    // assistant ~50% of the spend, editor agent ~30%, automations ~20%.
+    const weekend = day.getDay() === 0 || day.getDay() === 6;
+    const wave = 1 + 0.35 * Math.sin(back / 2.7);
+    const scale = (weekend ? 0.35 : 1) * wave;
+    for (const [feature, share, calls] of [
+      ["assistant", 500, 8],
+      ["writer", 300, 3],
+      ["workflow", 200, 1],
+    ]) {
+      // Skip the odd feature on the odd day so some bars are two-segment, not three —
+      // that's the case where a legend/tooltip mixes up its series alignment.
+      if ((back + share) % 7 === 0) continue;
+      for (let i = 0; i < calls; i++) {
+        const credits = Math.max(1, Math.round((share / calls) * scale));
+        const at = new Date(day);
+        at.setHours(9 + i, (17 * i) % 60, 0, 0);
+        const id = randomUUID();
+        usageRows.push({
+          id,
+          organization_id: orgId,
+          site_id: null,
+          feature,
+          model: MODELS[feature],
+          tokens_in: credits * 90,
+          tokens_out: credits * 30,
+          credits,
+          rate_version: 1,
+          request_id: null,
+          created_at: at,
+        });
+        ledgerRows.push({
+          id: randomUUID(),
+          organization_id: orgId,
+          delta: -credits,
+          kind: "usage",
+          bucket: "monthly",
+          usage_event_id: id,
+          reason: "seed: metered usage",
+          created_at: at,
+        });
+      }
+    }
+  }
+  await sql`insert into usage_event ${sql(usageRows)}`;
+  await sql`insert into credit_ledger ${sql(ledgerRows)}`;
+  const burned = usageRows.reduce((sum, r) => sum + r.credits, 0);
+  const remaining = Math.max(0, proVersion.included_monthly_credits - burned);
+
   await sql`
     insert into credit_balance (organization_id, trial_credits, monthly_credits, pack_credits)
-    values (${orgId}, 0, ${proVersion.included_monthly_credits}, 0)
+    values (${orgId}, 0, ${remaining}, 0)
     on conflict (organization_id) do update set
-      trial_credits = 0, monthly_credits = ${proVersion.included_monthly_credits},
+      trial_credits = 0, monthly_credits = ${remaining},
       pack_credits = 0, updated_at = now()`;
-  console.log(`• billing: dev-org on Pro (active), ${proVersion.included_monthly_credits} monthly credits`);
+  console.log(
+    `• billing: dev-org on Pro (active), ${proVersion.included_monthly_credits} monthly credits` +
+      ` − ${burned} used over 30 days (${usageRows.length} metered calls)`,
+  );
 }
 
 await sql.end();

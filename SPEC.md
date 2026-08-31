@@ -4617,6 +4617,44 @@ Minimum to operate the SaaS:
   (`cancel_at_period_end=true` + period end set, 5,000 credits). Regression:
   `tests/e2e/admin.spec.ts` grants Team through the UI and asserts the non-Stripe sub +
   monthly grant + actor/reason in the DB.*
+  **Usage chart landed 2026-08-31 (where the credits went).** Settings → Usage answers
+  "how many are left" (the meter) and "what did the last 15 calls cost" (the table), but
+  nothing in between — the question a buyer actually asks mid-period is *which feature* is
+  burning the pool and whether it's trending up. Added a **30-day stacked bar chart** of
+  credits per day, split by feature (Assistant / Editor agent / Automations), with a
+  per-day hover tooltip and a legend strip carrying each series' total and share. Fixed
+  30-day window rather than a range picker: the meter above is about *this* period, and a
+  second piece of URL state buys little here. Shape: pure math in `src/lib/usage-series.ts`
+  (day × feature stacking, nice-number axis ticks, compact formatting — `usage-series.test.ts`,
+  17 cases), one grouped aggregate in `src/lib/billing/usage-history.ts`, presentation in
+  `src/components/billing/UsageChart.tsx`. Hand-rolled like `VisitorsChart` — this repo has
+  no chart library and a stacked bar plus a hover layer is a few divs.
+  Two decisions worth keeping: (1) **color follows the feature, not its rank.** Each series
+  carries a palette slot (`--series-N` in platform.css), so a window where nobody ran the
+  editor agent doesn't repaint the two survivors. (2) **The palette was computed, not
+  eyeballed** — every *pair* (not just neighbours: a missing middle segment puts any two
+  slots side by side) clears the colorblind and normal-vision separation floors, sits in
+  the surface's lightness band, and holds 3:1 against it, with separate steps for the light
+  card. That gate is what ruled out the obvious brand pick: platform blue + violet are
+  ~ΔE 13 apart to normal vision and ~ΔE 4 under deuteranopia — indistinguishable stacked.
+  The result (neutral baseline · indigo · magenta) keeps the brand's cool/violet feel and
+  passes. The dominant series being a deliberate NEUTRAL is the one documented exception to
+  the chroma floor, along with the "Other" bucket for a feature the catalog gains later.
+  **The surface was re-laid out around it (same day):** chart first (full width), then the
+  credit meter and credit packs **two-up** beneath it, then the recent-usage table. The
+  chart is what the page is *about* — the balance and the top-up read as the controls under
+  it — and pairing the two short cards stops the page from being a single narrow column of
+  stacked blocks. Packs collapse from a card-per-pack into one card of rows (two cards
+  beside a card read as three peers), and the grid is `items-start` so the shorter card
+  isn't stretched (grid rows stretch by default — the same trap as the Card `h-full` bug).
+  `db:seed` now writes 30 days of metered history (usage_event + matching `usage` ledger
+  burns, deterministic so two seeds draw the same bars) — an org that has never called an
+  AI route renders an empty chart, which tells you nothing about whether the surface works.
+  Regression: `billing.spec.ts` gains a chart case (30 dense columns, exact legend
+  percentages from a 50/30/20 split, hover tooltip showing the *day's* split, no tooltip on
+  a quiet day) with the console-clean assertion. *Verified in a real browser 2026-08-31 in
+  both platform themes, including the hover tooltip and the keyboard (arrow-key) path;
+  console clean.*
 - **Web editor — BUILT (2026-06-14):** the 3-panel editor at `/:org/:site/editor` (editing-agent
   chat · navigation · multi-modal editor with a Visual⇄Source toggle, branch switcher, and a
   Publish→commit/PR button). It is **the same capability as the authoring MCP (§9.2), not a

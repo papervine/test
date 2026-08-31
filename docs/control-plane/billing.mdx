@@ -8,8 +8,8 @@ Billing is scoped to the **organization**: one plan and one credit pool cover ev
 site the org owns. It lives under a site's **Settings**, in the Workspace section:
 
 - **Settings → Billing** — the current plan, changing plans, and downgrading.
-- **Settings → Usage** — the credit meter, the reset date, credit packs, and recent
-  AI usage.
+- **Settings → Usage** — the credit meter, the reset date, the usage chart, credit
+  packs, and recent AI usage.
 
 Because the plan and credits are organization-level, every site's Billing and Usage tabs
 show the same subscription.
@@ -56,6 +56,19 @@ run, and workflow run meters the model tokens it actually used and converts them
 credits with a published rate table — a typical assistant answer costs around **10
 credits**. Settings → Usage shows credits remaining, the **reset date**, and a table of
 recent operations with their token count and credit cost.
+
+### Where the credits are going
+
+**Credit usage**, at the top of the page, charts the last 30 days: one bar per day,
+stacked by the feature that spent the credits — **Assistant**, **Editor agent**, and
+**Automations**. Hover a day (or focus the chart and use the arrow keys) for that day's
+split, and read the strip under the chart for each feature's 30-day total and its share
+of the period. A feature the organization hasn't used doesn't appear.
+
+The credit meter and credit packs sit side by side beneath it, so the chart answers "which
+feature is spending the pool" and the meter answers "how much is left". The **Recent AI
+usage** table at the bottom of the page is the same story per call — the operation, the
+model, the tokens, and the credits it cost.
 
 Credits come from three buckets, consumed in this order:
 
