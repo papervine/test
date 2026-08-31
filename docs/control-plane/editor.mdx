@@ -392,11 +392,22 @@ Visual mode edits it as that shape rather than as source:
 
 - **`/update`** inserts an entry, labelled with today's date and ready to type into. The label is
   what readers link to (it becomes the entry's anchor), so it's filled in rather than left empty.
-- The **label**, an optional **description** under it, and **tags** (comma separated) are fields in
-  the left column; the entry's body is the content beside them. <kbd>Enter</kbd> in any of the
-  fields moves down into the body.
-- An entry using `rss={…}` shows as its own MDX instead — per-entry feed metadata is an object, and
-  showing you the source beats keeping a part of it. Edit those in Source mode.
+- The **label** is a chip you type in, sitting on the line of the entry's title. <kbd>Enter</kbd>
+  moves down into the body.
+- The rest of an entry's properties are behind the **⋯** in its top-right corner: **Tags** (comma
+  separated, shown as pills under the label) and a **Description** (a line under the entry's title).
+  Each one says what it does and where it appears.
+
+<Note>
+  The description is edited in that panel rather than in the page because of where it *renders*:
+  under the entry's title, and the title is your own heading inside the entry's body. A field can't
+  sit between two lines of the text you're editing, and a field somewhere the text won't appear
+  would be worse than one click. **Preview** shows the real thing.
+</Note>
+
+An entry using `rss={…}` shows as its own MDX instead — per-entry feed metadata is an object, and
+showing you the source beats keeping part of it. The panel says so rather than offering a box that
+would write a prop with no effect. Edit those in Source mode.
 
 ## The `/` menu
 

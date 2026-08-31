@@ -3765,6 +3765,33 @@ layer.
 > with it, both idempotent (which is the converter's actual contract): tight spacing settles to
 > `["api", "beta"]`, and `tags={[]}` is dropped like every other empty value.
 >
+> **The published layout, from a design pass (2026-08-31).** Three changes, each from looking at a
+> real entry: the label chip sits on the TITLE's line (`items-baseline` on the grid, not
+> `items-start` — the pair reads as one row, which is how a changelog is scanned); the title is a step
+> larger with prose's `mt-10` and bottom rule dropped (that margin is what had pushed it below the
+> chip, and the entry already ends in a rule — two per entry read as a table); and the **description
+> moved out of the label column to sit under the title**, on the same left edge as the body. The
+> description is a prop and the title is the author's own heading, so getting it between them means
+> splitting `Children.toArray(children)` around the first element when that element is a heading —
+> and falling back to leading the entry when it isn't. Wrong order in an exotic case, never a lost
+> description.
+>
+> **A `⋯` properties panel, and the first piece of a general one.** The entry's other props live
+> behind a `⋯` in its top-right corner: `PropertiesPanel` (portaled + measured, like every other
+> popover in this editor) renders one row per prop — name, a sentence about what it does and where it
+> shows up, and the control. `Update` is its first user; Badge/Icon/Card want exactly this shape, so
+> it's generic from the start rather than after the second copy.
+>
+> Two decisions inside it worth keeping. **`rss` gets a row with no field**: it's an object the
+> converter doesn't model, so a box there would write a prop this renderer ignores *and* demote the
+> block out of Visual mode as it did it — the row explains instead. And **the description is edited
+> only in the panel**, not in the document, precisely because of where it renders: under the title,
+> which lives inside this node's editable body, and a field cannot sit between two lines of one
+> content hole. The choice was a field in the wrong place — a WYSIWYG editor lying about where text
+> will appear — or a field one click away with a sentence saying where it lands. The help copy is
+> written for THIS renderer, deliberately not copied from another product's panel, which describes a
+> different layout ("appears below the label and tag").
+>
 > **The label renders as an emerald chip, in both surfaces.** A changelog is scanned down its left
 > edge, and a filled pill gives the eye a rail that plain bold text doesn't — so the reader's label
 > became a chip (still a real anchor; the chip is what you copy the link from), and the editor's

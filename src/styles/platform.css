@@ -835,22 +835,135 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
 @media (min-width: 768px) {
   .pv-visual .pv-update {
     grid-template-columns: 10rem 1fr;
-    align-items: start;
+    /* Baseline, so the chip sits on the title's line — the pair reads as one row, the way a
+       changelog is scanned and the way it publishes. */
+    align-items: baseline;
   }
 }
+/* An entry's title is the author's own heading. In this context it's a step larger, with prose's
+   `mt-10` and bottom rule dropped — the same tuning the published entry does, so the two agree. */
+.pv-visual .pv-update-body > :first-child {
+  margin-top: 0;
+}
+.pv-visual .pv-update h2 {
+  margin-top: 0;
+  border-bottom: 0;
+  padding-bottom: 0;
+  font-size: 1.5rem;
+}
+.pv-visual .pv-update h3 {
+  font-size: 1.25rem;
+}
+/* The ⋯ that opens the properties panel: top-right of the entry, visible on hover or while the panel
+   is open (it's not needed while you're reading, and a permanent button in the corner of every entry
+   is noise). It stays reachable without hover — the block controls' own rule applies here too:
+   `@media (hover: none)` shows it outright, so it works on a touch device. */
+.pv-visual .pv-update {
+  position: relative;
+}
+.pv-visual .pv-update-actions {
+  position: absolute;
+  top: 0;
+  right: 0;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+.pv-visual .pv-update:hover .pv-update-actions,
+.pv-visual .pv-update-actions:focus-within {
+  opacity: 1;
+}
+@media (hover: none) {
+  .pv-visual .pv-update-actions {
+    opacity: 1;
+  }
+}
+.pv-props-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  color: var(--muted);
+  background: rgba(var(--ink-rgb), 0.06);
+}
+.pv-props-button:hover {
+  color: var(--fg);
+  background: rgba(var(--ink-rgb), 0.12);
+}
+
+/* The properties panel itself (PropertiesPanel) — portaled to <body>, so it carries `db-portal` to
+   re-resolve the platform tokens outside the `.db` shell. */
+.pv-props-panel {
+  position: fixed;
+  z-index: 60;
+  width: 20rem;
+  max-height: min(28rem, calc(100vh - 2rem));
+  overflow-y: auto;
+  border: 1px solid rgba(var(--ink-rgb), 0.1);
+  border-radius: 12px;
+  background: var(--bg-elev, var(--bg));
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+.pv-props-head {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid rgba(var(--ink-rgb), 0.08);
+  background: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+.pv-props-rows {
+  padding: 0.25rem 1rem 1rem;
+}
+.pv-props-row {
+  padding-top: 1rem;
+}
+.pv-props-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--fg);
+}
+.pv-props-required {
+  color: rgb(248 113 113);
+}
+.pv-props-help {
+  margin: 0.125rem 0 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.pv-props-input {
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid rgba(var(--ink-rgb), 0.14);
+  border-radius: 8px;
+  background: transparent;
+  font-size: 0.875rem;
+  color: var(--fg);
+  outline: none;
+}
+.pv-props-input:focus {
+  border-color: rgba(var(--ink-rgb), 0.3);
+}
+.pv-props-input::placeholder {
+  color: rgba(var(--ink-rgb), 0.35);
+}
+
 .pv-visual .pv-update-meta {
   display: flex;
   flex-direction: column;
   gap: 0.125rem;
 }
-/* The label reads as the link it becomes for readers, and is the one required field. */
-.pv-visual .pv-update-label,
-.pv-visual .pv-update-desc,
-.pv-visual .pv-update-tags {
-  width: 100%;
+/* The label is the only attr edited in the document — the rest live in the ⋯ properties panel. */
+.pv-visual .pv-update-label {
   border: 0;
   background: transparent;
-  padding: 0;
   outline: none;
 }
 /* The same emerald chip readers get (components/mdx/Update.tsx), as a field: an entry's label is
@@ -873,30 +986,13 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   background: rgb(236 253 245);
   color: rgb(4 120 87);
 }
-.pv-visual .pv-update-desc {
-  margin-top: 0.5rem;
-  font-size: 0.875rem;
-  color: var(--muted);
+.pv-visual .pv-update-label::placeholder {
+  color: rgb(52 211 153 / 0.55);
 }
-/* Tags read as the small print they are on the published entry (little pills under the label), so
-   the field is quiet until you're in it. */
-.pv-visual .pv-update-tags {
-  margin-top: 0.375rem;
-  font-size: 0.75rem;
-  color: var(--muted);
-}
-.pv-visual .pv-update-label::placeholder,
-.pv-visual .pv-update-desc::placeholder,
-.pv-visual .pv-update-tags::placeholder {
-  color: rgba(var(--ink-rgb), 0.35);
-}
-/* Focus is shown on the field itself rather than with a ring: these sit in running text, and a box
+/* Focus shown on the chip itself rather than with a ring: it sits in running text, and a box
    appearing around a word you're editing reads as a form, not a document. */
-.pv-visual .pv-update-label:focus,
-.pv-visual .pv-update-desc:focus,
-.pv-visual .pv-update-tags:focus {
-  border-radius: 3px;
-  box-shadow: 0 0 0 2px rgba(var(--ink-rgb), 0.1);
+.pv-visual .pv-update-label:focus {
+  box-shadow: 0 0 0 2px rgb(16 185 129 / 0.35);
 }
 .pv-visual .pv-update-body > :first-child {
   margin-top: 0;

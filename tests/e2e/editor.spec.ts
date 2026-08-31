@@ -1546,10 +1546,25 @@ test.describe("web editor @external", () => {
     const today = new Date().toISOString().slice(0, 10);
     await expect(entry.locator(".pv-update-label")).toHaveValue(today);
 
-    // Type the body, then fill the description — both parts of one entry.
+    // Type the body in the document…
     await entry.locator(".pv-update-body").click();
     await page.keyboard.type("Shipped the thing.");
-    await entry.locator(".pv-update-desc").fill("v1.2.0");
+
+    // …and set the description in the ⋯ properties panel, which is where it lives: for readers it
+    // sits under the entry's title, and the title is inside this node's editable body, so a field
+    // can't be placed there. The panel names each prop and says where it lands.
+    await entry.hover();
+    await page.getByRole("button", { name: "Update properties" }).click();
+    const panel = page.locator(".pv-props-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel.locator(".pv-props-name").first()).toContainText("Label");
+    // `rss` is an object the converter doesn't model, so the panel explains it instead of offering a
+    // box that would write a dead prop AND demote the block out of Visual mode.
+    const rssRow = panel.locator(".pv-props-row").filter({ hasText: "Rss" });
+    await expect(rssRow.locator("input")).toHaveCount(0);
+    await panel.getByLabel("Description").fill("v1.2.0");
+    await page.keyboard.press("Escape");
+    await expect(panel).toHaveCount(0);
 
     const draft = async () => {
       const rows = await sql<{ content: string }[]>`
