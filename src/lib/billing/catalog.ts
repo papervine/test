@@ -15,8 +15,7 @@ export type PlanFeatureKey =
   | "rbac"
   | "previewDeployments"
   | "adminApis"
-  | "advancedInsights"
-  | "multiRepo"
+  | "insights"
   | "scim"
   // Not a capability but the absence of one: hides the "Powered by Papervine" badge on this
   // org's docs sites. An entitlement rather than a hardcoded plan check so moving it down a
@@ -31,8 +30,7 @@ export const PLAN_FEATURE_KEYS: readonly PlanFeatureKey[] = [
   "rbac",
   "previewDeployments",
   "adminApis",
-  "advancedInsights",
-  "multiRepo",
+  "insights",
   "scim",
   "whiteLabel",
 ] as const;

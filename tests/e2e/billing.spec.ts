@@ -33,12 +33,12 @@ test.describe("billing settings", () => {
     const ents = (ai: boolean) =>
       JSON.stringify({
         sites: ai ? 10 : 1,
-        editors: ai ? 25 : 3,
+        editors: ai ? 25 : 5,
         analyticsRetentionDays: ai ? 365 : 7,
         features: {
-          assistant: ai, writerAgent: ai, workflows: ai, sso: ai, rbac: ai,
-          previewDeployments: ai, adminApis: ai, advancedInsights: ai,
-          multiRepo: ai, scim: false,
+          assistant: true, writerAgent: ai, workflows: ai, sso: ai, rbac: ai,
+          previewDeployments: ai, adminApis: ai, insights: ai,
+          scim: false, whiteLabel: false,
         },
       });
     for (const [key, name, listed, sort, credits] of [

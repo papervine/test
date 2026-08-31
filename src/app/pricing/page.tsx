@@ -16,13 +16,11 @@ import {
 import { PlanMatrix } from "@/components/billing/PlanMatrix";
 
 // Pricing for the SaaS apex (SPEC §2, §10 Billing). Uses the landing page chrome +
-// `.db` design language, and positions against the docs-platform category's shape
-// (free tier, then a ~$450+ jump, SSO held for enterprise) by filling the gap: a $29
-// Team plan that already carries SSO/RBAC, a $99 Pro for production docs teams, and
-// a 30-day everything trial on every account. BYOK is available from day one on all plans;
-// hosted AI credits are optional add-ons, not the primary differentiator. Numbers mirror
-// src/lib/billing/catalog.json — change them THERE (catalog is the source of truth;
-// this page is marketing copy over it).
+// `.db` design language. Five columns: Self-host ($0 OSS), Cloud ($0 hosted hobby),
+// Team ($29 with SSO/RBAC), Pro ($149 with scheduled workflows/insights), Enterprise
+// (SCIM/SLA/migration). 30-day trial on every account. BYOK from day one on all tiers;
+// hosted AI credits are optional pools. Numbers mirror src/lib/billing/catalog.json —
+// change them THERE (catalog is the source of truth; this page is marketing copy over it).
 // Shared marketing metadata: canonical host, `og:`/`twitter:` tags and our X handle (see
 // marketing-seo.ts). It also fixes the title, which the root layout's `%s · Papervine` template
 // was turning into "Pricing — Papervine · Papervine". The card image is the sibling
@@ -31,7 +29,7 @@ import { PlanMatrix } from "@/components/billing/PlanMatrix";
 export const metadata: Metadata = marketingMetadata({
   title: "Pricing — Papervine",
   description:
-    "Every new account starts with 30 days of everything + 5,000 AI credits. BYOK available from day one. Free for small docs sites; Team at $29/mo with SSO & RBAC; Pro at $99/mo for production docs; Enterprise for SCIM, SLAs, and migration.",
+    "Self-host for free (OSS). Cloud free hosted hobby. Team $29/mo with SSO & RBAC. Pro $149/mo with scheduled workflows and insights. Enterprise for SCIM, SLA, and migration. 30 days of everything + 5k AI credits. BYOK from day one.",
   path: "/pricing",
 });
 

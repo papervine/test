@@ -156,8 +156,8 @@ test.describe("platform admin — plan comps", () => {
       sites: 10, editors: 25, analyticsRetentionDays: 365,
       features: {
         assistant: true, writerAgent: true, workflows: true, sso: true, rbac: true,
-        previewDeployments: true, adminApis: true, advancedInsights: true,
-        multiRepo: true, scim: false,
+        previewDeployments: true, adminApis: true, insights: true,
+        scim: false, whiteLabel: false,
       },
     });
     await sql`insert into billing_plan_version (id, plan_key, version, entitlements, included_monthly_credits, config_hash)

@@ -21,11 +21,11 @@ function row(label: string): MatrixRow {
 }
 
 describe("plan content vs. enforced catalog (drift guard)", () => {
-  it("derives card prices from prices[] (Team $29, Pro $99, annual $19/$79)", () => {
+  it("derives card prices from prices[] (Team $29, Pro $149, annual $19/$129)", () => {
     expect(PLAN_TIER_BY_KEY.team.price).toBe("$29");
     expect(PLAN_TIER_BY_KEY.team.priceNote).toContain("$19/mo billed annually");
-    expect(PLAN_TIER_BY_KEY.pro.price).toBe("$99");
-    expect(PLAN_TIER_BY_KEY.pro.priceNote).toContain("$79/mo billed annually");
+    expect(PLAN_TIER_BY_KEY.pro.price).toBe("$149");
+    expect(PLAN_TIER_BY_KEY.pro.priceNote).toContain("$129/mo billed annually");
     expect(PLAN_TIER_BY_KEY.free.price).toBe("$0");
     expect(PLAN_TIER_BY_KEY.enterprise.price).toBe("Contact us");
   });
@@ -52,11 +52,11 @@ describe("plan content vs. enforced catalog (drift guard)", () => {
     // moving SSO to a different tier in entitlements but not the matrix) fails here.
     // Note: "BYOK assistant" row is all-true (available on all plans including Free).
     // "Assistant, writing agent" row combines both features (both true on Team+, both BYOK on Free).
+    // "Scheduled workflows" row is the new workflows gate.
     const ROW_TO_FEATURE: Record<string, PlanFeatureKey> = {
-      Routines: "workflows",
+      "Scheduled workflows": "workflows",
       "Admin APIs": "adminApis",
-      "Advanced insights": "advancedInsights",
-      "Multi-repo": "multiRepo",
+      "Insights": "insights",
       "Preview deployments": "previewDeployments",
       "Role-based permissions": "rbac",
       "Dashboard SSO": "sso",

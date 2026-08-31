@@ -1,4 +1,4 @@
-import { Rocket, Users, Zap, Briefcase, type LucideIcon } from "lucide-react";
+import { Rocket, Users, Zap, Briefcase, Code, Building2, type LucideIcon } from "lucide-react";
 import rawCatalog from "./catalog.json";
 
 // Marketing view over THE catalog (catalog.json). The tier feature bullets, comparison
@@ -12,7 +12,8 @@ import rawCatalog from "./catalog.json";
 export type PlanKey = "free" | "team" | "pro" | "enterprise";
 
 // Icon names allowed in catalog.json plans[].display.icon → the lucide component.
-const ICONS: Record<string, LucideIcon> = { Rocket, Users, Zap, Briefcase };
+// 5-column layout: Selfhost (Code), Cloud/Free (Rocket), Team (Users), Pro (Zap), Enterprise (Building2)
+const ICONS: Record<string, LucideIcon> = { Rocket, Users, Zap, Briefcase, Code, Building2 };
 
 export type PlanTier = {
   key: PlanKey;
