@@ -490,7 +490,11 @@ export const WIDGET_EMBED_SCRIPT = `
     ".pv-close:hover { background: var(--pv-surface-hover); color: var(--pv-fg); }",
     ".pv-disclaimer { padding: 10px 14px; font-size: 11.5px; line-height: 1.4; color: var(--pv-muted);",
     "  text-align: center; border-bottom: 1px solid var(--pv-border); }",
-    ".pv-messages { flex: 1; overflow-y: auto; padding: 12px 14px; font-size: 14px; line-height: 1.5; }",
+    // \`overscroll-behavior: contain\` keeps a flick past the end of the transcript from
+    // chaining into the HOST page's scroll — the alternative (locking document.body while
+    // open) mutates somebody else's page, which this script never does.
+    ".pv-messages { flex: 1; overflow-y: auto; overscroll-behavior: contain;",
+    "  padding: 12px 14px; font-size: 14px; line-height: 1.5; }",
     ".pv-messages::-webkit-scrollbar { width: 8px; }",
     ".pv-messages::-webkit-scrollbar-thumb { background: var(--pv-surface-hover); border-radius: 4px; }",
     ".pv-suggestions-heading { display: flex; align-items: center; gap: 6px; font-size: 12px;",
@@ -532,6 +536,37 @@ export const WIDGET_EMBED_SCRIPT = `
     ".pv-send { border: none; background: var(--pv-accent); color: var(--pv-accent-fg); border-radius: 50%;",
     "  width: 34px; height: 34px; flex-shrink: 0; font-size: 15px; line-height: 1; cursor: pointer; }",
     ".pv-send:disabled { opacity: 0.4; cursor: default; }",
+    // MOBILE: the opened panel goes full screen, whatever variant it is. At 360-420px
+    // wide a phone has no room for a floating card — the panel ends up nearly
+    // full-bleed anyway, but with a sliver of host page around it, a shadow, and the
+    // launcher sitting on top of its own input row.
+    //
+    // Last in the stylesheet (so the non-important rules below win over the base ones)
+    // and \`!important\` on the geometry, because the panel's position is applied as an
+    // INLINE style by edgePositionCss/the panel-variant branch, and inline beats a plain
+    // stylesheet rule at any viewport. Importance is what outranks it — that's the whole
+    // reason it's here rather than in the base rule.
+    //
+    // \`100vh\` then \`100dvh\`: on iOS Safari, \`vh\` counts the area behind the URL bar, so
+    // a 100vh panel puts its input row below the fold; \`dvh\` is the visible viewport and
+    // shrinks when the keyboard opens. The pair is the progressive fallback — browsers
+    // without \`dvh\` keep the \`vh\` line.
+    "@media (max-width: 640px) {",
+    "  .pv-panel, .pv-panel.pv-variant-modal, .pv-panel.pv-variant-panel {",
+    "    position: fixed !important; top: 0 !important; right: 0 !important; bottom: 0 !important;",
+    "    left: 0 !important; width: 100% !important; max-width: 100% !important;",
+    "    height: 100vh !important; height: 100dvh !important; max-height: none !important;",
+    "    transform: none !important; border-radius: 0 !important; border-width: 0 !important;",
+    "    box-shadow: none !important; }",
+    // The launcher is appended AFTER the panel, so a sibling selector reaches it — no JS
+    // and no resize listener. Full screen means there's nothing for it to float over.
+    "  .pv-panel.open ~ .pv-launcher { display: none; }",
+    // A 16px input is the threshold below which iOS Safari zooms the page on focus —
+    // inside a full-screen panel that zoom is very visible and doesn't undo itself.
+    "  .pv-input { font-size: 16px; }",
+    // Touch target: the close button is the only way out of a full-screen panel.
+    "  .pv-close { font-size: 20px; padding: 8px; margin: -8px -4px -8px 0; }",
+    "}",
   ].join("\\n");
 
   // Yields every parsed SSE event on the wire (not just text-delta) so the caller can tell

@@ -24,6 +24,15 @@ if (!dir) {
   process.exit(2);
 }
 
+// The renderer's degrade-don't-500 notice, matched on the one phrase that identifies it
+// ("This page couldn't be fully rendered yet." — MdxNotice in packages/renderer/lib/mdx.tsx
+// and the same text in ClientMdx). Deliberately not the apostrophe: that's a typographic
+// one and may arrive HTML-escaped. This USED to be `includes("couldn") && includes("rendered")`
+// — two loose substrings, anywhere in the page — so a docs page that merely said "couldn't
+// render" in one paragraph and "rendered" in another reported itself as degraded. The false
+// positive costs a real debugging session, because the page looks perfect in a browser.
+const DEGRADED_MARKER = "be fully rendered yet";
+
 const PKG_ROOT = process.cwd();
 const CONTENT = path.resolve(dir);
 // 127.0.0.1, not localhost: on some CI runners localhost resolves to IPv6 ::1
@@ -95,6 +104,10 @@ let ok = 0,
   degraded = 0,
   err = 0;
 const failed = [];
+// Degraded pages are NAMED, not just counted: a count going 50/50 → 49/50 tells you a
+// page stopped compiling but not which one, and the notice is the renderer working as
+// designed (never a 500), so there's no stack trace to grep for either.
+const notices = [];
 try {
   await waitForReady();
   for (const slug of slugs) {
@@ -104,8 +117,10 @@ try {
       if (res.status === 500) {
         err++;
         failed.push("/" + slug);
-      } else if (body.includes("couldn") && body.includes("rendered")) degraded++;
-      else ok++;
+      } else if (body.includes(DEGRADED_MARKER)) {
+        degraded++;
+        notices.push("/" + slug);
+      } else ok++;
     } catch {
       err++;
       failed.push("/" + slug + " (request error)");
@@ -118,6 +133,7 @@ try {
 
 console.log(`  fully rendered : ${ok}`);
 console.log(`  graceful notice: ${degraded}`);
+if (notices.length) console.log("  degraded:\n" + notices.map((n) => "    " + n).join("\n"));
 console.log(`  HTTP 500       : ${err}`);
 if (failed.length) console.log("  failures:\n" + failed.map((f) => "    " + f).join("\n"));
 process.exit(err > 0 ? 1 : 0);

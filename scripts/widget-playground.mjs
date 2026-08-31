@@ -97,8 +97,12 @@ if (!alreadyConfigured) {
 }
 await sql.end();
 
+// The viewport meta is not decoration: without it a mobile browser lays the page out at
+// ~980px and scales it down, so the widget's own mobile breakpoint never matches and the
+// panel opens as a tiny floating card on a phone. Every responsive customer site has this
+// tag; the playground has to have it too, or it can't reproduce what a phone really shows.
 function page(title, body) {
-  return `<!doctype html>\n<html><head><meta charset="utf-8"></head><body>\n<h1>${title}</h1>\n${body}\n</body></html>`;
+  return `<!doctype html>\n<html><head><meta charset="utf-8">\n<meta name="viewport" content="width=device-width, initial-scale=1">\n</head><body>\n<h1>${title}</h1>\n${body}\n</body></html>`;
 }
 
 const server = http.createServer((req, res) => {

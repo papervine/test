@@ -2532,6 +2532,51 @@ precedent already in the codebase rather than inventing a new access model:
 > own docs with citations resolving to the tenant host (not the app host), the platform
 > appearance toggle re-themed the open panel without clearing the conversation, and the same
 > `Origin` with no session cookie still 403s.
+>
+> **Full screen on phones (2026-08-31).** Below 640px the opened panel takes the whole
+> viewport — every variant, ignoring `side`/`align`/`radius`. At 360–420px wide the floating
+> card was already nearly full-bleed on a phone, but with a sliver of host page around it, a
+> shadow, and the launcher parked on top of its own input row. Pure CSS in the shadow
+> stylesheet (a media query, no resize listener, so rotation is free), and the launcher hides
+> via `.pv-panel.open ~ .pv-launcher` — it's appended after the panel, so a sibling selector
+> reaches it with no JS.
+> Three details that are the actual content of the change:
+> - **`!important` is load-bearing here, not sloppiness.** The panel's position is applied as
+>   an INLINE style (`edgePositionCss`), and inline beats a plain stylesheet rule at every
+>   viewport — importance is the only thing that outranks it. A mobile rule written without it
+>   silently does nothing, which is exactly what the new e2e case asserts against (it fails on
+>   the pre-fix script with `x: 20` instead of `0`).
+> - **`height: 100vh` then `100dvh`.** On iOS Safari `vh` counts the area behind the URL bar,
+>   so a 100vh panel puts its input row below the fold; `dvh` is the visible viewport and
+>   shrinks when the keyboard opens. The pair is the fallback for browsers without `dvh`.
+> - **The input goes to 16px on mobile** — below that, iOS Safari zooms the page on focus and
+>   does not zoom back out, which inside a full-screen panel is very visible.
+> Scroll chaining is handled with `overscroll-behavior: contain` on the transcript rather than
+> locking `document.body`: this script never mutates the host page, and a lock that fails to
+> unwind leaves a customer's site unscrollable.
+> **This depends on the host page's viewport meta**, which we don't control: a page without
+> `width=device-width` is laid out at ~980px and scaled down, so no mobile breakpoint of ours
+> can match. Documented in `docs/features/assistant-widget.mdx` rather than worked around
+> (`max-device-width` is deprecated and would only make the panel fill a viewport whose text
+> is already unreadably small). It also bit the verification: `scripts/widget-playground.mjs`
+> had no viewport meta, so the first phone-emulated run showed the old floating card and looked
+> like the CSS hadn't applied — the playground and the e2e fixture pages now carry the tag,
+> because a harness without it cannot reproduce what a phone really shows.
+> *Verified in a real browser under iPhone 14 emulation against the cross-origin playground,
+> dark and light, plus a desktop viewport to confirm the floating card is unchanged.*
+>
+> **Side-finding: the crawl gate's degraded-page detector was matching prose (fixed same
+> day).** Documenting this change made `node tests/crawl.mjs docs` report 49/50 with one
+> "graceful notice" — on a page that renders perfectly. The detector was
+> `body.includes("couldn") && body.includes("rendered")`: two loose substrings, anywhere in
+> the HTML. `assistant-widget.mdx` already said "a diagram couldn't render" in one paragraph,
+> and the new mobile paragraph added the word "rendered" — so the page reported itself
+> degraded. It now matches the notice's own phrase (`be fully rendered yet`, apostrophe-free
+> so escaping can't hide it), and it PRINTS the degraded slugs instead of only counting them
+> — the count alone tells you a page stopped compiling but not which one, and there's no
+> stack trace to grep for, since a notice is the renderer working as designed. Confirmed
+> still sharp against `tests/fixtures` (correctly names `/author-violation` and
+> `/with-snippet`) and clean on `docs` (50/50) and `examples/starter` (36/36).
 
 ---
 

@@ -146,6 +146,19 @@ page embed your widget.
 </script>
 ```
 
+### On phones
+
+Below 640px wide, the opened panel goes **full screen** — every variant, whatever `side`,
+`align`, or `radius` you set. A phone has no room for a floating card, and the launcher
+hides itself while the panel is open, so nothing overlaps the input. Closing it returns
+the visitor to your page exactly where they were. There's nothing to configure.
+
+This follows the **host page's** viewport, so the page needs the standard
+`<meta name="viewport" content="width=device-width, initial-scale=1">` tag for it to kick
+in. Any responsive site already has it; a page without one is laid out at desktop width and
+scaled down on a phone, and the widget is rendered at that same desktop width along with
+the rest of the page.
+
 The floating launcher bubble itself always stays a fixed dark style regardless of
 `theme` (unless replaced by `logo`/`trigger`) — it sits on your page's own background,
 which the widget doesn't control, so it needs to read clearly against either a light or

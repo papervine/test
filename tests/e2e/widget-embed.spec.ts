@@ -41,19 +41,19 @@ test.beforeAll(async () => {
     res.writeHead(200, { "Content-Type": "text/html" });
     if (req.url === "/single-tag") {
       res.end(`<!doctype html>
-<html><body>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>
 <h1>Customer site (single tag)</h1>
 <script type="module" src="${APEX_ORIGIN}/api/widget/embed.js" data-widget-id="${widgetId}"></script>
 </body></html>`);
     } else if (req.url === "/bare") {
       res.end(`<!doctype html>
-<html><body>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>
 <h1>Customer site (bare)</h1>
 <script type="module" src="${APEX_ORIGIN}/api/widget/embed.js"></script>
 </body></html>`);
     } else {
       res.end(`<!doctype html>
-<html><body>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body>
 <h1>Customer site</h1>
 <script type="module" src="${APEX_ORIGIN}/api/widget/embed.js"></script>
 <script type="module">
@@ -189,6 +189,55 @@ test("themes and other init() options apply, and the close button closes the pan
 
   await page.locator(".pv-close").click();
   await expect(panel).not.toHaveClass(/open/);
+});
+
+test("on a phone-sized viewport the panel opens full screen and hides the launcher", async ({
+  page,
+}) => {
+  // A 360px floating card on a 390px phone is nearly full-bleed anyway, but with a sliver
+  // of host page around it and the launcher sitting on its own input row. The mobile
+  // breakpoint takes the panel to the full viewport instead. Geometry is the assertion:
+  // the panel's own CSS is applied partly as an INLINE style (edgePositionCss), so the
+  // regression this guards is an override that loses to it and silently does nothing.
+  const phone = { width: 390, height: 844 };
+  await page.setViewportSize(phone);
+  await page.goto(hostOrigin);
+
+  const launcher = page.locator(".pv-launcher");
+  await launcher.click();
+
+  const panel = page.locator(".pv-panel");
+  await expect(panel).toHaveClass(/open/);
+  const box = await panel.boundingBox();
+  expect(box).not.toBeNull();
+  expect(box!.x).toBe(0);
+  expect(box!.y).toBe(0);
+  expect(box!.width).toBe(phone.width);
+  expect(box!.height).toBe(phone.height);
+
+  // Nothing left for the launcher to float over — it would overlap the input row.
+  await expect(launcher).not.toBeVisible();
+
+  // Full screen means no card edges, and a 16px input (below that, iOS Safari zooms the
+  // page on focus and does not zoom back out).
+  const style = await panel.evaluate((el) => {
+    const cs = getComputedStyle(el);
+    const input = el.querySelector(".pv-input");
+    return {
+      radius: cs.borderTopLeftRadius,
+      inputFontSize: input ? getComputedStyle(input).fontSize : null,
+    };
+  });
+  expect(style.radius).toBe("0px");
+  expect(style.inputFontSize).toBe("16px");
+
+  // The same panel on a desktop viewport stays a floating card — a rule written without
+  // the max-width query would make every viewport full screen and still pass above.
+  await page.setViewportSize({ width: 1280, height: 800 });
+  const desktopBox = await panel.boundingBox();
+  expect(desktopBox!.width).toBeLessThan(600);
+  expect(desktopBox!.height).toBeLessThan(800);
+  await expect(launcher).toBeVisible();
 });
 
 test("renders markdown (headings, lists, links, bold/italic/code) as real DOM, not raw syntax", async ({
