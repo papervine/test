@@ -235,6 +235,13 @@ test.describe("web editor @external", () => {
       `${prefix}taskpage.mdx`,
       "---\ntitle: Tasks\n---\n\n- [ ] not done\n- [x] done\n- plain bullet\n",
     );
+    // The shared text a COLLABORATOR receives the moment someone presses Enter at the end of a
+    // task list: markdown can't express "unchecked task item with no text", so the new row is a
+    // bare `-`. Opening this page is exactly what the peer's editor does with that text.
+    await put(
+      `${prefix}emptytaskpage.mdx`,
+      "---\ntitle: Empty task\n---\n\n- [ ] asasassa\n-\n",
+    );
     await put(`${prefix}uploadpage.mdx`, "---\ntitle: Upload\n---\n\nUpload anchor line.\n");
     await put(`${prefix}failpage.mdx`, "---\ntitle: Fail\n---\n\nFail anchor line.\n");
     await put(
@@ -847,6 +854,39 @@ test.describe("web editor @external", () => {
     expect(saved, "a plain bullet grew a checkbox").toContain("\n- plain bullet");
 
     await clearDrafts(["taskpage.mdx"]);
+  });
+
+  // Reported from two browsers side by side: pressing Enter at the end of a task list gave the
+  // typist a new checkbox, while the collaborator watching saw a plain BULLET until the first
+  // letter arrived. The peer only ever sees the shared TEXT, and markdown can't say "unchecked task
+  // item with no text" — the new row is a bare `-`. Opening a page holding that text is exactly the
+  // peer's situation, which is what makes this assertable without a second browser.
+  test("a task list's still-empty row renders as a checkbox, not a bullet", async ({ page }) => {
+    await page.goto(`${sitePath(SLUG, "editor")}?slug=emptytaskpage`);
+    const pm = page.locator(".pv-visual .ProseMirror");
+    await expect(pm).toBeVisible({ timeout: 15_000 });
+
+    // Both rows: the one with text, and the empty one the author is about to type into.
+    await expect(pm.locator('li[data-checked="false"]')).toHaveCount(2);
+    await expect(pm.locator("li:not([data-checked])")).toHaveCount(0);
+    await expect(pm.locator('input[type="checkbox"]')).toHaveCount(2);
+
+    // And it stays a task row when typed into — the text becomes a real GFM task item. Reached with
+    // the keyboard: an empty <li> has no clickable text box, so clicking it just times out.
+    await pm.locator("li").first().click();
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("End");
+    await page.keyboard.type("second");
+    const draft = async () => {
+      const rows = await sql<{ content: string }[]>`
+        select content from draft_file d
+        join editor_session s on s.id = d.session_id
+        where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'emptytaskpage.mdx'`;
+      return rows[0]?.content ?? "";
+    };
+    await expect.poll(draft, { timeout: 10_000 }).toContain("- [ ] second");
+
+    await clearDrafts(["emptytaskpage.mdx"]);
   });
 
   // Backspace stops at a component's edge (SPEC §9.2). ProseMirror's default joins the block with

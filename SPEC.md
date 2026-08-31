@@ -3905,6 +3905,35 @@ layer.
 > checklists render bullet + checkbox` — and the fixture's `include` list now pins the
 > `task-list-item` class the selector depends on.
 >
+> **…and a task list's still-EMPTY row was a bullet for everyone but the author (2026-08-30).**
+> Reported with two browsers side by side: pressing Enter at the end of a task list gave the typist
+> a new checkbox, while the collaborator watching saw a plain **bullet** until the first letter
+> arrived. The typist's editor holds a `listItem` node with `checked: false`; the peer only ever
+> sees the shared TEXT — and markdown cannot say "unchecked task item with no text". Measured both
+> halves: remark-stringify writes a `checked` item with no content as a bare `-`, silently dropping
+> the flag (for `checked: true` as well), and remark-gfm won't parse `- [ ]` back as a task item
+> either, because a GFM task marker has to be followed by content. So the transient row is a plain
+> bullet in the text, and the peer rendered exactly what the text said.
+>
+> Recovered in the projection, where the intent is unambiguous: `inheritTaskItems`
+> (`to-prosemirror.ts`) gives `checked: false` to an **empty** item in a list that already has task
+> items. Deliberately narrow — a list may legitimately mix task items and plain bullets (GitHub
+> renders those, and converting them all would be its own bug) — but an *empty* plain bullet inside
+> a task list isn't a mixed list, it's a row someone is about to type into. Text round-tripping is
+> untouched: serializing it emits the same bare `-`.
+>
+> Verifying that surfaced a second, older gap in the same line of code: an item with no blocks at
+> all projected to a `listItem` with **no paragraph**, so there was nothing to put a caret in —
+> ArrowDown skipped straight past the row and typing landed in a new paragraph *below* the list
+> (found because the new e2e case tried to type into it). Same fix, and the same reasoning, as the
+> blockquote case a few lines above: an empty item gets one empty paragraph. Guarded at both layers
+> — `mdx-prosemirror-roundtrip.test.ts` (the empty row gets its checkbox, the text still
+> round-trips byte-identically, an empty item in a *non*-task list stays plain, a non-empty plain
+> bullet in a mixed list stays plain) and an `editor.spec.ts` case on a page seeded with the exact
+> text a fresh empty row produces — which is precisely the peer's situation, and is what makes it
+> assertable without a second browser. Also confirmed with two real browsers on the collab service:
+> both sides show two checkboxes, and the peer can type into the empty one.
+>
 > **`/` inside a component said "No matching blocks" (2026-08-27).** Reported as "if I run a slash
 > command inside a tab I don't get the components list." It listed all 33 blocks in a plain
 > paragraph and none inside a `<Tab>` pane — the same code, the same query (`""`), the same item

@@ -71,6 +71,37 @@ describe("GFM task lists survive byte-for-byte", () => {
     expect(doc.content[0].content?.[0]?.attrs?.checked).toBe(true);
     expect(mdxToProseMirror("- [ ] todo\n").content[0].content?.[0]?.attrs?.checked).toBe(false);
   });
+
+  // Reported from two browsers side by side: pressing Enter at the end of a task list gave the
+  // typist a new checkbox, while the collaborator watching saw a plain BULLET until the first
+  // letter arrived. Markdown can't say "unchecked task item with no text" — an empty `checked` item
+  // stringifies to a bare `-`, and `- [ ]` doesn't parse back as a task item — so the transient row
+  // is a plain bullet in the shared text, and the peer (who only ever sees the text) rendered it as
+  // one. See `inheritTaskItems` in to-prosemirror.ts.
+  it("gives a task list's still-empty item its checkbox back", () => {
+    const items = mdxToProseMirror("- [ ] asasassa\n-\n").content[0].content ?? [];
+    expect(items).toHaveLength(2);
+    expect(items[0].attrs?.checked).toBe(false);
+    expect(items[1].attrs?.checked).toBe(false);
+  });
+
+  it("still emits the same text for that empty item, so the round trip is unchanged", () => {
+    // The recovery is a projection nicety, not a text rewrite: markdown gets the same bytes back.
+    expect(norm("- [ ] asasassa\n-\n")).toBe("- [ ] asasassa\n-\n");
+  });
+
+  it("leaves an empty item alone in a list with no task items", () => {
+    const items = mdxToProseMirror("- one\n-\n").content[0].content ?? [];
+    expect(items[1]?.attrs?.checked).toBeUndefined();
+  });
+
+  it("leaves a NON-empty plain bullet alone in a mixed list", () => {
+    // A list may legitimately mix task items and plain bullets; only the empty row is ambiguous.
+    const items = mdxToProseMirror("- [ ] task\n- plain bullet\n- [x] done\n").content[0].content ?? [];
+    expect(items[0]?.attrs?.checked).toBe(false);
+    expect(items[1]?.attrs?.checked).toBeUndefined();
+    expect(items[2]?.attrs?.checked).toBe(true);
+  });
 });
 
 describe("known components parse to typed nodes and round-trip", () => {

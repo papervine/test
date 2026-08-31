@@ -138,6 +138,39 @@ function childrenBlock(node: Any, source: string): PMNode[] {
   return out;
 }
 
+/** A list item with nothing in it — no blocks, or a single empty paragraph. */
+function isEmptyListItem(item: PMNode): boolean {
+  const blocks = item.content ?? [];
+  if (blocks.length === 0) return true;
+  return blocks.length === 1 && blocks[0].type === "paragraph" && !blocks[0].content?.length;
+}
+
+/**
+ * Give a task list's still-EMPTY item its checkbox back.
+ *
+ * Markdown cannot say "unchecked task item with no text": remark-stringify writes a `checked` item
+ * with no content as a bare `-` (dropping the flag entirely), and remark-gfm won't parse `- [ ]`
+ * back as a task item either, because a GFM task marker has to be followed by content. So the item
+ * an author creates by pressing Enter at the end of a task list is a plain bullet as far as the
+ * shared text is concerned — which is invisible to the author (their editor still holds the node)
+ * and very visible to a collaborator watching them: the new row rendered as a bullet and only
+ * turned into a checkbox once the first letter arrived.
+ *
+ * Recover the intent where it can't mean anything else: an empty item in a list that HAS task items
+ * is that transient item. Deliberately narrow — a list may legitimately mix task items and plain
+ * bullets (GitHub renders those, and turning them all into checkboxes would be its own bug) — but
+ * an *empty* plain bullet inside a task list isn't a mixed list, it's a row someone is about to
+ * type into. Text-level round-tripping is unaffected: serializing it emits the same bare `-`.
+ */
+function inheritTaskItems(items: PMNode[]): PMNode[] {
+  if (!items.some((i) => typeof i.attrs?.checked === "boolean")) return items;
+  return items.map((item) =>
+    typeof item.attrs?.checked === "boolean" || !isEmptyListItem(item)
+      ? item
+      : { ...item, attrs: { ...(item.attrs ?? {}), checked: false } },
+  );
+}
+
 function raw(source: string, node: Any): PMNode {
   return { type: "mdxUnknownFlow", attrs: { raw: rawSlice(source, node) } };
 }
@@ -221,9 +254,14 @@ function blockToPM(node: Any, source: string): PMNode | PMNode[] | null {
       return {
         type: node.ordered ? "orderedList" : "bulletList",
         attrs: node.ordered ? { start: node.start ?? 1 } : {},
-        content: childrenBlock(node, source),
+        content: inheritTaskItems(childrenBlock(node, source)),
       };
-    case "listItem":
+    case "listItem": {
+      // An item with no blocks at all (`-` on its own line) is schema-invalid for the editor and
+      // has nothing to put a caret in: pressing ArrowDown into it skipped straight past the row and
+      // typing landed in a new paragraph BELOW the list. One empty paragraph makes it an item you
+      // can actually type into — the same fix, for the same reason, as the blockquote case above.
+      const blocks = childrenBlock(node, source);
       return {
         type: "listItem",
         // GFM task items carry `checked: true | false`; a plain bullet carries null. Dropping it
@@ -231,8 +269,9 @@ function blockToPM(node: Any, source: string): PMNode | PMNode[] | null {
         // rewrote it as `- thing`, losing every checkbox on the page. Null stays absent so an
         // ordinary list round-trips byte-identically.
         attrs: node.checked === null || node.checked === undefined ? {} : { checked: node.checked },
-        content: childrenBlock(node, source),
+        content: blocks.length ? blocks : [{ type: "paragraph" }],
       };
+    }
     case "code": {
       const content = node.value ? [{ type: "text", text: node.value }] : [];
       return {
