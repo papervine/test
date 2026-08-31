@@ -251,8 +251,8 @@
   "prices": [
     { "planKey": "team", "interval": "month", "unitAmountCents": 2900, "currency": "usd" },
     { "planKey": "team", "interval": "year", "unitAmountCents": 22800, "currency": "usd" },
-    { "planKey": "pro", "interval": "month", "unitAmountCents": 14900, "currency": "usd" },
-    { "planKey": "pro", "interval": "year", "unitAmountCents": 154800, "currency": "usd" }
+    { "planKey": "pro", "interval": "month", "unitAmountCents": 19900, "currency": "usd" },
+    { "planKey": "pro", "interval": "year", "unitAmountCents": 190800, "currency": "usd" }
   ],
   "creditPacks": [
     { "key": "pack-5k", "name": "5,000 credits", "credits": 5000, "priceCents": 3500 },
@@ -276,7 +276,7 @@
     },
     {
       "title": "Self-host for free; Cloud if you want auth/SSO/widget/workflows",
-      "body": "Elastic License 2.0 OSS renderer. BYOK AI from day one. Hosted credits optional, hard caps by default. Scheduled workflows at $149, not enterprise-only."
+      "body": "Elastic License 2.0 OSS renderer. BYOK AI from day one. Hosted credits optional, hard caps by default. Scheduled workflows at $199, not enterprise-only."
     },
     {
       "title": "Your docs, never locked in",

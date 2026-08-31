@@ -17,7 +17,7 @@ import { PlanMatrix } from "@/components/billing/PlanMatrix";
 
 // Pricing for the SaaS apex (SPEC §2, §10 Billing). Uses the landing page chrome +
 // `.db` design language. Five columns: Self-host ($0 OSS), Cloud ($0 hosted hobby),
-// Team ($29 with SSO/RBAC), Pro ($149 with scheduled workflows/insights), Enterprise
+// Team ($29 with SSO/RBAC), Pro ($199 with scheduled workflows/insights), Enterprise
 // (SCIM/SLA/migration). 30-day trial on every account. BYOK from day one on all tiers;
 // hosted AI credits are optional pools. Numbers mirror src/lib/billing/catalog.json —
 // change them THERE (catalog is the source of truth; this page is marketing copy over it).
@@ -29,7 +29,7 @@ import { PlanMatrix } from "@/components/billing/PlanMatrix";
 export const metadata: Metadata = marketingMetadata({
   title: "Pricing — Papervine",
   description:
-    "Self-host for free (OSS). Cloud free hosted hobby. Team $29/mo with SSO & RBAC. Pro $149/mo with scheduled workflows and insights. Enterprise for SCIM, SLA, and migration. 30 days of everything + 5k AI credits. BYOK from day one.",
+    "Self-host for free (OSS). Cloud free hosted hobby. Team $29/mo with SSO & RBAC. Pro $199/mo with scheduled workflows and insights. Enterprise for SCIM, SLA, and migration. 30 days of everything + 5k AI credits. BYOK from day one.",
   path: "/pricing",
 });
 

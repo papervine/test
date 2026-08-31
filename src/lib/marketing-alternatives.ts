@@ -90,7 +90,7 @@ export const ALTERNATIVES: Alternative[] = [
     us: true,
     bestFor: "The repo you already have, live in minutes, with SSO at $29 instead of a sales call",
     price: "Free",
-    topTier: "$149/mo (Pro)",
+    topTier: "$199/mo (Pro)",
     hosting: "Hosted or self-host",
     format: "docs.json + MDX",
     ssoOn: "$29/mo (Team)",
@@ -101,7 +101,7 @@ export const ALTERNATIVES: Alternative[] = [
       "assistant with citations, an embeddable widget for your own product, MCP servers so your " +
       "docs work inside Claude and Cursor, browser editing with an agent, and analytics that " +
       "separate human readers from crawling agents. SSO and role-based access are on the $29 " +
-      "Team plan — the category holds both for an enterprise negotiation. Pro is $149/mo for " +
+      "Team plan — the category holds both for an enterprise negotiation. Pro is $199/mo for " +
       "scheduled workflows, insights, and production limits, with optional hosted AI credit pools. " +
       "Every account starts with 30 days of everything and 5,000 credits, no card. BYOK available " +
       "from day one, and `npx papervine dev` runs the same renderer on your laptop with no database and no signup.",
@@ -321,7 +321,7 @@ export const PICKS = [
       "GitBook they\u2019re an Enterprise conversation.",
   },
   {
-    need: "Production docs at $149",
+    need: "Production docs at $199",
     answer: "Not $450/mo",
     why:
       "Pro delivers workflows, insights, and production limits without the category's typical " +
