@@ -81,19 +81,30 @@ function findGroupNode(node: unknown, name: string): Record<string, unknown> | n
  * socket service — which can't see the session — authorizes purely on the signed room claim.
  * Returns `{ disabled: true }` when collab isn't configured (no secret): the client then falls
  * back to same-browser BroadcastChannel sync, never an error.
+ *
+ * Also returns WHO the caller is, for presence (SPEC §9.2): a collaborator's caret label and
+ * roster avatar are their real name, and their colour is keyed on their user id. That has to come
+ * from the session — the client can't be trusted to name itself, and the alternative (deriving a
+ * pseudonym from the Yjs clientID) both hid who was typing and let two people collide on one
+ * name+colour. Carried on the `disabled` branch too, so the fallback roster is still honest.
  */
 export async function mintCollabTokenAction(
   orgSlug: string,
   siteSlug: string,
   branch: string,
   path: string,
-): Promise<{ token: string; room: string } | { disabled: true } | { error: string }> {
+): Promise<
+  | { token: string; room: string; user: { id: string; name: string } }
+  | { disabled: true; user: { id: string; name: string } }
+  | { error: string }
+> {
   const gate = await gateEditor(orgSlug, siteSlug);
   if ("error" in gate) return gate;
+  const user = { id: gate.userId, name: gate.userName };
   const room = `${gate.site.id}:${branch}:${path}`;
   const token = await mintCollabToken({ room, userId: gate.userId, name: gate.userName });
-  if (!token) return { disabled: true };
-  return { token, room };
+  if (!token) return { disabled: true, user };
+  return { token, room, user };
 }
 
 export async function checkoutBranchAction(

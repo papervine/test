@@ -7,8 +7,15 @@ public: true
 The editor is **collaborative**: two people (or two of your own tabs) can open the same page and
 edit it at once, in either Visual or Source mode, and see each other's changes as they happen. A
 small **presence** indicator in the editor toolbar shows who else is on the page, and in **both
-Visual and Source** mode you see each collaborator's **live cursor** — coloured and labelled with
-their name — moving as they type.
+Visual and Source** mode you see each collaborator's **live cursor** — labelled with their name and
+drawn in their own colour — moving as they type, with their selection highlighted in the same
+colour when they select a range.
+
+That colour belongs to the person, not to the session: it's derived from their account, so the
+same teammate is the same colour on every page, in every browser, tomorrow as well as today, and
+two people are never the same colour by accident. Live cursors come from the cross-machine
+collaboration service below — two tabs of *your own* browser stay in sync but don't draw cursors
+for each other.
 
 <Info>
   Collaboration is a **strict enhancement**: two of your own tabs always stay in sync, and if
@@ -35,7 +42,8 @@ Both editor modes are views onto that one text:
 <CardGroup cols={2}>
   <Card title="Same browser — always on">
     Two tabs or windows in the same browser sync instantly with zero setup, over a built-in
-    channel. Useful for editing a page while previewing it beside itself.
+    channel. Useful for editing a page while previewing it beside itself. No live cursors here —
+    the built-in channel carries the document, not each tab's cursor.
   </Card>
   <Card title="Across machines — live multiplayer">
     Two people on different devices edit the same page together, with presence and live cursors.

@@ -2,7 +2,7 @@ import { test, expect, type Locator } from "@playwright/test";
 import postgres from "postgres";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { TEST_DB_URL } from "./global-setup";
-import { ORG_SLUG, sitePath, TEST_S3 } from "./constants";
+import { ORG_SLUG, sitePath, TEST_S3, TEST_USER } from "./constants";
 
 // The web editor (SPEC §9.2/§10): the 3-panel editor on the shared authoring backend.
 // Deterministic-ish (no GitHub writes): seed a synced site + content into Postgres + MinIO,
@@ -2244,7 +2244,11 @@ test.describe("web editor @external", () => {
       // A places its caret in the document; B should render A's remote caret + name label.
       await a.locator(".pv-visual .ProseMirror").click();
       await expect(b.locator(".pv-remote-caret")).toBeVisible({ timeout: 10_000 });
-      await expect(b.locator(".pv-remote-caret-label").first()).toHaveText(/\w+/);
+      // The label is the collaborator's REAL name, from the session (collab/presence.ts) — not a
+      // pseudonym derived from the Yjs clientID, which told you nothing about who was typing and
+      // let two people collide on one name+colour. Both contexts share this suite's storageState,
+      // so the peer here is the test user themselves.
+      await expect(b.locator(".pv-remote-caret-label").first()).toHaveText(TEST_USER.name);
     } finally {
       await ctxA.close();
       await ctxB.close();

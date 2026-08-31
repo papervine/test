@@ -3171,6 +3171,78 @@ layer.
 > cosmetic. Verified across two browser profiles: bidirectional colour+name carets that track the
 > other side's selection as it moves through the doc.
 >
+> **Presence is the signed-in user, not the Yjs clientID (2026-08-30).** Both caret surfaces
+> (Source's yCollab cursors, Visual's `CollabCarets`) and the peer roster read their label + colour
+> from awareness — which was populated with a pseudonym derived from the Yjs clientID
+> (`NAMES[clientID % 8]`, e.g. "Marlin"). Two problems that only appear with real collaborators: a
+> caret told you *somebody* was typing but not who, and two people in a room could collide on the
+> same name AND colour — i.e. "see who else is editing" fails exactly when there's someone to see.
+> Identity now comes from the session: `mintCollabTokenAction` already ran the editor gate and
+> already knew the user, so it returns `user: { id, name }` alongside the room token (also on the
+> `disabled` branch, so a fallback roster is still honest), and `collab/presence.ts` maps that to
+> `{ name, color }` — the real display name, and a colour keyed on the **user id** via FNV-1a over a
+> 12-colour palette. Keying on the id (not the name) means a rename doesn't repaint someone, and the
+> colour is stable across rooms, reloads and machines: the blue caret is the same teammate tomorrow.
+> The clientID pseudonym survives only where there's no server round trip to piggyback on — the
+> same-browser BroadcastChannel path, which has no cross-machine peers to label and would otherwise
+> pay a round trip before the room's first paint. Pinned by `tests/unit/collab-presence.test.ts`
+> (determinism, id-keyed colour, distinct users, empty-name fallback, palette membership) and the
+> two-context caret case in `editor.spec.ts`, which now asserts the label is the test user's real
+> name. Verified with two seeded accounts against the real collab service: each side's caret reads
+> the other's actual name in their own colour.
+>
+> **A pre-sync local write doubled the whole page — the settle gate (2026-08-30).** Reported from
+> real use: with two people in a document, **refreshing either screen saved the page doubled up on
+> itself**. Mechanism, and it's a one-liner once seen: the panes render immediately from the
+> server-rendered draft (`VisualEditor` is deliberately NOT gated on `ready`), so the Visual
+> editor's mount-time projection fires `onChange` → `binding.setText(wholeDraft)` **before the room
+> has synced** — and a freshly-opened room's `Y.Text` is still empty at that instant, because the
+> server's copy is a network hop away. `textDiff("", wholeDraft)` is therefore "insert the entire
+> document", and when the server state lands moments later Yjs merges two independent insertions:
+> two copies, converged on both clients, autosaved into the draft. Alone in a room it's invisible —
+> the room really is empty, so that insert IS the seed — which is exactly why it only showed with
+> someone else already in the page.
+>
+> Fixed by extracting the panes' write path into `collab/shared-text.ts` (`createSharedText`) with a
+> **settle gate**: a local write before `settle()` (called by `useCollabDoc` in `onSynced`, after the
+> seed decision) is **held, then applied only if it's safe to**. "Safe" has an exact meaning, and the
+> first attempt got it wrong in an instructive way: dropping held writes outright also fixed the
+> doubling, but silently ate anything typed in the first few hundred ms after opening a page — which
+> `editor.spec.ts`'s node-view cases caught immediately (they type the instant the editor appears),
+> failing 7–9 of 35 against a **0-failure baseline** on the same commit. So: a pane's write is a
+> whole-document snapshot of the text it rendered from, so if the room settles holding exactly that
+> baseline, the difference between them is nothing but what the user typed — apply it, nothing lost.
+> If the room settles holding anything else a peer is ahead of us, and splicing our stale snapshot
+> would wipe their edits — drop it, and let the pane adopt the settled text (which it already does
+> on `ready`). Applying a held write also **notifies the change listeners**, because the panes set
+> their state from the text as it stood when the room settled — before that splice — so without it
+> the person who typed is the only one still looking at the older projection (observed: the peer's
+> screen and the draft had the characters, the typist's own Visual pane didn't until the next edit).
+> The legitimate empty-room seed goes through `shared.seed()`, which carries the local origin so the
+> seeding client doesn't hear its own seed as a remote change.
+>
+> Pinned by `tests/unit/collab-shared-text.test.ts` over real Y.Docs — the doubling regression, both
+> lossless cases (we seeded / a peer settled on the same baseline), the drop-when-a-peer-is-ahead
+> case, the settle notification, and a counterfactual that performs the old ungated insert and
+> asserts it DOES double, so the gate can't be "simplified" away. Verified in a real browser with
+> two seeded accounts against the real collab service: four refreshes with the peer connected keep
+> the content at exactly one copy (it doubled per refresh before), and typing immediately after a
+> refresh lands in both screens, the shared text and the draft.
+>
+> > **Still open — concurrent typing in Visual mode crashes the pane.** Two users typing in the
+> > same page at the same time (post-settle, so unrelated to the gate above — reproduced with the
+> > gate disabled too) drop both `<VisualEditor>`s into their error boundary. The thrown error is an
+> > MDX **parse** error — `Expected a closing tag for <CardGroup>` — i.e. the interleaved splices
+> > produce a transiently invalid intermediate document, and the projection parses it and throws.
+> > Two separable problems: (1) the editor should never crash on unparseable MDX — the renderer's
+> > own "degrade, don't 500" rule (§7) applies here, so the projection should keep the last good doc
+> > and re-project when the text is valid again; (2) underneath it, the Visual pane serializes the
+> > WHOLE document and splices it, so two clients' whole-document diffs fight instead of
+> > CRDT-merging (which is why Source mode, bound straight to `Y.Text` via yCollab, is unaffected) —
+> > that one is a design change, not hardening. Reproducible in ~60s with two Playwright contexts on
+> > two seeded accounts typing simultaneously. Until (1) lands, multi-user *Visual* editing of one
+> > page shouldn't be recommended to customers; Source mode is fine.
+>
 > **Links in the Visual editor follow *inside* the editor (2026-08-09).** Bug: clicking any link
 > in Visual mode left the editor for a 404. The editor is a control-plane surface on the **app
 > host**, so a docs link (`/quickstart`, or a `<Card href>` — the node views render the real
