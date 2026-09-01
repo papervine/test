@@ -6,6 +6,8 @@ import { repoTokenForSite } from "./github-token";
 import { revalidateSite } from "./s3-source";
 import { syncErrorDetail } from "./sync-error";
 import { openDeployment, resolveDeployment, markSiteLive } from "./deployment-log";
+import { liveContentPrefix } from "./revisions";
+import { pruneSiteRevisions } from "./revision-store";
 
 type SiteRow = typeof siteTable.$inferSelect;
 
@@ -100,6 +102,10 @@ export async function runSync(
       token,
       isPrivate: site.isPrivate,
       docsPath: site.docsPath,
+      // Build a NEW revision named for this deployment, carrying forward from whatever is
+      // live now. Nothing readers can see changes until markSiteLive flips the pointer below.
+      revisionId: deploymentId,
+      fromPrefix: liveContentPrefix(site),
     });
     revalidateSite(site.id); // serve fresh content immediately, not the pre-sync copy
   } catch (e) {
@@ -120,6 +126,9 @@ export async function runSync(
     ok: Boolean(result),
     commitSha: commit?.sha ?? null,
     commitMessage: deploymentMessage(trigger, commit, result),
+    // Only on success: a failed sync wrote a partial revision that was never pointed at, and
+    // advertising it would offer a Roll back to a tree we deliberately never published.
+    revisionId: result ? deploymentId : null,
     error,
     filesAdded: isConnect ? (result?.files ?? 0) : 0,
     // Re-syncs now record what actually changed (the diff), not the whole file count —
@@ -140,7 +149,14 @@ export async function runSync(
   if (result) {
     // A commit-less sync (a manual re-pull) falls back to the deployment id as the
     // dedupe ref — stable if this same run is retried, unlike the old random fallback.
-    await markSiteLive(site, { commitSha: commit?.sha ?? null, fallbackRef: deploymentId });
+    // The revision id is that same deployment id: this is the atomic moment the freshly
+    // written tree becomes the live one.
+    await markSiteLive(site, {
+      commitSha: commit?.sha ?? null,
+      revisionId: deploymentId,
+      fallbackRef: deploymentId,
+    });
+    await pruneSiteRevisions(site.id, deploymentId);
   }
 
   return { result, error, commitSha: commit?.sha ?? null };

@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { getSiteByCustomDomain } from "@/lib/tenant";
 import { getObjectBytes } from "@/lib/storage";
+import { isServableAssetPath, liveContentPrefix } from "@/lib/revisions";
 
 // Streams a custom-domain site's static assets from object storage — the by-host
 // analogue of /api/tenant-asset/{slug}/…. The middleware rewrites asset requests on a
@@ -17,11 +18,15 @@ export async function GET(
   if (!record) return new NextResponse("Not found", { status: 404 });
 
   // In "Host at /docs" mode assets come through prefixed with the docs subpath
-  // (assetBase = /docs); strip it back to the object key under sites/{id}/.
+  // (assetBase = /docs); strip it back to the docs-relative object path.
   let path = (await params).path;
   if (record.customDomainSubpath && path[0] === "docs") path = path.slice(1);
 
-  const obj = await getObjectBytes(`sites/${record.id}/${path.join("/")}`);
+  const relPath = path.join("/");
+  // Same guard as the slug proxy: sidecars are bookkeeping, not public assets.
+  if (!isServableAssetPath(relPath)) return new NextResponse("Not found", { status: 404 });
+
+  const obj = await getObjectBytes(`${liveContentPrefix(record)}${relPath}`);
   if (!obj) return new NextResponse("Not found", { status: 404 });
 
   return new NextResponse(obj.body, {

@@ -44,9 +44,12 @@ describe("canDelete", () => {
 });
 
 describe("planResourceCleanup", () => {
-  it("always sweeps a site's storage prefix", () => {
+  // BOTH trees: the live/legacy content prefix and every retained revision. Revisions live
+  // outside sites/{id}/ so the asset proxy can never reach history — which means a single
+  // sweep of the old prefix would leave every rolled-back copy of a deleted site behind.
+  it("sweeps both the content prefix and the revision history", () => {
     expect(planResourceCleanup([{ id: "abc", customDomain: null }])).toEqual({
-      storagePrefixes: ["sites/abc/"],
+      storagePrefixes: ["sites/abc/", "revs/abc/"],
       domainsToDetach: [],
     });
   });
@@ -55,7 +58,7 @@ describe("planResourceCleanup", () => {
     expect(
       planResourceCleanup([{ id: "abc", customDomain: "docs.example.com" }]),
     ).toEqual({
-      storagePrefixes: ["sites/abc/"],
+      storagePrefixes: ["sites/abc/", "revs/abc/"],
       domainsToDetach: ["docs.example.com"],
     });
   });
@@ -66,7 +69,14 @@ describe("planResourceCleanup", () => {
       { id: "s2", customDomain: null },
       { id: "s3", customDomain: "docs.three.com" },
     ]);
-    expect(plan.storagePrefixes).toEqual(["sites/s1/", "sites/s2/", "sites/s3/"]);
+    expect(plan.storagePrefixes).toEqual([
+      "sites/s1/",
+      "revs/s1/",
+      "sites/s2/",
+      "revs/s2/",
+      "sites/s3/",
+      "revs/s3/",
+    ]);
     expect(plan.domainsToDetach).toEqual(["docs.one.com", "docs.three.com"]);
   });
 

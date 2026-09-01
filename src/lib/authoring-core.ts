@@ -22,6 +22,7 @@ import { isNativeSite } from "./site-source";
 import { publishNative } from "./native-publish";
 import type { PublishResult } from "./publish-mode";
 import { recordPageVersions } from "./page-history-store";
+import { liveContentPrefix } from "./revisions";
 
 const PAGE_EXTS = [".mdx", ".md"];
 
@@ -96,7 +97,7 @@ export async function resolvePagePath(
       const draft = await getDraftFile(session.id, path);
       if (draft) return { path, raw: draft.deleted ? null : draft.content };
     }
-    const raw = await getObjectText(`sites/${site.id}/${path}`);
+    const raw = await getObjectText(`${liveContentPrefix(site)}${path}`);
     if (raw !== null) return { path, raw };
   }
   return { path: `${normalized}.mdx`, raw: null };
@@ -109,7 +110,7 @@ export async function resolveBasePage(site: SiteRow, slug: string): Promise<{ pa
   const normalized = clean === "" || clean === "/" ? "index" : clean;
   for (const ext of PAGE_EXTS) {
     const path = `${normalized}${ext}`;
-    const raw = await getObjectText(`sites/${site.id}/${path}`);
+    const raw = await getObjectText(`${liveContentPrefix(site)}${path}`);
     if (raw !== null) return { path, raw };
   }
   return { path: `${normalized}.mdx`, raw: null };
@@ -123,7 +124,7 @@ export async function resolveDraftFile(site: SiteRow, branch: string, path: stri
     const draft = await getDraftFile(session.id, path);
     if (draft) return draft.deleted ? null : draft.content;
   }
-  return getObjectText(`sites/${site.id}/${path}`);
+  return getObjectText(`${liveContentPrefix(site)}${path}`);
 }
 
 /** Buffer an edit to one file (auto-checks-out the branch if no session is open yet). */
@@ -183,8 +184,8 @@ export async function listSessionChanges(site: SiteRow, branch: string): Promise
       // An uploaded asset is classified by whether the live key EXISTS, not by reading it — the
       // text path would pull a whole video into memory just to decide "added" vs "modified".
       const exists = d.binary
-        ? (await headObject(`sites/${site.id}/${d.path}`)) !== null
-        : (await getObjectText(`sites/${site.id}/${d.path}`)) !== null;
+        ? (await headObject(`${liveContentPrefix(site)}${d.path}`)) !== null
+        : (await getObjectText(`${liveContentPrefix(site)}${d.path}`)) !== null;
       return { path: d.path, content: d.content, status: exists ? "modified" : "added" };
     }),
   );

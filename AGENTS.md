@@ -631,6 +631,18 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   by both `playwright.config.ts` and the specs, so there's one definition to be right. A
   defaulted env read in a spec is a smell: prefer an imported constant, since the default is the
   only branch that ever runs.
+- **A spec that seeds a site row with raw SQL must use a run-unique slug — the row is cached for
+  60s and only `revalidateSiteRow` busts it.** `getSiteBySlug` wraps its query in
+  `unstable_cache` tagged `site-row:slug:{slug}` with `SITE_ROW_TTL = 60`; every *product*
+  mutation goes through `markSiteLive`/`revalidateSiteRow`, but an `INSERT` from a spec doesn't.
+  So re-running a spec inside that window renders the PREVIOUS run's row — which, for
+  `rollback.spec.ts`, named a content revision that run had since rolled away from, and the very
+  first assertion failed on content the test itself had just written. It reads as a broken render
+  path; it's a stale row. A run-scoped slug (`` `rollback-tenant-${randomUUID().slice(0, 8)}` ``)
+  sidesteps the cache entirely by changing the key. **Same shape, second trap:** revision prefixes
+  are *immutable by contract* and the content cache keys on the revision id, so a spec that reuses
+  a revision id while changing the bytes underneath is served the old bytes forever — correctly.
+  Scope those per run too.
 - **An order-dependent e2e assertion passes alone and fails in the file.** The publish-toast spec
   asserted the `"No open edit session for this branch."` message, which is only true when no
   earlier test in the file has opened one — and each load-then-type test does. Opening the editor

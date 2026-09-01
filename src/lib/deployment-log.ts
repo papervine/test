@@ -21,10 +21,18 @@ import { fireContentUpdateAutomations } from "./automations/runs";
 /**
  * What put content live. `'connect' | 'manual' | 'webhook'` are syncs (see `SyncTrigger`);
  * `'publish'` is an editor publish on a Papervine-hosted site and `'create'` is the seeding
- * of a new one. Mirrored in the `deployment.trigger` column comment, and rendered by
+ * of a new one. `'rollback'` restores an earlier deployment's revision — it writes no content
+ * at all, just flips the live pointer, which is why it's a trigger rather than a status.
+ * Mirrored in the `deployment.trigger` column comment, and rendered by
  * `triggerLabel`/`triggerDetail` in overview.ts.
  */
-export type DeploymentTrigger = "connect" | "manual" | "webhook" | "publish" | "create";
+export type DeploymentTrigger =
+  | "connect"
+  | "manual"
+  | "webhook"
+  | "publish"
+  | "create"
+  | "rollback";
 
 /**
  * Record a 'building' deployment row BEFORE any slow or fallible work, and nudge the
@@ -71,6 +79,13 @@ export async function resolveDeployment(
     ok: boolean;
     commitMessage: string;
     commitSha?: string | null;
+    /**
+     * The revision this deployment put live. Normally its own id; for a **rollback**, the
+     * revision of the deployment being restored — which is what lets the feed say what each
+     * row is actually serving, and lets a later row offer to restore it in turn.
+     * Omitted (undefined) leaves the column alone, so a failed run keeps whatever it had.
+     */
+    revisionId?: string | null;
     error?: string | null;
     filesAdded?: number;
     filesEdited?: number;
@@ -82,6 +97,7 @@ export async function resolveDeployment(
     .set({
       status: input.ok ? "successful" : "failed",
       commitSha: input.commitSha ?? null,
+      ...(input.revisionId !== undefined ? { revisionId: input.revisionId } : {}),
       commitMessage: input.commitMessage,
       error: input.error ?? null,
       filesAdded: input.filesAdded ?? 0,
@@ -96,11 +112,19 @@ export async function resolveDeployment(
  * Promote a site to live after its content actually landed in object storage, and make
  * readers see it.
  *
- * THE `updatedAt` bump lives here and nowhere else, because it is load-bearing: the render
- * path's content-cache version key is `${lastSyncedCommitSha ?? ""}:${updatedAt}` (see
- * request-source.ts), so without the bump a re-sync of the same commit — or ANY publish on
- * a Papervine-hosted site, whose sha is null forever, making updatedAt the entire key —
- * keeps serving the pre-publish copy indefinitely.
+ * THE pointer flip and the `updatedAt` bump both live here and nowhere else, because they are
+ * load-bearing.
+ *
+ * The flip (`liveRevisionId`) is what makes a deploy ATOMIC — the revision is fully written
+ * first, so this single UPDATE is the instant every reader moves from the old tree to the new
+ * one. It's equally the whole of rollback: point it at an older revision and that's the restore.
+ *
+ * The `updatedAt` bump still matters for the sites that have no revision yet, where the
+ * content-cache version key remains `${lastSyncedCommitSha ?? ""}:${updatedAt}` (see
+ * `contentVersion` in revisions.ts) — without it a re-sync of the same commit, or ANY publish on
+ * a Papervine-hosted site (whose sha is null forever, making updatedAt the entire key), keeps
+ * serving the pre-publish copy indefinitely. It also drives the 60s site-row cache and OG-card
+ * re-scrapes on every site, so it is not redundant once revisions exist.
  *
  * Revalidation is best-effort and must not fail a publish whose bytes are already written:
  * `revalidateTag` needs a Next request context, and this is reachable from a Trigger.dev
@@ -113,6 +137,20 @@ export async function markSiteLive(
   opts: {
     /** Synced head sha; null for a Papervine-hosted publish, which has no commit. */
     commitSha?: string | null;
+    /**
+     * The content revision to SERVE from here on (SPEC §10.11) — `revs/{site}/{revision}/`.
+     *
+     * This is the pointer flip, and putting it in the same UPDATE as everything else is what
+     * makes a deploy atomic: the tree is fully written before this runs, so no reader can
+     * observe a half-published site the way they could when writes landed in the live prefix.
+     * It is also the whole of rollback — restoring an older deployment passes ITS revision here
+     * and nothing else moves.
+     *
+     * Omit it only for a legacy no-revision path; `undefined` leaves the column untouched
+     * rather than nulling it, so a caller that doesn't know about revisions can't silently
+     * demote a site back to the flat prefix.
+     */
+    revisionId?: string | null;
     /**
      * Fan out to the site's enabled content_update automations. Pass `false` from an
      * automation's OWN publish: the fan-out dedupes on `automationRef`, and a hosted
@@ -135,6 +173,9 @@ export async function markSiteLive(
     .set({
       status: "live",
       lastSyncedCommitSha: opts.commitSha ?? null,
+      // The pointer flip. `undefined` is spread away by Drizzle, so a caller that passes no
+      // revision leaves the column as it was — see the option's docstring.
+      ...(opts.revisionId !== undefined ? { liveRevisionId: opts.revisionId } : {}),
       updatedAt: new Date(),
       // Mark the generated skill.md stale (SPEC §9.1) — MARK, not regenerate. A publish is a
       // cheap signal that something MIGHT have changed; the sweep fingerprints the site and

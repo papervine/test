@@ -8,6 +8,7 @@ import { db } from "./db";
 import { putObject } from "./storage";
 import { site } from "./db/app-schema";
 import { s3Source } from "./s3-source";
+import { contentVersion, liveContentPrefix } from "./revisions";
 import { isExecutorConfigured } from "./automations/executor";
 import {
   buildSkillPrompt,
@@ -48,7 +49,7 @@ export async function generateSkillForSite(
 ): Promise<SkillRunResult> {
   if (!aiConfigured()) return { status: "skipped", reason: "no-ai" };
 
-  const src = s3Source(row.id, `${row.lastSyncedCommitSha ?? ""}:${row.updatedAt.toISOString()}`);
+  const src = s3Source(row.id, contentVersion(row), liveContentPrefix(row));
 
   return contentContext.run(src, async () => {
     // An author's own file wins outright — we neither overwrite it nor publish a rival.

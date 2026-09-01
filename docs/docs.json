@@ -48,6 +48,7 @@
             "group": "Publish",
             "pages": [
               "guides/publishing",
+        "guides/rollbacks",
               "guides/social-cards",
               "guides/custom-domain",
               "control-plane/exports"

@@ -71,6 +71,17 @@ session (storageState) so specs start authenticated.
   `--grep-invert @external` and stay deterministic.
 </Warning>
 
+<Warning>
+  **Seeding a site row with raw SQL? Give it a run-unique slug.** Site rows are cached for 60
+  seconds, and only a mutation going through the product's own code busts that cache — a plain
+  `INSERT` from a spec doesn't. Re-running within the window renders the *previous* run's row,
+  which reads as a broken render path rather than a stale cache.
+
+  The same applies to content revisions: a revision is immutable by contract and the content
+  cache keys on its id, so reusing an id while changing the bytes underneath serves the old
+  bytes indefinitely — correctly. Scope both per run.
+</Warning>
+
 ## Real-repo crawl
 
 ```bash

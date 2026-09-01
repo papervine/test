@@ -3,6 +3,7 @@ import { requirePlatformAdmin } from "@/lib/dashboard-context";
 import { db } from "@/lib/db";
 import { site } from "@/lib/db/app-schema";
 import { s3Source } from "@/lib/s3-source";
+import { contentVersion, liveContentPrefix } from "@/lib/revisions";
 import { loadSkills } from "@/lib/skills-source";
 import { timeAgo } from "@/lib/overview";
 import { AdminPage, Empty, PageHead, Table, Td, Th } from "../ui";
@@ -36,7 +37,7 @@ export default async function AdminSkillsPage() {
   // cache hits rather than a fan-out of reads.
   const authored = new Map<string, number>();
   for (const row of rows) {
-    const src = s3Source(row.id, `${row.lastSyncedCommitSha ?? ""}:${row.updatedAt.toISOString()}`);
+    const src = s3Source(row.id, contentVersion(row), liveContentPrefix(row));
     // Explicit source, not the ambient one: this loop is a single request over many sites, and
     // the package's cached readers are keyed by argument alone (see loadSkills).
     const skills = await loadSkills(src).catch(() => []);

@@ -15,6 +15,7 @@ import {
 } from "./github";
 import { listKeys, getObjectText } from "./storage";
 import { repoEmptiness, planConversion } from "./git-conversion";
+import { liveContentPrefix } from "./revisions";
 import { runSync } from "./sync-runner";
 import { isNativeSite } from "./site-source";
 
@@ -106,8 +107,9 @@ export async function handOverToGit(
   }
 
   // The site's live content, straight out of storage.
-  const keys = await listKeys(`sites/${s.id}/`);
-  const plan = planConversion(s.id, keys, docsPath);
+  const prefix = liveContentPrefix(s);
+  const keys = await listKeys(prefix);
+  const plan = planConversion(prefix, keys, docsPath);
   if (plan.length === 0) {
     return { ok: false, error: "This site has no published content yet — publish a page in Studio first." };
   }

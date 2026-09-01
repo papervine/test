@@ -69,17 +69,18 @@ export type ConversionFile = { storageKey: string; repoPath: string };
 /**
  * Map the site's storage objects to the repo paths they'll be committed at.
  *
- * Storage keys are `sites/{id}/{docs-relative path}`; the repo path re-adds `docsPath` when
- * the site is destined for a subdirectory. Our own sidecars (`.manifest.json`,
+ * Storage keys are `{live prefix}{docs-relative path}` — a `revs/{id}/{rev}/` tree, or the flat
+ * `sites/{id}/` on a site that predates revisions; the caller passes whichever is live so a
+ * handover always commits what readers actually see, INCLUDING after a rollback. The repo path
+ * re-adds `docsPath` when the site is destined for a subdirectory. Our own sidecars (`.manifest.json`,
  * `.dimensions.json`) are sync bookkeeping, not content, and must never be committed — a
  * hosted site has none, but a git-backed one would, and this runs on whatever storage holds.
  */
 export function planConversion(
-  siteId: string,
+  prefix: string,
   storageKeys: readonly string[],
   docsPath = "",
 ): ConversionFile[] {
-  const prefix = `sites/${siteId}/`;
   const files: ConversionFile[] = [];
   for (const key of storageKeys) {
     if (!key.startsWith(prefix)) continue;

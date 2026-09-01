@@ -46,13 +46,19 @@ const CACHE = { revalidate: 3600 } as const; // version-keyed on sync; TTL ages 
 // This is the production read path (SPEC §3.1 model C) — no GitHub at request time.
 // Every read goes through the Data Cache (tagged per site), so warm requests do no R2.
 //
-// `version` is the site's synced head sha (`lastSyncedCommitSha`). Folding it into the cache
-// key makes invalidation content-addressed: a new sync writes a new key, so the render path
-// picks up fresh content WITHOUT depending on `revalidateTag` — which the push webhook can't
-// rely on, since its sync runs in `after()` (see `revalidateSite`). The caller reads the live
-// site row (`getSiteBySlug` is per-request `cache()`, never stale), so the sha is always current.
-export function s3Source(siteId: string, version = ""): ContentSource {
-  const prefix = `sites/${siteId}/`;
+// `version` identifies the content being served — the live revision id, or on a pre-revision
+// site the legacy `sha:updatedAt` key (see `contentVersion` in src/lib/revisions.ts). Folding it
+// into the cache key makes invalidation content-addressed: a deploy writes a new key, so the
+// render path picks up fresh content WITHOUT depending on `revalidateTag` — which the push
+// webhook can't rely on, since its sync runs in `after()` (see `revalidateSite`). The caller
+// reads the live site row (`getSiteBySlug` is per-request `cache()`, never stale), so it's current.
+//
+// `prefix` is where those bytes live — `liveContentPrefix(site)`, which is a `revs/{id}/{rev}/`
+// tree on a revision-backed site and the legacy flat `sites/{id}/` on one that hasn't deployed
+// since revisions landed. It's a parameter rather than derived here because the same reader
+// serves both, and because rollback is nothing more than pointing it somewhere else.
+export function s3Source(siteId: string, version = "", prefixOverride?: string): ContentSource {
+  const prefix = prefixOverride ?? `sites/${siteId}/`;
   const tag = siteContentTag(siteId);
 
   const readConfigRaw = unstable_cache(
@@ -145,8 +151,12 @@ async function readConfigRawUncached(prefix: string): Promise<string | null> {
 /** Has this site been synced to storage yet? Reads the same cached config blob loadConfig does.
  *  Version-keyed like `s3Source` so a fresh sync isn't masked by a cached `false` — without it,
  *  the first connect caches "not synced" for the full TTL and the site 404s for up to an hour. */
-export async function isSynced(siteId: string, version = ""): Promise<boolean> {
-  const prefix = `sites/${siteId}/`;
+export async function isSynced(
+  siteId: string,
+  version = "",
+  prefixOverride?: string,
+): Promise<boolean> {
+  const prefix = prefixOverride ?? `sites/${siteId}/`;
   const readConfigRaw = unstable_cache(
     () => readConfigRawUncached(prefix),
     ["s3-config", siteId, version],

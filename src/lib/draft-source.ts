@@ -40,8 +40,15 @@ export function isPagePath(path: string): boolean {
 // nav — without this each leaf would re-query the session row).
 const resolveSession = cache((siteId: string, branch: string) => findOpenSession(siteId, branch));
 
-export function draftSource(siteId: string, branch: string, baseVersion = ""): ContentSource {
-  const base = s3Source(siteId, baseVersion);
+export function draftSource(
+  siteId: string,
+  branch: string,
+  baseVersion = "",
+  basePrefix?: string,
+): ContentSource {
+  // The published base a draft sits on top of is whatever is LIVE right now — including after a
+  // rollback, so an editor opened on a rolled-back site diffs against what readers actually see.
+  const base = s3Source(siteId, baseVersion, basePrefix);
 
   return {
     // Distinct from the s3Source it wraps: the same request renders both (a draft page beside the

@@ -1,5 +1,6 @@
 import "server-only";
-import { putObject, getObjectText, deleteKeys, listKeys } from "./storage";
+import { putObject, getObjectText, listKeys, copyObject } from "./storage";
+import { revisionPrefix, planRevisionWrite, runPool, COPY_CONCURRENCY } from "./revisions";
 import { ghHeaders, getRef } from "./github";
 import { imageSize } from "image-size";
 import {
@@ -16,17 +17,20 @@ import {
 
 const API = "https://api.github.com";
 
-// Per-site sync manifest: maps each synced docs file (docs-relative path) to its GitHub
-// blob SHA, so the next sync skips bytes whose content is unchanged and deletes files that
-// vanished from the repo. The dot-name keeps it out of the render path (it's not a docs
-// file), and it lives under the site prefix so a site delete sweeps it with everything else.
-const manifestKey = (id: string) => `sites/${id}/.manifest.json`;
+// Per-revision sync manifest: maps each synced docs file (docs-relative path) to its GitHub
+// blob SHA, so the next sync skips bytes whose content is unchanged and drops files that
+// vanished from the repo. The dot-name keeps it out of the render path (it's not a docs file),
+// and it lives INSIDE the revision it describes — which is what makes rollback coherent: after
+// restoring an older revision the next sync diffs against THAT tree's manifest automatically,
+// so it re-fetches exactly what's needed to move forward again rather than trusting a manifest
+// describing a tree nobody is serving.
+const manifestKey = (prefix: string) => `${prefix}.manifest.json`;
 
 // Sibling of the blob manifest: each raster image's pixel dimensions (docs-relative path →
 // {width,height}), measured once at sync time so the render path can give next/image real
 // dimensions without re-fetching every image per request. Same dot-name convention keeps it
-// out of the render path and under the site prefix (swept on site delete).
-const dimensionsKey = (id: string) => `sites/${id}/.dimensions.json`;
+// out of the render path, and same per-revision placement.
+const dimensionsKey = (prefix: string) => `${prefix}.dimensions.json`;
 
 // Read an image's pixel dimensions from its raw bytes. Header-only (image-size never decodes
 // the full image), and any failure — truncated/corrupt/unknown encoding — yields null so the
@@ -67,8 +71,16 @@ type SyncSite = {
   isPrivate?: boolean;
   // Normalized subdirectory the docs live in (see normalizeDocsPath); "" = repo root.
   // We resolve and sync only this subtree and store paths relative to it, so the render
-  // path always finds sites/{id}/docs.json no matter where the config lived in the repo.
+  // path always finds docs.json at the revision root no matter where the config lived.
   docsPath?: string;
+  // The revision this sync BUILDS — the deployment id (SPEC §10.11). Content is written to
+  // `revs/{id}/{revisionId}/` and nothing serves it until `markSiteLive` flips the pointer,
+  // so a killed sync leaves an orphan tree rather than a torn live site.
+  revisionId: string;
+  // The revision this sync builds FROM: the site's current live prefix. Supplies the manifest
+  // to diff against and the unchanged bytes to carry forward. On a site that predates revisions
+  // this is the legacy flat prefix, which is how such a site migrates on its next sync.
+  fromPrefix: string;
 };
 
 type TreeEntry = { path: string; type: string; sha: string };
@@ -170,8 +182,8 @@ async function fetchContent(
   throw new Error(`Could not read ${ref.repoPath} after ${MAX_ATTEMPTS} attempts (${detail})`);
 }
 
-async function loadManifest(id: string): Promise<Record<string, string>> {
-  const text = await getObjectText(manifestKey(id));
+async function loadManifest(prefix: string): Promise<Record<string, string>> {
+  const text = await getObjectText(manifestKey(prefix));
   if (!text) return {};
   try {
     const parsed = JSON.parse(text);
@@ -181,8 +193,8 @@ async function loadManifest(id: string): Promise<Record<string, string>> {
   }
 }
 
-async function loadDimensions(id: string): Promise<Record<string, ImageDim>> {
-  const text = await getObjectText(dimensionsKey(id));
+async function loadDimensions(prefix: string): Promise<Record<string, ImageDim>> {
+  const text = await getObjectText(dimensionsKey(prefix));
   if (!text) return {};
   try {
     const parsed = JSON.parse(text);
@@ -193,7 +205,7 @@ async function loadDimensions(id: string): Promise<Record<string, ImageDim>> {
 }
 
 /**
- * Copy a repo's docs (config + MDX + assets) into object storage under sites/{id}/… — the
+ * Copy a repo's docs (config + MDX + assets) into a NEW immutable revision — the
  * copy-on-sync step of SPEC §3.
  *
  * Strategy (the fast path, after two slower iterations — see SPEC §3): enumerate ONLY the
@@ -201,9 +213,10 @@ async function loadDimensions(id: string): Promise<Record<string, ImageDim>> {
  * diff its blob SHAs against the last sync's manifest, then pull just the changed/new files
  * and PUT them to storage in one high-concurrency pool that overlaps download and upload.
  * Content comes from the raw.githubusercontent CDN for public repos and the authenticated
- * blobs API for private ones (see fetchContent). Cost scales with the *diff*, not repo size:
- * a first connect pulls everything; a re-sync moves only what changed and deletes what
- * vanished. The token never reaches the browser or the render path.
+ * blobs API for private ones (see fetchContent). **GitHub** cost still scales with the *diff*,
+ * not repo size: a first connect pulls everything; a re-sync fetches only what changed, and
+ * everything else is carried into the new revision with a server-side copy that never leaves
+ * the storage provider. The token never reaches the browser or the render path.
  *
  * The earlier per-file approach was N tree-walk round-trips (slow); the tarball that
  * replaced it downloaded+gunzipped the *entire* repo to harvest a docs/ subdir (a private
@@ -228,7 +241,7 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
     throw new Error(`docs tree of ${owner}/${name}@${branch} is too large to enumerate (truncated)`);
   }
   // Recursive listing of a subtree yields docs-relative paths already (no prefix to strip),
-  // so the storage key is sites/{id}/{path} directly and the render path resolves as usual.
+  // so the storage key is {revision prefix}{path} directly and the render path resolves as usual.
   const blobs: Blob[] = tree
     .filter((e) => e.type === "blob" && isSyncablePath(e.path))
     .map((e) => ({ path: e.path, sha: e.sha }));
@@ -238,9 +251,10 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
   //    sweep vanished ones. Listing the bucket (one paginated LIST) makes sync self-healing
   //    — the manifest can never permanently hide a missing file (drift), so a plain re-sync
   //    repairs storage with no manual manifest surgery.
-  const prior = await loadManifest(id);
-  const prefix = `sites/${id}/`;
-  const stored = new Set((await listKeys(prefix)).map((k) => k.slice(prefix.length)));
+  const fromPrefix = site.fromPrefix;
+  const toPrefix = revisionPrefix(id, site.revisionId);
+  const prior = await loadManifest(fromPrefix);
+  const stored = new Set((await listKeys(fromPrefix)).map((k) => k.slice(fromPrefix.length)));
   const { fetch: toFetch, manifest, stale } = planSync(blobs, prior, stored);
 
   // 3) Pipeline fetch→upload in one worker pool (not fixed batches, which stall on their
@@ -261,7 +275,7 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
       const b = toFetch[next++];
       const repoPath = docsPath ? `${docsPath}/${b.path}` : b.path;
       const data = await fetchContent(owner, name, { isPrivate, commitSha: head.commitSha, repoPath, blobSha: b.sha }, token);
-      const key = `sites/${id}/${b.path}`;
+      const key = `${toPrefix}${b.path}`;
       if (isAssetPath(b.path)) {
         await putObject(key, new Uint8Array(data), mimeForPath(b.path));
         if (isRasterImagePath(b.path)) {
@@ -276,14 +290,31 @@ export async function syncSite(site: SyncSite): Promise<SyncResult> {
   };
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, toFetch.length) }, worker));
 
-  // 4) Sweep files that disappeared from the repo, then persist the manifests LAST — so a
-  //    crash mid-sync leaves the previous manifest and the next run re-reconciles in full.
-  if (stale.length) await deleteKeys(stale.map((p) => `sites/${id}/${p}`));
-  const priorDims = await loadDimensions(id);
+  // 4) Carry forward every unchanged file from the previous revision with a server-side copy
+  //    (the bytes never enter this process). Nothing is DELETED anywhere: a file that vanished
+  //    from the repo is simply absent from the new manifest, so it isn't copied and the new
+  //    revision doesn't contain it — while the old revision keeps it, intact, to roll back to.
+  //    That's why `stale` no longer drives a `deleteKeys`; it only feeds the dimension merge.
+  //
+  //    Copying from `manifest` rather than from `stored` is deliberate: it carries exactly this
+  //    revision's file set, so orphaned objects from an older crash don't propagate forward.
+  //    A manifest path missing from storage (drift) is already in `toFetch`, so nothing is lost.
+  const { copies } = planRevisionWrite({
+    fromPrefix,
+    toPrefix,
+    keep: Object.keys(manifest),
+    written: toFetch.map((b) => b.path),
+  });
+  await runPool(copies, COPY_CONCURRENCY, (c) => copyObject(c.from, c.to));
+
+  // 5) Persist the sidecars LAST, inside the new revision. A crash before this point leaves an
+  //    incomplete revision that nothing points at — invisible, and swept by GC — rather than a
+  //    half-updated live tree. This is the atomicity the flat prefix could never offer.
+  const priorDims = await loadDimensions(fromPrefix);
   const fetchedRasterPaths = toFetch.filter((b) => isRasterImagePath(b.path)).map((b) => b.path);
   const dimensions = mergeAssetDimensions(priorDims, fetchedRasterPaths, measured, stale);
-  await putObject(manifestKey(id), JSON.stringify(manifest), "application/json");
-  await putObject(dimensionsKey(id), JSON.stringify(dimensions), "application/json");
+  await putObject(manifestKey(toPrefix), JSON.stringify(manifest), "application/json");
+  await putObject(dimensionsKey(toPrefix), JSON.stringify(dimensions), "application/json");
 
   return { files: blobs.length, uploaded };
 }

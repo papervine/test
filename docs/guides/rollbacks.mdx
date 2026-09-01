@@ -1,0 +1,76 @@
+---
+title: Rolling back
+description: Restore a previous version of your site in seconds when a change goes wrong — no rebuild, nothing lost.
+public: true
+---
+
+Something went live that shouldn't have. A broken link everywhere, a half-finished page, a
+paragraph that named a customer. You want the previous version back, now — not after you've
+found the right commit, reverted it, and waited for a build.
+
+**Roll back.** Your site serves the previous version again within seconds.
+
+## How to roll back
+
+<Steps>
+  <Step title="Open the site's Overview">
+    Every successful deployment is listed in the **Activity** feed, newest first.
+  </Step>
+  <Step title="Expand the version you want back">
+    Click a row to see its details — when it went out, who published it, how long it took, and
+    which commit it came from.
+  </Step>
+  <Step title="Click Roll back, and confirm">
+    Within seconds, readers are served that version again.
+  </Step>
+</Steps>
+
+Rolling back is available to organization owners and admins.
+
+## Why it's instant
+
+Each deployment leaves behind a complete, unchanged copy of your site as it was at that
+moment. Rolling back doesn't rebuild anything, re-read your repository, or undo a commit — it
+points your site back at a copy that already exists.
+
+That's also why it's safe. **Nothing is deleted when you roll back.** The version you're
+leaving stays exactly where it was, so you can roll *forward* to it again the same way. A
+rollback is itself recorded in the Activity feed, so the history shows who restored what and
+when.
+
+## After you roll back
+
+Your site is now serving something older than its newest deployment, so the Overview shows a
+banner saying so. It stays until a new deployment replaces it.
+
+<Warning>
+  On a Git-backed site, rolling back does **not** change your repository. Your default branch
+  still contains the content you just rolled away from, and the next push will deploy it —
+  replacing the rollback.
+
+  Treat a rollback as the thing you do *first*: stop the bleeding, then fix the content properly
+  and push. On a [Papervine-hosted site](/guides/start-from-scratch) there's no repository, so
+  publishing from Studio is what replaces it.
+</Warning>
+
+## What you can and can't roll back to
+
+A deployment offers a **Roll back** button when all of these are true:
+
+- **It succeeded.** A failed deployment never went live, so there's nothing to restore.
+- **It isn't already what you're serving.** Restoring the current version would do nothing.
+- **Its copy is still kept.** The most recent 20 deployments per site are retained; older ones
+  are cleaned up.
+- **It's a live deployment,** not a branch preview.
+
+Anything older than the retention window is gone for good, but its content still lives in your
+repository's history on a Git-backed site.
+
+## Rolling back one page instead
+
+A rollback restores your **whole site** — every page, your navigation, and your images
+together — to how it was at that deployment.
+
+To put back a single page without touching the rest, use
+[version history in Studio](/control-plane/editor#version-history) instead. That restores the
+page into your draft, so you can look at it before publishing.

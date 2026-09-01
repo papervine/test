@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // vi.mock is hoisted above top-level vars, so shared state the factories close over must be
 // created with vi.hoisted too.
 const { storage, store, log, calls, dbState } = vi.hoisted(() => ({
-  storage: { putObject: vi.fn(), deleteKeys: vi.fn(), listKeys: vi.fn() },
+  storage: { putObject: vi.fn(), deleteKeys: vi.fn(), listKeys: vi.fn(), copyObject: vi.fn() },
   store: {
     session: null as null | { id: string },
     drafts: [] as Array<{ path: string; content: string; deleted: boolean }>,
@@ -70,16 +70,19 @@ beforeEach(() => {
 });
 
 describe("publishNative", () => {
-  it("writes the drafts into the site's storage prefix and reports the file count", async () => {
+  it("writes the drafts into a NEW revision named for the deployment", async () => {
     const res = await publishNative(site, "main");
     expect(res).toEqual({ ok: true, mode: "native", files: 1, deploymentId: "dep1" });
-    expect(calls).toContain("put:sites/s1/index.mdx");
+    // Not the live prefix: nothing a reader can see moves until markSiteLive flips the pointer.
+    expect(calls).toContain("put:revs/s1/dep1/index.mdx");
+    expect(calls.some((c) => c.startsWith("put:sites/"))).toBe(false);
   });
 
   // THE ordering invariant: docs.json is the navigation, so publishing it before the pages
-  // it references would leave readers with sidebar entries that 404 for the width of the
-  // write window. Deletes go last, after the new config has stopped referencing them.
-  it("writes pages, then docs.json, then deletes", async () => {
+  // it references would leave readers with sidebar entries that 404. With revisions the whole
+  // tree is invisible until the flip, so this is now belt-and-braces — but it's free, and it
+  // still protects the legacy-prefix path a site takes on its very first revision.
+  it("writes pages, then docs.json", async () => {
     store.drafts = [
       { path: "docs.json", content: "{}", deleted: false },
       { path: "index.mdx", content: "# Hi", deleted: false },
@@ -90,11 +93,23 @@ describe("publishNative", () => {
     await publishNative(site, "main");
 
     const order = calls.filter((c) => c.startsWith("put:") || c.startsWith("delete:"));
-    expect(order).toEqual([
-      "put:sites/s1/index.mdx",
-      "put:sites/s1/docs.json",
-      "delete:sites/s1/gone.mdx",
-    ]);
+    expect(order).toEqual(["put:revs/s1/dep1/index.mdx", "put:revs/s1/dep1/docs.json"]);
+  });
+
+  // A tombstoned page is dropped by OMISSION — it just isn't carried into the new revision.
+  // Deleting it would destroy the very bytes a rollback needs.
+  it("never deletes anything, and does not carry a tombstoned page forward", async () => {
+    store.drafts = [{ path: "gone.mdx", content: "", deleted: true }];
+    storage.listKeys.mockResolvedValue(["sites/s1/gone.mdx", "sites/s1/kept.mdx"]);
+
+    await publishNative(site, "main");
+
+    expect(calls.some((c) => c.startsWith("delete:"))).toBe(false);
+    expect(storage.copyObject).toHaveBeenCalledWith("sites/s1/kept.mdx", "revs/s1/dep1/kept.mdx");
+    expect(storage.copyObject).not.toHaveBeenCalledWith(
+      expect.anything(),
+      "revs/s1/dep1/gone.mdx",
+    );
   });
 
   // Without this the publish is invisible: updatedAt is the ENTIRE content-cache version
@@ -105,6 +120,28 @@ describe("publishNative", () => {
     expect(log.markSiteLive).toHaveBeenCalledWith(
       site,
       expect.objectContaining({ fireAutomations: true, fallbackRef: "dep1" }),
+    );
+  });
+
+  // The flip is the publish. Without the revision id the tree is written and then never
+  // pointed at — a publish that silently does nothing.
+  it("flips the live pointer to the revision it just wrote", async () => {
+    await publishNative(site, "main");
+    expect(log.markSiteLive).toHaveBeenCalledWith(
+      site,
+      expect.objectContaining({ revisionId: "dep1" }),
+    );
+  });
+
+  // THE bug this pair exists to prevent: the site row can name a revision while the DEPLOYMENT
+  // row doesn't, and everything still looks fine — the right content is served, the feed renders,
+  // nothing errors. It only shows up as a Roll back button that never appears anywhere, because
+  // `canRollBack` reads the deployment row. Both writes, or neither.
+  it("records the revision on the deployment row too, not just the site", async () => {
+    await publishNative(site, "main");
+    expect(log.resolveDeployment).toHaveBeenCalledWith(
+      "dep1",
+      expect.objectContaining({ ok: true, revisionId: "dep1" }),
     );
   });
 

@@ -23,6 +23,7 @@ export async function getActivityFeed(
       filesAdded: deployment.filesAdded,
       filesEdited: deployment.filesEdited,
       trigger: deployment.trigger,
+      revisionId: deployment.revisionId,
       durationMs: deployment.durationMs,
       createdAt: deployment.createdAt,
       actorName: user.name,

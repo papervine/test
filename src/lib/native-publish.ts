@@ -3,7 +3,15 @@ import { and, desc, eq } from "drizzle-orm";
 import { db } from "./db";
 import { site as siteTable, deployment } from "./db/app-schema";
 import { findOpenSession, listDraftFiles, closeSession } from "./draft-store";
-import { putObject, deleteKeys, listKeys, copyObject } from "./storage";
+import { putObject, listKeys, copyObject } from "./storage";
+import {
+  liveContentPrefix,
+  planRevisionWrite,
+  revisionPrefix,
+  runPool,
+  COPY_CONCURRENCY,
+} from "./revisions";
+import { pruneSiteRevisions } from "./revision-store";
 import { recordPageVersions } from "./page-history-store";
 import { planNativePublish } from "./native-publish-plan";
 import { openDeployment, resolveDeployment, markSiteLive } from "./deployment-log";
@@ -25,13 +33,20 @@ type SiteRow = typeof siteTable.$inferSelect;
  * there would force every existing test of it to mock modules it doesn't exercise.
  * `authoring-core` imports this; this must never import `authoring-core`.
  *
- * **Guarantee: at-least-once and retry-safe, not atomic.** There is no transaction across N
- * object writes, so we (a) write pages before `docs.json` before deletes, so a partial
- * publish never leaves navigation pointing at pages that aren't there, and (b) leave the
- * session OPEN on failure, so the drafts survive and re-publishing is idempotent. The worst
- * observable outcome is a page still serving its previous content — never a 500. True
- * atomicity needs a content-addressed prefix plus a pointer flip, which would also fix the
- * long-standing concurrent-sync race; noted in SPEC, not built here.
+ * **Guarantee: ATOMIC as of revisions (SPEC §10.11).** A publish builds a whole new immutable
+ * tree at `revs/{id}/{deployment}/` and then flips `site.liveRevisionId` in one UPDATE, so a
+ * reader is served either the entire old revision or the entire new one — never a half-written
+ * mixture, which is what writing into the live prefix used to risk. A crash before the flip
+ * leaves an orphan tree nobody points at (GC sweeps it) and the session stays OPEN, so the
+ * drafts survive and re-publishing is idempotent.
+ *
+ * Nothing is ever deleted: a tombstoned draft is simply not carried into the new revision. That
+ * is what makes the previous revision a complete tree to roll back to.
+ *
+ * The remaining race is a LOST UPDATE, not a torn tree: two concurrent publishes build separate
+ * revisions and the later flip wins, discarding the other's work rather than interleaving with
+ * it. The `syncInFlight` window below still guards the common case; `pg_advisory_xact_lock`
+ * (SPEC §3) is still the real fix.
  */
 export async function publishNative(
   site: SiteRow,
@@ -54,9 +69,10 @@ export async function publishNative(
   if (drafts.length === 0) return { ok: false, error: "No changes to publish." };
 
   // INTERIM concurrency guard, reusing the mechanism the Re-sync button and Git settings
-  // already use rather than inventing a second one: two publishes interleaving over the
-  // same storage prefix can leave a reader a torn tree. A `building` row older than the
-  // window is an orphaned killed run and must not block publishing forever.
+  // already use rather than inventing a second one. Revisions removed the torn-tree failure
+  // mode this was written for; what's left is two publishes racing to flip the pointer, where
+  // the loser's work is silently discarded. A `building` row older than the window is an
+  // orphaned killed run and must not block publishing forever.
   const [building] = await db
     .select({ createdAt: deployment.createdAt })
     .from(deployment)
@@ -77,31 +93,48 @@ export async function publishNative(
   });
 
   try {
-    // One list call to classify added-vs-modified for the feed, rather than a getObjectText
-    // per file the way listSessionChanges does.
-    const existingKeys = new Set(await listKeys(`sites/${site.id}/`));
-    const plan = planNativePublish(site.id, drafts, existingKeys, session.id);
+    // Build a NEW revision rather than overwriting the live one. Nothing here is visible to a
+    // reader until markSiteLive flips the pointer below, which is what finally makes a hosted
+    // publish atomic — the phased ordering that used to be a damage-limitation measure is now
+    // just belt-and-braces, and a crash leaves an orphan tree nobody points at.
+    const fromPrefix = liveContentPrefix(site);
+    const toPrefix = revisionPrefix(site.id, deploymentId);
+
+    // One list call: classifies added-vs-modified for the feed AND supplies the carry-forward
+    // set, rather than a getObjectText per file the way listSessionChanges does.
+    const existingPaths = new Set(
+      (await listKeys(fromPrefix)).map((k) => k.slice(fromPrefix.length)).filter(Boolean),
+    );
+    const plan = planNativePublish(toPrefix, drafts, existingPaths, session.id);
 
     // Phase 1: pages and assets. Phase 2: the config, so nav never precedes its pages.
-    // Phase 3: removals, which the new config has already stopped referencing — so a crash
-    // between phases leaves orphaned objects (invisible to the renderer) rather than
-    // sidebar entries that 404.
     await Promise.all([
       ...plan.puts.map((w) => putObject(w.key, w.content, w.contentType)),
       // Uploaded assets: a server-side copy, so the bytes never travel through this process.
       ...plan.copies.map((c) => copyObject(c.from, c.to)),
     ]);
     for (const w of plan.configPuts) await putObject(w.key, w.content, w.contentType);
-    if (plan.deletes.length) await deleteKeys(plan.deletes);
+
+    // Phase 3: carry forward everything this publish didn't touch. A tombstoned draft is simply
+    // absent from the new revision — there is no delete anywhere, which is exactly why the
+    // previous revision remains a complete, rollback-able tree.
+    const { copies: carried } = planRevisionWrite({
+      fromPrefix,
+      toPrefix,
+      keep: [...existingPaths],
+      written: plan.writtenPaths,
+      removed: plan.removedPaths,
+    });
+    await runPool(carried, COPY_CONCURRENCY, (c) => copyObject(c.from, c.to));
 
     // One version row per changed page (SPEC §10.11), from the same plan that just wrote the
-    // objects — a hosted publish overwrites in place, so this is the only record that the
-    // previous content ever existed. After the writes and never allowed to throw: losing a
-    // history row is a far smaller problem than a publish that reports failure once the bytes
-    // are already live.
+    // objects. Revisions now retain the previous bytes too, but this stays: it's PER-PAGE
+    // history for the editor's History panel (restore one page into a draft), a different
+    // granularity from restoring a whole deployment. Never allowed to throw — losing a history
+    // row is a far smaller problem than a publish that reports failure once bytes are written.
     await recordPageVersions({
       siteId: site.id,
-      pages: plan.puts.map((w) => ({ path: w.key.slice(`sites/${site.id}/`.length), content: w.content })),
+      pages: plan.puts.map((w) => ({ path: w.key.slice(toPrefix.length), content: w.content })),
       actorUserId: opts.actorUserId ?? null,
       deploymentId,
     });
@@ -114,13 +147,18 @@ export async function publishNative(
     // visible at all. The deployment id is the automation dedupe ref: stable across a retry
     // of this publish, unlike the random fallback that would let an automation re-fire.
     await markSiteLive(site, {
+      revisionId: deploymentId,
       fireAutomations: opts.origin !== "automation",
       fallbackRef: deploymentId,
     });
+    await pruneSiteRevisions(site.id, deploymentId);
     await resolveDeployment(deploymentId, {
       siteId: site.id,
       ok: true,
       commitMessage: message,
+      // The revision this publish built and just pointed the site at. Without it the row
+      // can't offer a Roll back later — the site would serve revisions it has no record of.
+      revisionId: deploymentId,
       filesAdded: plan.added,
       filesEdited: plan.modified,
       durationMs: Date.now() - startedAt,

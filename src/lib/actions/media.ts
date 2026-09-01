@@ -6,6 +6,7 @@ import { checkoutBranch } from "@/lib/authoring-core";
 import type { SiteRow } from "@/lib/dashboard-context";
 import { headObject, listKeys, presignPut } from "@/lib/storage";
 import { mimeForPath } from "@/lib/sync-plan";
+import { liveContentPrefix } from "@/lib/revisions";
 import {
   UPLOAD_KINDS,
   draftAssetKey,
@@ -58,7 +59,7 @@ export async function requestMediaUpload(input: {
   if ("error" in check) return check;
 
   const sessionId = await sessionFor(gate.site, branch, gate.userId);
-  const taken = await existingMediaPaths(gate.site.id, sessionId);
+  const taken = await existingMediaPaths(gate.site, sessionId);
   const path = uploadTargetPath(kind, filename, taken);
   if (!path) return { error: "That file type isn't supported here." };
 
@@ -111,21 +112,24 @@ export async function listSiteMedia(input: {
   if ("error" in gate) return gate;
 
   const session = await findOpenSession(gate.site.id, branch);
-  const published = await publishedPaths(gate.site.id);
+  const published = await publishedPaths(gate.site);
   const draft = session
     ? (await listDraftFiles(session.id)).map((f) => ({ path: f.path, deleted: f.deleted }))
     : [];
   return { files: mergeMediaListing(kind, published, draft) };
 }
 
-async function publishedPaths(siteId: string): Promise<string[]> {
-  const prefix = `sites/${siteId}/`;
+/** Just the shape the prefix helper needs — the gate hands us a full SiteRow. */
+type MediaSite = { id: string; liveRevisionId: string | null };
+
+async function publishedPaths(site: MediaSite): Promise<string[]> {
+  const prefix = liveContentPrefix(site);
   return (await listKeys(prefix)).map((k) => k.slice(prefix.length));
 }
 
 /** Paths already in use, so a new upload gets a suffix instead of overwriting one. */
-async function existingMediaPaths(siteId: string, sessionId: string): Promise<string[]> {
-  const published = await publishedPaths(siteId);
+async function existingMediaPaths(site: MediaSite, sessionId: string): Promise<string[]> {
+  const published = await publishedPaths(site);
   const draft = (await listDraftFiles(sessionId)).map((f) => f.path);
   return [...published, ...draft];
 }

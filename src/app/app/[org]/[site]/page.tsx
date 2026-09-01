@@ -11,6 +11,7 @@ import { requireSite } from "@/lib/dashboard-context";
 import { canSeeFeature } from "@/lib/features";
 import { siteBase } from "@/lib/dashboard-nav";
 import { hasGitRepo, isNativeSite } from "@/lib/site-source";
+import { isRolledBack } from "@/lib/revisions";
 import { getActivityFeed } from "@/lib/activity-feed";
 import { feedParam, parseFeedTarget, timeAgo } from "@/lib/overview";
 import { ActivityFeed } from "@/components/app/ActivityFeed";
@@ -86,6 +87,10 @@ export default async function SiteOverview({
 
   const feedTarget = parseFeedTarget((await searchParams).feed);
   const feed = await getActivityFeed(activeSite.id, feedTarget);
+  // Computed off the LIVE feed specifically: the Previews tab has its own revisions and would
+  // otherwise make a site look rolled back whenever you switched tabs.
+  const rolledBack =
+    feedTarget === "live" && isRolledBack(activeSite, feed);
 
   const isLive = activeSite.status === "live";
   // First sync still in flight (connect runs it in the background): show the "assembling"
@@ -255,6 +260,21 @@ export default async function SiteOverview({
         </div>
       </section>
 
+      {/* Serving something older than the newest successful deploy (SPEC §10.11). Worth a
+          standing banner rather than a toast: a rollback is a state you can sit in for days,
+          and on a Git site the repo still holds the newer content — so say what happens next
+          instead of leaving someone to discover it when their next push "undoes" the fix. */}
+      {rolledBack && (
+        <div className="mt-6 rounded-xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
+          <p className="text-sm text-[var(--fg)]">This site is rolled back.</p>
+          <p className="mt-0.5 text-xs text-[var(--muted)]">
+            {hasGitRepo(activeSite)
+              ? "You're serving an earlier deployment. Your repository still has the newer content, so the next push will deploy it and replace this rollback."
+              : "You're serving an earlier deployment. Publishing from Studio will replace it."}
+          </p>
+        </div>
+      )}
+
       <section className="mt-10">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-medium text-[var(--muted)]">Activity</h2>
@@ -294,6 +314,7 @@ export default async function SiteOverview({
           initialRows={feed}
           repoUrl={repoUrl}
           siteId={activeSite.id}
+          liveRevisionId={activeSite.liveRevisionId}
         />
       </section>
     </div>

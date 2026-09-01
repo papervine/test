@@ -143,8 +143,8 @@ async function findId(table, column, value) {
 
 // Object storage client (MinIO locally) — same env as src/lib/storage.ts. The seed runs
 // under plain `node`, so it can't import the TS sync module; this mirrors src/lib/sync.ts
-// (keep the two in step). We copy the repo into sites/{id}/… exactly as a real connect does,
-// so isSynced() is true and the render path reads everything — config, pages, assets — from us.
+// (keep the two in step). We copy the repo into the site's live revision exactly as a real
+// deploy does, so isSynced() is true and the render path reads everything from us.
 const s3 = new S3Client({
   region: process.env.S3_REGION ?? "auto",
   endpoint: process.env.S3_ENDPOINT,
@@ -165,7 +165,7 @@ const RASTER_EXT = /\.(png|jpe?g|webp|avif|bmp)$/i;
  * Same uploads and same `.dimensions.json` manifest as the GitHub path, so what the renderer
  * reads is identical — only the transport differs.
  */
-async function syncFromDisk({ id, dir }) {
+async function syncFromDisk({ dir, prefix }) {
   const files = [];
   (function walk(current) {
     for (const entry of readdirSync(current, { withFileTypes: true })) {
@@ -193,7 +193,7 @@ async function syncFromDisk({ id, dir }) {
     await s3.send(
       new PutObjectCommand({
         Bucket: S3_BUCKET,
-        Key: `sites/${id}/${rel}`,
+        Key: `${prefix}${rel}`,
         Body: isAsset ? new Uint8Array(bytes) : bytes.toString("utf8"),
         ContentType: isAsset ? undefined : "text/plain; charset=utf-8",
       }),
@@ -202,7 +202,7 @@ async function syncFromDisk({ id, dir }) {
   await s3.send(
     new PutObjectCommand({
       Bucket: S3_BUCKET,
-      Key: `sites/${id}/.dimensions.json`,
+      Key: `${prefix}.dimensions.json`,
       Body: JSON.stringify(dimensions),
       ContentType: "application/json",
     }),
@@ -222,7 +222,7 @@ async function syncFromDisk({ id, dir }) {
  * `PAPERVINE_STARTER_DIR` overrides it with a local directory for offline work or when the
  * unauthenticated GitHub rate limit bites — at the cost of not exercising sync.
  */
-async function syncToStorage({ id, repoOwner, repoName, branch }) {
+async function syncToStorage({ repoOwner, repoName, branch, prefix }) {
   const localDir = process.env.PAPERVINE_STARTER_DIR;
   if (localDir && repoOwner === "papervine" && repoName === "starter") {
     return syncFromDisk({ id, dir: path.resolve(localDir) });
@@ -265,7 +265,7 @@ async function syncToStorage({ id, repoOwner, repoName, branch }) {
     await s3.send(
       new PutObjectCommand({
         Bucket: S3_BUCKET,
-        Key: `sites/${id}/${f.path}`,
+        Key: `${prefix}${f.path}`,
         Body: body,
         ContentType: isAsset
           ? (res.headers.get("content-type") ?? undefined)
@@ -278,7 +278,7 @@ async function syncToStorage({ id, repoOwner, repoName, branch }) {
   await s3.send(
     new PutObjectCommand({
       Bucket: S3_BUCKET,
-      Key: `sites/${id}/.dimensions.json`,
+      Key: `${prefix}.dimensions.json`,
       Body: JSON.stringify(dimensions),
       ContentType: "application/json",
     }),
@@ -305,23 +305,29 @@ async function wipeDb() {
   }
   console.log(`• reset: truncated ${wipe.length} tables (kept the billing catalog)`);
 }
-// The content bucket only holds seed-regenerable site content (`sites/<id>/…`); clearing it
-// keeps orphaned blobs from piling up as site ids change across reseeds. Non-fatal.
+// The content bucket only holds seed-regenerable site content; clearing it keeps orphaned
+// blobs from piling up as site ids change across reseeds. Non-fatal.
+//
+// BOTH prefixes: `revs/<id>/<revision>/…` is where deploys write now (SPEC §10.11), and
+// `sites/<id>/…` is the pre-revision layout still held by sites that haven't redeployed.
+// Missing `revs/` here would leave every reseed's revision trees behind forever.
 async function wipeStorage() {
   let removed = 0;
-  let token;
-  do {
-    const list = await s3.send(
-      new ListObjectsV2Command({ Bucket: S3_BUCKET, Prefix: "sites/", ContinuationToken: token }),
-    );
-    const objs = (list.Contents ?? []).map((o) => ({ Key: o.Key }));
-    if (objs.length) {
-      await s3.send(new DeleteObjectsCommand({ Bucket: S3_BUCKET, Delete: { Objects: objs } }));
-      removed += objs.length;
-    }
-    token = list.IsTruncated ? list.NextContinuationToken : undefined;
-  } while (token);
-  console.log(`• reset: cleared ${removed} objects under sites/ in ${S3_BUCKET}`);
+  for (const prefix of ["sites/", "revs/"]) {
+    let token;
+    do {
+      const list = await s3.send(
+        new ListObjectsV2Command({ Bucket: S3_BUCKET, Prefix: prefix, ContinuationToken: token }),
+      );
+      const objs = (list.Contents ?? []).map((o) => ({ Key: o.Key }));
+      if (objs.length) {
+        await s3.send(new DeleteObjectsCommand({ Bucket: S3_BUCKET, Delete: { Objects: objs } }));
+        removed += objs.length;
+      }
+      token = list.IsTruncated ? list.NextContinuationToken : undefined;
+    } while (token);
+  }
+  console.log(`• reset: cleared ${removed} objects under sites/ and revs/ in ${S3_BUCKET}`);
 }
 await wipeDb();
 try {
@@ -444,27 +450,47 @@ for (const s of DEV.sites) {
 
   // Sync the repo into our object storage so the render path serves config, pages, AND
   // assets (logos/images) from us — never GitHub at request time.
+  //
+  // Into a REVISION (SPEC §10.11), exactly where a real deploy writes, with the site pointed
+  // at it below. Seeding the pre-revision flat prefix instead would still render (the null
+  // pointer falls back to it), but it would give dev a layout production no longer produces —
+  // and no revision to roll back to.
+  const seedRevisionId = randomUUID();
+  let synced = false;
   try {
     // `dir` sites come from this checkout (the dogfood docs) rather than GitHub — the same
     // upload path PAPERVINE_STARTER_DIR uses, so what the renderer reads is identical.
+    const prefix = `revs/${siteId}/${seedRevisionId}/`;
     const files = s.dir
-      ? await syncFromDisk({ id: siteId, dir: path.resolve(s.dir) })
+      ? await syncFromDisk({ dir: path.resolve(s.dir), prefix })
       : await syncToStorage({
-          id: siteId,
           repoOwner: s.repoOwner,
           repoName: s.repoName,
           branch: s.branch,
+          prefix,
         });
     console.log(`  ↳ synced ${files} files into object storage`);
+    synced = true;
   } catch (e) {
     console.warn(`  ↳ sync failed for ${s.slug}: ${e.message} — docs won't render until re-synced`);
   }
 
   await sql`delete from deployment where site_id = ${siteId}`;
+  // The newest successful LIVE row owns the revision we just wrote, so the feed's top entry
+  // is the one actually being served. The rest stay revision-less: they're synthetic rows with
+  // no bytes behind them, and `canRollBack` correctly offers them no button rather than
+  // promising a restore that would empty the site.
+  let claimed = false;
   for (const d of feed) {
-    await sql`insert into deployment (id, site_id, status, target, commit_sha, commit_message, error, files_added, files_edited, actor_user_id, created_at)
-              values (${randomUUID()}, ${siteId}, ${d.status}, ${d.target}, ${randomUUID().slice(0, 7)}, ${d.msg},
-                      ${d.err}, ${d.added}, ${d.edited}, ${userId}, ${d.at})`;
+    const isLiveRevision =
+      synced && !claimed && d.status === "successful" && d.target === "live";
+    if (isLiveRevision) claimed = true;
+    await sql`insert into deployment (id, site_id, status, target, commit_sha, commit_message, error, files_added, files_edited, actor_user_id, revision_id, created_at)
+              values (${isLiveRevision ? seedRevisionId : randomUUID()}, ${siteId}, ${d.status}, ${d.target}, ${randomUUID().slice(0, 7)}, ${d.msg},
+                      ${d.err}, ${d.added}, ${d.edited}, ${userId}, ${isLiveRevision ? seedRevisionId : null}, ${d.at})`;
+  }
+  if (synced) {
+    await sql`update site set live_revision_id = ${seedRevisionId} where id = ${siteId}`;
   }
 }
 console.log(`• seeded ${DEV.sites.length} sites + ${feed.length} activity rows each`);

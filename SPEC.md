@@ -1417,10 +1417,18 @@ PAT field — public repos stay zero-config on any deployment. See `.env.example
 > promptly) but is no longer load-bearing. This also fixed a latent first-connect bug where
 > `isSynced` cached `false` for the full TTL. Regression: `tests/unit/s3-source-version.test.ts`.
 
-> **Known limitation — no sync queue/lock (2026-06-12).** `runSync` has no mutual exclusion:
-> two concurrent runs on the same site (a manual Re-sync during an in-flight webhook sync, or
-> two pushes in quick succession) both fetch + upload to the **same object-storage prefix**, so
-> their writes interleave and a reader can briefly see a torn tree. The live Activity feed
+> **Known limitation — no sync queue/lock (2026-06-12; half-fixed 2026-09-01).** `runSync` has no
+> mutual exclusion: two concurrent runs on the same site (a manual Re-sync during an in-flight
+> webhook sync, or two pushes in quick succession) race.
+>
+> **The torn tree is gone.** Since immutable revisions landed (§10.11), each run writes its own
+> `revs/{id}/{deployment}/` tree and publishes it with a single pointer flip, so a reader is
+> always served one complete revision. What's left is a **lost update** — the later flip wins and
+> the other run's work is discarded — which is a strict improvement but still wrong. Everything
+> below still applies to that.
+>
+> Originally: both runs fetched + uploaded to the **same object-storage prefix**, so
+> their writes interleaved and a reader could briefly see a torn tree. The live Activity feed
 > (§10.3) makes in-flight syncs visible, which *invites* a mid-build Re-sync — so as an interim
 > guard, **`resyncSite` refuses while a sync is in flight** (a `building` row younger than the
 > ~5-min function ceiling; older is treated as an orphaned timed-out run so it can't block
@@ -5629,6 +5637,74 @@ domains/§2, workflows/§10.2), not new capability. Layout, top to bottom:
 > variant). Not yet wired: *Open editor* (the §10 web-editor is still a "soon" surface), and
 > "suppress the banner once a workflow is configured" (Workflows aren't built, §10.2).
 
+> **Status 2026-09-01 — instant rollbacks, on immutable revisions.** Every successful deploy now
+> writes a complete, immutable content tree at **`revs/{site}/{deployment}/`** and then flips
+> **`site.live_revision_id`** to it. Restoring an earlier deployment is therefore a *pointer
+> flip* — one UPDATE, no rebuild, no GitHub round-trip, no bytes copied. The Activity feed grows
+> a **Roll back** button in each successful live row's detail panel.
+>
+> **Why this shape, and why now.** §10.11 already named "a content-addressed prefix
+> (`sites/{id}/@{rev}/`) + a pointer flip" as the deferred fix for the non-atomic hosted publish,
+> and §3's "no sync queue/lock" note named the same race from the sync side. Rollback needed
+> retained content, those two needed atomic swaps, and all three are the same mechanism — so this
+> is that deferred upgrade, cashed in. The alternative considered and rejected was snapshot +
+> copy-back into the live prefix: smaller blast radius (no read-path change at all), but rollback
+> becomes O(files) copies instead of O(1), and it leaves both defects standing.
+>
+> **What it does and does not fix.** A reader now sees either the whole old revision or the whole
+> new one — the torn tree is gone. Two concurrent deploys, however, build separate revisions and
+> the later flip wins: a **lost update**, not a torn tree. That is a strict improvement, not a
+> cure; `pg_advisory_xact_lock` (§3) is still the real fix, and `syncInFlight` still guards the
+> common case.
+>
+> **The details that were easy to get wrong.**
+> - **A rollback passes the TARGET's `commitSha`** to `markSiteLive`. That column is written
+>   unconditionally, and `shouldSyncSite` skips a push whose head already equals it — so keeping
+>   the bad sha would both misreport what's live and silently drop GitHub's redelivery of it.
+>   Restoring the old sha is also exactly what makes **push-supersedes-rollback** work: the next
+>   push is a genuinely new head again. (Decision: no sync pin. A rollback is a stopgap; you roll
+>   back, then push the fix. The Overview banner and the confirm dialog both say so outright.)
+> - **`fireAutomations: false`.** A rollback is an incident action; fanning out to content_update
+>   automations mid-incident spends real money and could re-publish the content being rolled away.
+> - **Nothing is ever deleted.** A file removed by a deploy is simply not carried into the new
+>   revision. Deleting it would destroy the bytes the previous revision needs to stay complete.
+> - **Sidecars moved INSIDE the revision.** `.manifest.json` drives the next sync's diff, so after
+>   a rollback the next sync must diff against the tree it's actually serving — which it now does
+>   for free, because the manifest travels with the revision.
+> - **Revisions live at a top-level `revs/` prefix, NOT under `sites/{id}/`.** The tenant-asset
+>   proxy turns URL segments straight into a storage key, so nesting history under the served
+>   prefix would have published every historical revision — including content someone rolled back
+>   specifically to remove. A separate prefix makes that unreachable by construction; the proxy
+>   additionally now refuses dot-segments, which also closes the pre-existing `.manifest.json`
+>   read. Site deletion sweeps both prefixes.
+>
+> **Migration: none.** `live_revision_id IS NULL` means "still on the legacy flat `sites/{id}/`
+> prefix", and `liveContentPrefix()` / `contentVersion()` fall back to it. Existing sites keep
+> serving untouched and adopt a revision on their next deploy; nothing is copied and nothing goes
+> down. Their deployments have no `revision_id`, so they correctly offer no Roll back button —
+> we genuinely don't have those bytes.
+>
+> **Cost, and the escape hatch.** Carrying a revision forward is one server-side `copyObject` per
+> unchanged file: a 1000-file site with 3 changed files does 997 copies (~1s at 32-way
+> concurrency, but real R2 Class A ops that scale with deploy frequency). Accepted for v1 because
+> it keeps every call site a plain `prefix + path` join. If op costs bite, the fix is
+> content-addressed blobs (`revs/{site}/blobs/{sha256}`) plus a per-revision manifest, making a
+> deploy O(changed) — entirely behind `src/lib/revisions.ts`, no call-site churn. Retention is 20
+> revisions per site, pruned after each successful deploy and never touching the live one
+> (`analyticsRetentionDays` is the precedent if it should become plan-tiered).
+>
+> **Incidentally forced, and worth it:** the content-cache version key had been inlined in **six**
+> places that had drifted apart (two used `toISOString()`, one omitted `updatedAt` entirely). It's
+> now one function, `contentVersion`. On a revision-backed site the key IS the revision id —
+> content-addressed by definition, so it cannot describe stale bytes.
+>
+> Pure core in `src/lib/revisions.ts` (prefixes, `contentVersion`, `planRevisionWrite`,
+> `planRevisionGc`, `canRollBack`, `isRolledBack`) with `tests/unit/revisions.test.ts`; DB half in
+> `src/lib/revision-store.ts`; the action is `rollBackSite` (`src/lib/actions/sites.ts`,
+> owner/admin only, same bar as `deleteSite`). End-to-end journey in `tests/e2e/rollback.spec.ts`,
+> which asserts the *public docs URL* serves the restored content — a DB-column assertion would
+> pass even if the render path never read the pointer.
+
 ### 10.4 Settings → Exports
 
 The control-plane **Settings → Exports** surface (hosted docs platforms: *Settings → Exports*) lets an
@@ -7850,16 +7926,19 @@ control — also false for a git site whose connect never completed), and `hasRe
 (the render gate).
 
 **Hosted publish** (`src/lib/native-publish.ts`, pure core in `native-publish-plan.ts`) is
-**at-least-once and retry-safe, not atomic**. There is no transaction across N object writes,
-so: writes are phased **pages → `docs.json` → deletes** (a partial publish never leaves
-navigation pointing at absent pages, and a crash before the deletes leaves orphan objects the
-renderer can't see rather than nav entries that 404), and the session is left **open** on
-failure so the drafts survive and a retry is an idempotent overwrite. Real atomicity needs a
-content-addressed prefix (`sites/{id}/@{rev}/` + a pointer flip) — which would also fix the
-concurrent-sync race — and is the deferred upgrade for both. Until then, concurrent publishes
-reuse the existing `syncInFlight` time-window guard rather than a second mechanism; the
-`pg_advisory_xact_lock` named earlier in §3 remains the real fix, and this is the cheapest
-place to prove it when we get there.
+**atomic as of 2026-09-01** — the deferred upgrade described below was built to support instant
+rollback (§10.3), and both fell out of the same mechanism. A publish writes a complete new
+revision at `revs/{id}/{deployment}/` and then flips `site.live_revision_id` in one UPDATE, so a
+reader is served either the whole old tree or the whole new one. Nothing is deleted: a tombstoned
+draft is simply not carried forward, which is what leaves the previous revision intact to roll
+back to. The session is still left **open** on failure so the drafts survive and a retry is
+idempotent, and the phased **pages → `docs.json`** ordering is kept as belt-and-braces (it costs
+nothing and still covers a site's first revision).
+
+What remains is a **lost update**, not a torn tree: two concurrent publishes build separate
+revisions and the later flip wins, discarding the other's work rather than interleaving with it.
+Concurrent publishes still reuse the existing `syncInFlight` time-window guard rather than a
+second mechanism; the `pg_advisory_xact_lock` named earlier in §3 remains the real fix.
 
 **`updatedAt` is load-bearing.** The content-cache version key is
 `${lastSyncedCommitSha ?? ""}:${updatedAt}`, and a hosted site's sha is null *forever* — so

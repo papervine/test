@@ -218,6 +218,20 @@
       "when": 1788240275508,
       "tag": "0030_same_morg",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788247451928,
+      "tag": "0031_magenta_joseph",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788247452928,
+      "tag": "0032_backfill_live_revision_id",
+      "breakpoints": true
     }
   ]
 }

@@ -673,8 +673,14 @@ rather than a log of how often you pressed Publish.
 Selecting a version shows what it contained. **Restore into draft** puts that content back into
 your draft — it doesn't publish it. You see the restored page in the editor, can keep editing,
 and Publish stays the one action that changes what readers see. On a Git-backed site that matters
-for a second reason: history can't be rewritten, so a "rollback" would be a new commit either
-way.
+for a second reason: history can't be rewritten, so putting an old page back is a new commit
+either way.
+
+<Note>
+  This is **one page**, restored into a draft you review before publishing. To put your *whole*
+  site — every page, the navigation, and your images together — back to how it was at a given
+  deployment, and immediately, use [Rolling back](/guides/rollbacks) instead.
+</Note>
 
 <Note>
   A page that has never been published has no history yet. The entry appears the first time you

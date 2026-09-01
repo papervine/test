@@ -1,3 +1,5 @@
+import { legacyPrefix, siteRevisionsPrefix } from "./revisions";
+
 // Pure helpers for the Settings → Danger zone surface (SPEC §10.5). Kept out of the
 // "use server" actions file because a "use server" module may only export async actions
 // — these sync helpers are shared by the client form and unit-tested in isolation
@@ -40,7 +42,10 @@ export type ResourceCleanup = { storagePrefixes: string[]; domainsToDetach: stri
 
 export function planResourceCleanup(sites: SiteResources[]): ResourceCleanup {
   return {
-    storagePrefixes: sites.map((s) => `sites/${s.id}/`),
+    // BOTH trees: the live/legacy content prefix AND every retained revision. Revisions live
+    // outside `sites/{id}/` (so the asset proxy can never reach history), which means the old
+    // single sweep would have left every rolled-back copy of a deleted site in the bucket.
+    storagePrefixes: sites.flatMap((s) => [legacyPrefix(s.id), siteRevisionsPrefix(s.id)]),
     domainsToDetach: sites
       .map((s) => s.customDomain)
       .filter((d): d is string => Boolean(d)),

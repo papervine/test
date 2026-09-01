@@ -4,6 +4,7 @@ import { z } from "zod";
 import type { SiteRow } from "./dashboard-context";
 import type { ContentSource } from "@papervine/renderer/lib/content";
 import { draftSource } from "./draft-source";
+import { contentVersion, liveContentPrefix } from "./revisions";
 import {
   resolvePagePath,
   saveDraft,
@@ -36,7 +37,7 @@ import { bytesFromDataUrl, type ImageAttachment } from "./agent-attachments";
 
 /** The draft-overlay content source for an editing session (read tools see live edits). */
 export function draftContentSource(site: SiteRow, branch: string): ContentSource {
-  return draftSource(site.id, branch, site.lastSyncedCommitSha ?? "");
+  return draftSource(site.id, branch, contentVersion(site), liveContentPrefix(site));
 }
 
 export function authoringTools(
@@ -196,7 +197,7 @@ export function authoringTools(
               // route checked the session out before any tool can run, so it exists.
               const session = await findOpenSession(site.id, branch);
               if (!session) return { error: "No open edit session for this branch." };
-              const prefix = `sites/${site.id}/`;
+              const prefix = liveContentPrefix(site);
               const published = (await listKeys(prefix)).map((k) => k.slice(prefix.length));
               const drafted = (await listDraftFiles(session.id)).map((f) => f.path);
               const path = uploadTargetPath("image", attachment.filename, [

@@ -31,6 +31,7 @@ import { TableOfContents } from "@papervine/renderer/components/TableOfContents"
 import { PageActions } from "@papervine/renderer/components/PageActions";
 import { mdHref } from "@papervine/renderer/lib/llms-format";
 import { PageViewBeacon } from "@/components/analytics/PageViewBeacon";
+import { contentVersion } from "@/lib/revisions";
 import { Assistant } from "@papervine/renderer/components/assistant/Assistant";
 import { AskAssistantButton } from "@papervine/renderer/components/assistant/AskAssistantButton";
 import { SearchButton } from "@papervine/renderer/components/SearchDialog";
@@ -198,12 +199,11 @@ async function buildNavCached(
   const record = await getSiteBySlug(slug);
   if (!record) return buildNav(config, base, canAccess); // src exists; purely defensive
   const cookie = (await cookies()).get(READER_COOKIE)?.value;
-  const version = `${record.lastSyncedCommitSha ?? ""}:${
-    record.updatedAt instanceof Date ? record.updatedAt.getTime() : 0
-  }`;
+  const version = contentVersion(record);
   const groupKey = entitlementKey(record, cookie);
-  // A DRAFT nav must never be cached. The key below is `sha:updatedAt`, and a draft changes
-  // neither — so a cached draft nav would be handed to readers of the PUBLISHED site. Drafts
+  // A DRAFT nav must never be cached. The key below identifies PUBLISHED content (the live
+  // revision, or `sha:updatedAt` on a legacy site) and a draft changes none of it — so a cached
+  // draft nav would be handed to readers of the published site. Drafts
   // read live and uncached everywhere else (draft-source.ts) for exactly this reason.
   if (draftBranch) return contentContext.run(src, () => buildNav(config, base, canAccess));
   return unstable_cache(

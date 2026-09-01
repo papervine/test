@@ -7,6 +7,7 @@ import { canSeeFeature } from "@/lib/features";
 import { findOpenSession } from "@/lib/draft-store";
 import { draftAssetKey } from "@/lib/media-upload";
 import { mimeForPath } from "@/lib/sync-plan";
+import { isServableAssetPath, liveContentPrefix } from "@/lib/revisions";
 
 // Streams a tenant's static assets from object storage (SPEC §3.1 model C).
 // Reached via the middleware tenant-host rewrite of /img/… → /api/tenant-asset/{slug}/…
@@ -29,8 +30,12 @@ export async function GET(
   if (!record) return new NextResponse("Not found", { status: 404 });
 
   const relPath = path.join("/");
+  // Sidecars (`.manifest.json`, `.dimensions.json`) are bookkeeping that happens to sit in the
+  // content tree, and a reader has no business fetching them by URL — this is the one surface
+  // that turns a storage key into a public GET, so the filter belongs here.
+  if (!isServableAssetPath(relPath)) return new NextResponse("Not found", { status: 404 });
   const draft = getSessionCookie(req) ? await draftBytes(record, relPath) : null;
-  const obj = draft ?? (await getObjectBytes(`sites/${record.id}/${relPath}`));
+  const obj = draft ?? (await getObjectBytes(`${liveContentPrefix(record)}${relPath}`));
   if (!obj) return new NextResponse("Not found", { status: 404 });
 
   return new NextResponse(obj.body, {

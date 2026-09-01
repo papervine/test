@@ -6,6 +6,7 @@ import { draftSource } from "./draft-source";
 import { READER_COOKIE } from "./reader-session";
 import { accessForRecord } from "./reader-access";
 import { hasRenderableSource } from "./site-source";
+import { contentVersion, liveContentPrefix } from "./revisions";
 import type { ContentSource } from "@papervine/renderer/lib/content";
 import type { PageAccess } from "@papervine/renderer/lib/nav";
 
@@ -58,23 +59,24 @@ export async function requestContentSource(
   if (!record || !hasRenderableSource(record)) return null;
 
   // Everything serves from our own object storage (SPEC §3.1 model C). The sync job —
-  // on connect, on re-sync, and in the dev seed — copies the repo's config + pages +
-  // assets into sites/{id}/…, and the render path reads ONLY from there: no GitHub at
+  // on connect, on re-sync, and in the dev seed — copies the repo's config + pages + assets
+  // into the deploy's revision, and the render path reads ONLY from there: no GitHub at
   // request time. A site that hasn't been synced yet has nothing to show → null (the
   // route 404s) rather than reaching back to the repo live.
-  // Key the content cache to the synced head sha AND the row's updatedAt, so the cache
-  // busts on EVERY successful sync — not only when the commit sha changes. Re-syncing the
-  // SAME commit (a force-push, a manual re-pull, or a reconcile that repaired drift) bumps
-  // updatedAt → a fresh key. Keying on the sha alone left the Data Cache serving the
-  // pre-sync content under the unchanged sha — the "page fresh but sidebar/tabs stale after
-  // a same-commit re-sync" bug, since docs.json (nav) stayed cached while newly-visited
-  // pages missed and read fresh. `record` is read live (`getSiteBySlug` is per-request
-  // `cache()`), and the sync runner bumps updatedAt on every success, so this is always current.
-  const syncedAt = record.updatedAt instanceof Date ? record.updatedAt.getTime() : 0;
-  const version = `${record.lastSyncedCommitSha ?? ""}:${syncedAt}`;
-  if (!(await isSynced(record.id, version))) return null;
-  if (opts?.draftBranch) return draftSource(record.id, opts.draftBranch, version);
-  return s3Source(record.id, version);
+  // Where the bytes are, and which version of them. On a revision-backed site the revision id
+  // is both — the prefix is immutable, so the id can't describe stale content, and a rollback
+  // changes both together by pointing `liveRevisionId` somewhere else. A pre-revision site
+  // falls back to the flat prefix and the historical `sha:updatedAt` key, which busts on EVERY
+  // successful sync rather than only on a sha change (re-syncing the SAME commit — a force-push,
+  // a manual re-pull, a drift-repairing reconcile — bumps updatedAt → a fresh key; keying on the
+  // sha alone left docs.json cached while newly-visited pages read fresh, the "page fresh but
+  // sidebar/tabs stale after a same-commit re-sync" bug). `record` is read live (`getSiteBySlug`
+  // is per-request `cache()`), so both are always current.
+  const version = contentVersion(record);
+  const prefix = liveContentPrefix(record);
+  if (!(await isSynced(record.id, version, prefix))) return null;
+  if (opts?.draftBranch) return draftSource(record.id, opts.draftBranch, version, prefix);
+  return s3Source(record.id, version, prefix);
 }
 
 /**
@@ -148,6 +150,5 @@ export async function requestSearchIndexKey(slugOverride?: string): Promise<stri
     ? await getSiteBySlug(slug)
     : await getSiteByCustomDomain(h.get("x-papervine-host") ?? h.get("host") ?? "");
   if (!record) return null;
-  const syncedAt = record.updatedAt instanceof Date ? record.updatedAt.getTime() : 0;
-  return `${record.id}:${record.lastSyncedCommitSha ?? ""}:${syncedAt}`;
+  return `${record.id}:${contentVersion(record)}`;
 }

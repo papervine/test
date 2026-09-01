@@ -25,6 +25,8 @@ import { starterTemplate } from "@/lib/site-template";
 import { TEXT_CONTENT_TYPE } from "@/lib/sync-plan";
 import { putObject } from "@/lib/storage";
 import { revalidateSite } from "@/lib/s3-source";
+import { canRollBack, revisionPrefix } from "@/lib/revisions";
+import { revisionExists } from "@/lib/revision-store";
 import { normalizeSiteName } from "@/lib/site-name";
 import { siteBase, siteRoute, postCreateHref } from "@/lib/dashboard-nav";
 
@@ -245,7 +247,11 @@ export async function createBlankSite(
     // In template order — docs.json LAST, so navigation never references pages that
     // haven't landed yet (see site-template.ts).
     for (const file of files) {
-      await putObject(`sites/${created.id}/${file.path}`, file.content, TEXT_CONTENT_TYPE);
+      await putObject(
+        `${revisionPrefix(created.id, deploymentId)}${file.path}`,
+        file.content,
+        TEXT_CONTENT_TYPE,
+      );
     }
   } catch (e) {
     console.error(`[create] seeding starter content failed for site ${created.id}`, e);
@@ -263,11 +269,14 @@ export async function createBlankSite(
   // Promotes to live and bumps updatedAt — which IS this site's whole content-cache version
   // key (its commit sha is null forever). A brand-new site has no automations, and firing
   // content_update on creation would be semantically wrong anyway.
-  await markSiteLive(created, { fireAutomations: false });
+  await markSiteLive(created, { revisionId: deploymentId, fireAutomations: false });
   await resolveDeployment(deploymentId, {
     siteId: created.id,
     ok: true,
     commitMessage: "Created a blank site",
+    // The starter revision. Recording it makes the site's very first state something you can
+    // get back to — for a hosted site that's the only "known good" it has.
+    revisionId: deploymentId,
     filesAdded: files.length,
     durationMs: Date.now() - startedAt,
   });
@@ -328,6 +337,118 @@ export async function resyncSite(
   // ResyncButton sits on the site's page; revalidate its INTERNAL route (Next keys the
   // cache by the real /app mount, not the rewritten-away public URL). s.organizationId
   // === org.id here, so org.slug is the right org for this site.
+  revalidatePath(siteRoute(org.slug, s.slug));
+  return { ok: true };
+}
+
+/**
+ * Instant rollback (SPEC §10.11): serve an earlier deployment's content again.
+ *
+ * This writes NO content. Every successful deploy leaves an immutable revision behind, so
+ * restoring one is a single pointer flip inside `markSiteLive` — which is why it's instant and
+ * why it can't half-succeed. The cost is one LIST to prove the bytes are still there.
+ *
+ * It still opens its own `building` deployment row: the rollback belongs in the Activity feed
+ * as a first-class event ("who put this back, and when"), and the row is also what makes the
+ * `syncInFlight` guard cover a rollback racing a sync.
+ */
+export async function rollBackSite(
+  siteId: string,
+  deploymentId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await getSession();
+  const org = (await listOrganizations())?.[0];
+  if (!session || !org) return { ok: false };
+
+  const rows = await db.select().from(site).where(eq(site.id, siteId)).limit(1);
+  const s = rows[0];
+  if (!s || s.organizationId !== org.id) return { ok: false };
+
+  // Rolling back replaces what every reader sees, so hold it to the same owner/admin bar as
+  // `deleteSite` rather than the editor's — spelled out the same way, for the same reason.
+  const role = await getMemberRole(org.id, session.user.id);
+  if (role !== "owner" && role !== "admin") {
+    return { ok: false, error: "You don't have permission to roll back this site." };
+  }
+
+  const [target] = await db
+    .select()
+    .from(deployment)
+    .where(and(eq(deployment.id, deploymentId), eq(deployment.siteId, s.id)))
+    .limit(1);
+  if (!target) return { ok: false, error: "That deployment no longer exists." };
+  if (!canRollBack(target, s)) {
+    return { ok: false, error: "That deployment can't be restored." };
+  }
+
+  // Same interim guard as resyncSite and publishNative — a rollback that lands mid-sync would
+  // be overwritten by the flip at the end of that sync, so the restore would silently undo
+  // itself moments later.
+  const [building] = await db
+    .select({ createdAt: deployment.createdAt })
+    .from(deployment)
+    .where(and(eq(deployment.siteId, s.id), eq(deployment.status, "building")))
+    .orderBy(desc(deployment.createdAt))
+    .limit(1);
+  if (syncInFlight(building?.createdAt.getTime() ?? null)) {
+    return { ok: false, error: "A deploy is already in progress — give it a moment." };
+  }
+
+  // The row can outlive its bytes once GC has run. "Restoring" an empty prefix would take the
+  // site down rather than save it, so prove the tree is there before promising anything.
+  const revisionId = target.revisionId!;
+  if (!(await revisionExists(s.id, revisionId))) {
+    return { ok: false, error: "That version's content has been cleaned up and can't be restored." };
+  }
+
+  const startedAt = Date.now();
+  const short = target.commitSha ? ` (${target.commitSha.slice(0, 7)})` : "";
+  const message = `Rolled back to ${(target.commitMessage || "an earlier deployment").split("\n")[0]}${short}`;
+  const rollbackId = await openDeployment({
+    siteId: s.id,
+    trigger: "rollback",
+    commitMessage: message,
+    actorUserId: session.user.id,
+  });
+
+  try {
+    await markSiteLive(s, {
+      // The TARGET's sha, not the current one. `markSiteLive` writes this column
+      // unconditionally, and `shouldSyncSite` skips a push whose head already equals it — so
+      // leaving the bad commit here would both misreport what's live AND make GitHub's
+      // redelivery of that commit a no-op. Restoring the old sha is also precisely what lets
+      // "push supersedes the rollback" work: the next push is a genuinely new head again.
+      commitSha: target.commitSha,
+      revisionId,
+      // A rollback is an incident action. Firing content_update automations here spends real
+      // money mid-incident and, worse, an automation that publishes could re-introduce the
+      // very content being rolled away.
+      fireAutomations: false,
+      fallbackRef: rollbackId,
+    });
+    await resolveDeployment(rollbackId, {
+      siteId: s.id,
+      ok: true,
+      commitMessage: message,
+      commitSha: target.commitSha,
+      // The TARGET's revision, not a new one — this row didn't build anything, it re-pointed
+      // at an existing tree, and recording that is what makes the feed self-describing.
+      revisionId,
+      durationMs: Date.now() - startedAt,
+    });
+  } catch (e) {
+    console.error(`[rollback] failed site=${s.id} → revision=${revisionId}`, e);
+    await resolveDeployment(rollbackId, {
+      siteId: s.id,
+      ok: false,
+      commitMessage: message,
+      error: e instanceof Error ? e.message : String(e),
+      durationMs: Date.now() - startedAt,
+    });
+    return { ok: false, error: "The rollback didn't complete. Try again." };
+  }
+
+  revalidateSite(s.id);
   revalidatePath(siteRoute(org.slug, s.slug));
   return { ok: true };
 }

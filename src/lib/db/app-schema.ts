@@ -109,6 +109,16 @@ export const site = pgTable(
     // Head commit sha of the last successful sync. Lets the push webhook skip a delivery
     // whose head we've already synced (idempotency for redeliveries / rapid pushes).
     lastSyncedCommitSha: text("last_synced_commit_sha"),
+    // The immutable content revision this site currently SERVES (SPEC §10.11) — the
+    // `revs/{site}/{revision}/` prefix every read path resolves through, and the whole of
+    // instant rollback: pointing this at an older revision IS the rollback, which is why the
+    // write lives in `markSiteLive`'s single UPDATE (atomic — no reader sees a torn tree).
+    //
+    // NULL means "this site still serves the LEGACY flat `sites/{id}/` prefix". That's the
+    // entire backfill story: pre-revision sites keep serving exactly as before and adopt a
+    // revision on their next deploy, so the migration copies nothing and takes nothing down.
+    // Resolve it through src/lib/revisions.ts, never by building the prefix inline.
+    liveRevisionId: text("live_revision_id"),
     // 'draft' until the first successful sync, then 'live'.
     status: text("status").default("draft").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -166,9 +176,18 @@ export const deployment = pgTable(
     // dashboard Activity feed, which surfaces this on failed rows.
     error: text("error"),
     // What kicked off the sync — 'connect' | 'manual' | 'webhook' (SyncTrigger in
-    // src/lib/sync-runner.ts). Drives the feed's label ("GitHub push" vs "Manual
-    // re-sync"); null on rows that predate the column.
+    // src/lib/sync-runner.ts), plus 'publish' | 'create' (hosted) and 'rollback'. Drives
+    // the feed's label ("GitHub push" vs "Manual re-sync"); null on rows that predate the
+    // column. Mirrored by DeploymentTrigger in src/lib/deployment-log.ts.
     trigger: text("trigger"),
+    // The content revision this deployment put live. For an ordinary deploy it equals the
+    // deployment's own id (the row IS the revision that produced it, so there's no separate
+    // revision table). For a **rollback** it points at the TARGET's revision — which is what
+    // makes a rollback a first-class deployment rather than a mutation of history, and lets
+    // several rollbacks to the same revision each keep their own row.
+    // NULL on rows that predate revisions; those have no bytes to restore, so the Activity
+    // feed correctly offers them no Roll back button.
+    revisionId: text("revision_id"),
     // Wall-time of the sync, stamped when the row resolves. null while 'building' (and
     // on pre-column rows) — a resolved row without it reads as "—" in the feed detail.
     durationMs: integer("duration_ms"),

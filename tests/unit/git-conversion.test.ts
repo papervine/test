@@ -59,7 +59,7 @@ describe("planConversion", () => {
   ];
 
   it("maps storage keys to repo-root paths", () => {
-    expect(planConversion("s1", keys)).toEqual([
+    expect(planConversion("sites/s1/", keys)).toEqual([
       { storageKey: "sites/s1/docs.json", repoPath: "docs.json" },
       { storageKey: "sites/s1/guides/intro.mdx", repoPath: "guides/intro.mdx" },
       { storageKey: "sites/s1/index.mdx", repoPath: "index.mdx" },
@@ -67,7 +67,7 @@ describe("planConversion", () => {
   });
 
   it("re-adds docsPath when the site targets a subdirectory", () => {
-    expect(planConversion("s1", ["sites/s1/index.mdx"], "docs")).toEqual([
+    expect(planConversion("sites/s1/", ["sites/s1/index.mdx"], "docs")).toEqual([
       { storageKey: "sites/s1/index.mdx", repoPath: "docs/index.mdx" },
     ]);
   });
@@ -75,7 +75,7 @@ describe("planConversion", () => {
   // The sidecars are sync bookkeeping — .manifest.json's values are git blob SHAs, which
   // would be nonsense committed into the repo they describe.
   it("never commits the sync sidecars", () => {
-    const plan = planConversion("s1", [
+    const plan = planConversion("sites/s1/", [
       "sites/s1/.manifest.json",
       "sites/s1/.dimensions.json",
       "sites/s1/index.mdx",
@@ -84,13 +84,13 @@ describe("planConversion", () => {
   });
 
   it("ignores keys belonging to another site", () => {
-    const plan = planConversion("s1", ["sites/s2/index.mdx", "sites/s1/index.mdx"]);
+    const plan = planConversion("sites/s1/", ["sites/s2/index.mdx", "sites/s1/index.mdx"]);
     expect(plan.map((f) => f.storageKey)).toEqual(["sites/s1/index.mdx"]);
   });
 
   it("is deterministic, so the initial commit's tree is reproducible", () => {
-    const a = planConversion("s1", [...keys]);
-    const b = planConversion("s1", [...keys].reverse());
+    const a = planConversion("sites/s1/", [...keys]);
+    const b = planConversion("sites/s1/", [...keys].reverse());
     expect(a).toEqual(b);
   });
 });

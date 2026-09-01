@@ -66,11 +66,39 @@ a user session.
 
 ## Object storage layout
 
-Each site owns a prefix in the bucket, `sites/{id}/…`, holding its `docs.json`, MDX, and
-assets. The render plane reads a site only through the `s3Source` content source (behind
-the `ContentSource` abstraction); the old request-time GitHub fallback is **gone**. A site
-that has not synced has nothing to show — it 404s rather than reaching back to the repo
-live. GitHub is touched only at sync time.
+Each deployment writes a complete, **immutable** tree at `revs/{site}/{deployment}/`, holding
+that version's `docs.json`, MDX, and assets, plus two sidecars (`.manifest.json`, the blob-sha
+map the next sync diffs against, and `.dimensions.json`, measured image sizes). The site row
+carries `live_revision_id`, naming the one tree readers are served.
+
+The render plane reads a site only through the `s3Source` content source (behind the
+`ContentSource` abstraction); the old request-time GitHub fallback is **gone**. A site that has
+not synced has nothing to show — it 404s rather than reaching back to the repo live. GitHub is
+touched only at sync time.
+
+Three consequences follow from writing a new tree rather than overwriting the live one:
+
+- **Deployments are atomic.** The tree is written in full, then the pointer moves in a single
+  database write. A reader is served either the entire old version or the entire new one.
+- **Rolling back is a pointer move.** Restoring an earlier deployment copies nothing and
+  rebuilds nothing — see [Rolling back](/guides/rollbacks).
+- **Deleting a file is an omission.** A file dropped from the repo simply isn't carried into the
+  new tree; the old tree still has it. Everything a deployment didn't change is carried forward
+  with a server-side copy, so bytes never pass through the application.
+
+The most recent 20 revisions per site are kept, pruned after each successful deployment and
+never including the live one — which matters after a rollback, when the live revision is no
+longer the newest.
+
+<Note>
+  Revisions sit at a **top-level `revs/` prefix**, deliberately not nested under the site's
+  served prefix. The tenant-asset route turns URL segments straight into a storage key, so
+  history stored under the served prefix would be publicly fetchable — including content
+  someone rolled back specifically to remove.
+</Note>
+
+A site that has not deployed since revisions were introduced has a null `live_revision_id` and
+still serves the older flat `sites/{id}/…` layout; it adopts a revision on its next deployment.
 
 This is why local development seeds its sites into object storage too: docs render exactly
 the same way locally as in production.
@@ -78,10 +106,16 @@ the same way locally as in production.
 ## Version-keyed cache, not GitHub-at-request-time
 
 The render path reads config and pages through the Next Data Cache (with a TTL safety net).
-Rather than relying on cache invalidation to serve fresh content after a sync, the
-**content cache key is stamped with the synced head sha** (`lastSyncedCommitSha`, read
-live per request). A new sync writes new keys and therefore serves fresh content with no
-revalidation needed; old versions age out via the TTL.
+Rather than relying on cache invalidation to serve fresh content after a sync, the **content
+cache key is stamped with the version being served**, read live per request. On a
+revision-backed site that key *is* the revision id — and since a revision's tree never changes,
+the key cannot describe stale bytes. A deployment writes new keys and therefore serves fresh
+content with no revalidation needed; old versions age out via the TTL. (Rolling back to a
+revision still in cache is a cache *hit*, which is part of why it's immediate.)
+
+A site still on the pre-revision layout keys on its synced head sha plus the row's
+`updatedAt` instead. Both forms come from one function, `contentVersion` — a cache key computed
+two ways is a cache that is wrong one of those ways.
 
 <Note>
   Stamping the key on the sha is what makes the **push webhook** correct. The webhook runs

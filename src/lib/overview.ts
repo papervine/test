@@ -15,6 +15,9 @@ export type ActivityRow = {
   filesAdded: number;
   filesEdited: number;
   trigger: string | null;
+  // The immutable content tree this deploy produced (SPEC §10.11) — what a rollback restores.
+  // Null on rows that predate revisions, which is exactly why `canRollBack` refuses them.
+  revisionId: string | null;
   durationMs: number | null;
   createdAt: number;
   actorName: string | null;
@@ -97,6 +100,7 @@ export function triggerLabel(
   // those a "Manual Update" would be plainly wrong.
   if (trigger === "publish") return "Published";
   if (trigger === "create") return "Site created";
+  if (trigger === "rollback") return "Rolled back";
   return "Manual Update";
 }
 
@@ -108,5 +112,7 @@ export function triggerDetail(trigger: string | null): string {
   // Papervine-hosted sites (SPEC §10.11): published from the editor, or seeded at creation.
   if (trigger === "publish") return "Published from the editor";
   if (trigger === "create") return "Site created";
+  // A rollback writes no content — it re-points the site at an earlier deployment's revision.
+  if (trigger === "rollback") return "Restored an earlier deployment";
   return "—";
 }

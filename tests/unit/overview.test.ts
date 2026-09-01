@@ -152,4 +152,11 @@ describe("triggerDetail (expanded panel)", () => {
     expect(triggerDetail("publish")).toBe("Published from the editor");
     expect(triggerDetail("create")).toBe("Site created");
   });
+  // A rollback writes no content, so the detail says what it actually did — re-pointed the
+  // site at an earlier deployment's revision.
+  it("describes a rollback as a restore, not a build", () => {
+    expect(triggerLabel("rollback", null)).toBe("Rolled back");
+    expect(triggerLabel("rollback", "Jeff Loiselle")).toBe("Jeff Loiselle");
+    expect(triggerDetail("rollback")).toBe("Restored an earlier deployment");
+  });
 });

@@ -13,6 +13,8 @@ import {
   triggerLabel,
 } from "@/lib/overview";
 import { formatElapsed } from "@/lib/format-elapsed";
+import { canRollBack } from "@/lib/revisions";
+import { RollBackButton } from "@/components/app/RollBackButton";
 
 // A `building` row younger than this is a live, in-flight sync → show the ticking counter;
 // older is an orphaned/killed run (its serverless function died mid-sync, no catch to flip it
@@ -40,12 +42,15 @@ export function ActivityFeed({
   initialRows,
   repoUrl,
   siteId,
+  liveRevisionId,
 }: {
   endpoint: string;
   target: FeedTarget;
   initialRows: ActivityRow[];
   repoUrl: string | null;
   siteId: string;
+  /** Which revision is being served, so a row knows whether it's the one already live. */
+  liveRevisionId: string | null;
 }) {
   const [rows, setRows] = useState(initialRows);
   // Set by the poll effect to "fetch now (and re-arm the timer)"; called by the realtime
@@ -269,6 +274,17 @@ export function ActivityFeed({
                     {d.error}
                   </pre>
                 </div>
+              )}
+              {/* Instant rollback (SPEC §10.11). Shown only on a successful live deploy whose
+                  revision we still hold and aren't already serving — `canRollBack` is the one
+                  place that decides, shared with the server action that re-checks it. */}
+              {canRollBack(d, { liveRevisionId }) && (
+                <RollBackButton
+                  siteId={siteId}
+                  deploymentId={d.id}
+                  label={(d.commitMessage || "an earlier deployment").split("\n")[0]}
+                  isGitBacked={Boolean(repoUrl)}
+                />
               )}
             </div>
           </details>
