@@ -12,7 +12,9 @@ import {
   type MatrixRow,
 } from "@/lib/billing/plan-content";
 
-const TIERS: PlanKey[] = ["free", "team", "pro", "enterprise"];
+// The four purchasable plans. `selfhost` is a matrix column but has no billing row, so
+// it is deliberately outside this list — a literal tuple, so catalogPlan() still narrows.
+const TIERS = ["free", "team", "pro", "enterprise"] as const;
 
 function row(label: string): MatrixRow {
   const found = PLAN_MATRIX.flatMap((g) => g.rows).find((r) => r.label === label);
@@ -21,11 +23,13 @@ function row(label: string): MatrixRow {
 }
 
 describe("plan content vs. enforced catalog (drift guard)", () => {
-  it("derives card prices from prices[] (Team $65, Pro $250, annual $55/$200)", () => {
+  it("derives card prices from prices[] (Team $65, Pro $250, monthly only)", () => {
     expect(PLAN_TIER_BY_KEY.team.price).toBe("$65");
-    expect(PLAN_TIER_BY_KEY.team.priceNote).toContain("$55/mo billed annually");
     expect(PLAN_TIER_BY_KEY.pro.price).toBe("$250");
-    expect(PLAN_TIER_BY_KEY.pro.priceNote).toContain("$200/mo billed annually");
+    // The cards quote the monthly number alone — an annual price exists in prices[] but
+    // is deliberately not advertised here, so the note must stay a bare "/mo".
+    expect(PLAN_TIER_BY_KEY.team.priceNote).toBe("/mo");
+    expect(PLAN_TIER_BY_KEY.pro.priceNote).toBe("/mo");
     expect(PLAN_TIER_BY_KEY.free.price).toBe("$0");
     expect(PLAN_TIER_BY_KEY.enterprise.price).toBe("Contact us");
   });
@@ -39,16 +43,20 @@ describe("plan content vs. enforced catalog (drift guard)", () => {
     // Team members row uses descriptive text ("5 team members", "Unlimited team members")
     // rather than raw numeric limits, so it's checked separately for format consistency.
     expect(row("Team members").free).toContain("5");
-    expect(row("Team members").team).toContain("5");
+    expect(row("Team members").team).toContain("Unlimited");
     expect(row("Team members").pro).toContain("Unlimited");
   });
 
-  it("matrix '250 AI credits' row shows base credit allocation", () => {
-    // Matrix row shows 250 AI credits for Free/Team/Pro, committed volume for Enterprise.
-    expect(String(row("250 AI credits").free), "free ai credits").toContain("250");
-    expect(String(row("250 AI credits").team), "team ai credits").toContain("250");
-    expect(String(row("250 AI credits").pro), "pro ai credits").toContain("250");
-    expect(String(row("250 AI credits").enterprise), "enterprise ai credits").toContain("volume");
+  it("matrix 'AI credits' row matches each plan's includedMonthlyCredits", () => {
+    // The advertised pool must be the pool the runtime actually grants — this is the
+    // drift the guard exists for, so read the number back out of the cell rather than
+    // hardcoding it here.
+    for (const t of ["free", "team", "pro"] as const) {
+      const cell = String(row("AI credits")[t]);
+      const advertised = Number(cell.replace(/[^0-9]/g, ""));
+      expect(advertised, `${t} ai credits`).toBe(catalogPlan(t).includedMonthlyCredits);
+    }
+    expect(String(row("AI credits").enterprise), "enterprise ai credits").toContain("volume");
   });
 
   it("matrix feature-flag rows match entitlement feature flags exactly", () => {
@@ -57,6 +65,7 @@ describe("plan content vs. enforced catalog (drift guard)", () => {
     const ROW_TO_FEATURE: Record<string, PlanFeatureKey> = {
       "Preview deployments": "previewDeployments",
       "AI Insights": "insights",
+      "AI Automations": "workflows",
       SCIM: "scim",
     };
     for (const [label, feature] of Object.entries(ROW_TO_FEATURE)) {

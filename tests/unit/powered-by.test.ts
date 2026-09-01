@@ -48,10 +48,10 @@ describe("showsPoweredByBadge", () => {
     }
   });
 
-  it("Pro and Enterprise have white-label, so the badge is on Free and Team", () => {
+  it("only Enterprise has white-label, so the badge is on every plan below it", () => {
     const white = catalog.plans
       .filter((p) => (p.entitlements.features as Record<string, boolean>).whiteLabel)
       .map((p) => p.key);
-    expect(white).toEqual(["pro", "enterprise"]);
+    expect(white).toEqual(["enterprise"]);
   });
 });

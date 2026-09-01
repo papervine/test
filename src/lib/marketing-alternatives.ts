@@ -16,7 +16,7 @@
  * IT IS A SALES PAGE, and it should read like one. The first draft was a neutral market
  * survey that cheerfully routed readers to four competitors before mentioning us — accurate,
  * useless, and not what a storefront is for. Every section now argues a position: the format
- * is what decides the switch, we read the one you already have, and $29 buys what the
+ * is what decides the switch, we read the one you already have, and $65 buys what the
  * category holds for an enterprise call. Order, emphasis and framing are ours to choose.
  *
  * WHAT IS STILL NOT NEGOTIABLE, because it is what keeps the page an asset instead of a
@@ -103,7 +103,7 @@ export const ALTERNATIVES: Alternative[] = [
       "separate human readers from crawling agents. SSO and role-based access are on the $65 " +
       "Team plan — the category holds both for an enterprise negotiation. Pro is $250/mo for " +
       "scheduled workflows, insights, and production limits, with optional hosted AI credit pools. " +
-      "Every account starts with 30 days of everything and 5,000 credits, no card. BYOK available " +
+      "Every account starts with a 30-day free trial of Pro and 10,000 credits, no card. BYOK available " +
       "from day one, and `npx papervine dev` runs the same renderer on your laptop with no database and no signup.",
     caveat:
       "We\u2019re the newest name here, and we\u2019d rather you find that out from us: bring your " +
@@ -430,7 +430,7 @@ export const FAQS: Faq[] = [
       "\u2014 are free and MIT-licensed, and everything a docs platform does beyond rendering " +
       "(search, auth, analytics, AI, editing) is yours to build. Among hosted platforms, " +
       "Papervine\u2019s free tier renders your existing docs.json with search included, and every " +
-      "new account gets 30 days of the paid features plus 5,000 AI credits without a card.",
+      "new account gets a 30-day free trial of Pro plus 10,000 AI credits without a card.",
   },
   {
     q: "Can I self-host the incumbent?",
@@ -463,8 +463,8 @@ export const FAQS: Faq[] = [
     q: "What's the cheapest way to get SSO on a docs site?",
     a:
       `As of ${PRICES_CHECKED}, two options will sell it to you without a call: Redocly at $24 ` +
-      "per seat/month, and Papervine\u2019s Team plan at $50/month flat \u2014 which also includes " +
-      "role-based access, the AI assistant and 5,000 credits. At the incumbent, ReadMe and GitBook, " +
+      "per seat/month, and Papervine\u2019s Team plan at $65/month flat \u2014 which also includes " +
+      "role-based access, the AI assistant and 1,000 credits. At the incumbent, ReadMe and GitBook, " +
       "single sign-on is an Enterprise conversation.",
   },
   {

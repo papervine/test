@@ -152,8 +152,9 @@ function sub(over: Partial<SubscriptionState>): SubscriptionState {
 describe("resolveEntitlements", () => {
   it("no billing row => Free (legacy orgs / DB-free paths must not throw or over-gate)", () => {
     expect(resolveEntitlements(null, now)).toBe(FREE_ENTITLEMENTS);
-    // Free now has BYOK assistant support
-    expect(FREE_ENTITLEMENTS.features.assistant).toBe(true);
+    // "Must not over-gate" is about not THROWING and not losing the free capabilities —
+    // the reader-facing assistant is a paid feature, so Free resolving without it is correct.
+    expect(FREE_ENTITLEMENTS.features.assistant).toBe(false);
   });
   it("active keeps plan entitlements", () => {
     expect(resolveEntitlements(sub({}), now).features.sso).toBe(true);
@@ -176,8 +177,8 @@ describe("resolveEntitlements", () => {
     ).toBe(FREE_ENTITLEMENTS);
   });
   it("hasFeature mirrors resolution", () => {
-    // Free now has BYOK assistant, so null billing row gives assistant=true
-    expect(hasFeature(null, "assistant", now)).toBe(true);
+    // No billing row resolves to Free, which does not carry the assistant; a paid sub does.
+    expect(hasFeature(null, "assistant", now)).toBe(false);
     expect(hasFeature(sub({}), "assistant", now)).toBe(true);
   });
 });
@@ -192,18 +193,18 @@ describe("authorizeAiDecision (the gate in front of every AI route)", () => {
       metered: false,
     });
   });
-  it("no billing row allows BYOK AI (Free has assistant with BYOK, unmetered)", () => {
-    // Free now supports BYOK assistant, so no billing row allows AI but unmetered
+  it("no billing row refuses the assistant (Free doesn't carry it) with an upgrade prompt", () => {
     expect(authorizeAiDecision({ state: "none" }, "assistant", now)).toEqual({
-      allowed: true,
-      metered: false,
+      allowed: false,
+      code: "upgrade_required",
     });
   });
-  it("canceled sub collapses to Free, which now supports BYOK AI (unmetered)", () => {
-    // Free supports BYOK assistant, so canceled plans allow AI but unmetered
+  it("canceled sub collapses to Free, so the assistant refuses even with credits left", () => {
+    // okLookup still has 100 monthly credits — the plan check runs FIRST, so the refusal is
+    // "upgrade_required", not "out_of_credits". The distinction is what the UI prompts on.
     expect(
       authorizeAiDecision({ ...okLookup, sub: sub({ status: "canceled" }) }, "assistant", now),
-    ).toEqual({ allowed: true, metered: true });
+    ).toEqual({ allowed: false, code: "upgrade_required" });
   });
   it("in-plan feature with credits -> allowed and metered", () => {
     expect(authorizeAiDecision(okLookup, "assistant", now)).toEqual({
@@ -229,7 +230,7 @@ describe("authorizeAiDecision (the gate in front of every AI route)", () => {
       metered: true,
     });
   });
-  it("expired trial collapses to Free, which supports BYOK AI (metered=true for hosted credit tracking)", () => {
+  it("expired trial collapses to Free, which does not carry the assistant", () => {
     const expired = {
       ...okLookup,
       buckets: { trial: 5000, monthly: 0, pack: 0 },
@@ -239,10 +240,11 @@ describe("authorizeAiDecision (the gate in front of every AI route)", () => {
         entitlements: catalogPlan("trial").entitlements,
       }),
     };
-    // Expired trial collapses to Free, which now has BYOK assistant
+    // Credits left in the bucket are NOT the gate — the feature has to be in-plan first,
+    // so a lapsed trial with 5,000 unspent credits still gets the upgrade prompt.
     expect(authorizeAiDecision(expired, "assistant", now)).toEqual({
-      allowed: true,
-      metered: true,
+      allowed: false,
+      code: "upgrade_required",
     });
   });
 });
@@ -317,7 +319,7 @@ describe("catalog", () => {
     expect(CATALOG.plans.length).toBeGreaterThanOrEqual(5);
     expect(CATALOG.trial).toEqual({
       days: 30,
-      credits: 5000,
+      credits: 10000,
       planKey: "trial",
       representsPlanKey: "pro",
     });
@@ -331,13 +333,15 @@ describe("catalog", () => {
     expect(cents("pro", "month")).toBe(25000);
     expect(cents("pro", "year")).toBe(200 * 12 * 100);
   });
-  it("credit pools: Team 5k, Pro 25k; Free has BYOK AI and 250 hosted credits/mo", () => {
-    expect(catalogPlan("team").includedMonthlyCredits).toBe(5000);
+  it("credit pools: Team 1k, Pro 25k; Free has BYOK AI and 250 hosted credits/mo", () => {
+    expect(catalogPlan("team").includedMonthlyCredits).toBe(1000);
     expect(catalogPlan("pro").includedMonthlyCredits).toBe(25000);
     expect(catalogPlan("free").includedMonthlyCredits).toBe(250);
     expect(catalogPlan("free").overageCentsPerThousandCredits).toBeNull();
-    // Free now has BYOK AI assistant (true) and 250 hosted monthly credits
-    expect(catalogPlan("free").entitlements.features.assistant).toBe(true);
+    // The reader-facing assistant is a paid feature; Free's 250 credits fund the editor's
+    // writing agent only.
+    expect(catalogPlan("free").entitlements.features.assistant).toBe(false);
+    expect(catalogPlan("free").entitlements.features.writerAgent).toBe(true);
   });
   it("the wedge: SSO/RBAC start at Team, SCIM is Enterprise-only", () => {
     expect(catalogPlan("team").entitlements.features.sso).toBe(true);

@@ -36,7 +36,7 @@ test.describe("billing settings", () => {
         editors: ai ? 25 : 5,
         analyticsRetentionDays: ai ? 365 : 7,
         features: {
-          assistant: true, writerAgent: ai, workflows: ai, sso: ai, rbac: ai,
+          assistant: ai, writerAgent: ai, workflows: ai, sso: ai, rbac: ai,
           previewDeployments: ai, adminApis: ai, insights: ai,
           scim: false, whiteLabel: false,
         },
@@ -55,7 +55,7 @@ test.describe("billing settings", () => {
     }
     // Team + Pro need a published price to render as change-plan cards.
     await sql`insert into billing_price (id, plan_key, interval, unit_amount_cents)
-              values ('bp-team-month-e2e', 'team', 'month', 5000) on conflict do nothing`;
+              values ('bp-team-month-e2e', 'team', 'month', 6500) on conflict do nothing`;
     await sql`insert into billing_price (id, plan_key, interval, unit_amount_cents)
               values ('bp-pro-month-e2e', 'pro', 'month', 30000) on conflict do nothing`;
 
@@ -122,7 +122,7 @@ test.describe("billing settings", () => {
     await expect(page.getByText(/Trial — \d+ days? left/)).toBeVisible();
     // Change-plan card with its price (button exists; clicking needs Stripe).
     await expect(page.getByRole("heading", { name: "Plans", exact: true })).toBeVisible();
-    await expect(page.getByText("$29")).toBeVisible();
+    await expect(page.getByText("$65")).toBeVisible();
     // Feature bullets on the cards + the shared comparison matrix (same content as
     // /pricing, via the reused PlanMatrix component).
     await expect(page.getByText("SSO & RBAC")).toBeVisible();

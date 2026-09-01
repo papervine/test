@@ -2,7 +2,7 @@
   "$comment": "THE single editable source for EVERYTHING about plans — the billing numbers AND the marketing copy. Two consumers read this file: (1) billing (src/lib/billing/catalog.ts + scripts/sync-billing.mjs) uses plans[].{key,name,blurb,listed,sort,includedMonthlyCredits,overage,entitlements}, prices, creditPacks, creditRates — `npm run billing:sync` publishes them to the DB (append-only: an entitlement/credit change mints a NEW immutable plan version so existing subscriptions stay pinned to what they bought — legacy vs new is automatic — and prices are archived, never mutated); `npm run billing:publish` mirrors them to Stripe. (2) marketing (src/lib/billing/plan-content.ts) uses plans[].display, positioning, and matrix for the /pricing page and the in-app Settings→Billing surface. IMPORTANT: display/matrix/positioning are DISPLAY-ONLY — editing them does NOT mint a new billing plan version (a bullet-wording change must not reprice anyone). Price strings on the cards are DERIVED from prices[] (not stored here), so a price change updates the cards automatically. A unit test (billing-plan-content.test.ts) fails if the matrix's numeric/flag claims disagree with entitlements, so the copy can't silently drift from what's enforced. Money is integer cents; credits are integers.",
   "trial": {
     "days": 30,
-    "credits": 5000,
+    "credits": 10000,
     "planKey": "trial",
     "representsPlanKey": "pro"
   },
@@ -10,7 +10,7 @@
     {
       "key": "selfhost",
       "name": "Self-host",
-      "blurb": "Run the docs renderer on your machine. No account.",
+      "blurb": "For individuals",
       "listed": false,
       "sort": -1,
       "includedMonthlyCredits": 0,
@@ -37,14 +37,23 @@
         "badge": "OSS",
         "highlight": false,
         "priceOverride": "$0",
-        "cta": { "label": "GitHub", "href": "https://github.com/papervine/papervine" },
-        "lead": "Run the same renderer on your machine. BYOK assistant and MCP. No account.",
+        "cta": {
+          "label": "Star on GitHub",
+          "href": "https://github.com/papervine/papervine",
+          "brand": "github"
+        },
+        "secondaryCta": {
+          "label": "Deploy with Vercel",
+          "href": "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fpapervine%2Fpapervine&root-directory=apps%2Fcli&project-name=papervine-docs&repository-name=papervine-docs",
+          "brand": "vercel"
+        },
+        "lead": null,
         "features": [
           "Custom domain",
           "In-memory search",
           "LLMs.txt",
           "MCP server",
-          "Bring your own model (BYOK)"
+          "AI Assistant (BYOK)"
         ]
       }
     },
@@ -61,7 +70,7 @@
         "editors": 5,
         "analyticsRetentionDays": 7,
         "features": {
-          "assistant": true,
+          "assistant": false,
           "writerAgent": true,
           "workflows": false,
           "sso": false,
@@ -76,10 +85,10 @@
       "display": {
         "icon": "Rocket",
         "badge": null,
-        "highlight": false,
+        "highlight": true,
         "priceOverride": "$0",
         "cta": { "label": "Get started", "href": "/signup" },
-        "lead": "For individuals and small teams",
+        "lead": null,
         "features": [
           "5 team members",
           "Web editor",
@@ -91,7 +100,6 @@
           "Sync with GitHub",
           "LLMs.txt",
           "MCP server",
-          "Bring your own model (BYOK)",
           "250 AI credits",
           "Analytics"
         ]
@@ -103,11 +111,11 @@
       "blurb": "For startups and growing teams",
       "listed": true,
       "sort": 1,
-      "includedMonthlyCredits": 5000,
+      "includedMonthlyCredits": 1000,
       "overageCentsPerThousandCredits": 800,
       "entitlements": {
         "sites": 3,
-        "editors": 5,
+        "editors": 9999,
         "analyticsRetentionDays": 90,
         "features": {
           "assistant": true,
@@ -130,11 +138,10 @@
         "cta": { "label": "Start free trial", "href": "/signup" },
         "lead": "Everything in Free",
         "features": [
-          "Everything in Free +",
-          "AI search",
-          "Password-protected docs",
-          "Advanced Analytics",
-          "PDF Exports",
+          "Unlimited team members",
+          "Multiplayer Editing",
+          "AI Assistant",
+          "1,000 AI credits",
           "SSO & RBAC"
         ]
       }
@@ -161,24 +168,23 @@
           "adminApis": true,
           "insights": true,
           "scim": false,
-          "whiteLabel": true
+          "whiteLabel": false
         }
       },
       "display": {
         "icon": "Zap",
-        "badge": "Popular",
-        "highlight": true,
+        "badge": null,
+        "highlight": false,
         "priceOverride": null,
         "cta": { "label": "Start free trial", "href": "/signup" },
         "lead": "Everything in Team",
         "features": [
-          "Everything in Team +",
-          "AI Assistant",
-          "Multiplayer Editing",
+          "AI Agent",
+          "AI Automations",
           "AI Insights",
-          "Support widget",
-          "No branding",
-          "Unlimited team members"
+          "Bring your own model (BYOK)",
+          "Advanced insights",
+          "Advanced customization"
         ]
       }
     },
@@ -218,6 +224,7 @@
         },
         "lead": "Everything in Pro",
         "features": [
+          "No branding",
           "Committed AI credit volume",
           "SCIM provisioning",
           "Security and legal review",
@@ -294,7 +301,7 @@
       "group": "Limits",
       "rows": [
         { "label": "Docs sites", "selfhost": "Unlimited", "free": "1", "team": "3", "pro": "10", "enterprise": "Custom" },
-        { "label": "Team members", "selfhost": false, "free": "5 team members", "team": "5 team members", "pro": "Unlimited team members", "enterprise": "Custom" },
+        { "label": "Team members", "selfhost": false, "free": "5 team members", "team": "Unlimited team members", "pro": "Unlimited team members", "enterprise": "Custom" },
         { "label": "Analytics retention", "selfhost": false, "free": "7 days", "team": "90 days", "pro": "1 year", "enterprise": "Custom" }
       ]
     },
@@ -316,9 +323,10 @@
     {
       "group": "AI Features",
       "rows": [
-        { "label": "250 AI credits", "selfhost": false, "free": "250 AI credits", "team": "250 AI credits", "pro": "250 AI credits", "enterprise": "Committed volume" },
-        { "label": "AI search", "selfhost": false, "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "AI Assistant", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "AI credits", "selfhost": "BYOK", "free": "250 / month", "team": "1,000 / month", "pro": "25,000 / month", "enterprise": "Committed volume" },
+        { "label": "AI search", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "AI Assistant", "selfhost": true, "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "AI Automations", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
         { "label": "AI Insights", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true }
       ]
     },
@@ -326,13 +334,13 @@
       "group": "Advanced Features",
       "rows": [
         { "label": "Analytics", "selfhost": false, "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Password-protected docs", "selfhost": false, "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "Advanced Analytics", "selfhost": false, "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "PDF Exports", "selfhost": false, "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "Multiplayer Editing", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "Password-protected docs", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "Advanced Analytics", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "PDF Exports", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "Multiplayer Editing", "selfhost": false, "free": false, "team": true, "pro": true, "enterprise": true },
         { "label": "SSO & RBAC", "selfhost": false, "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "Support widget", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
-        { "label": "No branding", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true }
+        { "label": "AI Widget Embed", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "No branding", "selfhost": false, "free": false, "team": false, "pro": false, "enterprise": true }
       ]
     },
     {

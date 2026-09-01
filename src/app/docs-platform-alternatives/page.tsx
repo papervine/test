@@ -46,7 +46,7 @@ export const metadata: Metadata = marketingMetadata({
   title: "Docs Platform Alternatives — 10 Docs Platforms Compared",
   description:
     "10 docs platform alternatives compared on real prices from their own pricing pages. See which " +
-    "ones read your existing docs.json, where SSO costs $50 instead of an enterprise call, and " +
+    "ones read your existing docs.json, where SSO costs $65 instead of an enterprise call, and " +
     "how to migrate without rewriting a page.",
   path: "/docs-platform-alternatives",
   keywords: [
@@ -447,7 +447,7 @@ export default async function DocsPlatformAlternativesPage() {
         <p className="mx-auto mt-4 max-w-xl leading-relaxed text-[var(--muted)]">
           Nothing to convert and nothing to decide: point it at the docs you already have and
           see what renders. Locally in one command, or hosted with 30 days of everything and
-          5,000 AI credits — no card.
+          10,000 AI credits — no card.
         </p>
         <div className="mt-7 flex flex-wrap justify-center gap-3">
           <Link

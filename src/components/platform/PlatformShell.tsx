@@ -3,6 +3,7 @@ import { platformFontVars } from "@/lib/fonts";
 import { VineField } from "./VineField";
 import { SproutField } from "./SproutField";
 import { PrismaticBurst } from "./PrismaticBurst";
+import { GradientWaves } from "./GradientWaves";
 
 // The platform's dark, luminous frame (SPEC §2). Wraps every control-plane surface
 // — landing, auth, app — in the `.db` scope so the palette, fonts, and atmosphere
@@ -15,6 +16,10 @@ import { PrismaticBurst } from "./PrismaticBurst";
 //             It degrades to a static wash under reduced motion or without WebGL2.
 //   "home"  — glow + ambient seedling field + growing vine + grain. The landing page's
 //             living backdrop (SproutField behind VineField), in place of the static grid.
+//   "waves" — glow + a raymarched gradient sea under the masthead + grain, in place of the grid.
+//             Pricing is a page people scan and compare on, so the motion is bounded to the top
+//             of it and slowed right down; it degrades to a static wash on the same terms as the
+//             burst (reduced motion, no WebGL2, no chunk).
 //   "lite"  — glow only. For the data-dense app, so the grid/grain never sit behind
 //             tables and forms and hurt legibility.
 export function PlatformShell({
@@ -22,7 +27,7 @@ export function PlatformShell({
   className = "",
   children,
 }: {
-  variant?: "full" | "auth" | "lite" | "home";
+  variant?: "full" | "auth" | "lite" | "home" | "waves";
   className?: string;
   children: React.ReactNode;
 }) {
@@ -42,6 +47,26 @@ export function PlatformShell({
           // The platform's own two brand hues, plus the deep indigo they sit on — so the burst
           // reads as this product's glow rather than a stock rainbow.
           colors={["#261B62", "#5b8cff", "#a974ff", "#BDA4F1"]}
+        />
+      )}
+      {variant === "waves" && (
+        <GradientWaves
+          // The platform's own two brand hues over the deep indigo they sit on — the same
+          // palette as the auth burst, so the two shader surfaces read as one product.
+          horizonColor="#261B62"
+          waveColor="#5b8cff"
+          crestColor="#BDA4F1"
+          // Tuned for a page you compare prices on, not a demo: half upstream's speed, the
+          // cheapest step count (invisible behind the mask), and held back to two-thirds
+          // opacity so the tier cards stay the brightest thing on screen.
+          speed={0.18}
+          detail="low"
+          opacity={0.62}
+          brightness={0.95}
+          // Parallax stays, damped — it rewards a moved cursor without dragging the eye off
+          // the cards. Grain is off here: `.db-grain` already lays a film over the whole shell.
+          parallaxStrength={0.25}
+          grain={false}
         />
       )}
       {variant === "home" && <SproutField />}

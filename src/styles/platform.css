@@ -165,6 +165,37 @@ html[data-db-theme="light"] .db-burst {
   opacity: 0.55;
 }
 
+/* Gradient Waves backdrop (GradientWaves.tsx) — the pricing page's alternative to `.db-grid`.
+   A raymarched plasma sea drifting under the masthead.
+
+   - **Bounded height, not `inset: 0`.** The cost of a raymarch is per fragment, and the pricing
+     page is several viewports tall; filling it would run the same shader over four times the
+     pixels for atmosphere nobody scrolls back up to see. 860px covers the masthead and the top
+     of the tier cards, which is all of it anyone reads against.
+   - **The gradient underneath is the fallback**, painted whether or not the shader ever runs
+     (reduced motion, no WebGL2, a chunk that never lands) — so the page is never a bare slab.
+   - **Faded out at the bottom** so the cards sit on flat ground rather than on moving colour.
+   - **`pointer-events: none`.** The shader tracks the pointer from a window listener, so it
+     needs no hits of its own — and taking them would put a transparent box over the CTAs. */
+.db-waves {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 860px;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 55% at 30% 0%, rgba(91, 140, 255, 0.22), transparent 70%),
+    radial-gradient(60% 50% at 72% 10%, rgba(169, 116, 255, 0.2), transparent 72%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, rgba(0, 0, 0, 0.4) 72%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 45%, rgba(0, 0, 0, 0.4) 72%, transparent 100%);
+}
+/* Same reason as `.db-burst`: the shader is luminous and the light theme is near-white, where
+   "adds light" means "washes out". */
+html[data-db-theme="light"] .db-waves {
+  opacity: 0.5;
+}
+
 .db-grain {
   position: fixed;
   inset: 0;
