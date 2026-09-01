@@ -73,27 +73,6 @@ const LAYERS = [
     ],
   },
   {
-    tag: "stripe",
-    color: BLUE,
-    // Billing webhooks (SPEC §10 Billing). Needs the CLI, a key, and the `whsec_` that
-    // `stripe listen` prints — i.e. someone deliberately set up billing work.
-    when: () => has("STRIPE_SECRET_KEY") && has("STRIPE_WEBHOOK_SECRET") && onPath("stripe"),
-    cmd: "stripe",
-    args: ["listen", "--forward-to", `localhost:${PORT}/api/webhooks/stripe`],
-    hint: () => {
-      if (!has("STRIPE_SECRET_KEY")) return null; // not doing billing work — stay quiet
-      if (!onPath("stripe"))
-        return "STRIPE_SECRET_KEY is set but the `stripe` CLI isn't on PATH — install it to forward webhooks.";
-      if (!has("STRIPE_WEBHOOK_SECRET"))
-        return (
-          "STRIPE_SECRET_KEY is set but STRIPE_WEBHOOK_SECRET isn't — run " +
-          `\`stripe listen --forward-to localhost:${PORT}/api/webhooks/stripe\` once and ` +
-          "copy its whsec_ into .env.local."
-        );
-      return null;
-    },
-  },
-  {
     tag: "smee",
     color: GREEN,
     // GitHub App webhook delivery (SPEC §3). GitHub's servers can't reach localhost, so a

@@ -270,3 +270,178 @@ export async function ensureCustomer(input: {
     return false;
   }
 }
+
+// --- catalog + customer reads for the billing surfaces ---------------------------------
+
+export type AutumnPlan = {
+  id: string;
+  name?: string | null;
+  add_on?: boolean | null;
+  auto_enable?: boolean | null;
+  archived?: boolean | null;
+  price?: { amount?: number | null; interval?: string | null } | null;
+  items?: Array<{ feature_id?: string | null; included?: number | null }> | null;
+  variant_details?: { base_plan_id?: string | null } | null;
+  [k: string]: unknown;
+};
+
+/**
+ * The customer record behind the billing surfaces. Separate from `lookupOrg` because those
+ * pages want more than the gate does (period end, plan name, cancellation) and can afford a
+ * slower call — `subscriptions.plan` is expanded so the plan's display name comes back with
+ * it instead of costing a second round trip.
+ *
+ * Returns `null` for "no billing backend / unknown customer" and throws nothing: these are
+ * dashboard reads, and a billing outage should show an empty billing page, not a 500.
+ */
+export async function fetchCustomer(organizationId: string): Promise<AutumnCustomer | null> {
+  const client = autumn();
+  if (!client) return null;
+  try {
+    return (await client.customers.get({
+      customerId: organizationId,
+      expand: ["subscriptions.plan"],
+    })) as unknown as AutumnCustomer;
+  } catch (err) {
+    if (!isNotFound(err)) console.warn("[billing] Autumn customer read failed:", err);
+    return null;
+  }
+}
+
+/** The whole Autumn catalog. Empty array when unconfigured or unreachable. */
+export async function fetchPlans(): Promise<AutumnPlan[]> {
+  const client = autumn();
+  if (!client) return [];
+  try {
+    const res = (await client.plans.list({})) as unknown as { list?: AutumnPlan[] } | AutumnPlan[];
+    const list = Array.isArray(res) ? res : (res?.list ?? []);
+    return list.filter((p) => !p.archived);
+  } catch (err) {
+    console.warn("[billing] Autumn plan list failed:", err);
+    return [];
+  }
+}
+
+/** Open Autumn's hosted billing portal (Stripe's, provisioned by Autumn). */
+export async function billingPortalUrl(input: {
+  organizationId: string;
+  returnUrl?: string;
+}): Promise<string | null> {
+  const client = autumn();
+  if (!client) return null;
+  try {
+    const res = (await client.billing.openCustomerPortal({
+      customerId: input.organizationId,
+      ...(input.returnUrl ? { returnUrl: input.returnUrl } : {}),
+    })) as unknown as { url?: string | null };
+    return res?.url ?? null;
+  } catch (err) {
+    console.warn("[billing] Autumn portal failed:", err);
+    return null;
+  }
+}
+
+
+// --- mutations behind the billing surfaces ---------------------------------------------
+
+/**
+ * Cancel at period end, or reverse a pending cancellation. Autumn's `cancel_end_of_cycle`
+ * is what `cancel_at_period_end` used to mean to us, and `uncancel` is the Resume button —
+ * both are one call now, with no branch for "subscription Stripe never knew about", because
+ * Autumn provisions Stripe for everything it bills.
+ */
+export async function setCancelation(input: {
+  organizationId: string;
+  cancel: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  const client = autumn();
+  if (!client) return { ok: false, error: "Billing is not configured." };
+  try {
+    await client.billing.update({
+      customerId: input.organizationId,
+      cancelAction: input.cancel ? "cancel_end_of_cycle" : "uncancel",
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error("[billing] Autumn cancelation change failed:", err);
+    return { ok: false, error: "Could not update the plan — try again." };
+  }
+}
+
+/**
+ * The overage opt-in (hard caps by default — SPEC §10 Billing rule 4). A customer-level
+ * billing control in Autumn, which is the same shape it had as a column: org-wide and
+ * deliberate, the only way usage can exceed the included credits.
+ */
+export async function setOverage(input: {
+  organizationId: string;
+  enabled: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  const client = autumn();
+  if (!client) return { ok: false, error: "Billing is not configured." };
+  try {
+    await client.customers.update({
+      customerId: input.organizationId,
+      billingControls: {
+        overageAllowed: [{ featureId: AI_CREDITS_FEATURE, enabled: input.enabled }],
+      },
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error("[billing] Autumn overage toggle failed:", err);
+    return { ok: false, error: "Could not update overage — try again." };
+  }
+}
+
+/**
+ * Support's escape hatch: hand an org credits directly. This replaces the actor-attributed
+ * `credit_ledger` adjustment — Autumn keeps its own audit trail of balance grants, so the
+ * reason rides along as metadata rather than in a column we own.
+ */
+export async function grantCredits(input: {
+  organizationId: string;
+  amount: number;
+}): Promise<{ ok: boolean; error?: string }> {
+  const client = autumn();
+  if (!client) return { ok: false, error: "Billing is not configured." };
+  try {
+    await client.balances.create({
+      customerId: input.organizationId,
+      featureId: AI_CREDITS_FEATURE,
+      includedGrant: input.amount,
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error("[billing] Autumn credit grant failed:", err);
+    return { ok: false, error: "Could not adjust credits — see server logs." };
+  }
+}
+
+/**
+ * Platform-admin comp: put an org on a paid plan without charging for it.
+ * `noBillingChanges` is what makes it a comp rather than a sale — Autumn grants the
+ * entitlements and bills nothing. `months` bounds it; null is indefinite.
+ */
+export async function compPlan(input: {
+  organizationId: string;
+  planId: string;
+  months: number | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  const client = autumn();
+  if (!client) return { ok: false, error: "Billing is not configured." };
+  try {
+    const endsAt = input.months
+      ? Date.now() + input.months * 30 * 24 * 60 * 60 * 1000
+      : undefined;
+    await client.billing.attach({
+      customerId: input.organizationId,
+      planId: input.planId,
+      noBillingChanges: true,
+      ...(endsAt ? { endsAt } : {}),
+    });
+    return { ok: true };
+  } catch (err) {
+    console.error("[billing] Autumn comp failed:", err);
+    return { ok: false, error: "Could not grant the plan — see server logs." };
+  }
+}

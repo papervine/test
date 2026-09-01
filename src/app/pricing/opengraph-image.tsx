@@ -6,7 +6,7 @@ import { MarketingOgCard, MARKETING_OG_SIZE } from "@/lib/marketing-og-card";
  * unfurled with no image at all.
  *
  * Deliberately **price-free**. Plan prices live in the billing catalog and ship through
- * `billing:sync` → `billing:publish` (SPEC §10), so a reprice is a data change with no reason to
+ * the billing catalog (SPEC §10), so a reprice is a data change with no reason to
  * touch this file — baking "$50" into a PNG would leave a stale card on every timeline that had
  * already scraped it, with nothing to signal it had gone wrong.
  */

@@ -195,7 +195,7 @@ export default async function BillingSettingsPage({
         })}
         {offers.length === 0 && (
           <p className="text-sm text-[var(--muted)]">
-            No plans published yet — run <code>npm run billing:sync</code>.
+            No plans available right now.
           </p>
         )}
       </div>

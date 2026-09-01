@@ -29,9 +29,7 @@
     "db:migrate": "node --env-file=.env.local node_modules/drizzle-kit/bin.cjs migrate",
     "db:seed": "node --env-file=.env.local scripts/seed-dev.mjs",
     "widget:playground": "node --env-file=.env.local scripts/widget-playground.mjs",
-    "billing:sync": "node --env-file=.env.local scripts/sync-billing.mjs",
-    "trigger:local": "node scripts/trigger-local.mjs",
-    "billing:publish": "node --env-file=.env.local scripts/publish-stripe.mjs"
+    "trigger:local": "node scripts/trigger-local.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.81",

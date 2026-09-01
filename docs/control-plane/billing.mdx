@@ -73,12 +73,10 @@ feature is spending the pool" and the meter answers "how much is left". The **Re
 usage** table at the bottom of the page is the same story per call — the operation, the
 model, the tokens, and the credits it cost.
 
-Credits come from three buckets, consumed in this order:
-
-1. **Trial** — the one-time signup grant (expires with the trial).
-2. **Monthly** — the plan's included pool, refreshed each billing period (the "Next
-   reset" date on the Usage page). Unused monthly credits don't roll over.
-3. **Packs** — one-time top-ups purchased on any paid plan. Packs never expire.
+Your plan's included pool refreshes each billing period — the "Next reset" date on the
+Usage page — and unused credits don't roll over. **Credit packs** are one-time top-ups you
+can buy on any paid plan; they're added to the same balance and don't expire with the
+period.
 
 ## Hard caps and overage
 
@@ -89,15 +87,15 @@ the included pool at the plan's per-credit overage rate (Team $0.008, Pro $0.006
 
 ## Managing the subscription
 
-Upgrades go through Stripe Checkout from Settings → Billing (pack purchases from
-Settings → Usage). Once an organization is on a paid plan, choosing a different plan or
-interval switches the existing subscription in place, with proration — no second
-subscription is created.
+Upgrades go through checkout from Settings → Billing (pack purchases from
+Settings → Usage). Once an organization is on a paid plan, choosing a different plan
+switches the existing subscription in place, with proration — no second subscription is
+created. A downgrade is scheduled for the end of the period you have already paid for.
 
 **Downgrading to Free** is on the current-plan card: it cancels at the end of the
 billing period (with a confirm step), and can be resumed any time before then. Docs
 keep rendering on Free; AI features stop when the plan lapses. Card changes and
-invoices are self-serve through the Stripe customer portal ("Manage billing").
+invoices are self-serve through the billing portal ("Manage billing").
 
 Only organization **owners and admins** can change billing; members can view the page.
 

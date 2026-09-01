@@ -51,6 +51,7 @@ export function BillingActions({
   canManage,
   kind,
   planKey,
+  annualPlanKey,
   packKey,
   isCurrent,
 }: {
@@ -58,6 +59,8 @@ export function BillingActions({
   canManage: boolean;
   kind: "plan" | "pack" | "portal";
   planKey?: string;
+  /** The annual variant's plan id, when the tier has one. */
+  annualPlanKey?: string;
   packKey?: string;
   isCurrent?: boolean;
 }) {
@@ -102,26 +105,29 @@ export function BillingActions({
       </span>
     );
   }
-  // changePlan routes by billing state: live Stripe sub → in-place switch with
-  // proration (works for downgrades too); otherwise → Checkout.
+  // One action for every case: Autumn decides whether this is a new subscription, an
+  // upgrade to prorate in place, or a downgrade to schedule, and only returns a Checkout
+  // URL when it actually needs a card. Annual is a sibling plan id, not an interval.
   return (
     <div>
       <div className="flex gap-2">
+        {annualPlanKey && (
+          <button
+            type="button"
+            className={btnPrimary}
+            disabled={!canManage || pending}
+            onClick={() => run(() => changePlan(orgSlug, annualPlanKey))}
+          >
+            {pending ? "Working…" : "Choose annual"}
+          </button>
+        )}
         <button
           type="button"
-          className={btnPrimary}
+          className={annualPlanKey ? btnQuiet : btnPrimary}
           disabled={!canManage || pending}
-          onClick={() => run(() => changePlan(orgSlug, planKey!, "year"))}
+          onClick={() => run(() => changePlan(orgSlug, planKey!))}
         >
-          {pending ? "Working…" : "Choose annual"}
-        </button>
-        <button
-          type="button"
-          className={btnQuiet}
-          disabled={!canManage || pending}
-          onClick={() => run(() => changePlan(orgSlug, planKey!, "month"))}
-        >
-          Monthly
+          {!annualPlanKey && pending ? "Working…" : "Monthly"}
         </button>
       </div>
       {error && <p className="mt-2 text-sm text-red-400">{error}</p>}
