@@ -12,13 +12,13 @@ import {
 export default function AgentPage() {
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-6">
-      <AutomateHeader page="Teammate" />
+      <AutomateHeader page="Agent" />
 
       {/* Settings heading + Slack workspace connect banner */}
       <div className="mt-8 flex flex-col gap-6 lg:flex-row lg:items-stretch lg:justify-between">
         <div className="shrink-0">
-          <h1 className="text-xl font-semibold">Teammate settings</h1>
-          <p className="mt-1 text-sm text-[var(--muted)]">Manage your docs teammate</p>
+          <h1 className="text-xl font-semibold">Agent settings</h1>
+          <p className="mt-1 text-sm text-[var(--muted)]">Manage your docs agent</p>
         </div>
 
         <div className="flex items-center justify-between gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.03)] px-5 py-4 lg:max-w-2xl lg:flex-1">

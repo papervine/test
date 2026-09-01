@@ -39,7 +39,7 @@ type RailItem = {
   // (src/lib/features.ts). Absent → visible to everyone.
   feature?: FeatureKey;
   // TEMPORARY: hide from everyone but the platform operator (PLATFORM_ADMIN_EMAILS).
-  // Teammate has nothing wired up yet — pull this flag once it's real.
+  // The Agent has nothing wired up yet — pull this flag once it's real.
   operatorOnly?: boolean;
   // Heavy routes (expensive per-request RSC render) opt OUT of the full prefetch below, so we
   // don't fire that work for every rail item on every dashboard page. They keep Next's default
@@ -50,12 +50,12 @@ type RailItem = {
   trialBadge?: boolean;
 };
 
-// Grouped rail IA. A lead group (Overview · Studio · Insights), an "Autopilot" section — the
-// three agentic surfaces: Routines (scheduled/triggered runs), Teammate (the chat agent), and
-// Ask (reader Q&A) — then a "Workspace" section (MCP + Settings). Routes (`sub`) are stable
+// Grouped rail IA. A lead group (Overview · Studio · Insights), an "Automate" section — the
+// three agentic surfaces: Automations (scheduled/triggered runs), Agent (the chat agent), and
+// Assistant (reader Q&A) — then a "Workspace" section (MCP + Settings). Routes (`sub`) are stable
 // (SPEC §10.2: automate/automations, automate/agent, automate/assistant); the rail carries only
-// the display label + sub-path, and hrefs are built per-site from the URL. The Autopilot
-// surfaces are scaffolded UI only beyond Routines — they navigate but aren't all wired yet.
+// the display label + sub-path, and hrefs are built per-site from the URL. The Automate
+// surfaces are scaffolded UI only beyond Automations — they navigate but aren't all wired yet.
 const NAV_SECTIONS: { heading?: string; items: RailItem[] }[] = [
   {
     items: [
@@ -65,18 +65,18 @@ const NAV_SECTIONS: { heading?: string; items: RailItem[] }[] = [
     ],
   },
   {
-    heading: "Autopilot",
+    heading: "Automate",
     items: [
       {
         sub: "automate/automations",
-        label: "Routines",
+        label: "Automations",
         icon: CalendarClock,
         feature: "automate.workflows",
         trialBadge: true,
       },
       {
         sub: "automate/agent",
-        label: "Teammate",
+        label: "Agent",
         icon: MessagesSquare,
         feature: "automate.agent",
         trialBadge: true,
@@ -84,7 +84,7 @@ const NAV_SECTIONS: { heading?: string; items: RailItem[] }[] = [
       },
       {
         sub: "automate/assistant",
-        label: "Ask",
+        label: "Assistant",
         icon: CircleHelp,
         feature: "automate.assistant",
         trialBadge: true,
