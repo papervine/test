@@ -661,6 +661,20 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   is an **idempotent** `ensureAutomation()` helper: find the row or create it, so the toggle
   test still creates it via UI and the later tests stop caring who did. When a test needs
   something another test makes, make it yourself if it's missing.
+- **A static import into a SHARED shell is paid by every route that renders it — and the
+  smoke gate's budget is per check, not per suite.** `PlatformShell` wraps eleven routes.
+  Adding one `import { GradientWaves }` to it — a ~440-line shader module used by exactly one
+  page — put that module in all eleven module graphs, and `/home` (the heaviest marketing
+  page: two backdrop fields plus the Ask demo) went over the smoke gate's **30s per-request**
+  timeout on its cold `next dev` compile. It passed locally every time and failed twice in a
+  row on CI, which is the signature of a budget rather than a bug: CI is ~4× slower, so it is
+  the only place the extra compile crosses the line. The control that made it diagnosable
+  rather than a guess was checking `main`'s own tip in CI — smoke green there, red here, same
+  job. Fix: the shell takes the backdrop as a **node** (`backdrop?: React.ReactNode`) and
+  `/pricing` passes it, so the module stays in one route's graph. Reach for the same shape
+  before adding anything heavy to `PlatformShell`, the root layout, or middleware; a
+  `next/dynamic` boundary is the other option, but passing the node is the one you can be
+  certain about, because the module is then genuinely not imported.
 - **Tests run alongside `npm run dev` — each harness owns its own `distDir`.** Next allows one
   `next dev` per *distDir* (it holds `<distDir>/dev/lock`), and two dev servers sharing one
   output tree also interleave their compiled chunks and manifests — which is how running the

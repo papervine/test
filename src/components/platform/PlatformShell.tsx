@@ -3,7 +3,6 @@ import { platformFontVars } from "@/lib/fonts";
 import { VineField } from "./VineField";
 import { SproutField } from "./SproutField";
 import { PrismaticBurst } from "./PrismaticBurst";
-import { GradientWaves } from "./GradientWaves";
 
 // The platform's dark, luminous frame (SPEC §2). Wraps every control-plane surface
 // — landing, auth, app — in the `.db` scope so the palette, fonts, and atmosphere
@@ -16,19 +15,25 @@ import { GradientWaves } from "./GradientWaves";
 //             It degrades to a static wash under reduced motion or without WebGL2.
 //   "home"  — glow + ambient seedling field + growing vine + grain. The landing page's
 //             living backdrop (SproutField behind VineField), in place of the static grid.
-//   "waves" — glow + a raymarched gradient sea under the masthead + grain, in place of the grid.
-//             Pricing is a page people scan and compare on, so the motion is bounded to the top
-//             of it and slowed right down; it degrades to a static wash on the same terms as the
-//             burst (reduced motion, no WebGL2, no chunk).
+//   "waves" — glow + grain, no grid, and whatever you pass as `backdrop`. Unlike the other
+//             variants this one does NOT import its backdrop: eleven routes render this shell,
+//             and a static import puts the module in all eleven module graphs to serve one.
+//             That is not theoretical — importing GradientWaves here pushed `/home`'s cold
+//             compile past the smoke gate's 30s-per-check budget on CI (green locally, failed
+//             twice in a row on the runner, while `main` was green). Pass the node instead and
+//             it stays in the graph of the one page that wants it.
 //   "lite"  — glow only. For the data-dense app, so the grid/grain never sit behind
 //             tables and forms and hurt legibility.
 export function PlatformShell({
   variant = "full",
   className = "",
+  backdrop,
   children,
 }: {
   variant?: "full" | "auth" | "lite" | "home" | "waves";
   className?: string;
+  /** The `waves` variant's backdrop. A node, not an import — see the note above. */
+  backdrop?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -49,26 +54,7 @@ export function PlatformShell({
           colors={["#261B62", "#5b8cff", "#a974ff", "#BDA4F1"]}
         />
       )}
-      {variant === "waves" && (
-        <GradientWaves
-          // The platform's own two brand hues over the deep indigo they sit on — the same
-          // palette as the auth burst, so the two shader surfaces read as one product.
-          horizonColor="#261B62"
-          waveColor="#5b8cff"
-          crestColor="#BDA4F1"
-          // Tuned for a page you compare prices on, not a demo: half upstream's speed, the
-          // cheapest step count (invisible behind the mask), and held back to two-thirds
-          // opacity so the tier cards stay the brightest thing on screen.
-          speed={0.18}
-          detail="low"
-          opacity={0.62}
-          brightness={0.95}
-          // Parallax stays, damped — it rewards a moved cursor without dragging the eye off
-          // the cards. Grain is off here: `.db-grain` already lays a film over the whole shell.
-          parallaxStrength={0.25}
-          grain={false}
-        />
-      )}
+      {variant === "waves" && backdrop}
       {variant === "home" && <SproutField />}
       {variant === "home" && <VineField />}
       {variant !== "lite" && <div className="db-grain" />}

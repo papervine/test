@@ -3,6 +3,7 @@ import Link from "next/link";
 import { cookies, headers } from "next/headers";
 import { Plus, Check, ArrowRight, Sparkles } from "lucide-react";
 import { PlatformShell } from "@/components/platform/PlatformShell";
+import { GradientWaves } from "@/components/platform/GradientWaves";
 import { Brand } from "@/components/Brand";
 import { appHostFor } from "@/lib/tenant-host";
 import { marketingMetadata } from "@/lib/marketing-seo";
@@ -107,7 +108,31 @@ export default async function PricingPage() {
   const appBase = `${host.includes("localhost") ? "http" : "https"}://${appHostFor(host)}`;
 
   return (
-    <PlatformShell variant="waves">
+    <PlatformShell
+      variant="waves"
+      // Passed rather than imported by the shell: see PlatformShell's note on why a
+      // one-route shader must not sit in eleven routes' module graphs.
+      backdrop={
+        <GradientWaves
+          // The platform's own two brand hues over the deep indigo they sit on — the same
+          // palette as the auth burst, so the two shader surfaces read as one product.
+          horizonColor="#261B62"
+          waveColor="#5b8cff"
+          crestColor="#BDA4F1"
+          // Tuned for a page you compare prices on, not a demo: half upstream's speed, the
+          // cheapest step count (invisible behind the mask), and held back to two-thirds
+          // opacity so the tier cards stay the brightest thing on screen.
+          speed={0.18}
+          detail="low"
+          opacity={0.62}
+          brightness={0.95}
+          // Parallax stays, damped — it rewards a moved cursor without dragging the eye off
+          // the cards. Grain is off here: `.db-grain` already lays a film over the whole shell.
+          parallaxStrength={0.25}
+          grain={false}
+        />
+      }
+    >
       {/* Header */}
       <header className="db-glass sticky top-0 z-30 border-b border-[rgba(var(--ink-rgb),0.06)]">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
