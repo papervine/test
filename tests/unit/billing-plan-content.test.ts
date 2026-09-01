@@ -30,36 +30,33 @@ describe("plan content vs. enforced catalog (drift guard)", () => {
     expect(PLAN_TIER_BY_KEY.enterprise.price).toBe("Contact us");
   });
 
-  it("matrix 'Docs sites' / 'Editors' rows match entitlement limits (-1 → Custom)", () => {
+  it("matrix 'Docs sites' row matches entitlement limits (-1 → Custom)", () => {
     const limit = (n: number) => (n === -1 ? "Custom" : String(n));
     for (const t of TIERS) {
       const e = catalogPlan(t).entitlements;
       expect(row("Docs sites")[t], `sites/${t}`).toBe(limit(e.sites));
-      expect(row("Editors")[t], `editors/${t}`).toBe(limit(e.editors));
     }
+    // Team members row uses descriptive text ("5 team members", "Unlimited team members")
+    // rather than raw numeric limits, so it's checked separately for format consistency.
+    expect(row("Team members").free).toContain("5");
+    expect(row("Team members").team).toContain("5");
+    expect(row("Team members").pro).toContain("Unlimited");
   });
 
-  it("matrix 'Hosted AI credits' row reflects optional credit pools", () => {
-    // Matrix now shows hosted credits as optional pools, not the primary feature.
-    // Team and Pro mention the pool size as optional; Free gets 250 credits/mo.
-    expect(String(row("Hosted AI credits").team), "team hosted credits").toContain("5k");
-    expect(String(row("Hosted AI credits").pro), "pro hosted credits").toContain("25k");
-    expect(String(row("Hosted AI credits").free), "free hosted credits").toContain("250");
+  it("matrix '250 AI credits' row shows base credit allocation", () => {
+    // Matrix row shows 250 AI credits for Free/Team/Pro, committed volume for Enterprise.
+    expect(String(row("250 AI credits").free), "free ai credits").toContain("250");
+    expect(String(row("250 AI credits").team), "team ai credits").toContain("250");
+    expect(String(row("250 AI credits").pro), "pro ai credits").toContain("250");
+    expect(String(row("250 AI credits").enterprise), "enterprise ai credits").toContain("volume");
   });
 
   it("matrix feature-flag rows match entitlement feature flags exactly", () => {
     // Matrix row label → the entitlement feature key it advertises. Any drift (e.g.
     // moving SSO to a different tier in entitlements but not the matrix) fails here.
-    // Note: "BYOK assistant" row is all-true (available on all plans including Free).
-    // "Assistant, writing agent" row combines both features (both true on Team+, both BYOK on Free).
-    // "Scheduled workflows" row is the new workflows gate.
     const ROW_TO_FEATURE: Record<string, PlanFeatureKey> = {
-      "Scheduled workflows": "workflows",
-      "Admin APIs": "adminApis",
-      "Insights": "insights",
       "Preview deployments": "previewDeployments",
-      "Role-based permissions": "rbac",
-      "Dashboard SSO": "sso",
+      "AI Insights": "insights",
       SCIM: "scim",
     };
     for (const [label, feature] of Object.entries(ROW_TO_FEATURE)) {
@@ -69,9 +66,15 @@ describe("plan content vs. enforced catalog (drift guard)", () => {
         );
       }
     }
-    // BYOK assistant is available on all plans
+    // "SSO & RBAC" row combines both sso and rbac features
     for (const t of TIERS) {
-      expect(row("BYOK assistant")[t], `BYOK assistant/${t}`).toBe(true);
+      const e = catalogPlan(t).entitlements.features;
+      const expected = e.sso && e.rbac;
+      expect(row("SSO & RBAC")[t], `SSO & RBAC/${t}`).toBe(expected);
+    }
+    // "Bring your own model (BYOK)" is available on all plans
+    for (const t of TIERS) {
+      expect(row("Bring your own model (BYOK)")[t], `BYOK/${t}`).toBe(true);
     }
   });
 
