@@ -9,8 +9,9 @@ import { buildNav, type NavLeaf, type NavNode } from "@papervine/renderer/lib/na
 // renders first on the app host, finds no tenant source, and primes that memo with the
 // DEFAULT content/ config. The editor page later runs inside `contentContext.run(draftSrc)`,
 // but the memo can't re-resolve the now-active source, so `loadConfig()` returns the cached
-// DEFAULT and buildNav produces our docs' nav, not the site's. The fix: the editor reads
-// config straight from its resolved `src`, bypassing the poisoned memo.
+// DEFAULT and buildNav produces our docs' nav, not the site's. The first fix: the editor reads
+// config straight from its resolved `src`, bypassing the poisoned memo. (The memo is now keyed
+// by source id too — see the second describe block, which is where the general fix lives.)
 //
 // React's `cache()` only memoizes inside a render request (under Node it's an identity pass-
 // through), so we model the per-request memo explicitly — an arg-keyed memo over the SAME
@@ -74,5 +75,63 @@ describe("editor reads nav config from its own source, not the poisoned request 
     });
 
     expect(fixedGroups).toEqual(["Get Started", "Guides", "Widgets"]); // the edited site's own nav
+  });
+});
+
+// The workaround above fixes the surface that knows to apply it. The FULL-SITE draft preview
+// didn't: it renders through TenantDocsShell, which calls the shared `loadConfig()`, so the
+// preview showed the draft's pages inside Papervine's own nav, colours and banner — and every
+// edit in the Site settings drawer looked like it had done nothing. So the memo key itself now
+// carries the active source's id (content.ts), and the poisoning is structurally impossible.
+
+/** The memo as it is now: keyed by the active source's id, not by "no arguments". */
+function makeKeyedRequestMemo(fallback: ContentSource) {
+  const slots = new Map<string, ReturnType<ContentSource["loadConfig"]>>();
+  return () => {
+    const src = contentContext.getStore() ?? fallback;
+    const key = src.id ?? "default";
+    const hit = slots.get(key);
+    if (hit) return hit;
+    const fresh = src.loadConfig();
+    slots.set(key, fresh);
+    return fresh;
+  };
+}
+
+describe("the per-request config memo is keyed by source", () => {
+  it("gives two sources in one request their own entries", async () => {
+    const platform = { ...sourceFor("Papervine Docs", ["Platform", "Renderer"]), id: "fs:/content" };
+    const draft = { ...sourceFor("Starter Docs", ["Get Started", "Guides"]), id: "draft:site-1:main:" };
+    const loadConfig = makeKeyedRequestMemo(platform);
+
+    // Phase 1 — the root layout primes the memo on the app host, where there's no tenant source.
+    expect((await loadConfig()).name).toBe("Papervine Docs");
+
+    // Phase 2 — the preview renders inside the draft source. It must see the DRAFT's config.
+    const inPreview = await contentContext.run(draft, () => loadConfig());
+    expect(inPreview.name).toBe("Starter Docs");
+
+    // …and the platform entry is still intact, so priming isn't destroyed either way.
+    expect((await loadConfig()).name).toBe("Papervine Docs");
+  });
+
+  it("every real source declares a distinct id", async () => {
+    // A source that forgets `id` falls back to the shared "default" slot — which is exactly the
+    // bug above. These are the four the app actually renders through.
+    const { fsSource } = await import("@papervine/renderer/lib/content");
+    const { s3Source } = await import("@/lib/s3-source");
+    const { draftSource } = await import("@/lib/draft-source");
+
+    const ids = [
+      fsSource("content").id,
+      fsSource("docs").id,
+      s3Source("site-1", "sha:1").id,
+      s3Source("site-1", "sha:2").id,
+      s3Source("site-2", "sha:1").id,
+      draftSource("site-1", "main", "sha:1").id,
+      draftSource("site-1", "release", "sha:1").id,
+    ];
+    expect(ids.every((id) => typeof id === "string" && id.length > 0)).toBe(true);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 });

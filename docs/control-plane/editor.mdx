@@ -589,6 +589,57 @@ It's your draft, not your published site, so nobody else sees it and nothing is 
 **Publish**. Gated pages are visible to you here even if you don't hold the reader groups they
 require — you're previewing your own site.
 
+### Site settings, without leaving the preview
+
+**Site settings** in the preview's top bar opens a drawer down the right-hand side: your whole
+`docs.json`, as one scrolling form. Change the primary colour, add a navbar link, write a banner —
+the site behind the drawer re-renders with it, so you're choosing against the real thing instead of
+guessing and reloading.
+
+Everything `docs.json` can carry is in there, in one column: General, Navigation, Branding,
+Styling, Typography, Navbar, Footer, Banner, Content, Codeblocks, Context menu, Navigation
+behavior, Search, API reference, Redirects, SEO, Thumbnails, Analytics, 404 page and Variables. The
+**Section** picker at the top jumps to one; scrolling past the rest is how you find out what's
+configurable in the first place.
+
+Three things worth knowing about how it saves:
+
+<Steps>
+  <Step title="It edits your draft, not your live site">
+    Every change lands in the same edit session as your page edits, and shows up in the **Publish**
+    panel as `docs.json`. So a colour change ships — and can be reverted — exactly like a page
+    edit, and nothing readers see moves until you publish.
+  </Step>
+  <Step title="It saves as you go">
+    There's no Save button. Text settles a moment after you stop typing; a toggle or a dropdown
+    saves immediately. The header says **Saving…** and then **Saved to draft**.
+  </Step>
+  <Step title="Clearing a field removes it">
+    Emptying a setting deletes the key from `docs.json` rather than writing an empty value — and if
+    that was the last setting in its block, the block goes too. Your config keeps the shape a
+    hand-written one would have, which matters because it's a file in your repo that other tools
+    read.
+  </Step>
+</Steps>
+
+The **Navigation** section says how many tabs, groups and pages you have and sends you to the
+navigation tree, which is where reordering and page creation live.
+
+<Note>
+  **“Not rendered yet”.** Some sections and fields carry that label. `docs.json` is a portable,
+  standard file — the same one other tools read — so the drawer lets you set every key the format
+  defines, and Papervine stores and preserves all of them. A labelled key is one Papervine doesn't
+  yet *draw on the page*: set it because your repo or another tool needs it, and it starts taking
+  effect the moment support lands. Nothing marked that way is lost, reformatted, or ignored on
+  publish.
+</Note>
+
+Fields written by the drawer follow the format's own shapes, so what lands in your repo is what a
+hand-written config would look like: a one-file logo stays a plain string rather than becoming
+`{ light, dark }`, a redirect only carries `permanent` when it's permanent, and a call-to-action
+button appears only once it has both a label and a link. Keys the drawer doesn't show at all are
+left exactly as you wrote them.
+
 ## Branches and the draft buffer
 
 <Info>

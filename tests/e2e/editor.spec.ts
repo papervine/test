@@ -2213,8 +2213,10 @@ test.describe("web editor @external", () => {
     await expect(overlay).toBeVisible({ timeout: 15_000 });
     expect(popups, "Preview opened a tab instead of an overlay").toEqual([]);
 
-    // The header's controls, per the design: settings, agent, reload, close.
-    await expect(overlay.getByRole("link", { name: "Site settings" })).toBeVisible();
+    // The header's controls, per the design: settings, agent, reload, close. Settings is a BUTTON
+    // (it opens a drawer over the preview) — as a link it navigated away and threw the preview,
+    // the editor and the draft away to show a form for the same file.
+    await expect(overlay.getByRole("button", { name: "Site settings" })).toBeVisible();
     await expect(overlay.getByRole("button", { name: "Ask agent" })).toBeVisible();
     await expect(overlay.getByRole("button", { name: "Reload preview" })).toBeVisible();
 
@@ -2231,6 +2233,170 @@ test.describe("web editor @external", () => {
     await page.keyboard.press("Escape");
     await expect(overlay).toHaveCount(0);
     await expect(pm).toBeVisible();
+  });
+
+  // The Site settings drawer (SPEC §9.2): docs.json edited over the live preview, in one long
+  // scrolling column. Three things worth a browser: the write lands in the DRAFT (so it publishes
+  // with the pages, and never touches the live site on its own), the PREVIEW behind it re-renders
+  // with the change — which is the whole point, and which a poisoned per-request config memo
+  // silently defeated for the full-site preview — and clearing a field REMOVES the key rather than
+  // writing an empty string into somebody's config file.
+  test("Site settings edits docs.json in the draft and the preview picks it up", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
+    page.on("console", (m) => {
+      if (m.type() !== "error") return;
+      // Resource 404s are excluded deliberately: the logo assertions below set paths that don't
+      // exist in this fixture (the point is the JSON shape, not the file), and the preview frame
+      // dutifully tries to load them. What this guard is for is React errors — a
+      // flushSync-during-render, a render loop, a hydration mismatch — which is JS, not fetches.
+      if (m.text().includes("Failed to load resource")) return;
+      errors.push(`console.error: ${m.text()}`);
+    });
+
+    // Own the precondition: this asserts on docs.json's draft content, so start from no draft of it.
+    await sql`
+      delete from draft_file df
+       using editor_session es
+       where df.session_id = es.id and es.site_id = ${SITE_ID} and df.path = 'docs.json'`;
+
+    await page.goto(sitePath(SLUG, "editor"));
+    await expect(page.locator(".pv-visual .ProseMirror")).toBeVisible({ timeout: 15_000 });
+    await page.getByRole("button", { name: "Preview" }).click();
+
+    const drawer = page.getByRole("dialog", { name: "Site settings" });
+    await page.getByRole("button", { name: "Site settings" }).click();
+    await expect(drawer).toBeVisible({ timeout: 15_000 });
+
+    // One column, the WHOLE docs.json surface in it — the picker jumps, it doesn't hide the rest
+    // behind tabs. Listed explicitly because "it's all in there" is the feature.
+    for (const section of [
+      "General",
+      "Navigation",
+      "Branding",
+      "Styling",
+      "Typography",
+      "Navbar",
+      "Footer",
+      "Banner",
+      "Content",
+      "Codeblocks",
+      "Context menu",
+      "Navigation behavior",
+      "Search",
+      "API reference",
+      "Redirects",
+      "SEO",
+      "Thumbnails",
+      "Analytics",
+      "404 page",
+      "Variables",
+    ]) {
+      // `exact` matters: "Navigation" and "Navigation behavior" are both headings here, and the
+      // default substring match would resolve two elements for one of them.
+      await expect(drawer.getByRole("heading", { name: section, exact: true })).toBeVisible();
+    }
+
+    // Keys Papervine keeps but doesn't render are labelled, not hidden — that's the deal that lets
+    // the drawer cover the whole format without promising effects it can't deliver.
+    await expect(drawer.getByText("Not rendered yet").first()).toBeVisible();
+
+    // The picker jumps rather than filters — the section stays in the one column.
+    await drawer.getByLabel("Jump to section").selectOption("analytics");
+    await expect(drawer.getByLabel("Google Analytics 4")).toBeInViewport({ timeout: 10_000 });
+
+    // A banner is unmistakable in the frame behind: absent before, rendered after.
+    const frame = page.frameLocator('iframe[title="Live preview"]');
+    const bannerText = "Shipping notes for the drawer test";
+    await expect(frame.getByText(bannerText)).toHaveCount(0);
+
+    await drawer.getByLabel("Content", { exact: true }).fill(bannerText);
+    await expect(drawer.getByText("Saved to draft")).toBeVisible({ timeout: 15_000 });
+
+    // It went into the draft session's docs.json, not the live config.
+    await expect
+      .poll(
+        async () => {
+          const rows = await sql`
+            select content from draft_file d
+            join editor_session s on s.id = d.session_id
+            where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'docs.json'`;
+          return rows[0]?.content ?? "";
+        },
+        { timeout: 15_000 },
+      )
+      .toContain(bannerText);
+
+    // …and the preview re-rendered with it (the frame is remounted on every save).
+    await expect(frame.getByText(bannerText)).toBeVisible({ timeout: 30_000 });
+
+    // Clearing removes the key — `"content": ""` would be a banner that renders as an empty bar.
+    await drawer.getByLabel("Content", { exact: true }).fill("");
+    await expect
+      .poll(
+        async () => {
+          const rows = await sql`
+            select content from draft_file d
+            join editor_session s on s.id = d.session_id
+            where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'docs.json'`;
+          return rows[0]?.content ?? "";
+        },
+        { timeout: 15_000 },
+      )
+      .not.toContain(bannerText);
+    const after = await sql`
+      select content from draft_file d
+      join editor_session s on s.id = d.session_id
+      where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'docs.json'`;
+    expect(after[0]?.content ?? "", "an emptied banner must leave no banner key at all").not.toContain(
+      '"banner"',
+    );
+
+    // `logo` is EITHER a string or `{light, dark}`, and the drawer edits the whole key as one
+    // paired control for that reason: per-sub-path fields showed a string-form logo as empty and
+    // then replaced it with an object, dropping the logo the site was using.
+    const draftConfig = async () => {
+      const rows = await sql`
+        select content from draft_file d
+        join editor_session s on s.id = d.session_id
+        where s.site_id = ${SITE_ID} and s.status = 'open' and d.path = 'docs.json'`;
+      return JSON.parse(rows[0]?.content ?? "{}") as { logo?: unknown; redirects?: unknown };
+    };
+
+    await drawer.getByLabel("Logo (light)").fill("/logo.svg");
+    // One file for both modes stays the plain string — the shape a hand-written docs.json has.
+    await expect.poll(async () => (await draftConfig()).logo, { timeout: 15_000 }).toBe("/logo.svg");
+
+    await drawer.getByLabel("Logo (dark)").fill("/logo-dark.svg");
+    await expect
+      .poll(async () => (await draftConfig()).logo, { timeout: 15_000 })
+      .toEqual({ light: "/logo.svg", dark: "/logo-dark.svg" });
+
+    await drawer.getByLabel("Logo (light)").fill("");
+    await drawer.getByLabel("Logo (dark)").fill("");
+    await expect.poll(async () => "logo" in (await draftConfig()), { timeout: 15_000 }).toBe(false);
+
+    // A passthrough section writes the format's shape properly too — a list of objects, with
+    // `permanent` present only when it's true (false is the default; a file full of it is noise).
+    await drawer.getByRole("button", { name: "Add redirect" }).click();
+    await drawer.getByLabel("Redirect 1 from").fill("/old");
+    await drawer.getByLabel("Redirect 1 to").fill("/new");
+    await expect
+      .poll(async () => (await draftConfig()).redirects, { timeout: 15_000 })
+      .toEqual([{ source: "/old", destination: "/new" }]);
+    await drawer.getByLabel("Redirect 1 permanent").click();
+    await expect
+      .poll(async () => (await draftConfig()).redirects, { timeout: 15_000 })
+      .toEqual([{ source: "/old", destination: "/new", permanent: true }]);
+    await drawer.getByRole("button", { name: "Remove redirect 1" }).click();
+    await expect.poll(async () => "redirects" in (await draftConfig()), { timeout: 15_000 }).toBe(false);
+
+    // Escape closes the drawer and leaves the preview up (they're separate dismissals).
+    await page.keyboard.press("Escape");
+    await expect(drawer).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Live preview" })).toBeVisible();
+
+    expect(errors, `console errors in the settings drawer:\n${errors.join("\n")}`).toEqual([]);
   });
 
   // Publish panel: the file-changes list + per-file revert (SPEC §9.2). Edit one page, open the

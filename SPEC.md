@@ -4073,6 +4073,79 @@ layer.
 > is the current page, its content renders, and Escape returns to the editor. Verified in both
 > platform themes.
 >
+> **Site settings became a drawer over the preview (2026-08-31).** The overlay's "Site settings"
+> control was a link to `/:org/:site/settings`, which navigated away — throwing out the preview, the
+> editor and the draft you were looking at in order to show a form for the same file. It's now a
+> right-hand drawer (`SiteSettingsDrawer`) over the frame: the whole `docs.json` as **one scrolling
+> column**, with a sticky section picker that jumps. One column rather than tabs on purpose — config
+> editing is a browsing task ("what can I even change?") more than a lookup one, and tabs hide the
+> field you didn't know existed.
+>
+> The form is DATA (`site-config-schema.ts`: `{path, label, help, kind}` per field), not hand-built
+> markup — dozens of fields over one file, where a hand-written form is one whose 40th row disagrees
+> with its 3rd about spacing and help text. Writes go through ONE action
+> (`setSiteConfigValueAction(path, value)`) into the same draft session as page edits, so a colour
+> change is reviewable, revertable and publishable exactly like a page edit and shows up in the
+> Publish panel as `docs.json`. The pure part is `src/lib/site-config-edit.ts` — path get/set with
+> two rules under test: **clearing a field deletes the key** (and prunes an object left empty; a
+> config file wants an absent `logo`, not `"logo": ""`), and **everything unmodelled survives
+> byte-for-byte**, which is the write-side of the parser's warn-don't-throw promise.
+>
+> **Scope: the WHOLE format, with the parts we don't render labelled.** The first cut shipped only
+> the eight sections whose keys this renderer consumes and listed the rest as "not editable here" —
+> reasoned from the honesty rule (a form field that changes nothing is a lie) and **wrong**, as the
+> reviewer said plainly: *"i gave you so many screenshots.. you didn't add all of those options."*
+> The flaw in the reasoning is that `docs.json` is not our UI — it's the customer's portable file,
+> the same one other tools read, so being unable to set a key they need costs them more than setting
+> one we don't read. Twenty sections now, straight off the JSON Schema at
+> `https://papervine.io/docs.json` (field names, nesting and enums taken from it rather than
+> guessed): General, Navigation, Branding, Styling, Typography, Navbar, Footer, Banner, Content,
+> Codeblocks, Context menu, Navigation behavior, Search, API reference, Redirects, SEO, Thumbnails,
+> Analytics, 404 page, Variables.
+>
+> Honesty moved from omission to **labelling**: `rendered: false` on a section or field draws a quiet
+> "Not rendered yet" badge, and the drawer's footer explains the deal — stored, preserved, published,
+> just not drawn yet. Two tests keep it true: every field claiming to be rendered must survive
+> `docsConfigSchema` typed parsing, and every unrendered field must come back out of
+> `parseDocsConfig` untouched AND be named in its warnings (the passthrough promise, asserted from
+> both ends). A third pins the section list itself, so dropping one is a failing test rather than
+> something a customer discovers.
+>
+> Shapes that needed real care, all pinned: `logo`/`favicon` are string OR `{light, dark}` — one
+> paired control per key (`logoValue` picks the shape a hand-written file would have), because
+> per-sub-path fields showed a string-form logo as empty and then replaced it with an object,
+> dropping the logo the site was using; `navbar.primary` requires BOTH `label` and `href`, and a
+> half-written pair invalidates the whole `navbar` block, so it's written only when complete;
+> `redirects` writes `permanent` only when true (false is the default and a file full of it is diff
+> noise); `contextual.options` writes in the schema's order rather than click order; `fonts.weight`
+> is coerced to a number, since `"400"` is a string where the schema wants an integer. And one
+> genuinely dumb bug the screenshots caught: the shared key/value control hardcoded "Add meta tag",
+> so the footer's Socials rows invited you to add a meta tag — the noun comes from the field now.
+>
+> **And the bug that made the whole feature look broken: the full-site preview was rendering
+> PAPERVINE'S OWN `docs.json`.** Every setting saved correctly into the draft and the frame reloaded
+> with no visible change — because `loadConfig` is a per-request React `cache()` keyed on its (empty)
+> arguments, the root layout runs first on every host, and on the **app host** it finds no tenant
+> source and primes that single memo with the default `content/` config. The preview then ran inside
+> `contentContext.run(draftSrc)` but got the memoized platform config: right pages, wrong nav, wrong
+> colours, no banner. This was a KNOWN bug with a LOCAL workaround — the editor page reads config
+> straight off its `src` (`editor-config-source.test.ts` documents it) — and the preview simply never
+> got the workaround. Fixed at the root instead: every `ContentSource` now carries an `id`
+> (`fs:{dir}`, `s3:{site}:{version}`, `draft:{site}:{branch}:{version}`) and every memo key starts
+> with it, so two sources in one request are independent and no surface has to know to dodge the memo.
+> `id` is optional so test mocks still compile (they're single-source per request); the real sources
+> all set one, pinned by a test asserting they're distinct. Also fixed while in there: `banner` was
+> missing from the parser's `KNOWN_KEYS`, so every site with a banner logged "Unsupported docs.json
+> keys (ignored): banner" while rendering it perfectly.
+>
+> Last detail, cosmetic but load-bearing for demos: the dashboard's own embedded assistant widget
+> (§8.7) is appended to `<body>` by the real customer loader, outside the dashboard's DOM, and it
+> painted over the preview and the drawer — z-index can't settle it from inside. The loader now marks
+> its host `data-papervine-widget` (a handle a customer page can use too — everything else is behind
+> a shadow root) and the overlay hides it while it's up; it also makes no sense there, since the
+> frame is showing a site with a launcher of its own. And `/api/widget/embed.js` no longer sends
+> `max-age=3600` in dev, where it meant an hour of "my change to the loader did nothing".
+>
 > **Video 404'd in the draft preview (2026-08-25).** Reported as "the editor renders the video URLs
 > without the tenant parts," and it was broader than the editor: **any** surface with a non-empty
 > `assetBase` — path-based tenant serving (`/sites/{slug}`) as well as the draft preview — rendered

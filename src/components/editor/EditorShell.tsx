@@ -668,8 +668,16 @@ export function EditorShell({
         <PreviewOverlay
           org={org}
           site={site}
+          branch={branch}
           slug={slug}
           onClose={() => setPreviewOpen(false)}
+          // The settings drawer's Navigation section defers to the real tree, which lives behind
+          // the preview — so close the preview and make sure the tree is actually showing.
+          onEditNavigation={() => {
+            setPreviewOpen(false);
+            setTreeView("nav");
+            setTreeOpen(true);
+          }}
           // Close before summoning the agent: the composer lives in the editor's own layout, so
           // leaving the preview on top would put the agent behind an opaque full-screen frame.
           onAskAgent={() => {

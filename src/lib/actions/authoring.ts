@@ -6,6 +6,7 @@ import { getPageVersionContent, listPageVersions } from "@/lib/page-history-stor
 import { upsertDraftFile } from "@/lib/draft-store";
 import { siteRoute } from "@/lib/dashboard-nav";
 import { gateEditor } from "@/lib/editor-gate";
+import { setAtPath } from "@/lib/site-config-edit";
 import { mintCollabToken } from "@/lib/collab-token";
 import {
   checkoutBranch,
@@ -599,4 +600,51 @@ export async function revertFileAction(
   const result = await revertDraftFile(gate.site, branch, path);
   revalidatePath(siteRoute(orgSlug, siteSlug, "editor"));
   return result;
+}
+
+
+/**
+ * Read the draft's `docs.json` for the Site settings drawer.
+ *
+ * Returns the RAW parsed object, not the validated `DocsConfig`: the drawer edits a file, and the
+ * parser's job is to be lenient for rendering (defaults filled in, unknown keys kept with a
+ * warning). Handing the drawer a defaulted config would make it show `#16A34A` as if someone had
+ * chosen it, and saving any field would then write every default into the file.
+ */
+export async function readSiteConfigAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+): Promise<{ config: unknown } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  return readDraftConfig(gate.site, branch);
+}
+
+/**
+ * Write one `docs.json` value by path, for the Site settings drawer — one action for every field
+ * rather than sixty near-identical ones. `undefined`/`""` removes the key and prunes any object left
+ * empty (see site-config-edit.ts for why a config file wants a missing key rather than an empty
+ * string).
+ *
+ * Lands in the same draft session as page edits, so a settings change is part of the same
+ * reviewable, revertable, publishable unit — and shows up in the Publish panel as `docs.json`.
+ */
+export async function setSiteConfigValueAction(
+  orgSlug: string,
+  siteSlug: string,
+  branch: string,
+  path: string[],
+  value: unknown,
+): Promise<{ ok: true } | { error: string }> {
+  const gate = await gateEditor(orgSlug, siteSlug);
+  if ("error" in gate) return gate;
+  if (path.length === 0) return { error: "No setting was named." };
+
+  const read = await readDraftConfig(gate.site, branch);
+  if ("error" in read) return read;
+
+  await writeConfig(gate.site, branch, setAtPath(read.config, path, value), gate.userId);
+  revalidatePath(siteRoute(orgSlug, siteSlug, "editor"));
+  return { ok: true };
 }

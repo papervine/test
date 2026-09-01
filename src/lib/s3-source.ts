@@ -86,6 +86,7 @@ export function s3Source(siteId: string, version = ""): ContentSource {
   );
 
   return {
+    id: `s3:${siteId}:${version}`,
     async loadConfig() {
       const raw = await readConfigRaw();
       if (!raw) throw new Error(`Site ${siteId} has no synced config`);

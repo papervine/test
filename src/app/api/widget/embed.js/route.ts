@@ -11,7 +11,11 @@ export function GET() {
   return new Response(WIDGET_EMBED_SCRIPT, {
     headers: {
       "Content-Type": "application/javascript; charset=utf-8",
-      "Cache-Control": "public, max-age=3600",
+      // An hour in production; nothing in dev. The browser caching this script for an hour means
+      // an edit to the loader is INVISIBLE for an hour on a page that already loaded it, and the
+      // symptom is "my change to the widget did nothing" with no header in sight to explain it.
+      "Cache-Control":
+        process.env.NODE_ENV === "production" ? "public, max-age=3600" : "no-store, max-age=0",
       "Access-Control-Allow-Origin": "*",
     },
   });

@@ -44,6 +44,9 @@ export function draftSource(siteId: string, branch: string, baseVersion = ""): C
   const base = s3Source(siteId, baseVersion);
 
   return {
+    // Distinct from the s3Source it wraps: the same request renders both (a draft page beside the
+    // published base) and they must not collide in the per-request memo.
+    id: `draft:${siteId}:${branch}:${baseVersion}`,
     async loadConfig() {
       const session = await resolveSession(siteId, branch);
       if (session) {

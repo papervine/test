@@ -678,6 +678,10 @@ export const WIDGET_EMBED_SCRIPT = `
     var theme = resolveTheme(opts.theme);
 
     var host = el("div");
+    // The one handle a host page has on us: everything else lives behind a shadow root, so a page
+    // that needs to get the launcher out of the way (a full-screen overlay of its own — the
+    // dashboard's live preview does exactly this) has nothing to select without it.
+    host.setAttribute("data-papervine-widget", "");
     if (theme === "light") host.classList.add("pv-theme-light");
     // opts.accent/radius/font/zIndex are per-instance dynamic values, not baked into
     // the shared stylesheet — set as inline custom properties on the host element,

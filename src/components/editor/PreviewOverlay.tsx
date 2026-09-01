@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { MonitorPlay, RefreshCw, Settings, Sparkles, X } from "lucide-react";
-import { siteRoute } from "@/lib/dashboard-nav";
+import { SiteSettingsDrawer } from "./settings/SiteSettingsDrawer";
 
 // The whole draft site, over the editor rather than in a second tab.
 //
@@ -29,22 +29,29 @@ export function previewHref(org: string, site: string, slug: string): string {
 export function PreviewOverlay({
   org,
   site,
+  branch,
   slug,
   onClose,
   onAskAgent,
+  onEditNavigation,
 }: {
   org: string;
   site: string;
+  /** The draft branch the settings drawer writes `docs.json` into — the same one being edited. */
+  branch: string;
   /** The page being edited. Opening on the site's front page instead means every preview starts
    *  by making you navigate back to what you were just looking at. */
   slug: string;
   onClose: () => void;
   onAskAgent: () => void;
+  /** Nav editing lives in the editor's tree, so the drawer's Navigation section hands off to it. */
+  onEditNavigation: () => void;
 }) {
   // Bumping this remounts the iframe. Deliberately not `contentWindow.location.reload()`: that
   // works only while the frame is same-origin, and it would silently stop working if the preview
   // ever moved to the tenant host.
   const [reloadKey, setReloadKey] = useState(0);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const closeRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -55,7 +62,15 @@ export function PreviewOverlay({
     // Focus the close button on open, so Escape isn't the only way out for a keyboard user and
     // the frame doesn't swallow the first Tab.
     closeRef.current?.focus();
-    return () => window.removeEventListener("keydown", onKey);
+    // The dashboard's own assistant widget (SiteAssistantWidget) is appended to <body> by the
+    // embed loader, and it paints over this overlay — z-index can't settle it, because the widget
+    // lives outside the dashboard's DOM subtree entirely. It also makes no sense here: the frame
+    // is showing the reader's site, which has a launcher of its own. So hide ours while it's up.
+    document.body.classList.add("pv-overlay-open");
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.classList.remove("pv-overlay-open");
+    };
   }, [onClose]);
 
   return (
@@ -72,13 +87,17 @@ export function PreviewOverlay({
         </span>
 
         <div className="flex shrink-0 items-center gap-1.5">
-          <a
-            href={siteRoute(org, site, "settings")}
+          {/* A drawer, not a link to the settings page: navigating away threw out the preview,
+              the editor and the draft in order to show a form for the same file. */}
+          <button
+            type="button"
+            onClick={() => setSettingsOpen(true)}
+            aria-expanded={settingsOpen}
             className="flex items-center gap-1.5 rounded-md border border-[rgba(var(--ink-rgb),0.15)] px-2.5 py-1.5 text-sm text-[var(--fg)] transition-colors hover:bg-[rgba(var(--ink-rgb),0.06)]"
           >
             <Settings className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Site settings</span>
-          </a>
+          </button>
           <button
             type="button"
             onClick={onAskAgent}
@@ -115,6 +134,22 @@ export function PreviewOverlay({
         title="Live preview"
         className="min-h-0 flex-1 border-0 bg-white"
       />
+
+      {settingsOpen && (
+        <SiteSettingsDrawer
+          org={org}
+          site={site}
+          branch={branch}
+          onClose={() => setSettingsOpen(false)}
+          // The whole point of editing config here: the frame behind the drawer re-renders with
+          // what you just changed.
+          onSaved={() => setReloadKey((n) => n + 1)}
+          onEditNavigation={() => {
+            setSettingsOpen(false);
+            onEditNavigation();
+          }}
+        />
+      )}
     </div>
   );
 }
