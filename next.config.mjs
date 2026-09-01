@@ -16,6 +16,10 @@ const nextConfig = {
   // model in SPEC.md §2.
   outputFileTracingIncludes: {
     "/**": ["./content/**/*"],
+    // Our own brand assets (logotype, mark, favicon set, webmanifest) are read from disk by
+    // /brand/[asset] at request time — the tracer can't see a readFile, so they'd be missing from
+    // the serverless bundle and every brand URL would 404 in production only.
+    "/brand/[asset]": ["./src/assets/brand/**/*"],
   },
   // The MDX compiler stack (unified/@mdx-js + next-mdx-remote-client) breaks when
   // webpack bundles it for RSC — keep it external so it's required at runtime.

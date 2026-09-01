@@ -231,6 +231,51 @@ node tests/crawl.mjs <dir>           # crawl a real repo, report rendered/degrad
 </Warning>
 
 
+## Brand assets
+
+Papervine's own artwork is served from `/brand/*` — stable, CORS-open URLs you can point a README,
+a slide, or an OG card at:
+
+| URL | What it is |
+|---|---|
+| `/brand/logotype.svg` | mark + wordmark, dark ink for light backgrounds |
+| `/brand/logotype-on-dark.svg` | the same lockup with light ink |
+| `/brand/mark.svg` | the square mark on its own |
+| `/brand/favicon.ico`, `/brand/favicon-32x32.png`, `/brand/favicon-16x16.png` | favicons |
+| `/brand/apple-touch-icon.png`, `/brand/android-chrome-192x192.png`, `/brand/android-chrome-512x512.png` | touch / PWA icons |
+| `/brand/site.webmanifest` | the web app manifest |
+
+The files live in `src/assets/brand/` and are served by `src/app/brand/[asset]/route.ts` through an
+allowlist in `src/lib/brand.ts` — the URL segment is a key into that table, never a filename, so
+there's no traversal to guard. Three things are easy to get wrong here:
+
+<Steps>
+  <Step title="There is no public/ directory">
+    Static files can't just be dropped at the web root: apex middleware rewrites every root path
+    ending in an asset extension to the docs-content reader, so `/logo.svg` would be looked up in
+    the *docs repo being served*, not found, and 404. `/brand/*` is bypassed in the apex and
+    app-host middleware branches — and deliberately **not** on tenant hosts, where a customer's own
+    `/brand/hero.png` must keep resolving to their repo.
+  </Step>
+  <Step title="The route reads from disk, so the build has to be told">
+    `next.config.mjs` lists `src/assets/brand/**` under `outputFileTracingIncludes` for that route.
+    Without it the tracer sees no import, the files are absent from the serverless bundle, and every
+    brand URL 404s **in production only**.
+  </Step>
+  <Step title="Our icons never appear on a customer's site">
+    The root layout renders the marketing apex, the dashboard *and* every tenant's docs site. Icons
+    are emitted from `PLATFORM_ICONS` only when the request isn't rendering a docs repo — a tenant
+    gets `<Favicon>` from its own `docs.json`, and so does single-repo mode (`papervine dev`), where
+    `PAPERVINE_CONTENT` points at somebody else's repo. This is also why the icons aren't Next's
+    `app/favicon.ico` file convention, which would inject ours into every page under the layout.
+  </Step>
+</Steps>
+
+The logotype exists twice on purpose — `src/assets/brand/logotype.svg` for the endpoint, and
+`docs/logo/{light,dark}.svg` for this docs site, which has to render standalone through the CLI
+where no route is reachable. `tests/unit/brand-assets.test.ts` asserts the two are byte-identical,
+so editing one without the other fails a test rather than shipping two versions of the logo.
+
 ## Conventions
 
 - **TypeScript strict, App Router / RSC.** Server components by default; add `"use client"`

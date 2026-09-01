@@ -4146,6 +4146,52 @@ layer.
 > frame is showing a site with a launcher of its own. And `/api/widget/embed.js` no longer sends
 > `max-age=3600` in dev, where it meant an hour of "my change to the loader did nothing".
 >
+> **We had no URL for our own logo (2026-08-31).** Asked where the Papervine logotype URL was, and
+> the answer was: nowhere. The artwork existed three times over — `docs/logo/{light,dark}.svg` (our
+> docs site's own asset), `examples/starter/logo/*` (different artwork, it says "Starter"), and
+> `src/assets/papervine-logo.png` (bundled by `<Brand>` to a content-hashed `/_next/static/media/`
+> path) — and none of it was addressable. A favicon set had also just been added to `src/assets/`
+> and was referenced by nothing at all, so the dashboard and marketing apex were running on whatever
+> `content/docs.json` happened to declare.
+>
+> Now `/brand/*`: `logotype.svg`, `logotype-on-dark.svg`, `mark.svg`, the favicon/touch/PWA icons and
+> `site.webmanifest`, served by `src/app/brand/[asset]/route.ts` from `src/assets/brand/` through the
+> allowlist in `src/lib/brand.ts` (the URL segment is a KEY into that table, never a filename — the
+> traversal guard is the data structure). Public, CORS-open, `max-age=86400` with a week of
+> stale-while-revalidate, because the point of a logotype URL is that someone else's README can use
+> it, and a year of immutability would be wrong for a URL whose artwork can change.
+>
+> Three things this had to get around, each of which would have failed silently:
+>
+> 1. **There is no `public/`** (SPEC §2 — tenant assets are read at request time), and apex
+>    middleware rewrites every root path ending in an asset extension to the docs-content reader. A
+>    file at `/logo.svg` isn't served; it's *looked up in whichever docs repo is being rendered*. So
+>    `/brand/` needed the same explicit bypass the Sentry tunnel has — in the apex and app-host
+>    branches ONLY. Not on tenant hosts: a customer's repo may hold `/brand/hero.png`, and their path
+>    space stays theirs (verified: `starter.localhost/brand/logotype.svg` 404s rather than serving
+>    ours).
+> 2. **The route reads from disk**, so `outputFileTracingIncludes` has to name
+>    `./src/assets/brand/**` for it — the tracer can't see a `readFile`, and the failure mode is
+>    every brand URL 404ing *in production only*. Verified against the built trace manifest rather
+>    than assumed: all 10 files appear in `.next/server/app/brand/[asset]/route.js.nft.json`.
+> 3. **One root layout renders the marketing apex, the dashboard AND every tenant's docs site.** So
+>    the icons come from `PLATFORM_ICONS` only when the request isn't rendering a docs repo, which
+>    means `isTenant` **or single-repo mode** — `PAPERVINE_CONTENT` set is `papervine dev`, pointing
+>    at somebody else's repo, and stamping our favicon on a self-hoster's site would be both wrong
+>    and rude. That's also why these aren't Next's `app/favicon.ico` file convention: file-based
+>    metadata is injected into every page under the layout, so a customer's docs would have carried
+>    our icon alongside theirs with the browser free to pick either.
+>
+> The logotype now exists twice on purpose (endpoint copy + `docs/logo/*` for the CLI-served docs
+> site, which can't reach a route), with `tests/unit/brand-assets.test.ts` asserting they're
+> byte-identical so the two can't drift. Guards: that unit test (allowlist ↔ files on disk, manifest
+> icons resolve, SVGs have an accessible name) plus four smoke checks — the apex serves the logotype,
+> the app host serves a brand asset without bouncing to `/login`, the manifest points at brand URLs,
+> and an unlisted name 404s. **Still open:** the wordmark is an SVG `<text>` element in a system-font
+> stack, so a consumer without a matching font gets different letterforms. Converting it to outlines
+> needs font tooling we don't have here — fine for our own surfaces, worth knowing before handing the
+> URL to a press kit.
+>
 > **Video 404'd in the draft preview (2026-08-25).** Reported as "the editor renders the video URLs
 > without the tenant parts," and it was broader than the editor: **any** surface with a non-empty
 > `assetBase` — path-based tenant serving (`/sites/{slug}`) as well as the draft preview — rendered

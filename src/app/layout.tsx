@@ -12,6 +12,7 @@ import { isAppHost } from "@/lib/tenant-host";
 import { resolveTheme, themeCssVars } from "@papervine/renderer/lib/theme";
 import { appearanceInitScript } from "@papervine/renderer/lib/appearance";
 import { Favicon } from "@papervine/renderer/components/Favicon";
+import { PLATFORM_ICONS } from "@/lib/brand";
 import { EnvBadge } from "@/components/platform/EnvBadge";
 import { LogRocketInit } from "@/components/platform/LogRocketInit";
 import { ChatwootWidget } from "@/components/platform/ChatwootWidget";
@@ -78,6 +79,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   // only widget and the one people are looking for.
   const onAppHost = isAppHost((await headers()).get("host"));
 
+  /**
+   * Whose icons go in the <head>: ours, or the docs site's own.
+   *
+   * Ours on the dashboard and on the hosted marketing/auth/legal apex. THEIRS everywhere a docs
+   * repo is being rendered — a tenant (`isTenant`), and also single-repo mode, where
+   * `PAPERVINE_CONTENT` points at somebody's own repo and there is no tenant record: that's
+   * `papervine dev` / `papervine serve`, and stamping the Papervine favicon on a self-hoster's
+   * site would be both wrong and rude.
+   */
+  const platformChrome = onAppHost || (!isTenant && !process.env.PAPERVINE_CONTENT);
+
   const theme = resolveTheme(config.theme);
   const colors = config.colors;
   const themeVars = `:root{--color-primary:${colors.primary};--color-primary-light:${
@@ -98,7 +110,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       suppressHydrationWarning
     >
       <head>
-        <Favicon favicon={config.favicon} assetBase={assetBase} />
+        {/* Icons split the same way the analytics below do, and for the same reason: this one
+            layout renders the marketing apex, the dashboard AND every tenant's docs site. A
+            tenant's icons come from their own `docs.json` (<Favicon>); ours are served from
+            /brand/* and emitted only where there's no tenant — which is also why these aren't
+            Next's `app/favicon.ico` file convention, since that would inject our icon into
+            customers' pages alongside theirs. */}
+        {platformChrome ? (
+          PLATFORM_ICONS.map((icon) => <link key={icon.href} {...icon} />)
+        ) : (
+          <Favicon favicon={config.favicon} assetBase={assetBase} />
+        )}
         <style dangerouslySetInnerHTML={{ __html: themeVars }} />
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         <script dangerouslySetInnerHTML={{ __html: buildPlatformThemeScript() }} />

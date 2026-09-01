@@ -476,6 +476,32 @@ const CONTROL_PLANE_CHECKS = [
     redirectTo: "/login",
   },
   {
+    // Papervine's own logotype (src/lib/brand.ts). Two rewrites want this path: the apex sends
+    // anything ending in an asset extension to the docs-content reader (→ 404, since the artwork
+    // isn't docs content), and the app host mounts everything under /app behind the auth gate
+    // (→ /login). Both are bypassed, and this is the assertion that keeps them that way — a brand
+    // URL that 404s is the kind of thing nobody notices until it's in someone else's README.
+    path: "/brand/logotype.svg",
+    include: ["<svg", 'aria-label="Papervine"'],
+    desc: "the apex serves the logotype SVG (not routed into docs content)",
+  },
+  {
+    host: "app.localhost",
+    path: "/brand/favicon.ico",
+    expectStatus: 200,
+    desc: "brand assets serve on the app host too (not dragged through the /app auth gate)",
+  },
+  {
+    path: "/brand/site.webmanifest",
+    include: ['"name": "Papervine"', "/brand/android-chrome-512x512.png"],
+    desc: "the PWA manifest is served and points at brand-hosted icons",
+  },
+  {
+    path: "/brand/nope.svg",
+    expectStatus: 404,
+    desc: "an unlisted brand asset 404s (the allowlist is the traversal guard)",
+  },
+  {
     // Stale-session self-heal: a lingering-but-invalid session cookie must NOT loop
     // /login → / → /login (ERR_TOO_MANY_REDIRECTS). The server redirects to /login?stale=1
     // and middleware clears the cookie + renders login. Middleware-only (no DB), so smoke covers it.

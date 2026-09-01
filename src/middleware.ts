@@ -94,6 +94,12 @@ const WELL_KNOWN_OAUTH = new Set([
  * a renderer feature, not this file's call to make.
  */
 const CRAWLER_FILES = new Set(["/robots.txt", "/sitemap.xml"]);
+// Papervine's own brand assets (`/brand/logotype.svg`, the favicon set, the webmanifest — see
+// src/lib/brand.ts). Every path here ends in an asset extension, so on the apex the ASSET_RE
+// rewrite below would send them to the docs-content reader and 404, and on the app host the auth
+// gate would 307 them to /login. Bypassed on those two hosts only: a TENANT's repo may
+// legitimately contain `/brand/hero.png`, and their path space stays theirs.
+const BRAND_PREFIX = "/brand/";
 
 /**
  * The AI-discovery surfaces (SPEC §9.1/§10.1). Like the Sentry tunnel these are ROOT paths
@@ -227,6 +233,7 @@ export function middleware(req: NextRequest) {
       pathname === AUTHORING_MCP ||
       WELL_KNOWN_OAUTH.has(pathname) ||
       CRAWLER_FILES.has(pathname) ||
+      pathname.startsWith(BRAND_PREFIX) ||
       ASSET_RE.test(pathname)
     ) {
       return syncFlag(NextResponse.next());
@@ -449,8 +456,9 @@ export function middleware(req: NextRequest) {
 
   // Apex static assets stream from PAPERVINE_CONTENT — but not `/api/…`, which includes
   // path-mode tenant assets (`/api/tenant-asset/{slug}/img.png`) that must reach their
-  // route handler, not the dbasset reader.
-  if (ASSET_RE.test(pathname) && !pathname.startsWith("/api/")) {
+  // route handler, not the dbasset reader — and not `/brand/…`, which is OUR artwork served by
+  // its own route (it would otherwise be looked up in the docs content and 404).
+  if (ASSET_RE.test(pathname) && !pathname.startsWith("/api/") && !pathname.startsWith(BRAND_PREFIX)) {
     const url = req.nextUrl.clone();
     url.pathname = `/dbasset${pathname}`;
     return NextResponse.rewrite(url);
