@@ -123,41 +123,46 @@ html[data-db-theme="light"] :is(.db, .db-portal) {
   );
   mask-image: radial-gradient(120% 70% at 50% 0%, #000 35%, transparent 75%);
 }
-/* Interactive grid (InteractiveGrid.tsx) — the auth pages' alternative to `.db-grid`. Same
-   56px rhythm and the same top-anchored fade, but the cells light under the cursor.
+/* Prismatic burst (PrismaticBurst.tsx) — the auth pages' backdrop, in place of the grid.
 
-   Note what does NOT get `pointer-events: none` here: this is the one backdrop layer meant to
-   receive the pointer. It works because `.db-glow` and `.db-grain` above it both opt out, and
-   because `.db-content` sits at z-index 2 — so the form is never fighting the grid for a click.
-   The wrapper clips: the SVG is deliberately larger than the viewport (square cells at any
-   width), and an unclipped absolute child would hand a short screen a vertical scrollbar. */
-.db-igrid {
+   The canvas is absolutely positioned inside this box and blends with `mix-blend-mode: lighten`,
+   so it ADDS light to the shell rather than covering it. Three things this layer owns:
+
+   - **The fallback.** The radial wash below is what a visitor sees when the shader can't or
+     shouldn't run: reduced motion, no WebGL2, a chunk that failed to load. It's built from the
+     same two brand hues, so the page reads as finished either way rather than as broken.
+   - **The mask**, so the burst fades out before it reaches the form. Same top-anchored curve the
+     grid used, pulled in tighter — a full-strength ray march behind a password field is
+     unreadable, and dimming the canvas instead would dim the interesting part too.
+   - **`pointer-events: none`.** Unlike the grid it replaces, the burst tracks the pointer from a
+     window listener, so it needs no hits of its own — and taking them would put a full-viewport
+     transparent box between the visitor and the form. */
+.db-burst {
   position: absolute;
   inset: 0;
   z-index: 0;
   overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(70% 55% at 30% 0%, rgba(91, 140, 255, 0.22), transparent 70%),
+    radial-gradient(60% 50% at 72% 10%, rgba(169, 116, 255, 0.2), transparent 72%);
   -webkit-mask-image: radial-gradient(
-    120% 70% at 50% 0%,
-    #000 35%,
-    transparent 75%
+    110% 75% at 50% 0%,
+    #000 30%,
+    rgba(0, 0, 0, 0.45) 60%,
+    transparent 85%
   );
-  mask-image: radial-gradient(120% 70% at 50% 0%, #000 35%, transparent 75%);
+  mask-image: radial-gradient(
+    110% 75% at 50% 0%,
+    #000 30%,
+    rgba(0, 0, 0, 0.45) 60%,
+    transparent 85%
+  );
 }
-.db-igrid rect {
-  /* Explicit, rather than relying on the SVG default `visiblePainted` — which only counts a hit
-     over the interior when the fill is painted, and these are transparent until hovered. */
-  pointer-events: all;
-  fill: transparent;
-  stroke: var(--line);
-  stroke-width: 1;
-  /* Slow by default, fast on the way in — the cell lights at once and fades behind the cursor. */
-  transition: fill 900ms ease-out;
-}
-.db-igrid rect:hover {
-  /* Deliberately above `--line` (0.07): at the same value the lit cell read as nothing more
-     than the grid it sits in. */
-  fill: rgba(var(--ink-rgb), 0.14);
-  transition-duration: 90ms;
+/* The shader is luminous by nature and the platform's light theme is near-white, where "adds
+   light" means "washes out". Screen keeps the hues visible against a pale surface. */
+html[data-db-theme="light"] .db-burst {
+  opacity: 0.55;
 }
 
 .db-grain {

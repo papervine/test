@@ -4146,6 +4146,45 @@ layer.
 > frame is showing a site with a launcher of its own. And `/api/widget/embed.js` no longer sends
 > `max-age=3600` in dev, where it meant an hour of "my change to the loader did nothing".
 >
+> **The auth backdrop is a shader now (2026-09-01).** The login/signup pages had `InteractiveGrid`
+> — a CSS take on a hovering grid, chosen because it stayed a *server* component with no hydration
+> and no main-thread work while someone types a password. Replaced on request with React Bits'
+> **Prismatic Burst**: volumetric rays in the platform's own blue/violet, leaning toward the cursor.
+> Same instinct as the grid (auth is the one place with dead time, so it can afford a backdrop that
+> rewards a moved cursor), one step further up the effort curve — it's WebGL, so it costs a client
+> component, `ogl` (~90KB) and a GPU.
+>
+> Licensing decided where it lives: React Bits is **MIT + Commons Clause** — use and modify inside
+> a product, don't sell or redistribute the component. This repo publishes public mirrors on every
+> green CI run, so the same file under `packages/renderer` or `examples/starter` would be
+> redistribution. It sits in `src/components/platform/`, which is never mirrored, and says so in its
+> header. Documented as a general rule in `docs/contributing/working-on-papervine.mdx`, because the
+> next vendored component will face the same fork.
+>
+> The shaders are upstream's verbatim; four adaptations are ours, each fixing something that would
+> land on a login page. **`ogl` is imported inside the effect**, so the form doesn't block on it.
+> **Reduced motion means no canvas at all** rather than a paused one — no GPU work for someone who
+> asked for less animation. **WebGL2 is checked explicitly**: the fragment shader is `#version 300
+> es` and ogl silently falls back to a WebGL1 context where it can't compile, which would be a black
+> rectangle over the form rather than a missing flourish. And **every failure path leaves the CSS
+> wash visible** (`.db-burst` paints its own radial gradient from the same two hues), so a page
+> without WebGL reads as finished instead of flat. Teardown also explicitly frees the context —
+> browsers cap live WebGL contexts and drop the oldest, so leaking them breaks a later mount rather
+> than merely wasting memory.
+>
+> Two things fell out of the swap. The grid had to RECEIVE hovers, which forced `.db-content` to be
+> `pointer-events: none` on the auth variant with `pointer-events-auto` sprinkled back onto each
+> clickable thing — a hack maintained across two files. The burst tracks the pointer from a window
+> listener and takes no hits, so all of that is gone. And the `hover` animation mode reads better
+> than `rotate3d` here: heavily damped (`hoverDampness: 0.55`), the burst drifts toward the cursor
+> instead of spinning on its own, which is the same "it noticed you" the grid was for.
+>
+> Guards: unit tests on the two pure converters feeding the uniforms (a NaN uniform renders black
+> rather than throwing, so `toPx`/`hexToRgb01` returning finite values is load-bearing), and the
+> `/login` smoke check now asserts `db-burst` is present and `db-igrid` is gone — the latter because
+> leaving the old backdrop behind would stack the two. Verified in-browser at full size and with
+> `prefers-reduced-motion` forced.
+>
 > **We had no URL for our own logo (2026-08-31).** Asked where the Papervine logotype URL was, and
 > the answer was: nowhere. The artwork existed three times over — `docs/logo/{light,dark}.svg` (our
 > docs site's own asset), `examples/starter/logo/*` (different artwork, it says "Starter"), and

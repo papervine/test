@@ -276,6 +276,30 @@ The logotype exists twice on purpose — `src/assets/brand/logotype.svg` for the
 where no route is reachable. `tests/unit/brand-assets.test.ts` asserts the two are byte-identical,
 so editing one without the other fails a test rather than shipping two versions of the logo.
 
+## Vendored UI components
+
+A few pieces of platform chrome are copied in from third-party component galleries rather than
+installed — the auth pages' `PrismaticBurst` backdrop is one. Two rules apply when you add or move
+one:
+
+<Warning>
+  **Check the licence for a redistribution clause, and respect the mirror boundary.** React Bits
+  ships under MIT **+ Commons Clause**: using and modifying a component inside this product is
+  fine, commercially; *selling or redistributing the component itself* is not. This repo publishes
+  public mirrors (`apps/cli`, `packages/renderer`, `tests/fixtures`, `examples/starter` — see
+  `scripts/mirror-cli.mjs`), and a restricted component under one of those paths would be
+  redistribution on every green CI run. So vendored components live in `src/components/` — the web
+  app, which is never mirrored — and each one keeps its copyright header. Don't move them.
+</Warning>
+
+Keep the vendored shader/canvas code itself verbatim where you can, and put the adaptations in the
+React around it — that's what makes the next upstream version something you can diff against. The
+four the burst needed are worth copying into anything similar: load the WebGL library from *inside*
+the effect (a login form shouldn't block on 90KB it doesn't need to be interactive), treat
+`prefers-reduced-motion` as "no canvas at all" rather than a paused one, check the context you got
+is the one the shaders need (`#version 300 es` requires WebGL2, and libraries silently hand back
+WebGL1), and make every failure path leave a CSS fallback visible instead of a blank rectangle.
+
 ## Conventions
 
 - **TypeScript strict, App Router / RSC.** Server components by default; add `"use client"`

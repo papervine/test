@@ -599,10 +599,15 @@ const CONTROL_PLANE_CHECKS = [
   },
   {
     path: "/login",
-    desc: "login page renders in the platform theme (shell + gradient CTA)",
+    desc: "login page renders in the platform theme (shell + burst backdrop + gradient CTA)",
     // `db-glow` proves PlatformShell wraps it; `db-cta` proves the shared Button is used.
     // Guards the platform theme from regressing back to the old emerald/system look.
-    include: ["Sign in to Papervine", "db-glow", "db-cta"],
+    // `db-burst` is the auth backdrop's container: it's server-rendered even though the shader
+    // that fills it is client-side, and it carries the static wash that a visitor with reduced
+    // motion or no WebGL2 sees — so its absence means those visitors get a flat page.
+    include: ["Sign in to Papervine", "db-glow", "db-cta", "db-burst"],
+    // The interactive grid it replaced. Left behind, the two backdrops would stack.
+    exclude: ["db-igrid"],
   },
   {
     path: "/signup",
