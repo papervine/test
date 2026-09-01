@@ -48,10 +48,10 @@ describe("showsPoweredByBadge", () => {
     }
   });
 
-  it("only Enterprise has it, so the badge is on every self-serve tier", () => {
+  it("Pro and Enterprise have white-label, so the badge is on Free and Team", () => {
     const white = catalog.plans
       .filter((p) => (p.entitlements.features as Record<string, boolean>).whiteLabel)
       .map((p) => p.key);
-    expect(white).toEqual(["enterprise"]);
+    expect(white).toEqual(["pro", "enterprise"]);
   });
 });

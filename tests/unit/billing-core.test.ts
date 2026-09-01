@@ -322,21 +322,21 @@ describe("catalog", () => {
       representsPlanKey: "pro",
     });
   });
-  it("locked pricing shape: Team $29/mo, Pro $199/mo, annual $19/$159-per-month equiv", () => {
+  it("locked pricing shape: Team $65/mo, Pro $250/mo, annual $55/$200-per-month equiv", () => {
     const cents = (plan: string, interval: string) =>
       CATALOG.prices.find((p) => p.planKey === plan && p.interval === interval)!
         .unitAmountCents;
-    expect(cents("team", "month")).toBe(2900);
-    expect(cents("team", "year")).toBe(19 * 12 * 100);
-    expect(cents("pro", "month")).toBe(19900);
-    expect(cents("pro", "year")).toBe(159 * 12 * 100);
+    expect(cents("team", "month")).toBe(6500);
+    expect(cents("team", "year")).toBe(55 * 12 * 100);
+    expect(cents("pro", "month")).toBe(25000);
+    expect(cents("pro", "year")).toBe(200 * 12 * 100);
   });
-  it("credit pools: Team 5k, Pro 25k; Free has BYOK AI but no hosted credits/overage", () => {
+  it("credit pools: Team 5k, Pro 25k; Free has BYOK AI and 250 hosted credits/mo", () => {
     expect(catalogPlan("team").includedMonthlyCredits).toBe(5000);
     expect(catalogPlan("pro").includedMonthlyCredits).toBe(25000);
-    expect(catalogPlan("free").includedMonthlyCredits).toBe(0);
+    expect(catalogPlan("free").includedMonthlyCredits).toBe(250);
     expect(catalogPlan("free").overageCentsPerThousandCredits).toBeNull();
-    // Free now has BYOK AI assistant (true), but no hosted monthly credits
+    // Free now has BYOK AI assistant (true) and 250 hosted monthly credits
     expect(catalogPlan("free").entitlements.features.assistant).toBe(true);
   });
   it("the wedge: SSO/RBAC start at Team, SCIM is Enterprise-only", () => {

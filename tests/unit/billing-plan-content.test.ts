@@ -21,11 +21,11 @@ function row(label: string): MatrixRow {
 }
 
 describe("plan content vs. enforced catalog (drift guard)", () => {
-  it("derives card prices from prices[] (Team $29, Pro $199, annual $19/$159)", () => {
-    expect(PLAN_TIER_BY_KEY.team.price).toBe("$29");
-    expect(PLAN_TIER_BY_KEY.team.priceNote).toContain("$19/mo billed annually");
-    expect(PLAN_TIER_BY_KEY.pro.price).toBe("$199");
-    expect(PLAN_TIER_BY_KEY.pro.priceNote).toContain("$159/mo billed annually");
+  it("derives card prices from prices[] (Team $65, Pro $250, annual $55/$200)", () => {
+    expect(PLAN_TIER_BY_KEY.team.price).toBe("$65");
+    expect(PLAN_TIER_BY_KEY.team.priceNote).toContain("$55/mo billed annually");
+    expect(PLAN_TIER_BY_KEY.pro.price).toBe("$250");
+    expect(PLAN_TIER_BY_KEY.pro.priceNote).toContain("$200/mo billed annually");
     expect(PLAN_TIER_BY_KEY.free.price).toBe("$0");
     expect(PLAN_TIER_BY_KEY.enterprise.price).toBe("Contact us");
   });
@@ -41,10 +41,10 @@ describe("plan content vs. enforced catalog (drift guard)", () => {
 
   it("matrix 'Hosted AI credits' row reflects optional credit pools", () => {
     // Matrix now shows hosted credits as optional pools, not the primary feature.
-    // Team and Pro mention the pool size as optional; Free shows trial-only.
+    // Team and Pro mention the pool size as optional; Free gets 250 credits/mo.
     expect(String(row("Hosted AI credits").team), "team hosted credits").toContain("5k");
     expect(String(row("Hosted AI credits").pro), "pro hosted credits").toContain("25k");
-    expect(String(row("Hosted AI credits").free), "free hosted credits").toContain("Trial only");
+    expect(String(row("Hosted AI credits").free), "free hosted credits").toContain("250");
   });
 
   it("matrix feature-flag rows match entitlement feature flags exactly", () => {

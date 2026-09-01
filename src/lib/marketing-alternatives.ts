@@ -88,20 +88,20 @@ export const ALTERNATIVES: Alternative[] = [
     key: "papervine",
     name: "Papervine",
     us: true,
-    bestFor: "The repo you already have, live in minutes, with SSO at $29 instead of a sales call",
+    bestFor: "The repo you already have, live in minutes, with SSO at $65 instead of a sales call",
     price: "Free",
-    topTier: "$199/mo (Pro)",
+    topTier: "$250/mo (Pro)",
     hosting: "Hosted or self-host",
     format: "docs.json + MDX",
-    ssoOn: "$29/mo (Team)",
+    ssoOn: "$65/mo (Team)",
     body:
       "Point it at your existing repo and you\u2019re done — Papervine reads the same docs.json + " +
       "MDX, so there is nothing to convert, no export, and no re-authoring. Everything the rest " +
       "of this page sells as an upgrade is included with the repo: full-text search, an AI " +
       "assistant with citations, an embeddable widget for your own product, MCP servers so your " +
       "docs work inside Claude and Cursor, browser editing with an agent, and analytics that " +
-      "separate human readers from crawling agents. SSO and role-based access are on the $29 " +
-      "Team plan — the category holds both for an enterprise negotiation. Pro is $199/mo for " +
+      "separate human readers from crawling agents. SSO and role-based access are on the $65 " +
+      "Team plan — the category holds both for an enterprise negotiation. Pro is $250/mo for " +
       "scheduled workflows, insights, and production limits, with optional hosted AI credit pools. " +
       "Every account starts with 30 days of everything and 5,000 credits, no card. BYOK available " +
       "from day one, and `npx papervine dev` runs the same renderer on your laptop with no database and no signup.",
@@ -315,13 +315,13 @@ export const PICKS = [
   },
   {
     need: "SSO without a sales call",
-    answer: "$29/mo, self-serve",
+    answer: "$65/mo, self-serve",
     why:
       "Single sign-on and role-based access are on the Team plan. At the incumbent, ReadMe and " +
       "GitBook they\u2019re an Enterprise conversation.",
   },
   {
-    need: "Production docs at $199",
+    need: "Production docs at $250",
     answer: "Not $450/mo",
     why:
       "Pro delivers workflows, insights, and production limits without the category's typical " +
@@ -344,7 +344,7 @@ export const REASONS = [
       "the incumbent\u2019s Starter is free and Pro is $450/mo billed annually ($540 monthly), with " +
       "nothing in between. A two-person team that outgrows free gets a bill that reads like a " +
       "seed-stage line item for a docs site. Our Team plan exists because of exactly that " +
-      "shape: $29/mo, with SSO, RBAC, and AI features already in it \u2014 filling the gap the " +
+      "shape: $65/mo, with SSO, RBAC, and AI search already in it \u2014 filling the gap the " +
       "category created.",
     source: "https://example.com/pricing",
   },
@@ -353,7 +353,7 @@ export const REASONS = [
     body:
       "Single sign-on is this category\u2019s classic enterprise hostage: Enterprise-only at " +
       "the incumbent and at ReadMe, SAML-on-Enterprise at GitBook. Two options on this page will " +
-      "just sell it to you \u2014 Redocly at $24/seat/mo, and us at $29/mo flat, no seat math and " +
+      "just sell it to you \u2014 Redocly at $24/seat/mo, and us at $65/mo flat, no seat math and " +
       "no procurement thread. Locking your docs down should be a checkbox, not a quarter.",
     source: "https://redocly.com/pricing",
   },

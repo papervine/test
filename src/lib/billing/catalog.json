@@ -52,11 +52,11 @@
     },
     {
       "key": "free",
-      "name": "Cloud",
-      "blurb": "For open-source and small docs sites",
+      "name": "Free",
+      "blurb": "For individuals and small teams",
       "listed": true,
       "sort": 0,
-      "includedMonthlyCredits": 0,
+      "includedMonthlyCredits": 250,
       "overageCentsPerThousandCredits": null,
       "entitlements": {
         "sites": 1,
@@ -68,7 +68,7 @@
           "workflows": false,
           "sso": false,
           "rbac": false,
-          "previewDeployments": false,
+          "previewDeployments": true,
           "adminApis": false,
           "insights": false,
           "scim": false,
@@ -81,21 +81,21 @@
         "highlight": false,
         "priceOverride": "$0",
         "cta": { "label": "Get started", "href": "/signup" },
-        "lead": "Hosted docs with custom domain, auth, and Studio",
+        "lead": "For individuals and small teams",
         "features": [
-          "Studio WYSIWYG editor",
-          "Custom domain & Git sync",
-          "Reader auth & analytics (7d)",
-          "Widget & API playground",
-          "MCP server & search",
-          "BYOK AI assistant"
+          "Studio editor & Git sync",
+          "Custom domain & auth",
+          "Preview deployments",
+          "API playground & MCP",
+          "BYOK assistant + 250 credits/mo",
+          "1 site, 5 editors, 7d analytics"
         ]
       }
     },
     {
       "key": "team",
       "name": "Team",
-      "blurb": "SSO, roles, and previews for small teams",
+      "blurb": "SSO, roles, and AI search for growing teams",
       "listed": true,
       "sort": 1,
       "includedMonthlyCredits": 5000,
@@ -123,21 +123,21 @@
         "highlight": false,
         "priceOverride": null,
         "cta": { "label": "Start free trial", "href": "/signup" },
-        "lead": "Everything in Cloud",
+        "lead": "Everything in Free",
         "features": [
           "SSO & RBAC",
-          "Preview deployments",
+          "AI search",
           "Admin APIs",
           "3 sites, 8 editors",
           "90-day analytics",
-          "BYOK + optional 5k hosted credits"
+          "Optional 5k hosted credits/mo"
         ]
       }
     },
     {
       "key": "pro",
       "name": "Pro",
-      "blurb": "Workflows, insights, and production limits",
+      "blurb": "Assistant, widget, insights, and unlimited editors",
       "listed": true,
       "sort": 2,
       "includedMonthlyCredits": 25000,
@@ -156,7 +156,7 @@
           "adminApis": true,
           "insights": true,
           "scim": false,
-          "whiteLabel": false
+          "whiteLabel": true
         }
       },
       "display": {
@@ -167,12 +167,13 @@
         "cta": { "label": "Start free trial", "href": "/signup" },
         "lead": "Everything in Team",
         "features": [
-          "Scheduled workflows/routines",
-          "Insights",
+          "Scheduled workflows",
+          "Widget & insights",
+          "No Papervine branding",
           "10 sites, 25 editors",
           "1-year analytics",
           "Priority support",
-          "Optional 25k hosted credits"
+          "Optional 25k hosted credits/mo"
         ]
       }
     },
@@ -249,10 +250,10 @@
     }
   ],
   "prices": [
-    { "planKey": "team", "interval": "month", "unitAmountCents": 2900, "currency": "usd" },
-    { "planKey": "team", "interval": "year", "unitAmountCents": 22800, "currency": "usd" },
-    { "planKey": "pro", "interval": "month", "unitAmountCents": 19900, "currency": "usd" },
-    { "planKey": "pro", "interval": "year", "unitAmountCents": 190800, "currency": "usd" }
+    { "planKey": "team", "interval": "month", "unitAmountCents": 6500, "currency": "usd" },
+    { "planKey": "team", "interval": "year", "unitAmountCents": 66000, "currency": "usd" },
+    { "planKey": "pro", "interval": "month", "unitAmountCents": 25000, "currency": "usd" },
+    { "planKey": "pro", "interval": "year", "unitAmountCents": 240000, "currency": "usd" }
   ],
   "creditPacks": [
     { "key": "pack-5k", "name": "5,000 credits", "credits": 5000, "priceCents": 3500 },
@@ -272,11 +273,11 @@
   "positioning": [
     {
       "title": "Security before procurement",
-      "body": "SSO and role-based access live in the $29 plan, not behind an enterprise negotiation. Growing teams shouldn't need a sales call to lock down their docs."
+      "body": "SSO and role-based access live in the $65 Team plan, not behind an enterprise negotiation. Growing teams shouldn't need a sales call to lock down their docs."
     },
     {
-      "title": "Self-host for free; Cloud if you want auth/SSO/widget/workflows",
-      "body": "Elastic License 2.0 OSS renderer. BYOK AI from day one. Hosted credits optional, hard caps by default. Scheduled workflows at $199, not enterprise-only."
+      "title": "Self-host for free; hosted if you want auth/Studio/workflows",
+      "body": "Elastic License 2.0 OSS renderer. BYOK AI from day one. Hosted credits optional, hard caps by default. Scheduled workflows at $250, not enterprise-only."
     },
     {
       "title": "Your docs, never locked in",
@@ -296,11 +297,10 @@
       "group": "AI",
       "rows": [
         { "label": "BYOK assistant", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Hosted AI credits", "selfhost": false, "free": "Trial only (5k / 30 days)", "team": "Optional pool (5k/mo)", "pro": "Optional pool (25k/mo)", "enterprise": "Committed volume optional" },
-        { "label": "Assistant, writing agent", "selfhost": "BYOK only", "free": "BYOK", "team": true, "pro": true, "enterprise": true },
+        { "label": "Hosted AI credits", "selfhost": false, "free": "250 credits/mo", "team": "Optional 5k/mo", "pro": "Optional 25k/mo", "enterprise": "Committed volume" },
+        { "label": "AI search", "selfhost": false, "free": false, "team": true, "pro": true, "enterprise": true },
         { "label": "Scheduled workflows", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
-        { "label": "Credit packs", "selfhost": false, "free": false, "team": "Optional", "pro": "Optional", "enterprise": "Optional" },
-        { "label": "Overage (opt-in, hard caps by default)", "selfhost": false, "free": false, "team": "$0.008 / credit", "pro": "$0.006 / credit", "enterprise": "Best rate" }
+        { "label": "Credit overage (opt-in)", "selfhost": false, "free": false, "team": "$0.008/credit", "pro": "$0.006/credit", "enterprise": "Best rate" }
       ]
     },
     {
@@ -309,12 +309,10 @@
         { "label": "Git sync", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
         { "label": "Search", "selfhost": "In-memory", "free": true, "team": true, "pro": true, "enterprise": true },
         { "label": "Studio editor", "selfhost": false, "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "MDX editor", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
         { "label": "API playground", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
         { "label": "MCP server", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
         { "label": "Analytics", "selfhost": false, "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "User feedback", "selfhost": false, "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Widget", "selfhost": false, "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Widget", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
         { "label": "Admin APIs", "selfhost": false, "free": false, "team": true, "pro": true, "enterprise": true },
         { "label": "Insights", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true }
       ]
@@ -323,11 +321,11 @@
       "group": "Publishing",
       "rows": [
         { "label": "Custom domain", "selfhost": "DIY reverse proxy", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Preview deployments", "selfhost": false, "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "Preview deployments", "selfhost": false, "free": true, "team": true, "pro": true, "enterprise": true },
         { "label": "SEO optimizations", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
         { "label": "Agent-readable output", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
         { "label": "Custom components, CSS, and JS", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "White labeling", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true }
+        { "label": "No Papervine branding", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true }
       ]
     },
     {

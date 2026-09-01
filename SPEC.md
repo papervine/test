@@ -715,20 +715,21 @@ tracked public docs; locally, `_private/` is gitignored for that work. The curre
 next page update; the billing backend's schema + versioned catalog + credit core landed
 2026-07-16, with enforcement, Stripe, and surfaces to follow (§10 "Billing").
 
-> **Status (2026-08-31): pricing revised to 5-column structure with self-host OSS.** The
+> **Status (2026-09-01): pricing revised to 5-column structure with new price points.** The
 > public pricing page and catalog now present five tiers: **Self-host** ($0 OSS, Elastic
-> License 2.0, npm `papervine`, BYOK AI only, no control plane), **Cloud** ($0 hosted hobby,
-> 1 site/5 editors, Studio/widget/auth/analytics), **Team** ($29/mo · $19/mo annual, was
-> $50/$40 — SSO/RBAC/preview deploys/admin APIs, 3 sites/8 editors/90d analytics),
-> **Pro** ($199/mo · $159/mo annual, was $149/$129 — scheduled workflows/routines + Insights,
-> 10 sites/25 editors/1y analytics/priority support), and **Enterprise** (contact us for
-> SCIM/SLA/migration). BYOK AI assistant available on all tiers including self-host and Cloud;
-> hosted AI credits remain optional pools. **Multi-repo removed** (doesn't exist as a product
-> feature); **"Advanced insights" → "Insights"** (gated Pro+). Workflows moved from Team to
-> Pro (now "Scheduled workflows"). Widget row added to matrix (no on self-host, yes Cloud+).
-> Striped the old $450 pro price and $50 Team from every marketing surface. New Stripe prices
-> pending: Team 2900/22800 cents, Pro 19900/190800 cents (follow-up: create prices, run
-> `billing:publish`).
+> License 2.0, npm `papervine`, BYOK AI only, no control plane), **Free** ($0 hosted for
+> individuals and small teams, 1 site/5 editors, Studio/preview deploys/auth/analytics,
+> 250 hosted credits/mo), **Team** ($65/mo · $55/mo annual, was $29/$19 — SSO/RBAC/AI search,
+> 3 sites/8 editors/90d analytics/admin APIs/optional 5k credits), **Pro** ($250/mo · $200/mo
+> annual, was $199/$159 — widget/insights/workflows/white-label, 10 sites/25 editors/1y
+> analytics/priority support/optional 25k credits), and **Enterprise** (contact us for
+> SCIM/SLA/migration/committed volume). BYOK AI assistant available on all tiers including
+> self-host and Free; hosted AI credits remain optional pools. **Widget gated Pro+** (was
+> Free+). **White labeling / No Papervine branding Pro+** (was all tiers). **AI search Team+**
+> (new feature row). Striped all old pricing ($29/$19, $199/$159, $300, $450) from every
+> marketing surface. "Cloud" renamed to "Free" in UI and all customer-facing copy. New Stripe
+> prices pending: Team 6500/66000 cents (55*12*100), Pro 25000/240000 cents (200*12*100).
+> Follow-up: create prices, run `billing:publish`.
 
 **Landing backdrop: a growing vine, not a grid (landed 2026-06-28).** The marketing
 landing swaps the static `.db-grid` for `VineField` (`src/components/platform/VineField.tsx`,
