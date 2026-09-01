@@ -23,7 +23,6 @@ The files below live in the `reference/` directory next to this one.
 | `reference/navigation.md` | Modifying navigation structure (groups, tabs, anchors, dropdowns, versions, languages) or adding an OpenAPI reference to the nav. |
 | `reference/api-docs.md` | Setting up API documentation (OpenAPI/AsyncAPI, endpoint pages, the Try it playground, manual API pages). |
 | `reference/cli.md` | Running the CLI (`papervine new`, `dev`, `serve`) and serving a site in production. |
-| `reference/product-context.md` | Before substantial content work (new site, broad restructure, first-time section setup) — check for and maintain `.papervine/product-brief.md`. |
 
 ## MCP servers
 
@@ -74,10 +73,8 @@ uncoordinated copies of the same page, and whichever publishes last silently win
 
 ## Before you start
 
-Before substantial content work, read `reference/product-context.md` and check for
-`.papervine/product-brief.md`.
-
-Read the project's `docs.json` first — it defines the navigation, theme, and colors.
+Read the project's `docs.json` first — it defines the navigation, theme, and colors, and it is
+the only thing that decides what appears in the sidebar.
 
 Search for existing content before creating a page. Read 2-3 similar pages to match the
 site's voice, structure, and formatting.
@@ -94,7 +91,7 @@ my-docs/
 ├── guides/
 │   └── example.mdx
 ├── openapi.json        # API specification (optional)
-├── images/             # Static assets
+├── images/             # Referenced root-relative from pages
 │   └── example.png
 └── snippets/           # Reusable MDX fragments
     └── prerequisites.mdx
@@ -118,7 +115,7 @@ or a path prefix, and only root-relative links survive all three.
 Keep them in the repository and reference them root-relative. Alt text is required.
 
 ```mdx
-![Dashboard showing analytics overview](/images/dashboard.png)
+![The deploy log after a successful sync](/images/deploy-log.png)
 ```
 
 Papervine measures images at sync time and reserves their space as the page loads, so pictures
@@ -128,8 +125,8 @@ don't shove text around while a reader is reading.
 
 ```yaml
 ---
-title: "Clear, descriptive title"
-description: "Concise summary for search results and social previews."
+title: "Connect a repository"
+description: "Point Papervine at a Git repo of MDX and docs.json, and publish on push."
 ---
 ```
 
@@ -164,12 +161,12 @@ The most-used components. Full props for all of them are in `reference/component
 ### Callouts
 
 ```mdx
-<Note>Supplementary information, safe to skip.</Note>
-<Info>Helpful context such as permissions or prerequisites.</Info>
-<Tip>A recommendation or shortcut.</Tip>
-<Warning>Something that can bite you; read before proceeding.</Warning>
-<Check>Success confirmation or completed status.</Check>
-<Danger>Critical warning about data loss or a breaking change.</Danger>
+<Note>Worth knowing, but you can keep going without it.</Note>
+<Info>Background or a prerequisite — what you needed to know first.</Info>
+<Tip>A shortcut, or the way we would do it.</Tip>
+<Warning>This one bites. Read it before you run the command.</Warning>
+<Check>Done — this is what success looks like.</Check>
+<Danger>Destructive or irreversible. Data goes away.</Danger>
 ```
 
 ### Steps
@@ -206,11 +203,11 @@ The most-used components. Full props for all of them are in `reference/component
 <CodeGroup>
 
 ```javascript example.js
-const greeting = "Hello, world!";
+export const site = "acme-docs";
 ```
 
 ```python example.py
-greeting = "Hello, world!"
+site = "acme-docs"
 ```
 
 </CodeGroup>
@@ -223,11 +220,11 @@ three `bash` blocks all read the same.
 
 ```mdx
 <Columns cols={2}>
-  <Card title="First card" icon="rocket" href="/quickstart">
-    Card description text.
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    From an empty folder to a rendered site.
   </Card>
-  <Card title="Second card" icon="book" href="/guides">
-    Card description text.
+  <Card title="Components" icon="book" href="/components">
+    Every component, with its props.
   </Card>
 </Columns>
 ```
@@ -239,8 +236,8 @@ three `bash` blocks all read the same.
 
 ```mdx
 <AccordionGroup>
-  <Accordion title="First section">Content one.</Accordion>
-  <Accordion title="Second section">Content two.</Accordion>
+  <Accordion title="Why is my page missing?">It is probably not in docs.json.</Accordion>
+  <Accordion title="Why is it unstyled?">docs.json probably has a trailing comma.</Accordion>
 </AccordionGroup>
 ```
 
@@ -343,16 +340,22 @@ there is no hot reload. See `reference/cli.md`.
 
 ## Writing standards
 
-- Second-person voice ("you").
-- Active voice, direct language.
-- Sentence case for headings ("Getting started", not "Getting Started").
-- Sentence case for code block titles.
-- Every code block has a language tag.
-- Every image has descriptive alt text.
-- No marketing language, filler phrases, or emoji.
-- Keep code examples simple, practical, and tested.
-- Don't repeat the `title` as an `# H1` in the body.
-- Keep the outline shallow — `##` and `###` cover nearly everything.
+- **Second person, present tense.** "You connect a repo", not "the user connects a repo".
+- **Say what it does before how to configure it.** A reader who lands mid-page from search
+  needs the sentence that orients them.
+- **Sentence case in headings and code-block titles.** Title Case reads as branding.
+- **Every fence gets a language.** It is what produces highlighting, and an untagged block is
+  rendered as plain grey text.
+- **Every image gets alt text describing what it shows**, not what it is — "the dashboard after
+  a first sync" beats "screenshot".
+- **A `description` on every page.** It is the line search results, `llms.txt` and social cards
+  use, so a missing one costs a reader the choice of whether to open the page.
+- **No emoji, no filler, no superlatives.** "Simply", "just", "powerful" and "seamless" all
+  survive deletion.
+- **Prefer a shorter page to a longer one.** Two pages with real titles beat one with four
+  levels of heading.
+- **Don't repeat the `title` as an `# H1`.** The title already renders as the page heading, so
+  a second one gives the page two competing headings and a confusing outline.
 
 ## Common mistakes
 

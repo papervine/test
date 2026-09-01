@@ -42,12 +42,12 @@ There is **no video component** — see [Video and embeds](#video-and-embeds).
 Six variants, each signalling a different intent. All take children only.
 
 ```mdx
-<Note>Supplementary information, safe to skip.</Note>
-<Info>Helpful context such as permissions or prerequisites.</Info>
-<Tip>A recommendation or shortcut.</Tip>
-<Warning>Something that can bite you; read before proceeding.</Warning>
-<Check>Success confirmation or completed status.</Check>
-<Danger>Critical warning about data loss or a breaking change.</Danger>
+<Note>Worth knowing, but you can keep going without it.</Note>
+<Info>Background or a prerequisite — what you needed to know first.</Info>
+<Tip>A shortcut, or the way we would do it.</Tip>
+<Warning>This one bites. Read it before you run the command.</Warning>
+<Check>Done — this is what success looks like.</Check>
+<Danger>Destructive or irreversible. Data goes away.</Danger>
 ```
 
 `<Callout>` is the same panel with your own icon and color:

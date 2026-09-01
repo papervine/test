@@ -5,7 +5,6 @@ established `docs.json` schema, so an existing docs repo renders unchanged.
 
 ```jsonc
 {
-  "$schema": "https://papervine.io/docs.json",
   "name": "Acme Docs",
   "description": "Everything you need to build on Acme.",
   "theme": "mint",
@@ -244,7 +243,7 @@ would only make a migration back harder.
 
 | Key | Status |
 | --- | --- |
-| `$schema` | Read and ignored. Keep whatever value the repo already has. |
+| `$schema` | Read and ignored. Whatever a migrated repo already has is fine; there is nothing to change it to. |
 | `footer` | Parsed, not yet rendered. |
 | `authentication` | Passed through. Reader access is configured in the Papervine dashboard, not here — see [Reader access](#reader-access). |
 
@@ -328,9 +327,9 @@ endpoint).
 Reusable MDX fragments live in `/snippets/`:
 
 ```mdx
-import Prerequisites from "/snippets/prerequisites.mdx";
+import AuthNote from "/snippets/auth-required.mdx";
 
-<Prerequisites />
+<AuthNote />
 ```
 
 `/snippets/` is the only import source a page may reach for. See `components.md`.

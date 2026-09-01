@@ -40,7 +40,7 @@ Keep images in the repository and reference them root-relative. Every image need
 descriptive alt text.
 
 ```mdx
-![Dashboard showing analytics overview](/images/dashboard.png)
+![The deploy log after a successful sync](/images/deploy-log.png)
 ```
 
 ## Page frontmatter
@@ -50,8 +50,8 @@ social previews show, so write a real one.
 
 ```yaml
 ---
-title: "Clear, descriptive title"
-description: "Concise summary for search results and social previews."
+title: "Connect a repository"
+description: "Point Papervine at a Git repo of MDX and docs.json, and publish on push."
 ---
 ```
 
@@ -76,18 +76,22 @@ Unknown frontmatter keys are ignored rather than treated as errors.
 
 ## Writing standards
 
-- Second-person voice ("you").
-- Active voice, direct language.
-- Sentence case for headings ("Getting started", not "Getting Started").
-- Sentence case for code block titles.
-- Every code block gets a language tag.
-- Every image gets descriptive alt text.
-- No marketing language, filler phrases, or emoji.
-- Keep code examples simple, practical, and tested.
-- Don't repeat the `title` as an `# H1` in the body — the title already renders as the page
-  heading, and a second one gives the page two competing headings.
-- Keep the heading outline shallow. `##` and `###` cover nearly everything; reaching for a
-  fourth level usually means the page is really two pages.
+- **Second person, present tense.** "You connect a repo", not "the user connects a repo".
+- **Say what it does before how to configure it.** A reader who lands mid-page from search
+  needs the sentence that orients them.
+- **Sentence case in headings and code-block titles.** Title Case reads as branding.
+- **Every fence gets a language.** It is what produces highlighting, and an untagged block is
+  rendered as plain grey text.
+- **Every image gets alt text describing what it shows**, not what it is — "the dashboard after
+  a first sync" beats "screenshot".
+- **A `description` on every page.** It is the line search results, `llms.txt` and social cards
+  use, so a missing one costs a reader the choice of whether to open the page.
+- **No emoji, no filler, no superlatives.** "Simply", "just", "powerful" and "seamless" all
+  survive deletion.
+- **Prefer a shorter page to a longer one.** Two pages with real titles beat one with four
+  levels of heading.
+- **Don't repeat the `title` as an `# H1`.** The title already renders as the page heading, so
+  a second one gives the page two competing headings and a confusing outline.
 
 ## Common mistakes
 

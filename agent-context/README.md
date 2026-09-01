@@ -93,7 +93,6 @@ them.
 | `reference/navigation.md` | Navigation patterns and what each division actually renders |
 | `reference/api-docs.md` | OpenAPI/AsyncAPI setup, generated pages, playground, hand-written API pages |
 | `reference/cli.md` | CLI commands, flags, production serving, trust model |
-| `reference/product-context.md` | Gathering and persisting product context in `.papervine/product-brief.md` |
 
 ## Rules included
 
@@ -101,11 +100,12 @@ them.
 
 Writing guardrails that activate when editing `.mdx` files or `docs.json`:
 
-- File conventions and naming
-- Internal link format (root-relative, no extensions)
-- Page frontmatter fields
-- Writing standards (voice, headings, code blocks, alt text)
-- Common mistakes
+- Where a page lives, and why `docs.json` decides whether anyone can find it
+- Why internal links are root-relative (a site is served three different ways)
+- The frontmatter fields that exist, with what each one changes
+- House style, most of it downstream of how the renderer behaves
+- The mistakes that cost an afternoon: an ignored `hidden` on a tab, a Font Awesome icon
+  name, a trailing comma
 
 ## Migrating from another docs platform
 
