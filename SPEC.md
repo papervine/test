@@ -4958,6 +4958,63 @@ Minimum to operate the SaaS:
   `docs/control-plane/billing.mdx` (editors 5/8/25, Team 5k credits, "workflows (Team+)",
   "multi-repo"). The lesson is the routing one: prices on `/pricing` are *derived* and were
   never wrong; everything that broke was a number retyped somewhere else.
+  **Decision — Autumn becomes the billing source of truth (2026-09-01).** Papervine's
+  billing was a full Stripe integration of its own: a versioned catalog in Postgres, a
+  webhook that mirrored Stripe subscription state back, a credit ledger with bucket
+  ordering, and a monthly grant rollover. All of it worked, and all of it is undifferentiated
+  — it is the part of this product nobody chooses us for. Autumn (https://useautumn.com) is a
+  billing-state layer above Stripe that owns exactly that surface: plans, entitlements,
+  balances, subscription lifecycle, and the Stripe objects underneath them.
+
+  **What that means concretely.** `catalog.json` stops being the billing source and shrinks to
+  what only we can own: the marketing copy on `/pricing` (`display`, `matrix`). Plans,
+  entitlements, prices, credit packs and the trial live in Autumn; `billing:sync` and
+  `billing:publish` are deleted along with the `node scripts/sync-billing.mjs` step in
+  `vercel.json`'s build command. Repricing stops being a commit and becomes a catalog edit —
+  which is a real loss of the GitOps property (§10 "repricing is a config edit, not a deploy"
+  was about *our* config, in git, reviewed like code) traded for not maintaining the
+  machinery. Accepted deliberately: the reprice earlier today is the argument, where the
+  numbers were right in `catalog.json` and wrong in five other files.
+
+  **The Stripe webhook goes, but LAST, not first.** `billing/webhooks.ts` is the only writer of
+  `billing_subscription` / `credit_balance` / `credit_ledger`, and those are what `authorizeAi`
+  reads before every AI call. Delete it before the readers move and every paid org silently
+  resolves to Free — a data-loss-shaped bug with no error anywhere. Order is: adapter, then
+  readers, then writers, then schema.
+
+  **Six seams, each swapped behind its existing signature** so the call sites and their tests
+  do not move: `authorizeAi` → Autumn `check`; `recordAiUsage` → `track`; `getPlanOffers` /
+  `getBillingSummary` → `listPlans` / `getCustomer`; `actions/billing.ts` → `attach` /
+  `updateSubscription`; `powered-by-store` → the `white_label` flag; `startTrial` → `attach
+  pro_trial`. Autumn's own webhooks are optional notifications — subscription state, usage and
+  access are synchronized without them — so nothing replaces the endpoint we remove.
+
+  **Rating stays ours.** Autumn offers an `ai_credit_system` that prices tokens from Models.dev
+  plus a markup, and we are deliberately not using it. `rateTokensToCredits` is calibrated so a
+  typical assistant answer costs ~9–10 credits, it is pinned by unit tests, and — the deciding
+  reason — it rates the `ollama/` provider prefix at **zero** so self-hosted inference is free
+  (§18). A Models.dev-priced system has no way to know that a customer's own GPU costs us
+  nothing. So `ai_credits` is a plain metered consumable in Autumn, we convert tokens to
+  credits here, and `track` the integer.
+
+  **Two properties that must survive the move, because they are load-bearing.** (1)
+  `authorizeAi` **fails OPEN** on lookup failure — "billing outages must not kill paid
+  surfaces", pinned by a unit test. Against Postgres that covered a dead connection; against
+  Autumn it covers a network hop from a serverless function, so it matters more, not less.
+  (2) The renderer **must survive with no billing backend at all**: `powered-by-store` runs on
+  every tenant page render and `npm test` boots the whole renderer with no database and fails
+  on any 500. Both stay cached and both stay fail-open; a billing call is never on the critical
+  path of rendering someone's docs.
+
+  **`usage_event` stays local.** It is analytics, not billing — it backs the usage chart and the
+  analytics page, and it is the only record of *which feature* spent a credit. Autumn holds the
+  balance; we keep the story of how it was spent.
+
+  Migration for existing paid orgs is Autumn's `billing.import` (Stripe customer + subscription
+  + matching `plan_id`), which leaves the live Stripe subscriptions untouched. The billing
+  tables are left in place, unread, and dropped in a separate contract migration once
+  production is imported — expand-then-contract, per the migrations rule above.
+
   **Plan switching + downgrade landed 2026-07-17** (gap found dogfooding: no way to
   downgrade). `changePlan` routes by billing state — a live Stripe sub gets an
   in-place `subscriptions.update` with proration (a second Checkout would mint a
