@@ -4185,6 +4185,19 @@ layer.
 > leaving the old backdrop behind would stack the two. Verified in-browser at full size and with
 > `prefers-reduced-motion` forced.
 >
+> **Also: the MCP page's two fields are copyable (2026-09-01).** Its server URL and client-config
+> block exist to be pasted into someone's MCP client, and neither had a copy button. Both do now,
+> and the config JSON is rendered from the same value the button copies, so what's on screen and
+> what lands on the clipboard can't drift. The button itself was hand-rolled per surface (widget
+> settings, the reader-auth secret, invite links) — it's now
+> `src/components/platform/CopyButton.tsx`, and the widget settings' identical copy was folded in.
+> One real bug fixed in the extraction: every existing version chained a bare `.then()` on
+> `navigator.clipboard.writeText`, which REJECTS on a non-secure origin, a denied permission, or an
+> unfocused document — so a failure was an unhandled rejection and a button that looked like it did
+> nothing. It now shows a visible failed state telling you to select the text. Pinned by a
+> `dashboard.spec.ts` case that grants clipboard permissions and asserts the pasted string equals
+> the rendered one.
+>
 > **We had no URL for our own logo (2026-08-31).** Asked where the Papervine logotype URL was, and
 > the answer was: nowhere. The artwork existed three times over — `docs/logo/{light,dark}.svg` (our
 > docs site's own asset), `examples/starter/logo/*` (different artwork, it says "Starter"), and

@@ -2,28 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, X } from "lucide-react";
+import { X } from "lucide-react";
+import { CopyButton } from "@/components/platform/CopyButton";
 import { Switch } from "@/components/ui/switch";
 import { setWidgetEnabled, setWidgetAllowedOrigins, type SiteRef } from "./actions";
-
-function CopyButton({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      aria-label="Copy"
-      onClick={() => {
-        void navigator.clipboard?.writeText(value).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        });
-      }}
-      className="flex items-center gap-1.5 rounded-md px-2 py-1 text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
-    >
-      {copied ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-    </button>
-  );
-}
 
 export function WidgetForm({
   siteRef,
@@ -231,7 +213,7 @@ export function WidgetForm({
                 <code>{embedCode}</code>
               </pre>
               <div className="absolute right-2 top-2">
-                <CopyButton value={embedCode} />
+                <CopyButton value={embedCode} label="snippet" />
               </div>
             </div>
 
@@ -244,7 +226,7 @@ export function WidgetForm({
                 <code>{singleTagEmbedCode}</code>
               </pre>
               <div className="absolute right-2 top-2">
-                <CopyButton value={singleTagEmbedCode} />
+                <CopyButton value={singleTagEmbedCode} label="snippet" />
               </div>
             </div>
           </div>
@@ -257,7 +239,7 @@ export function WidgetForm({
             </p>
             <div className="mt-3 flex items-center justify-between rounded-lg border border-[rgba(var(--ink-rgb),0.08)] px-3 py-2">
               <code className="text-sm text-[var(--fg)]">{widgetId}</code>
-              <CopyButton value={widgetId} />
+              <CopyButton value={widgetId} label="widget ID" />
             </div>
           </div>
         </div>

@@ -71,3 +71,31 @@ test("a gated site shows the required status + method + edit link", async ({ pag
     sitePath(AUTH_SITE.slug, "settings/authentication"),
   );
 });
+
+// The MCP page's two fields (SPEC §8.5) exist to be pasted into somebody's client config, so both
+// carry a copy button. Worth a browser rather than a unit test for two reasons: the buttons are a
+// client component mounted by a server page (a bad boundary shows up only here), and what lands on
+// the clipboard has to be the string that was on screen — the config block is rendered from and
+// copied from one value precisely so those can't drift.
+test("the MCP page copies its server URL and client config to the clipboard", async ({
+  page,
+  context,
+}) => {
+  // Reading the clipboard back needs an explicit grant; writing doesn't.
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  await page.goto(sitePath(SITE.slug, "mcp"));
+
+  const url = await page.locator("pre code").first().innerText();
+  expect(url, "the server URL block should render an /mcp endpoint").toContain("/mcp");
+  await page.getByRole("button", { name: "Copy server URL" }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 5_000 })
+    .toBe(url);
+
+  const config = await page.locator("pre code").nth(1).innerText();
+  expect(config, "the client config should name the site").toContain(SITE.slug);
+  await page.getByRole("button", { name: "Copy client config" }).click();
+  await expect
+    .poll(() => page.evaluate(() => navigator.clipboard.readText()), { timeout: 5_000 })
+    .toBe(config);
+});

@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { Plug } from "lucide-react";
+import { CopyButton } from "@/components/platform/CopyButton";
 import { supportsSubdomainTenants, tenantHostFor } from "@/lib/tenant-host";
 import { requireSite } from "@/lib/dashboard-context";
 
@@ -31,6 +32,11 @@ export default async function McpPage({
     ? `https://${site.customDomain}/mcp`
     : `${proto}://${docsHost}/mcp`;
 
+  // Named because it's used twice now — rendered in the block and handed to the copy button.
+  // Copying the on-screen text verbatim is the point: what someone pastes into their client has
+  // to be what they were shown, indentation included.
+  const clientConfig = JSON.stringify({ mcpServers: { [site.slug]: { url: mcpUrl } } }, null, 2);
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-6">
       <div className="flex items-center gap-2.5">
@@ -46,9 +52,16 @@ export default async function McpPage({
       <div className="mt-8 max-w-2xl space-y-6">
         <div>
           <div className="text-sm font-medium">Server URL</div>
-          <pre className="db-feature mt-2 overflow-x-auto rounded-lg px-4 py-3 text-sm text-[var(--fg)]">
-            <code>{mcpUrl}</code>
-          </pre>
+          {/* `pr-12` keeps a long URL from sliding under the button as it scrolls; the button sits
+              outside the scrolling <pre> so it stays put while the text moves. */}
+          <div className="relative mt-2">
+            <pre className="db-feature overflow-x-auto rounded-lg py-3 pl-4 pr-12 text-sm text-[var(--fg)]">
+              <code>{mcpUrl}</code>
+            </pre>
+            <div className="absolute right-1.5 top-1.5">
+              <CopyButton value={mcpUrl} label="server URL" />
+            </div>
+          </div>
         </div>
 
         <div>
@@ -56,17 +69,14 @@ export default async function McpPage({
           <p className="mt-1 text-sm text-[var(--muted)]">
             Add it to your client&apos;s MCP config (e.g. Claude Desktop):
           </p>
-          <pre className="db-feature mt-2 overflow-x-auto rounded-lg px-4 py-3 text-xs leading-relaxed text-[var(--fg)]">
-            <code>{JSON.stringify(
-              {
-                mcpServers: {
-                  [site.slug]: { url: mcpUrl },
-                },
-              },
-              null,
-              2,
-            )}</code>
-          </pre>
+          <div className="relative mt-2">
+            <pre className="db-feature overflow-x-auto rounded-lg py-3 pl-4 pr-12 text-xs leading-relaxed text-[var(--fg)]">
+              <code>{clientConfig}</code>
+            </pre>
+            <div className="absolute right-1.5 top-1.5">
+              <CopyButton value={clientConfig} label="client config" />
+            </div>
+          </div>
         </div>
       </div>
     </div>
