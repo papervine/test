@@ -364,6 +364,14 @@ hand-walk signup → onboarding. Seed a known account and drive a real browser:
   product in a few seconds: `app.localhost:3000/dev-org/connect` → *Start from scratch* → name
   it. It's seeded with starter content and live immediately, which is the point. (Adding one to
   `db:seed` would be reasonable if hosted sites become a frequent test bed.)
+- **Testing the authoring MCP's write auth** (SPEC §9.2/§11): `node scripts/authoring-mcp-login.mjs`
+  drives the whole OAuth flow the way a real MCP client does — registers a client, opens the
+  authorize URL, captures the code on a loopback callback, exchanges it for a token, and calls
+  the MCP with it, so a failure names the step that broke. `--write` also proves an edit buffers
+  onto a draft branch (an identity edit; it changes nothing). `--origin` points it at production,
+  `--no-open` suits a headless box. The printed token is good for an hour, so you can curl the
+  endpoint directly afterwards. The one-credential half — a browser with a dashboard session —
+  needs no script; it's just the endpoint in a signed-in tab.
 - The **control plane lives on the `app.` host** (SPEC §10): log in at
   **`http://app.localhost:3000/login`**, and the dashboard is at bare
   **`app.localhost:3000/:org/:site`** (seed → `app.localhost:3000/dev-org/starter`). New
