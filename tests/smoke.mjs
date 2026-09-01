@@ -424,8 +424,18 @@ const CONTROL_PLANE_CHECKS = [
   {
     host: "app.localhost",
     path: "/.well-known/oauth-authorization-server",
-    expectStatus: 200,
-    desc: "OAuth authorization-server metadata is served on the app host (not rewritten onto /app)",
+    // Served (not rewritten onto /app), and naming BOTH grants. One document describes this
+    // authorization server, so a client discovering it must learn about the device grant
+    // (SPEC §11.4) in the same fetch as the authorization-code flow — two half-authoritative
+    // documents at adjacent paths is how a client picks the wrong one. `authorization_endpoint`
+    // is here as the canary for the code flow going missing from a document about to grow.
+    desc: "OAuth authorization-server metadata is public on the app host and names both grants",
+    include: [
+      "/api/auth/mcp/authorize",
+      "/api/auth/mcp/register",
+      "urn:ietf:params:oauth:grant-type:device_code",
+      "/api/auth/device/code",
+    ],
   },
   {
     // Consent is FORCED on the authoring MCP's authorize endpoint (SPEC §9.2/§11), and this is
@@ -500,6 +510,18 @@ const CONTROL_PLANE_CHECKS = [
     path: "/brand/nope.svg",
     expectStatus: 404,
     desc: "an unlisted brand asset 404s (the allowlist is the traversal guard)",
+  },
+  {
+    // The verification page `papervine login` prints, and what the discovery document names as
+    // `verification_uri` (SPEC §11.4). Reachable signed-OUT on purpose — that state is what
+    // offers sign-in / sign-up links carrying the code — so the edge gate must not bounce it.
+    // Bare `/device` (no user_code) is also the one state of this page that reads no database,
+    // which is what makes it assertable in this DB-free gate; the approval journey itself is
+    // covered by tests/e2e/device-auth.spec.ts.
+    host: "app.localhost",
+    path: "/device",
+    desc: "the device-authorization page is reachable signed-out on the app host (SPEC §11.4)",
+    include: ["Connect a device"],
   },
   {
     // Stale-session self-heal: a lingering-but-invalid session cookie must NOT loop

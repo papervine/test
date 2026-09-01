@@ -51,9 +51,93 @@ The template ships inside the package, so `new` works offline and always matches
 of the CLI that wrote it.
 
 <Note>
-  The CLI is a previewer, not a deployer — it has **no `deploy` and no `login`**. Publishing
-  happens through Git (push your repo) and the hosted control plane, not the CLI.
+  The CLI is a previewer, not a deployer — it has **no `deploy`**. Publishing happens through Git
+  (push your repo) and the hosted control plane, not the CLI.
 </Note>
+
+## Signing in from the terminal
+
+You don't need an account to use the CLI. Everything above works offline and always will.
+
+An account is for the hosted product, and you can create one without leaving the terminal:
+
+```bash
+npx papervine signup    # create a Papervine account
+npx papervine login     # sign in to one you already have
+npx papervine whoami    # who is this terminal signed in as?
+npx papervine logout    # forget the stored credential
+```
+
+`signup` prints a short code and opens your browser. You create the account (or continue with
+Google or GitHub), the browser shows you the code and asks whether to connect the terminal, and
+the command finishes the moment you approve:
+
+```
+▲ papervine create your account
+
+  Your code   7LRB-Z9EN
+  Open        https://app.papervine.io/signup?redirect=%2Fdevice%3Fuser_code%3D7LRBZ9EN
+
+✓ signed in to https://papervine.io as you@example.com
+  credential saved to ~/.config/papervine/credentials.json
+```
+
+`login` is the same flow pointed at the sign-in form instead. Nothing else differs — same code,
+same approval, same credential.
+
+### Why a browser and not a password prompt
+
+The CLI never asks for a password, and never handles one. It runs the OAuth 2.0
+[Device Authorization Grant](https://datatracker.ietf.org/doc/html/rfc8628) — the flow a smart TV
+uses — so the account part happens in a browser where it belongs. Three things follow from that:
+
+- **Nothing secret passes through your shell.** No password in a shell history, a CI log, or an
+  agent transcript.
+- **"Continue with Google" and "Continue with GitHub" work.** A terminal prompt can't do a social
+  sign-in; a browser handoff can.
+- **The command doesn't block on your inbox.** Approval is a click you're already making, not an
+  email you're waiting for.
+
+### On a machine with no browser
+
+Over SSH, in a container, or when an agent is driving, pass `--no-browser`: the command prints
+the URL and the code and waits. Open the URL anywhere — your laptop, your phone — and the
+terminal finishes on its own. Nothing about the flow requires the browser to be on the same
+machine.
+
+If you'd rather type the code than follow a link, open
+[`app.papervine.io/device`](https://app.papervine.io/device) and enter it.
+
+### Where the credential lives
+
+| | |
+| --- | --- |
+| Path | `~/.config/papervine/credentials.json` (`$XDG_CONFIG_HOME` honoured; `%APPDATA%\papervine\` on Windows) |
+| Permissions | `0600` — owner-only |
+| Keyed by | the control plane's origin, so a self-hosted one and the hosted one coexist |
+
+`PAPERVINE_TOKEN` overrides the file entirely, which is how CI and sandboxes pass a credential
+without writing to a home directory that may not persist. `logout` clears the stored copy; it
+doesn't revoke the session on the server, so revoke it there if the machine is compromised.
+
+### A self-hosted control plane
+
+`--url` points any of these commands at your own deployment, and `PAPERVINE_API_URL` sets it for
+all of them:
+
+```bash
+papervine login --url https://papervine.acme.dev
+```
+
+<Note>
+  Signing in is only useful against a control plane. A CLI-only self-hosted site (the
+  [self-hosting guide](/guides/self-hosting)) has no accounts to sign in to, and needs none.
+</Note>
+
+<Card title="Letting an agent sign itself in" icon="robot" href="/features/agent-auth">
+  These commands are a convenience over a public, documented OAuth flow — an agent can walk it
+  without the CLI installed. What's published, and how.
+</Card>
 
 ## Options
 
@@ -181,6 +265,10 @@ It deliberately carries **none** of the hosted control plane — no authenticati
 object storage, or realtime. Those are services of the hosted product, not things a local
 previewer needs, so they're absent from the package entirely rather than disabled at runtime.
 
+That includes the account commands. `signup` and `login` don't embed an auth system; they make a
+handful of HTTPS requests to one and write a JSON file. The control plane stays on the other end
+of the wire.
+
 Search and the AI assistant *are* included: neither needs the control plane. Search is an
 in-memory index over the folder you're previewing, and the assistant answers by searching and
 reading those same pages. What the assistant needs from you is a model — see
@@ -293,6 +381,6 @@ deploy it to a hosted site.
 
 ## Roadmap
 
-`new`, `dev` and `serve` are the command surface today. Planned next: `broken-links` (dead
-internal links), `validate` (a strict config/frontmatter gate for CI), `openapi-check`, and
-`build` (static export).
+`new`, `dev`, `serve`, `signup`, `login`, `logout` and `whoami` are the command surface today.
+Planned next: `broken-links` (dead internal links), `validate` (a strict config/frontmatter gate
+for CI), `openapi-check`, and `build` (static export).

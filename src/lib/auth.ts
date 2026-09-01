@@ -3,7 +3,13 @@ import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 // `mcp` has no `better-auth/plugins/mcp` subpath export (only its client half does) — it
 // comes off the barrel, unlike admin/organization which have both.
-import { admin, mcp, organization } from "better-auth/plugins";
+import {
+  admin,
+  bearer,
+  deviceAuthorization,
+  mcp,
+  organization,
+} from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 import { eq } from "drizzle-orm";
 import { db } from "./db";
@@ -256,6 +262,52 @@ export const auth = betterAuth({
       // outer one or the two halves of the flow would send people to different pages.
       oidcConfig: { loginPage: "/login", consentPage: "/oauth/consent" },
     }),
+    // OAuth 2.0 Device Authorization Grant (RFC 8628) — how `papervine signup` / `papervine
+    // login` sign a terminal in, and the reason the CLI never handles a password (SPEC §11.4).
+    // A client asks for a pair of codes, shows the human the short one, and polls
+    // /api/auth/device/token until the /device page approves it.
+    //
+    // The sibling of the `mcp()` grant above, not a competitor: both are advertised by the one
+    // discovery document (`src/lib/mcp-oauth-metadata.ts`), and they answer different questions.
+    // Authorization-code + PKCE is right when the client can receive a redirect — an MCP client,
+    // an editor extension. The device grant is right when it cannot: a terminal, a container, an
+    // SSH session, a CI job.
+    //
+    // Two consequences of running it on THIS deployment, both load-bearing:
+    //
+    //  - `verificationUri` is on the APP host, not `BETTER_AUTH_URL`'s apex. Approving needs a
+    //    session, and the session cookie is host-only on `app.` by design (SPEC §10) — a
+    //    verification page on the apex would be permanently signed out. The `/api/auth/*`
+    //    endpoints answer on either host (one route tree), so only the human-facing URL cares.
+    //  - No `validateClient`. The device grant is for PUBLIC clients with no secret, and the
+    //    point of advertising it in a public discovery document is that a client we have never
+    //    heard of can use it. So any client_id is accepted and shown verbatim on the approval
+    //    page — the human deciding IS the authorization, not an allowlist we would have to
+    //    maintain. (A client that wants a *recorded* identity can register through the `mcp`
+    //    plugin's RFC 7591 endpoint instead; that is the trade it buys.)
+    deviceAuthorization({
+      // Long enough to find the browser tab, sign up, maybe check email; short enough that a
+      // code left on a shared terminal is worthless by the time anyone reads it.
+      expiresIn: "15m",
+      interval: "5s",
+      ...(APP_ORIGIN ? { verificationUri: `${APP_ORIGIN}/device` } : {}),
+      // Not a customization — a workaround. The plugin's options are typed `Partial<…>`, but
+      // its runtime Zod schema declares `schema` WITHOUT `.optional()`, so omitting the key
+      // throws a ZodError *at module evaluation*: `src/lib/auth.ts` fails to import, and every
+      // page that touches auth 500s while the pages that don't render perfectly. `{}` is a
+      // no-op through the plugin's `mergeSchema`. Remove when better-auth marks it optional.
+      schema: {},
+    }),
+    // Accept `Authorization: Bearer <session token>` anywhere a session is read. This is what
+    // makes the token the device grant hands back usable at all — the CLI has no cookie jar.
+    //
+    // Narrower than it looks, and deliberately so: this signs a raw SESSION token, which is what
+    // `/device/token` returns. It is not the authoring MCP's credential — that is an OIDC access
+    // token verified by `authoring-auth.ts`, which resolves its own actor and never reaches this
+    // hook. So the two token types stay separate; `bearer()` exists for `/api/me` and whatever
+    // the CLI reaches for next.
+    bearer(),
+    // Documented as last — it forwards cookies set during server actions.
     nextCookies(),
   ],
 });

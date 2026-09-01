@@ -10,6 +10,7 @@ import {
 } from "./lib/tenant-host";
 import { SIGNED_IN_FLAG } from "./lib/signed-in-flag";
 import { isOAuthCallbackPath } from "./lib/social-auth";
+import { safeRedirect } from "./lib/safe-redirect";
 import { setLlmsDiscoveryHeaders } from "@papervine/renderer/lib/llms-discovery";
 
 // Bare control-plane paths that keep their own URL on the app host (real routes, not
@@ -250,7 +251,13 @@ export function middleware(req: NextRequest) {
     // auth path it would bounce a signed-in user to the dashboard — which is every user who
     // reaches it, since consenting requires a session. The page renders its own signed-out
     // state rather than relying on the edge gate.
-    if (pathname === "/oauth/consent") {
+    //
+    // `/device` is the device grant's equivalent (SPEC §11.4) — the page `papervine login`
+    // prints, and what the discovery document names as `verification_uri`. It differs from
+    // consent in one way that matters: it must reach its own SIGNED-OUT render, because that
+    // state is what offers sign-in / sign-up links carrying `?redirect=` back here with the user
+    // code intact. Bounced by the edge gate, the code the CLI printed is simply lost.
+    if (pathname === "/oauth/consent" || pathname === "/device") {
       return syncFlag(NextResponse.next());
     }
     if (isAuthPath(pathname)) {
@@ -271,7 +278,15 @@ export function middleware(req: NextRequest) {
       // signup loop with ERR_TOO_MANY_REDIRECTS) and the password-reset pages.
       if (authed && !isAuthPathReachableWhenSignedIn(pathname)) {
         const url = req.nextUrl.clone();
-        url.pathname = "/";
+        // …but honor a `?redirect=`. These pages are reached mid-flow by people who already
+        // have a session: `papervine signup` sends the browser to /signup?redirect=/device?…
+        // and the GitHub App install resumes through /login?redirect=…. Bouncing those to the
+        // dashboard drops the thing they came to finish, and it looks like the device approval
+        // or the install silently did nothing. Same-host paths only (safeRedirect).
+        const resume = safeRedirect(req.nextUrl.searchParams.get("redirect"));
+        const target = resume ? new URL(resume, req.nextUrl.origin) : null;
+        url.pathname = target ? target.pathname : "/";
+        if (target) url.search = target.search;
         return syncFlag(NextResponse.redirect(url));
       }
       return syncFlag(NextResponse.next());

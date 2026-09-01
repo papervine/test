@@ -583,6 +583,35 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   branches. If you add any other root-level route that isn't under `/api/`, add it to those
   bypasses too. Guarded by a smoke check that asserts `/monitoring` on the app host is NOT
   bounced to `/login` (a status assertion would depend on whether a DSN is configured).
+  **The list only grows:** `AUTHORING_MCP`, `WELL_KNOWN_OAUTH` (both OAuth discovery documents),
+  `CRAWLER_FILES` and `BRAND_PREFIX` are bypassed on the app host for the same reason. The OAuth
+  ones are the sharpest case — a client asking "how do I authorize here?" answered with a 307 to
+  a login page reads as "this server doesn't support authorization" — and each has its own smoke
+  check. The `/device` approval page (SPEC §11.4) is a *different* exception, alongside
+  `/accept-invite` and `/oauth/consent`: those are bare-URL `(auth)` pages that must reach their
+  own **signed-out** render rather than the edge bounce, because that render is what carries the
+  flow onward (for `/device`, the sign-in links holding the user code the CLI printed).
+- **Node does not resolve `*.localhost`; browsers do.** `app.localhost` works perfectly in Chrome
+  and fails with `getaddrinfo ENOTFOUND` from anything using Node's DNS — which includes
+  Playwright's `APIRequestContext` (so an e2e that drives a page on `baseURL` fine cannot
+  `request.post` the same host) and the published CLI (`papervine login --url
+  http://app.localhost:3000` dies before sending a byte). Neither says why, because **`fetch`
+  reports every transport failure as the bare string "fetch failed"** and hides the real error on
+  `.cause` — DNS, refused connection and TLS all read identically. So: address `127.0.0.1` from
+  Node and let the *browser* have the `app.localhost` URL (`tests/e2e/device-auth.spec.ts` does
+  exactly this — the `/api/auth/*` endpoints answer on either host), and unwrap
+  `err.cause.message` before printing a network error to a user.
+- **A better-auth plugin whose options are typed `Partial<…>` can still have a REQUIRED runtime
+  field — and the failure is a module-eval throw.** `deviceAuthorization`'s Zod schema declares
+  `schema: z.custom(() => true)` with no `.optional()`, so omitting the key throws a ZodError
+  while `src/lib/auth.ts` is being *imported*. TypeScript is happy and typecheck passes; the app
+  then 500s every page that touches auth while every page that doesn't renders perfectly — which
+  reads as an unrelated regression somewhere else entirely (the tell here was the widget route's
+  unknown-id 404 turning into a 500, three files away from anything we'd changed). Pass
+  `schema: {}` — a no-op through the plugin's `mergeSchema`. General lesson: after adding any
+  better-auth plugin, load a page that reads a session before trusting the typecheck, and keep
+  `npm test` in the loop — the smoke gate caught this precisely because it exercises pages on
+  both sides of that line.
 - **The index page has two spellings — normalize before comparing a nav href to a page slug.**
   `listPageSlugs()` reports the index page as **`""`** (its route is `/`, see `s3-source.ts`),
   while `docs.json` writes it as **`"index"`** and `buildNav` emits the href **`/index`**. So any

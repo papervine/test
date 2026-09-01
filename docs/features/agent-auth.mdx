@@ -1,0 +1,149 @@
+---
+title: Agent sign-in
+description: Papervine publishes a standard OAuth device flow, so an agent or a script can get a Papervine token without a vendor-specific command.
+public: true
+---
+
+Papervine's terminal sign-in isn't a private mechanism with a CLI wrapper around it. It's a
+standard OAuth flow, published where clients look for it, and `papervine login` is one client of
+it. Anything that speaks the same flow — an agent runtime, a CI job, a script, a tool nobody has
+written yet — can sign itself in without installing our CLI.
+
+## What's published
+
+<CodeGroup>
+
+```bash Discovery
+curl https://papervine.io/.well-known/oauth-authorization-server
+```
+
+```json Response (abridged)
+{
+  "issuer": "https://papervine.io",
+  "authorization_endpoint": "https://papervine.io/api/auth/mcp/authorize",
+  "token_endpoint": "https://papervine.io/api/auth/mcp/token",
+  "registration_endpoint": "https://papervine.io/api/auth/mcp/register",
+  "device_authorization_endpoint": "https://papervine.io/api/auth/device/code",
+  "grant_types_supported": [
+    "authorization_code",
+    "refresh_token",
+    "urn:ietf:params:oauth:grant-type:device_code"
+  ],
+  "code_challenge_methods_supported": ["S256"]
+}
+```
+
+</CodeGroup>
+
+That document is [RFC 8414](https://datatracker.ietf.org/doc/html/rfc8414) authorization server
+metadata, and it describes **two** ways in. Nothing here is Papervine-shaped: a client that can
+sign in to one provider of either flow can sign in to this one.
+
+| Flow | Use it when | Spec |
+| --- | --- | --- |
+| **Authorization code + PKCE** | Your client can receive a redirect — an MCP client, an editor extension, a web app. Register yourself first; you get a recorded client identity and scoped tokens. | [RFC 6749](https://datatracker.ietf.org/doc/html/rfc6749) + [RFC 7591](https://datatracker.ietf.org/doc/html/rfc7591) |
+| **Device authorization** | It can't — a terminal, a container, an SSH session, a CI job. No registration, no redirect URI, no secret. | [RFC 8628](https://datatracker.ietf.org/doc/html/rfc8628) |
+
+The rest of this page is the device grant. For the code flow, point an MCP client at
+`https://papervine.io/authoring/mcp` and let it discover the rest — see
+[MCP servers](/features/mcp-servers).
+
+## The flow
+
+<Steps>
+  <Step title="Ask for a code">
+    ```bash
+    curl -X POST https://papervine.io/api/auth/device/code \
+      -H 'content-type: application/json' \
+      -d '{"client_id":"my-agent"}'
+    ```
+
+    You get back a `device_code` (yours, keep it), a short `user_code` (the human's), a
+    `verification_uri`, a `verification_uri_complete` with the code already in it, and the
+    `interval` you're allowed to poll at.
+
+    `client_id` is any stable string that names your client. There's no registration step and no
+    secret — this grant is for **public clients**, which is what a program on somebody else's
+    machine is. Choose a recognizable name: it's shown verbatim on the approval screen, and it's
+    the only thing telling the person whether the request is yours.
+  </Step>
+
+  <Step title="Show the human the URL">
+    Print `verification_uri_complete`, or the `verification_uri` and the `user_code` separately
+    if they'll type it. They don't have to be on the same machine as you — a phone works.
+  </Step>
+
+  <Step title="Poll for the token">
+    ```bash
+    curl -X POST https://papervine.io/api/auth/mcp/token \
+      -d grant_type=urn:ietf:params:oauth:grant-type:device_code \
+      -d device_code=… \
+      -d client_id=my-agent
+    ```
+
+    That's the `token_endpoint` from the metadata, form-encoded as OAuth specifies — so a generic
+    client needs no special case. JSON works too, and so does posting straight to
+    `/api/auth/device/token` if you'd rather skip discovery (what our own CLI does).
+
+    Until they approve, this answers `400` with `{"error":"authorization_pending"}` — keep
+    waiting. `slow_down` means widen your interval by 5 seconds and **keep it widened**.
+    `access_denied` means they refused; `expired_token` means the code aged out. On success you
+    get an `access_token`.
+  </Step>
+
+  <Step title="Use the token">
+    ```bash
+    curl https://papervine.io/api/me -H "Authorization: Bearer $TOKEN"
+    ```
+
+    ```json
+    {
+      "user": { "id": "…", "email": "you@example.com", "name": "…", "emailVerified": true },
+      "organizations": [{ "id": "…", "slug": "acme", "name": "Acme" }]
+    }
+    ```
+  </Step>
+</Steps>
+
+## What the token is
+
+**A session, not a scoped key.** The token carries the same access the person has in the
+dashboard, and it expires the way a browser session does. The `scopes_supported` in the metadata
+document describes the **authorization-code** flow; a device-grant token ignores `scope`
+entirely. Scoping it is planned — until then, assume a device token can do anything its owner can.
+
+Treat it accordingly: store it where you'd store a session cookie, never in a repository, and
+don't hand it to a third party. If a machine holding one is compromised, revoke the session from
+the dashboard rather than only deleting the local copy.
+
+<Note>
+  If your client *can* handle a redirect, prefer the authorization-code flow: it gives you a
+  registered identity, scoped access, and a refresh token. The device grant's advantage is only
+  that it needs none of that.
+</Note>
+
+## What the approval screen shows
+
+The person approving sees the `client_id` you sent, the code, the account they're about to grant,
+and an equally prominent way to refuse. That's deliberate: the known weakness of this flow is
+that anyone can start one and try to talk a stranger into approving it, and the defence is that
+the screen makes an unexpected request look unexpected.
+
+So: send a `client_id` that names you honestly, and never suggest someone approve a code they
+didn't see in their own terminal.
+
+## Limits worth knowing
+
+- **Codes last 15 minutes** and are single-use. Exchanging one deletes it, so a replay gets
+  `invalid_grant`.
+- **A code is bound to the `client_id` that requested it.** Presenting the same `device_code`
+  under a different client is `invalid_grant`.
+- **Approval requires a signed-in browser session** on the app host. A client cannot approve its
+  own request; only a person can.
+- **The device grant ignores `scope`.** Send one and it's recorded and shown on the approval
+  screen, but nothing enforces it.
+
+<Card title="The CLI commands" icon="terminal" href="/cli#signing-in-from-the-terminal">
+  `papervine signup` / `login` / `whoami` / `logout` — the same flow, with the polling and the
+  credential file handled for you.
+</Card>

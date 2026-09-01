@@ -115,6 +115,42 @@ light mode never flashes dark.
   mismatch.
 </Note>
 
+### Node doesn't resolve `*.localhost` — browsers do
+
+<Warning>
+  `app.localhost` works perfectly in Chrome and fails with `getaddrinfo ENOTFOUND` from anything
+  using Node's DNS: Playwright's `APIRequestContext`, and the `papervine` CLI. **Fix:** address
+  `127.0.0.1` from Node and leave the `app.localhost` URL to the browser.
+</Warning>
+
+This bites in two places that look unrelated. An e2e spec can drive a page on `app.localhost`
+and, in the same test, fail to `request.post` the same host — so API calls in
+`tests/e2e/device-auth.spec.ts` go to the apex, which serves the same `/api/auth/*` route tree.
+And `papervine login --url http://app.localhost:3000` dies before sending a byte, which is why
+local sign-in uses `--url http://127.0.0.1:<port>` while the browser page it opens is still on
+`app.localhost`.
+
+<Note>
+  Neither failure explains itself, because **`fetch` reports every transport problem as the bare
+  string `fetch failed`** and hides the real one on `.cause` — DNS, refused connection and TLS
+  all read identically. Unwrap `err.cause.message` before showing a network error to anyone.
+</Note>
+
+### A better-auth plugin can require an option TypeScript says is optional
+
+<Warning>
+  A plugin's options may be typed `Partial<…>` while its runtime Zod schema declares a field
+  **without** `.optional()` — `deviceAuthorization`'s `schema` is one. Omitting it throws a
+  ZodError *while `src/lib/auth.ts` is being imported*. **Fix:** pass `schema: {}`.
+</Warning>
+
+The failure mode is what makes this expensive. Typecheck passes. The app then 500s every page
+that reads a session while every page that doesn't renders perfectly, so it looks like a
+regression somewhere unrelated — here the tell was an unknown-widget-id 404 becoming a 500, in a
+route nobody had touched. After adding any auth plugin, load a page that reads a session, and
+keep `npm test` in the loop: the smoke gate catches this because it exercises pages on both sides
+of that line.
+
 ### Redirecting to a tenant host needs a hard navigation
 
 <Warning>
@@ -151,7 +187,11 @@ So `www` shows a Dashboard link via a *benign* `pv_signed_in=1` flag cookie
 by the marketing nav. Because it reaches tenant subdomains (parent-domain cookie), it's
 **httpOnly** (+ Secure in prod) so tenant page JS can't read it, and it's cleared
 **server-side in the middleware** on logout (a client clear can't touch httpOnly).
-Logged-in users who hit `/login` or `/signup` on the app host go straight to the dashboard.
+Logged-in users who hit `/login` or `/signup` on the app host go straight to the dashboard —
+**unless the URL carries a `?redirect=`**, which means they arrived mid-flow (approving a
+`papervine login`, resuming a GitHub App install) and the thing they came to finish is at that
+path. Same-host paths only, via `safeRedirect`; forwarding an arbitrary origin from a login page
+is an open redirect that hands over a freshly authenticated visitor.
 
 <Note>
   **Dev caveat:** Chrome rejects `Domain=localhost` cookies, so the flag (and thus `www`'s

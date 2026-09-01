@@ -118,6 +118,13 @@ Point any MCP client at `https://app.papervine.io/authoring/mcp` and it authoriz
   aren't. Editing the same page both ways at once gives you two uncoordinated copies.
 </Note>
 
+<Note>
+  **A client that can't receive a redirect** — a script, a CI job, an agent in a container — can't
+  do step 2 above. The same authorization server also publishes the OAuth **device flow** for
+  exactly that case: see [agent sign-in](/features/agent-auth). Both are described in one
+  discovery document, so a client picks the one its own shape allows.
+</Note>
+
 It serves at `/authoring/mcp`. The tools, grouped by what they touch:
 
 - **Content** — `read`, `search`, `list_pages`, `write_page` (full MDX), `edit_page` (a

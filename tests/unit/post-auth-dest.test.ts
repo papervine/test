@@ -47,6 +47,36 @@ describe("postAuthDestFor", () => {
     expect(dest.startsWith("/api/auth/mcp/authorize?")).toBe(true);
   });
 
+  it("resumes an explicit ?redirect=, query intact", () => {
+    // `papervine login` sends the browser to /signup?redirect=/device?user_code=… so the device
+    // approval survives account creation (SPEC §11.4). `/api/github/setup` uses the same
+    // parameter to resume an App install — and did so for months before anything read it, which
+    // is why this case exists at all.
+    expect(postAuthDestFor("?redirect=%2Fdevice%3Fuser_code%3DABCD1234")).toBe(
+      "/device?user_code=ABCD1234",
+    );
+  });
+
+  it("refuses a ?redirect= that could leave this origin", () => {
+    // Forwarding a freshly authenticated visitor to an arbitrary URL from a login page is the
+    // textbook open redirect; `safeRedirect` drops anything that isn't a same-host path.
+    expect(postAuthDestFor("?redirect=https%3A%2F%2Fevil.example%2Fsteal")).toBe("/");
+    expect(postAuthDestFor("?redirect=%2F%2Fevil.example")).toBe("/");
+  });
+
+  it("prefers a resumable authorization over a ?redirect=", () => {
+    // Both are "a flow already in progress", so the tie-break is which one has a client
+    // blocked on the other end. The MCP authorize round trip does.
+    const dest = postAuthDestFor("?client_id=abc&response_type=code&redirect=%2Fdevice");
+    expect(dest.startsWith("/api/auth/mcp/authorize?")).toBe(true);
+  });
+
+  it("prefers a ?redirect= over a pending invite", () => {
+    expect(postAuthDestFor("?invite=inv_1&redirect=%2Fdevice%3Fuser_code%3DA")).toBe(
+      "/device?user_code=A",
+    );
+  });
+
   it("still honors a pending invite", () => {
     expect(postAuthDestFor("?invite=inv_1")).toBe("/accept-invite?id=inv_1");
   });

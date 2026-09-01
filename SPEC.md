@@ -5799,12 +5799,15 @@ placeholder, from CI with `--provenance`. Phase 1 is the disruptive-but-mechanic
 move touches every import path); 2–4 are contained; the destination is the full monorepo
 regardless of where we pause.
 
-**docs platform parity informs the surface.** `mint` has **no `deploy` and no `login`** —
-deployment is Git-based (push → their GitHub app builds it), and the CLI only reaches the
+**docs platform parity informs the surface.** `mint` had **no `deploy` and no `login`** —
+deployment is Git-based (push → their GitHub app builds it), and the CLI only reached the
 hosted backend for *read-only live data* (`mint analytics` pulls real traffic). So a CLI
 never *is* the control plane; at most it's a thin HTTPS client to it. Papervine mirrors this:
-local dev commands now, an optional thin authenticated client (`papervine analytics`, a
-hypothetical `papervine deploy`) later — never by embedding the server. hosted docs platforms' one gap is
+local dev commands, plus a thin authenticated client — `papervine signup` / `login` / `logout` /
+`whoami` landed 2026-08-31 over the public device grant (§11.4), and `papervine analytics` / a
+hypothetical `papervine deploy` are the same shape when wanted — never by embedding the server.
+(That competitor since shipped `mint signup`; §11.4 has why we took the protocol-first route
+instead of a signup verb with a private mechanism behind it.) hosted docs platforms' one gap is
 that it has **no offline `build`/static export** (prod rendering is server-side on their
 infra); because Papervine's renderer works standalone, `papervine build` (static export of a
 docs repo) is a genuine differentiator and a natural fit for the renderer-only package.
@@ -5822,9 +5825,15 @@ order, smallest lift first):
 | `papervine build [dir]` | Static export to `./dist` (static-export differentiator) | renderer + crawl; emits the rendered route tree |
 | `papervine new [dir]` | Scaffold from the starter template | a vendored starter `docs.json` + MDX skeleton |
 
-Deferred (thin-client, needs an API + token storage, not a pure renderer): `papervine
-analytics`, `papervine login`, `papervine deploy`. Compatible with the split — they talk to
-the hosted API over HTTPS, they don't embed it.
+**Account commands (landed 2026-08-31, §11.4):** `papervine signup` / `login` / `logout` /
+`whoami`. Thin-client as promised — four `fetch` calls over the public OAuth device grant plus a
+`0600` JSON file at `~/.config/papervine/credentials.json`, keyed by control-plane origin
+(`--url` / `PAPERVINE_API_URL` for a self-hosted one, `PAPERVINE_TOKEN` to bypass the file in CI).
+Nothing control-plane enters the tarball; the pure decision core is `apps/cli/bin/auth.mjs`.
+
+Still deferred (needs an API surface beyond `/api/me`, not just a token): `papervine analytics`,
+`papervine deploy`. Compatible with the split — they talk to the hosted API over HTTPS, they
+don't embed it.
 
 > **Status (2026-06-13):** reserved the npm namespace. Claimed the **`@papervine`** org/scope
 > *and* the unscoped **`papervine`** name (so `npx papervine` resolves to the bare name, the
@@ -8561,6 +8570,144 @@ then **⑤ (optional) PPR**.
    bake it into the HTML and make every personalized page uncacheable — see §11.2 "two axes."
 3. **Enterprise (when a deal demands it):** WorkOS SAML/SSO into the platform; OAuth-2.0
    reader handshake; per-user personalization at scale.
+
+### 11.4 Layer 1 from a terminal — the device grant (`papervine signup` / `login`)
+
+**The decision: a published protocol, with the CLI as one client of it — not a CLI verb with a
+private mechanism behind it.**
+
+The prompt for this was a competitor shipping `mint signup`: an interactive command that collects
+name/email/company, POSTs them, and then **blocks until the user clicks an email verification
+link** — minutes, during which an agent must either hold the process open or background it. The
+critique that followed (API Evangelist, 2026-08-31) is the part worth acting on: that vendor had
+*already* been serving RFC 8414 authorization-server metadata with a live RFC 7591 registration
+endpoint, and never said so. The CLI verb works only for people who install the vendor's tool;
+the protocol door composes with every agent runtime that already speaks OAuth. Announcing the
+verb and not the door is announcing the smaller thing.
+
+So Papervine ships both, in that order of importance:
+
+1. **The device grant, advertised in the authorization-server metadata we already publish.**
+   §9.2's authoring-MCP work put an RFC 8414 document at
+   `/.well-known/oauth-authorization-server` for the authorization-code flow; the device grant
+   is added to *that* document (`device_authorization_endpoint`, plus
+   `urn:ietf:params:oauth:grant-type:device_code` in `grant_types_supported`) rather than
+   getting one of its own. **One authorization server, one description of it.** A client
+   discovering this deployment learns everything it can do in a single fetch; two
+   half-authoritative documents at adjacent well-known paths is how a client picks the wrong
+   flow and reports our server as broken.
+2. **`papervine signup` / `login` / `logout` / `whoami`** — a convenience over that door. Four
+   `fetch` calls and a JSON file, which is what keeps them inside the §10.6 packaging boundary:
+   no better-auth, no database driver, nothing control-plane in the tarball.
+
+**The two grants are siblings, not rivals**, and the split is about what the client can receive.
+Authorization-code + PKCE (the `mcp` plugin) needs a redirect URI, which an MCP client, an editor
+extension or a browser app has. The device grant is for a client that has none — a terminal, a
+container, an SSH session, a CI job, an agent sandbox. Publishing both from one document is what
+lets a client pick correctly without knowing anything about us.
+
+**Why the device grant rather than a `--email/--password` prompt.** Three reasons, in order:
+no secret passes through the shell (so nothing lands in a shell history, a CI log, or an agent
+transcript); **social sign-in works** — "Continue with Google/GitHub" is not something a terminal
+prompt can do, and it is how a large share of accounts exist; and approval is a click the user is
+already making rather than an email they are waiting for, so the command finishes in seconds
+instead of minutes. `signup` and `login` are therefore the *same* flow differing only in which
+page the browser lands on — the sign-up form, or the approval page directly.
+
+**Implementation.** Better Auth's `deviceAuthorization` plugin + `bearer()`
+(`src/lib/auth.ts`), a `device_code` table (migration `0030`), the device fields added to
+`src/lib/mcp-oauth-metadata.ts`, and the approval page at **`/device`** on the app host — a
+bare-URL `(auth)` page beside `/login`, `/accept-invite` and `/oauth/consent`, reachable
+signed-OUT so it can offer sign-in/sign-up links that carry the code back. `/api/me` is the first
+authenticated JSON endpoint for non-browser clients; deliberately not `/api/cli/*`, since the CLI
+is one client of a public grant.
+
+**The token endpoint had to be made honest.** The two plugins mount two: `mcp` at
+`/api/auth/mcp/token`, `deviceAuthorization` at `/api/auth/device/token`. RFC 8414 has exactly
+one `token_endpoint` field and RFC 8628 §3.4 redeems the device code at *that* endpoint — so a
+spec-following client would read our metadata and POST a device grant to a handler that only
+knows authorization codes. Advertising a second, non-registry field would have been a footnote,
+not discovery. Instead `src/app/api/auth/mcp/token/route.ts` shadows Better Auth's catch-all (the
+same trick the `authorize` wrapper already uses to force consent) and forwards a device-code
+grant to the device handler, normalizing form-encoded → JSON on the way, since OAuth specifies
+the former and the plugin validates the latter. Everything else passes through byte for byte,
+headers included, so a confidential client's `client_secret_basic` still works. Papervine's own
+CLI skips this and calls `/device/token` directly — it can hard-code a URL and save the
+discovery round trip; the shim is for everyone else.
+
+**Two token types, deliberately separate.** `bearer()` signs a raw **session** token — what
+`/device/token` returns — so the CLI's credential works on `/api/me` and anywhere else a session
+is read. The authoring MCP's credential is an OIDC **access token** resolved by
+`authoring-auth.ts`, which never reaches that hook. Keeping them apart is why adding `bearer()`
+does not quietly widen the MCP's write surface.
+
+Four decisions inside that worth not re-litigating:
+
+- **`verificationUri` is pinned to the APP host**, not `BETTER_AUTH_URL`'s apex. Approving needs a
+  session and the session cookie is host-only on `app.` (§10). Consequence for local dev: the port
+  must match `BETTER_AUTH_URL`, exactly like every other emailed auth link built from
+  `APP_ORIGIN`. Also, Node does not resolve `*.localhost` (browsers do), so local flows use
+  `--url http://127.0.0.1:<port>` while the browser page is on `app.localhost` — the CLI unwraps
+  `fetch`'s useless "fetch failed" to surface `ENOTFOUND` rather than leaving that a mystery.
+- **No `validateClient`.** The grant is for public clients with no secret; the whole point of
+  advertising it is that a client we have never heard of can use it. So any `client_id` is
+  accepted and **shown verbatim on the approval page** — the human deciding *is* the
+  authorization, and the screen says the name is self-reported (the same honesty the consent
+  screen already applies). A client that wants a *recorded* identity registers through the `mcp`
+  plugin's RFC 7591 endpoint and uses the code flow; that is the trade registration buys. Note
+  the asymmetry with scopes: the shared metadata document advertises `scopes_supported` because
+  the **code** flow enforces them, and a device-grant token ignores scope entirely — which is the
+  strongest argument for scoping it next.
+- **Granting is never a GET.** Better Auth's `deviceVerify` (the page load) *claims* the row for
+  the signed-in user and `deviceApprove` refuses an unclaimed row, so approval is structurally a
+  two-request dance. That is the mitigation for this grant's known weakness — a stranger starting
+  a flow and talking someone into approving it — together with naming the client, showing the
+  code to compare against the terminal, and giving "I didn't start this — refuse" equal weight.
+- **`?redirect=` is now honored**, in `postAuthDest()` *and* in the middleware's
+  signed-in-visitor bounce off the auth pages (`src/lib/safe-redirect.ts`, same-host paths only).
+  It was being **emitted and never read**: `/api/github/setup` has bounced unauthenticated
+  installs to `/login?redirect=…` since §10, and that resume always landed on the dashboard
+  instead. Fixing it is what makes `papervine signup` one uninterrupted flow.
+
+> **Status (2026-09-01):** landed. `deviceAuthorization` + `bearer` in `src/lib/auth.ts`,
+> `device_code` table (migration `0030`), the device fields in `src/lib/mcp-oauth-metadata.ts`,
+> the token-endpoint shim, `/device` approval page, `/api/me`, and the four CLI commands
+> (`apps/cli/bin/auth.mjs` is the pure core; `papervine.mjs` does the I/O). Verified end to end
+> against a real dev server: CLI → code → browser approval → token stored `0600` → `whoami` over
+> `Authorization: Bearer`, screenshotted in both themes. Gates: `tests/unit/cli-auth.test.ts`
+> (parser, credential store, RFC 8628 polling rules, the two verification URLs),
+> `tests/unit/device-code.test.ts` (code normalization + open-redirect refusal),
+> `tests/e2e/device-auth.spec.ts` (10 cases: approve, deny, replay, client-id binding, lower-case
+> code, code-entry form, signed-out resume, metadata public on the app host, console-clean), and
+> smoke (the metadata document names **both** grants; `/device` is not bounced to `/login`).
+> `npm run test:cli` green — the tarball is unchanged in shape.
+>
+> **Written against `main` before §9.2's authoring-MCP OAuth landed, then reconciled onto it.**
+> Worth recording because the reconciliation is the interesting half, and every choice went the
+> same way — *one* authorization server with one description. Dropped: a second metadata route
+> (main's is better; it has a `oauth-protected-resource` sibling and a shared origin resolver),
+> a second middleware bypass (main's `WELL_KNOWN_OAUTH` set already covers it), and a competing
+> `postAuthDest` (the `?redirect=` branch slots into main's pure `postAuthDestFor` after the
+> MCP-resume branch). Added because of the merge: the token-endpoint shim, which only became
+> necessary once one document advertised two grants. Both sessions independently hit the
+> `*.localhost` DNS trap and independently reached "address `127.0.0.1` from Node, give the
+> browser the real host" — twice in two days is a gotcha, so it is in the log now.
+>
+> **Bug found and worked around:** the plugin's options are typed `Partial<…>` but its runtime
+> Zod schema declares `schema` **without** `.optional()`, so omitting the key throws a ZodError
+> *at module evaluation* — `src/lib/auth.ts` fails to import and every page that touches auth
+> 500s while pages that don't render perfectly. Caught by the smoke gate (the widget route's
+> unknown-id 404 became a 500), which is exactly the class of failure that gate exists for.
+> Passing `schema: {}` is a no-op through the plugin's `mergeSchema`.
+>
+> **Deferred, on purpose:** **scoped tokens** — the device grant ignores `scope` entirely and
+> hands back a full-access session token, which is now the single biggest gap in this surface
+> (the code flow beside it *does* enforce scopes, so the asymmetry is visible in one document).
+> Then: rate-limiting the user-code lookup, and a dashboard surface listing and revoking
+> connected devices. The critique's other suggestion — a `/.well-known/api-onboarding`
+> descriptor — is **not** adopted, for the same reason the device grant went into the existing
+> document rather than a new one: it is one publisher's convention, not a standard, and a second
+> half-authoritative discovery file makes the surface less trustworthy, not more.
 
 ---
 

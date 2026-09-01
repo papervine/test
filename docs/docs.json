@@ -69,6 +69,7 @@
               "features/assistant-widget",
               "features/api-playground",
               "features/mcp-servers",
+              "features/agent-auth",
               "features/llms-txt",
               "features/skill-md"
             ]

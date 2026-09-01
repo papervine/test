@@ -7,6 +7,7 @@ import {
   text,
   timestamp,
   boolean,
+  integer,
   index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
@@ -211,6 +212,41 @@ export const oauthConsent = pgTable(
   (table) => [
     index("oauthConsent_clientId_idx").on(table.clientId),
     index("oauthConsent_userId_idx").on(table.userId),
+  ],
+);
+
+// device-authorization plugin (RFC 8628) — the CLI's `papervine signup` / `login`, and the
+// grant any client that can't receive a redirect uses (SPEC §11.4). One row per in-flight
+// authorization:
+// created by POST /api/auth/device/code, claimed for a user by GET /api/auth/device, flipped to
+// approved/denied by the /device page, then deleted the moment it is exchanged for a token.
+//
+// The key names here are the plugin's FIELD names, not just column names: the Drizzle adapter
+// resolves a model to `schema.deviceCode` and each field to `schema.deviceCode[field]`, so
+// renaming a key (rather than the string inside `text(...)`) silently breaks the plugin.
+export const deviceCode = pgTable(
+  "device_code",
+  {
+    id: text("id").primaryKey(),
+    // The secret half — only ever held by the client that requested it.
+    deviceCode: text("device_code").notNull(),
+    // The short half a human reads off their terminal and confirms in a browser.
+    userCode: text("user_code").notNull(),
+    // Null until someone signed in opens the verification page and claims it.
+    userId: text("user_id").references(() => user.id, { onDelete: "cascade" }),
+    expiresAt: timestamp("expires_at").notNull(),
+    status: text("status").notNull(),
+    lastPolledAt: timestamp("last_polled_at"),
+    pollingInterval: integer("polling_interval"),
+    clientId: text("client_id"),
+    scope: text("scope"),
+  },
+  (table) => [
+    uniqueIndex("device_code_device_code_uidx").on(table.deviceCode),
+    // Indexed, not unique: the code is server-generated from a 32-character alphabet, so a
+    // collision is vanishingly unlikely — and a unique constraint would turn that non-event
+    // into a 500 on someone's `papervine login` instead of a lookup that picks one row.
+    index("device_code_user_code_idx").on(table.userCode),
   ],
 );
 

@@ -63,6 +63,15 @@ Address verification and password reset need a mailbox on our end — see
 **[transactional email](/auth/transactional-email)**. Both degrade cleanly when no provider is
 configured, so neither is a prerequisite for running Papervine.
 
+A third method exists for clients that have no browser of their own: the **OAuth 2.0 Device
+Authorization Grant**, which is how `papervine signup` / `papervine login` sign a terminal in and
+how an agent gets a token. It needs no configuration — the endpoints are always on, advertised at
+`/.well-known/oauth-authorization-server`, and approval happens at `/device` on the app host
+under an ordinary session. It mints a session token rather than a scoped key, so the `bearer()`
+plugin makes that token work anywhere a session cookie would. See
+**[agent sign-in](/features/agent-auth)** for the protocol and
+**[the CLI](/cli#signing-in-from-the-terminal)** for the commands.
+
 ## Where platform auth lives: the app host
 
 The control plane runs on its own host, `app.papervine.io`, separate from the marketing apex

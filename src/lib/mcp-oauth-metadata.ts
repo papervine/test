@@ -51,10 +51,21 @@ export function authorizationServerMetadata(origin: string) {
     // Dynamic client registration. This is the field that makes "paste a URL into Cursor and
     // it just works" possible — without it every client would need credentials issued by hand.
     registration_endpoint: `${base}/mcp/register`,
+    // The Device Authorization Grant (RFC 8628, SPEC §11.4) — how `papervine signup` /
+    // `papervine login` sign a terminal in, and the answer for any client that cannot receive a
+    // redirect: a container, an SSH session, a CI job, an agent sandbox. Advertised in THIS
+    // document rather than one of its own, because a client discovering an authorization server
+    // should learn everything it can do here in one fetch; two half-authoritative documents at
+    // adjacent paths is how a client ends up picking the wrong flow.
+    device_authorization_endpoint: `${base}/device/code`,
     scopes_supported: SCOPES,
     response_types_supported: ["code"],
     response_modes_supported: ["query"],
-    grant_types_supported: ["authorization_code", "refresh_token"],
+    grant_types_supported: [
+      "authorization_code",
+      "refresh_token",
+      "urn:ietf:params:oauth:grant-type:device_code",
+    ],
     subject_types_supported: ["public"],
     id_token_signing_alg_values_supported: ["RS256"],
     token_endpoint_auth_methods_supported: [
