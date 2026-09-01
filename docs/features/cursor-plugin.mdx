@@ -12,7 +12,7 @@ The Papervine plugin for [Cursor](https://cursor.com) supplies the reference, so
 working from what Papervine actually does.
 
 <Card title="papervine/cursor-plugin" icon="github" href="https://github.com/papervine/cursor-plugin">
-  The plugin's source — a skill, a rules file, and two MCP servers.
+  The plugin's source — a skill, writing rules, three commands, and two MCP servers.
 </Card>
 
 ## Install it
@@ -92,16 +92,30 @@ The plugin is packaged in Cursor's format, but the material inside it is plain M
 `SKILL.md` and six reference files. Any agent that can read a skill directory can use it: clone
 the repository and point your tool at `skills/papervine/`.
 
+## Commands
+
+Three, alongside the reference:
+
+| Command | What it does |
+|---|---|
+| `/papervine-audit` | Sweeps a docs repo for the mistakes that fail silently — unreachable pages, dead nav entries, unresolvable icons, relative links |
+| `/papervine-page` | Adds a page, and the `docs.json` entry that makes it reachable |
+| `/papervine-migrate` | Reports what a repo from another platform renders unchanged, differently, or not at all |
+
+`/papervine-audit` earns its place because of how the renderer behaves: pages are built never to
+break, so a misspelled component is plain text and a page nobody listed is a URL nobody can find.
+Neither errors, so neither turns up until a reader does.
+
 ## Keeping it accurate
 
-The plugin is published from the same repository as the renderer it describes, so a change to a
-component and the change to its documented props land together. A structural check runs before
-each publish and on every test run: the manifest has to parse, and the skill's reference index
-and the files beside it have to agree in both directions.
+The plugin is its own repository and takes pull requests directly. A structure check runs in its
+CI on every push: the manifest has to parse, the logo has to resolve, every rule, command and
+skill needs its frontmatter, and the skill's reference index and the files beside it have to
+agree in both directions.
 
 If the plugin tells you something Papervine doesn't do,
 [open an issue](https://github.com/papervine/cursor-plugin/issues) — that's a bug in the same
-sense a broken component is.
+sense a broken component is, and a PR is welcome.
 
 ## Related
 

@@ -7514,6 +7514,54 @@ the hosted API over HTTPS, they don't embed it.
 > repo checked out should **edit the files** — the authoring MCP earns its place when the
 > repository *isn't* open, and using both on one page gives you two uncoordinated copies where
 > the last publish silently wins.
+>
+> **Reversed: the Cursor plugin is its own repo, not a third mirror target (2026-09-01).**
+> `agent-context/` is gone from here and `papervine/cursor-plugin` is the source of truth.
+>
+> The argument for mirroring it — the plugin describes the renderer, so it drifts if it can't
+> change in the same commit — was weaker than it read, because **nothing enforced it.** The
+> structure check verified that the manifest parses and the SKILL.md index matches the files
+> beside it; it never verified that the prose matches the code, and no test could have. So the
+> coupling bought an aspiration and charged real costs: a "PRs are reviewed here, merged
+> upstream" policy on a marketplace plugin that wants drive-by contributions, and a third target
+> in the release machinery. A reference document with no build step and no code dependency is a
+> repository. The mirror is back to two targets; `hoistDirectory` (extracted when the third was
+> added) stays, since it's the clearer shape for the starter regardless.
+>
+> **The content was too close to the plugin it was modelled on, and measuring said so.** A
+> file-by-file diff (difflib ratio + count of identical non-trivial lines) put `product-context.md`
+> at **90%** — effectively their file with the names swapped — with SKILL.md and the rules file
+> around 30%. The five substantial reference files were 2–6%: those were written from the
+> renderer's source, which is the whole point. The scaffolding was not.
+>
+> `product-context.md` was deleted rather than reworded. It was the biggest copy *and* the least
+> Papervine-specific thing shipped — a generic "interview the user about their product" workflow
+> that knows nothing about the renderer — so removing it fixed the copying and made the plugin
+> tighter. It also settled a licensing problem: an MIT `LICENSE` reading "Copyright (c) 2026
+> Papervine" over text substantially theirs, with their notice stripped, is not something MIT
+> permits. The shared style bullets and example snippets were rewritten; the competitor's
+> `$schema` URL came out of the sample config.
+>
+> **Then the structure was rebuilt on `cursor/plugin-template`**, which is what it should have
+> been modelled on from the start. That surfaced three things we were missing outright —
+> `displayName`, a `logo` (the marketplace listing renders both), and the `commands/` surface —
+> and one we'd inherited: `"skills": "./skills/"`, which the official template doesn't declare
+> because discovery is by default path. Three commands now ship (`/papervine-audit`,
+> `/papervine-page`, `/papervine-migrate`), and the reference gained `gotchas.md`, collecting the
+> negative space that was scattered across five files. That file is the one with no counterpart
+> anywhere, and it's the most useful: on a renderer built never to break a page, almost every
+> mistake renders as *something*, so "what looks like it works and doesn't" is the question an
+> agent actually needs answered.
+>
+> Four identical lines now remain across the whole repo — an `<Expandable>` usage, the `.mdc`
+> globs line (which *is* the correct glob), and a markdown table header.
+>
+> One deliberate mention stays: a legacy skills directory in `docs-json.md`, because the renderer really
+> does read that path for a migrated repo (SPEC §9.1). Factual compatibility, per the §10.6
+> discovery-surface rule.
+>
+> `docs/features/cursor-plugin.mdx` stays here — it's product documentation about a thing we
+> ship, and it lives with the rest of the docs site.
 
 ### 10.7 Error resilience (route boundaries)
 
