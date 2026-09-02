@@ -201,18 +201,20 @@ footer link to the public CLI repo (`github.com/papervine/papervine` — the mir
 from `papervine/cli` on 2026-08-28). Absolute `<a>`, not `<Link>` — it's a different host.
 Smoke asserts the href on `/home`.
 
-**Status 2026-09-02 — a feature spotlight below the bento: "Instant rollbacks".** The bento
-lists capabilities; this shows one. A two-panel card between the bento and the CTA band: a
-light panel carrying the claim in the brand face plus one paragraph from
-`docs/guides/rollbacks.mdx` (every deployment stays as a complete copy; roll back or forward
-in one click; nothing rebuilt, nothing lost), and a dark inset panel that is a *still* of the
-product — the deployment row's "live" state with its Roll back button and details (source ref,
-commit, seconds to restore). The still is `aria-hidden` and its button is a `div`, so the
-block adds no controls. Colors are explicit, so the card is the same object in light and dark
-mode, the way the CTA band fixes its own ground. Modelled on the format hosted docs platforms
-use for the same feature; ours, not theirs — no competitor mark, our wordmark in the corner.
-Smoke's `/home` check passes unchanged; the block is the pattern to reuse for the next
-capability worth a picture rather than a bullet.
+**Status 2026-09-02 — three "shown, not listed" cards below the bento.** The bento lists
+capabilities; this row shows three the bento doesn't cover — instant rollbacks, the per-site
+MCP server, automations — each as a card with a small *still* of the surface that does it (the
+Activity feed with a restored version; the MCP address with its four tools; an automation's
+runs, one published and one awaiting review). The stills are `aria-hidden`, built from the
+same tokens as the cards around them so they belong to the page in either theme, and their
+"buttons" are `div`s. Copy is ours and checked against `docs/guides/rollbacks.mdx`,
+`docs/features/mcp-servers.mdx` and `docs/control-plane/automate.mdx`. Two decisions on the
+way here: a first cut was a single hero-sized two-panel block in a fixed light/dark palette
+modelled on a competitor's card, which read as a foreign object on the page and was replaced
+the same night; and **preview deployments were cut from the row** — the `deployment.kind =
+'preview'` column and the feed's Previews tab exist, but nothing yet serves a branch at an
+address and the docs list previews under the roadmap, so the home page does not claim them.
+Smoke's `/home` check passes unchanged.
 
 **Status 2026-08-27 — the hero is the product tour, click-to-play.** The hero's product shot
 was a static skeleton mock (fake sidebar, grey bars). It is now the poster frame of a real

@@ -16,9 +16,8 @@ import {
   Github,
   CheckCircle2,
   RotateCcw,
-  GitBranch,
-  GitCommitHorizontal,
-  Clock3,
+  Workflow,
+  History,
 } from "lucide-react";
 import { cookies, headers } from "next/headers";
 import { PlatformShell } from "@/components/platform/PlatformShell";
@@ -154,6 +153,141 @@ const FEATURES = [
     icon: BarChart3,
     title: "See what people actually read",
     body: "See which pages people open and what they search for — then flip one toggle to see the same site the way automated crawlers see it.",
+  },
+];
+
+// A frame around each still: the same surface the dashboard uses (card on line), a shade
+// darker than the card it sits in so it reads as "a screen inside the card".
+function StillFrame({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      aria-hidden
+      className="rounded-xl bg-[rgba(var(--ink-rgb),0.035)] p-4 text-sm ring-1 ring-[var(--line)]"
+    >
+      {children}
+    </div>
+  );
+}
+
+function Pill({ children, tone = "ok" }: { children: React.ReactNode; tone?: "ok" | "muted" }) {
+  return (
+    <span
+      className={
+        tone === "ok"
+          ? "inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-400"
+          : "inline-flex items-center gap-1 rounded-full bg-[rgba(var(--ink-rgb),0.08)] px-2 py-0.5 text-xs font-medium text-[var(--muted)]"
+      }
+    >
+      {children}
+    </span>
+  );
+}
+
+// Two versions in the Activity feed; the older one has been restored and says so.
+function RollbackStill() {
+  return (
+    <StillFrame>
+      <div className="flex items-center justify-between">
+        <div className="min-w-0">
+          <div className="truncate font-medium">Tidy the quickstart</div>
+          <div className="mt-0.5 text-xs text-[var(--muted)]">2 min ago · main · b41c9e0</div>
+        </div>
+        <Pill tone="muted">Superseded</Pill>
+      </div>
+      <div className="my-3 h-px bg-[var(--line)]" />
+      <div className="flex items-center justify-between">
+        <div className="min-w-0">
+          <div className="truncate font-medium">Add the webhooks guide</div>
+          <div className="mt-0.5 text-xs text-[var(--muted)]">Yesterday · main · 7f20d3a</div>
+        </div>
+        <Pill>
+          <CheckCircle2 className="h-3 w-3" />
+          Live
+        </Pill>
+      </div>
+      <div className="mt-4 inline-flex items-center gap-2 rounded-lg bg-[var(--fg)] px-3 py-1.5 text-xs font-medium text-[var(--bg)]">
+        <RotateCcw className="h-3.5 w-3.5" />
+        Restored this version
+      </div>
+    </StillFrame>
+  );
+}
+
+// The read MCP every published site gets: one address, four tools, any MCP-capable client.
+function McpStill() {
+  return (
+    <StillFrame>
+      <div className="text-xs text-[var(--muted)]">MCP server</div>
+      <div className="mt-0.5 truncate font-mono text-xs">https://docs.acme.com/mcp</div>
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {["search_docs", "read_page", "list_pages", "search_api"].map((tool) => (
+          <span
+            key={tool}
+            className="rounded-md bg-[rgba(var(--ink-rgb),0.08)] px-2 py-0.5 font-mono text-[11px] text-[var(--muted)]"
+          >
+            {tool}
+          </span>
+        ))}
+      </div>
+      <div className="my-3 h-px bg-[var(--line)]" />
+      <div className="flex items-center gap-2 text-xs text-[var(--muted)]">
+        <Pill>
+          <CheckCircle2 className="h-3 w-3" />
+          Connected
+        </Pill>
+        Cursor · Claude · Windsurf
+      </div>
+    </StillFrame>
+  );
+}
+
+// An automation's recent runs: one shipped on its own, one is waiting for a person.
+function AutomationStill() {
+  return (
+    <StillFrame>
+      <div className="flex items-center gap-2 font-medium">
+        <Workflow className="h-4 w-4 text-[var(--blue)]" />
+        Keep the changelog current
+      </div>
+      <div className="mt-0.5 text-xs text-[var(--muted)]">Runs nightly, and when content changes</div>
+      <div className="my-3 h-px bg-[var(--line)]" />
+      <ul className="space-y-2 text-xs">
+        <li className="flex items-center justify-between gap-3">
+          <span className="truncate">v2.4.0 — 3 pages updated</span>
+          <Pill>Published</Pill>
+        </li>
+        <li className="flex items-center justify-between gap-3">
+          <span className="truncate">v2.4.1 — 1 page updated</span>
+          <Pill tone="muted">Review needed</Pill>
+        </li>
+      </ul>
+      <div className="mt-3 flex items-center gap-1.5 text-xs text-[var(--muted)]">
+        <History className="h-3.5 w-3.5" />
+        Every run is a draft you can read before it ships.
+      </div>
+    </StillFrame>
+  );
+}
+
+// Three capabilities worth a picture rather than a bullet — none of them in the bento above.
+const SPOTLIGHTS = [
+  {
+    icon: RotateCcw,
+    title: "Instant rollbacks",
+    body: "Every version you publish is kept. If something goes out wrong, restore the previous one in a click — no rebuild, nothing lost, and you can go forward again the same way.",
+    still: RollbackStill,
+  },
+  {
+    icon: Plug,
+    title: "Your docs, inside the AI tools people already use",
+    body: "Every published site comes with an MCP server at its own address. Point Claude, Cursor or any MCP-capable tool at it and it can search and read your docs directly — no setup on your side.",
+    still: McpStill,
+  },
+  {
+    icon: Workflow,
+    title: "Docs that update themselves",
+    body: "Set up an automation once — on a schedule, or whenever your content changes — and it drafts the edits for you. You choose whether a run publishes on its own or waits for your review.",
+    still: AutomationStill,
   },
 ];
 
@@ -379,92 +513,25 @@ export default async function LandingPage() {
         </div>
       </section>
 
-      {/* Feature spotlight — one capability, shown rather than listed. A two-panel card: a
-          light panel that carries the claim in the brand face, and a dark panel that is a
-          still of the product doing it. The still is decorative (aria-hidden): a mock of the
-          deployment row's rolled-back state, so its "button" is a div, not a control. Colors
-          are explicit on purpose — the card is the same object in light and dark mode, the
-          way the CTA band below fixes its own ground. Copy follows docs/guides/rollbacks.mdx:
-          every deployment stays as a complete copy, so rolling back points at one, and rolling
-          forward is the same move. */}
+      {/* Shown, not listed: three capabilities the bento doesn't cover, each with a small
+          still of the surface that does it. The stills are decorative (aria-hidden) and built
+          from the same tokens as the cards around them, so they read as part of the page in
+          either theme; their "buttons" are divs, not controls. Copy is ours — see
+          docs/guides/rollbacks.mdx, docs/features/mcp-servers.mdx, docs/control-plane/automate.mdx. */}
       <section className="mx-auto max-w-6xl px-6 pb-28">
-        <div
-          className="grid overflow-hidden rounded-[2rem] bg-[#efece4] text-[#233129] md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
-          style={{ boxShadow: "0 0 0 1px rgba(35,49,41,0.08), 0 30px 80px -40px rgba(0,0,0,0.5)" }}
-        >
-          <div className="relative flex flex-col justify-between p-8 sm:p-10 md:p-12">
-            <div
-              aria-hidden
-              className="pointer-events-none absolute inset-0"
-              style={{
-                backgroundImage: "radial-gradient(rgba(35,49,41,0.28) 1px, transparent 1.3px)",
-                backgroundSize: "9px 9px",
-                maskImage:
-                  "radial-gradient(70% 55% at 100% 35%, black, transparent 72%), radial-gradient(50% 45% at 0% 100%, black, transparent 70%)",
-                WebkitMaskImage:
-                  "radial-gradient(70% 55% at 100% 35%, black, transparent 72%), radial-gradient(50% 45% at 0% 100%, black, transparent 70%)",
-              }}
-            />
-            <div className="relative">
-              <h2 className="font-brand text-5xl leading-[0.95] tracking-tight sm:text-6xl">
-                Instant
-                <br />
-                rollbacks
-              </h2>
-              <p className="mt-6 max-w-xs text-base leading-relaxed text-[#5a6a60]">
-                Every deployment stays as a complete copy of your site. Roll back in one
-                click, and roll forward the same way — nothing is rebuilt, nothing is lost.
-              </p>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {SPOTLIGHTS.map(({ icon: Icon, title, body, still: Still }) => (
+            <div key={title} className="db-feature flex flex-col rounded-2xl p-6">
+              <div className="mb-4 grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-[var(--blue)]/20 to-[var(--violet)]/20 text-[var(--blue)] ring-1 ring-[rgba(var(--ink-rgb),0.1)]">
+                <Icon className="h-5 w-5" />
+              </div>
+              <h3 className="text-base font-semibold">{title}</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{body}</p>
+              <div className="mt-6 flex-1">
+                <Still />
+              </div>
             </div>
-            <Brand size="sm" className="relative mt-10 text-[#1b2620]" />
-          </div>
-
-          <div className="md:pt-12">
-            <div
-              aria-hidden
-              className="relative h-full overflow-hidden rounded-t-[2rem] bg-[#0c0f0d] p-8 text-white sm:p-10 md:rounded-tr-none md:rounded-tl-[2.5rem] md:p-12"
-              style={{
-                backgroundImage:
-                  "radial-gradient(80% 70% at 100% 100%, rgba(120,120,255,0.14), transparent 70%), radial-gradient(rgba(255,255,255,0.10) 1px, transparent 1.3px)",
-                backgroundSize: "auto, 9px 9px",
-              }}
-            >
-              <div className="flex items-center gap-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-                <CheckCircle2 className="h-7 w-7 shrink-0 text-emerald-400" />
-                Deployment live
-              </div>
-              <p className="mt-2 text-lg text-white/55">Your changes are now live</p>
-
-              <div className="mt-8 inline-flex items-center gap-2.5 rounded-xl bg-white px-6 py-3.5 text-lg font-medium text-[#121513] shadow-[0_10px_30px_-12px_rgba(0,0,0,0.6)]">
-                <RotateCcw className="h-5 w-5" strokeWidth={2.4} />
-                Roll back
-              </div>
-
-              <div className="mt-12 text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
-                Deployment details
-              </div>
-              <ul className="mt-4 space-y-3 text-base text-white/60 sm:text-lg">
-                <li className="flex items-center gap-3">
-                  <GitBranch className="h-5 w-5 shrink-0 text-white/35" />
-                  <span>
-                    source <span className="text-white/80">refs/heads/main</span>
-                  </span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <GitCommitHorizontal className="h-5 w-5 shrink-0 text-white/35" />
-                  <span>
-                    commit <span className="font-mono text-white/80">21c6146</span>
-                  </span>
-                </li>
-                <li className="flex items-center gap-3">
-                  <Clock3 className="h-5 w-5 shrink-0 text-white/35" />
-                  <span>
-                    live again in <span className="text-white/80">4 seconds</span>
-                  </span>
-                </li>
-              </ul>
-            </div>
-          </div>
+          ))}
         </div>
       </section>
 
