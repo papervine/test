@@ -141,8 +141,33 @@ jobs:
   # Authed control-plane journeys (Playwright + real Postgres). The @external connect
   # spec hits the GitHub API, so it's skipped here to keep CI deterministic; run it
   # locally with `npm run test:e2e`.
+  #
+  # SHARDED, because the suite's cost is `next dev` cold-compiling each route on first
+  # visit, serialized behind a single worker: a test that lands on a warm route runs in
+  # 1-6s, one that lands on a cold route runs in 30-55s, and the whole run took ~25min.
+  # The worker count can't fix that — one dev server, one Postgres, one MinIO, and the
+  # specs race on shared DB state — and per-worker servers don't fit in the runner's
+  # memory (see the NODE_OPTIONS note in playwright.config.ts). So the parallelism lives
+  # at the JOB level instead: each shard is a whole isolated environment with its own
+  # runner, services and dev server, and shares nothing. Each pays its own auth.setup
+  # (~80s) and compiles only the routes its third of the files touch.
+  #
+  # `fail-fast: false` so one red shard doesn't cancel the others — the point of a failure
+  # here is to see the whole picture, not the first bad file. A shard failing on a test
+  # that passes unsharded means that test was inheriting state from a file that used to
+  # run before it: a latent bug found, not one introduced (the repo's notes on
+  # order-dependent specs cover the fix — set up the precondition you assert on).
+  #
+  # `timeout-minutes` is a ceiling, not a target. Without it GitHub's default is six
+  # hours, and a genuinely hung dev server would burn all of it silently.
   e2e:
+    name: e2e (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:16
@@ -185,12 +210,13 @@ jobs:
             mc mb --ignore-existing local/papervine-content && echo "bucket ready"'
 
       - name: E2E (deterministic — skips @external)
-        run: npm run test:e2e -- --grep-invert @external
+        run: npm run test:e2e -- --grep-invert @external --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
+      # Artifact names must be unique within a run, so each shard uploads its own.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
 
