@@ -5751,6 +5751,52 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 > the Slack app created from the manifest (dev needs an https tunnel for the redirect
 > URL — Slack refuses http). Next: `/api/slack/events` on the apex + the Trigger.dev
 > agent-run task (slice A2).
+>
+> **Status — Agent slice A2 landed (2026-09-02): the agent answers mentions.** The
+> inbound half, end-to-end: `POST /api/slack/events` on the **apex** (the GitHub-webhook
+> host split; raw-body v0 HMAC + a 5-minute timestamp window as the replay guard) →
+> `agent_run` row (migration 0035) → Trigger.dev `slack-agent-run` task → read-only agent
+> loop over the site's LIVE published content (`assistantTools`, `stepCountIs(12)`) →
+> post-and-edit reply in the Slack thread → `usage_event` metered by `requestId = runId`
+> with the credit sum rolled onto the row.
+> - *Idempotency is the row.* Slack retries any non-2xx and we ack **before** the agent
+>   runs, so `agent_run.slack_event_id` is UNIQUE and the enqueue is dedupe-first —
+>   without it a slow ack answers (and bills) twice. `enqueueAgentRun` is pure over an
+>   injectable store (the `automations/runs.ts` shape): 10 unit tests cover dedupe,
+>   dedupe-before-cap ordering, the executor-unconfigured degradation (persist nothing —
+>   no zombie queued rows), the per-org daily cap, bare-mention rejection, and the
+>   keep-the-row-and-mark-failed enqueue-failure path.
+> - *Loop guards.* The bot's own messages (`bot_id`/`bot_profile`) and subtyped messages
+>   are dropped in the pure classifier — an agent answering its own reply is an infinite
+>   loop on our own credits. A DM to the bot counts as a mention; a plain channel message
+>   does not. Unknown events are a quiet 204, never an error Slack would retry into an
+>   endpoint disable. Site resolution is v1-simple: the org's oldest site (a channel↔site
+>   mapping is the natural next step).
+> - *Verified live (2026-09-02)*, driving real signed deliveries at the dev server with a
+>   local `trigger.dev dev` worker: handshake echoes the challenge; a mention acks in
+>   **46ms** warm (Slack's budget is 3s) and enqueues; a retry of the same `event_id`
+>   creates no second row; the bot's own message 204s; an unknown workspace no-ops. The
+>   task then ran 1m11s and produced a correct, docs-grounded answer about reader auth in
+>   Slack mrkdwn, metered at 47 credits.
+> - **Two real defects the live run exposed, both fixed with regression tests.** (1)
+>   `botTokenFor` *threw* on an undecryptable stored token, and the task calls it before
+>   its try/catch — so the run crashed unhandled and the row sat at `queued` forever,
+>   which reads to the user as a bot that silently ignored them. It now returns null and
+>   the run fails visibly telling them to reconnect (`slack-workspace-token.test.ts`).
+>   (2) A run whose answer could not be **delivered** reported `succeeded` — an answer
+>   nobody received, billed, filed as a success. Delivery is now part of the outcome: the
+>   run fails with `answer generated but not delivered: <slack error>`, keeping the answer
+>   for diagnosis. Also fixed from the same run: the read tools return root-relative
+>   hrefs, so the model invented `https://example.com` hosts for its citations — the task
+>   now hands it `resolveDocsBaseUrl` (the helper the embeddable widget's citations
+>   already use: custom domain, else the configured tenant host).
+> - *Still owed:* a real Slack app for a true round trip (the placeholder token ends at
+>   `invalid_auth`, which is exactly where verification stops without one); streaming the
+>   reply as the agent works (v1 posts `_Reading the docs…_` then edits once — deliberate:
+>   `chat.update` is tier-rate-limited per channel); a channel allowlist; an in-dashboard
+>   run history for `agent_run` (the rows and `listAgentRuns` exist, no surface yet); and
+>   authoring from a mention (read-only this slice — writes will go through the §9.2
+>   backend exactly as automations do, never a parallel path).
 
 - **Workflows** — a catalog of scheduled/triggered jobs that open content changes as
   PRs. Two built-in families plus custom:
@@ -9373,6 +9419,25 @@ Decisions under this posture:
   the datastore rule. Since adoption the adapter gained native Slack agent-experience
   support (Agent badge, Messages-tab conversations, token-streamed replies with
   post-and-edit fallback), which strengthens the call.
+  - **Amended when it was actually built (2026-09-02): we take `@slack/web-api`
+    directly, and NO Redis.** Evaluating the adapter against the shipped architecture
+    (§10.2 slice A2) found its two halves pull apart. Its *handler/state* half assumes
+    the agent answers inside a long-lived webhook handler, and its multi-workspace mode
+    requires installations to live in **its own** state store (Redis) — the `botToken`
+    resolver is `() => string`, un-keyed, so per-tenant tokens cannot be fed to it at
+    all. Our shape is the opposite and is forced by Slack: ack within 3 seconds, run the
+    agent on the executor (a turn takes ~1m), and we already hold per-org installs in
+    Postgres (§10.2 slice A1, first-party by decision). Its *stateless* half
+    (`@chat-adapter/slack/api`: `postSlackMessage`/`updateSlackMessage`) would fit fine,
+    but hard-depends on `chat` + `@slack/socket-mode`, which is weight in the Trigger
+    bundle (cf. the `@vercel/oidc` esbuild lesson) for wrappers around three API calls.
+    So the transport is `@slack/web-api` — the official MIT client the adapter itself
+    depends on, chosen over hand-rolled `fetch` (this repo's usual style) because
+    post-and-edit is rate-limit-sensitive and its retry/backoff is the wheel not worth
+    rebuilding. **Consequence: the Agent adds no Redis dependency** — the line above
+    that said its state backend wants Redis no longer applies to what we built. The
+    adapter stays the reference for Slack's agent-experience affordances (Agent badge,
+    Messages tab) if we later want them.
 - **Background/agent-run executor: Trigger.dev Cloud** (2026-07-19) — resolves the §2
   executor-choice note's "not yet"; architecture + isolation rules in the §10.2 decision
   note. Escape hatch: Trigger.dev is Apache-2.0, so it can run on our own infrastructure

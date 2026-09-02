@@ -194,6 +194,50 @@ export const slackWorkspace = pgTable(
   (table) => [index("slackWorkspace_organizationId_idx").on(table.organizationId)],
 );
 
+// One row per Slack agent conversation turn (SPEC §10.2) — the interactive sibling of
+// `automation_run`. The row IS the idempotency record: `slack_event_id` is unique, so a
+// Slack retry (it redelivers on any non-2xx, and our ack races the enqueue) can't run
+// the agent twice on our credits. Site-scoped like automation_run so the history is a
+// per-site view, and org-scoped for the billing gate.
+export const agentRun = pgTable(
+  "agent_run",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    siteId: text("site_id")
+      .notNull()
+      .references(() => site.id, { onDelete: "cascade" }),
+    // 'slack' today. Named so a future transport (Teams, a web console — the §10.2 open
+    // question) is a new value here rather than a second table.
+    transport: text("transport").default("slack").notNull(),
+    // Slack's per-delivery event id — the dedupe key (see above).
+    slackEventId: text("slack_event_id").notNull().unique(),
+    slackTeamId: text("slack_team_id").notNull(),
+    slackChannelId: text("slack_channel_id").notNull(),
+    // The thread the answer is posted into, and the message we post-then-edit while the
+    // agent works ('Thinking…' → the answer). Null until the task posts its placeholder.
+    slackThreadTs: text("slack_thread_ts").notNull(),
+    slackMessageTs: text("slack_message_ts"),
+    // Who asked (Slack user id) — attribution in the run history; not a Papervine user.
+    slackUserId: text("slack_user_id").notNull(),
+    // 'queued' | 'running' | 'succeeded' | 'failed'
+    status: text("status").default("queued").notNull(),
+    executorRunId: text("executor_run_id"),
+    // The question as the agent received it (bot mention stripped).
+    prompt: text("prompt").notNull(),
+    // What the agent replied, as posted to Slack.
+    answer: text("answer"),
+    error: text("error"),
+    creditsUsed: integer("credits_used").default(0).notNull(),
+    queuedAt: timestamp("queued_at").defaultNow().notNull(),
+    startedAt: timestamp("started_at"),
+    finishedAt: timestamp("finished_at"),
+  },
+  (table) => [index("agentRun_site_queuedAt_idx").on(table.siteId, table.queuedAt)],
+);
+
 // One row per git-sync / publish — backs the dashboard "Activity" feed.
 export const deployment = pgTable(
   "deployment",
@@ -590,6 +634,14 @@ export const slackWorkspaceRelations = relations(slackWorkspace, ({ one }) => ({
     fields: [slackWorkspace.organizationId],
     references: [organization.id],
   }),
+}));
+
+export const agentRunRelations = relations(agentRun, ({ one }) => ({
+  organization: one(organization, {
+    fields: [agentRun.organizationId],
+    references: [organization.id],
+  }),
+  site: one(site, { fields: [agentRun.siteId], references: [site.id] }),
 }));
 
 export const deploymentRelations = relations(deployment, ({ one }) => ({

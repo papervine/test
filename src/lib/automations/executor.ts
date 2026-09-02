@@ -17,6 +17,11 @@ export type AutomationExecutor = {
   // Enqueue the background run for an already-persisted automation_run row. Returns
   // the executor's correlation id (Trigger.dev run_… id).
   enqueueRun(input: { runId: string }): Promise<{ executorRunId: string }>;
+  // Enqueue an interactive agent turn for an already-persisted agent_run row (SPEC
+  // §10.2 Agent). Same seam, different task: a Slack mention can't be answered inside
+  // the 3-second ack Slack demands, so the route persists + enqueues and the task owns
+  // the model call and the reply.
+  enqueueAgentRun(input: { runId: string }): Promise<{ executorRunId: string }>;
   // Converge the executor's cron schedule to the automation's config (register,
   // reschedule, or deregister as needed). Returns the schedule id the row should
   // store — null when no schedule should exist.
@@ -26,6 +31,7 @@ export type AutomationExecutor = {
 // The Trigger.dev task ids the adapter targets (defined in src/trigger/).
 export const AUTOMATION_RUN_TASK_ID = "automation-run";
 export const AUTOMATION_CRON_TASK_ID = "automation-cron";
+export const AGENT_RUN_TASK_ID = "slack-agent-run";
 
 // Env is read per-call, not at module load, so tests and long-lived dev servers see
 // changes without a module-cache reset (the collab-secret lesson).
@@ -41,6 +47,11 @@ export function getExecutor(): AutomationExecutor | null {
       // pays for (or crashes on) the SDK in environments without it.
       const { tasks } = await import("@trigger.dev/sdk/v3");
       const handle = await tasks.trigger(AUTOMATION_RUN_TASK_ID, { runId });
+      return { executorRunId: handle.id };
+    },
+    async enqueueAgentRun({ runId }) {
+      const { tasks } = await import("@trigger.dev/sdk/v3");
+      const handle = await tasks.trigger(AGENT_RUN_TASK_ID, { runId });
       return { executorRunId: handle.id };
     },
     async syncCronSchedule(input) {

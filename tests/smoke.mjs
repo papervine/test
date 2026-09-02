@@ -1302,6 +1302,41 @@ async function run() {
       log(`  ${failures.length === before ? "✓" : "✗"} github webhook rejects an unsigned delivery (401)`);
     }
 
+    // Slack events endpoint signature gate (SPEC §10.2 Agent). Same shape and same
+    // reasoning as the GitHub webhook above: an unsigned delivery must be rejected 401
+    // BEFORE the route parses the body, resolves a workspace, or enqueues anything — so
+    // it runs with no Postgres and no Slack app configured (with SLACK_SIGNING_SECRET
+    // unset, verification has nothing to compare against, which is itself a rejection).
+    // The happy path (valid signature → an enqueued agent run) needs the DB + executor.
+    {
+      const before = failures.length;
+      const deliver = () =>
+        fetch(`${BASE}/api/slack/events`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-slack-request-timestamp": String(Math.floor(Date.now() / 1000)),
+            "x-slack-signature": "v0=deadbeef", // not a valid HMAC of the body
+          },
+          body: JSON.stringify({ type: "event_callback", team_id: "T1", event_id: "Ev1" }),
+          signal: AbortSignal.timeout(30_000),
+        });
+      try {
+        let res = await deliver();
+        // Retried once on 404, and only on 404: against `next dev` a route's FIRST request
+        // can land before the route is compiled and come back 404 (observed on a cold
+        // .next). The route file's existence isn't in question here — the signature gate
+        // is — so a single warm-up retry keeps the gate about behavior, not compile timing.
+        if (res.status === 404) res = await deliver();
+        if (res.status !== 401) {
+          failures.push(`[slack-events] expected 401 for a bad signature, got ${res.status}`);
+        }
+      } catch (e) {
+        failures.push(`[slack-events] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} slack events rejects an unsigned delivery (401)`);
+    }
+
     for (const check of CONTROL_PLANE_CHECKS) {
       const before = failures.length;
       const tag = `control-plane ${check.host ? `${check.host}` : ""}${check.path}`;

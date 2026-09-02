@@ -57,6 +57,7 @@
     "@radix-ui/react-slot": "^1.2.5",
     "@scalar/openapi-parser": "^0.28.6",
     "@sentry/nextjs": "^10.58.0",
+    "@slack/web-api": "^8.1.1",
     "@tiptap/core": "^3.27.1",
     "@tiptap/extension-bubble-menu": "^3.27.1",
     "@tiptap/extension-code-block": "^3.27.1",
