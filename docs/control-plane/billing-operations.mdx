@@ -110,6 +110,17 @@ unsigned or badly signed requests are refused, and a registered URL with no secr
 re-rendering also needs the realtime service configured; without it the cache drop alone
 still makes the next navigation correct.
 
+### Testing it locally
+
+Autumn cannot reach `app.localhost`, so a change made in the sandbox dashboard shows up
+locally only when the cache expires — about a minute, then a reload. To see the realtime
+path on your machine, expose the dev server with any HTTP tunnel (ngrok, cloudflared) on
+port 3000, register `https://<tunnel host>/api/webhooks/autumn` as a webhook endpoint in the
+**sandbox** environment, put its secret in `.env.local` as `AUTUMN_WEBHOOK_SECRET`, and
+restart `npm run dev`. The route ignores the request's hostname, so no host-header rewrite
+is needed. Keep the sandbox and live endpoints separate: each environment has its own
+secret, and a live delivery signed with the sandbox secret is refused.
+
 ## What happens without a key
 
 Leaving `AUTUMN_SECRET_KEY` unset is a supported state, not a broken one — it is how
