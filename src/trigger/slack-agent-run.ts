@@ -21,6 +21,7 @@ import {
 } from "../lib/slack-workspaces";
 import { postThreadMessage, updateMessage, fitSlackText } from "../lib/slack-api";
 import { authorizeAi, recordAiUsage } from "../lib/billing/store";
+import { autumnConfigured } from "../lib/billing/autumn";
 import { assistantTools } from "@papervine/renderer/lib/assistant-tools";
 import { contentContext } from "@papervine/renderer/lib/content";
 import { s3Source } from "../lib/s3-source";
@@ -121,11 +122,24 @@ export const slackAgentRunTask = task({
     // (src/lib/billing/unlock.ts explains why they share one flag).
     const billing = await authorizeAi(siteRow.organizationId, "workflows");
     if (!billing.allowed) {
+      // An `upgrade_required` from an executor with NO billing backend configured is
+      // almost never a real plan problem: with no AUTUMN_SECRET_KEY every org reads as
+      // Free (billing/core.ts), so a paying customer gets told to upgrade. That happened
+      // on the first live prod run — the org was on a Pro trial and the executor, which
+      // does not inherit the web app's env, simply couldn't see billing. Name the actual
+      // cause; "upgrade your plan" is unactionable advice when the plan is fine.
+      const misconfigured = billing.code !== "out_of_credits" && !autumnConfigured();
       return fail(
-        billing.code === "out_of_credits" ? "out of AI credits" : "plan does not include the agent",
+        billing.code === "out_of_credits"
+          ? "out of AI credits"
+          : misconfigured
+            ? "this deployment's executor has no billing backend configured (AUTUMN_SECRET_KEY), so every org reads as Free — set it in the executor's environment to the same value the web app uses"
+            : "plan does not include the agent",
         billing.code === "out_of_credits"
           ? "This workspace is out of AI credits."
-          : "This workspace's plan doesn't include the docs agent.",
+          : misconfigured
+            ? "The docs agent isn't configured on this deployment yet."
+            : "This workspace's plan doesn't include the docs agent.",
       );
     }
 
