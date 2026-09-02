@@ -78,8 +78,17 @@ function tunnelCommand() {
     return { cmd: "tailscale", args: ["funnel", PORT] };
   }
   // ngrok, pinned to the reserved static domain (one per free account).
+  //
+  // The flag was renamed: current ngrok documents `--url https://host` (which is what the
+  // dashboard hands you) and older builds only know `--domain=host`. Neither is safe to
+  // assume, and picking wrong fails with an unknown-flag error at the least helpful
+  // moment, so ask the binary which it speaks.
   if (/\.ngrok(-free)?\.(app|io|dev)$/i.test(host) && onPath("ngrok")) {
-    return { cmd: "ngrok", args: ["http", `--domain=${host}`, PORT] };
+    const help = spawnSync("ngrok", ["http", "--help"], { encoding: "utf8" });
+    const flag = `${help.stdout ?? ""}${help.stderr ?? ""}`.includes("--url")
+      ? ["--url", `https://${host}`]
+      : [`--domain=${host}`];
+    return { cmd: "ngrok", args: ["http", ...flag, PORT] };
   }
   return null;
 }
