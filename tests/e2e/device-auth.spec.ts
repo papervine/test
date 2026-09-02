@@ -149,10 +149,11 @@ test("the ADVERTISED token endpoint redeems a device code, form-encoded", async 
   //
   // Same round trip as the two approve/refuse tests either side of this one, and it needs the
   // same two allowances they already have: `test.slow()` for the whole test, AND an explicit
-  // budget on the heading, because `test.slow()` does not raise the 5s per-assertion default
-  // (CLAUDE.md, the members-roles case). This test was the one that kept the pattern's comment
-  // — "same shape as approving above" — while not actually applying it, and it failed both
-  // attempts on CI at the 5s assertion and then the 30s test budget.
+  // budget on the heading, because `test.slow()` does not raise the per-assertion budget
+  // (CLAUDE.md, the members-roles case) — and the device endpoints have taken longer on CI than
+  // even the suite-wide 15s. This test was the one that kept the pattern's comment — the test
+  // below it reads "same shape as approving above" — without applying it, and it failed both
+  // attempts: the assertion first, then the whole 30s test budget on retry.
   test.slow();
   const flow = await requestCode(request);
   await page.goto(flow.verification_uri_complete);

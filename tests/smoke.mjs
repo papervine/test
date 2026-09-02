@@ -849,15 +849,18 @@ async function run() {
     //
     // This gate runs against `next dev`, so a route's first request is also its cold Turbopack
     // compile, and on a CI runner that has repeatedly landed on either side of the 30s
-    // per-check budget: `/home`, then `/device`, then `/docs-platform-alternatives` — three routes,
-    // on three commits that touched none of them. Warming them one at a time as each flakes is
-    // whack-a-mole, so this warms the whole set.
+    // per-check budget: `/home` (two backdrop fields plus the Ask demo), then `/device` (its own
+    // Better Auth bundle), then `/docs-platform-alternatives` — three routes, on three commits that
+    // touched none of them. Each was warmed individually as it flaked; `/device` even outlasted
+    // TWO consecutive 30s attempts under the retry below, which is when per-route warming stops
+    // being a fix and starts being whack-a-mole. So this warms the whole set.
     //
     // It costs nothing that wasn't already being paid: the compile happens either way, and
     // today it happens *inside* a measured check, competing with that check's budget. Paid
     // here it is unasserted, sequential (parallel compiles are what push the dev server into
-    // the memory ceiling), and given a budget of its own. Every check still issues its own real
-    // request afterwards, so nothing is asserted against a warm-up response.
+    // the memory ceiling that already forced 6144 down to 3072 for e2e), and given a budget of
+    // its own. Every check still issues its own real request afterwards, so nothing is asserted
+    // against a warm-up response.
     //
     // The proper fix is to serve a production build, as the e2e harness now does
     // (`next build && next start`, playwright.config.ts) — then there are no cold compiles to
@@ -870,6 +873,9 @@ async function run() {
       warmed.add(key);
       await rawGet(check.path, check.host, check.cookie, 120_000).catch(() => {});
     }
+    // The apex marketing pages are fetched by URL rather than through rawGet, so warm the
+    // heaviest one the same way.
+    await fetch(`${BASE}/home`, { signal: AbortSignal.timeout(120_000) }).catch(() => {});
     for (const check of CHECKS) {
       const before = failures.length;
       const url = `${BASE}/${check.slug}`;

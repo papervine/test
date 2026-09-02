@@ -5790,6 +5790,20 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   hrefs, so the model invented `https://example.com` hosts for its citations — the task
 >   now hands it `resolveDocsBaseUrl` (the helper the embeddable widget's citations
 >   already use: custom domain, else the configured tenant host).
+> - **Ops — the events Request URL is the `www` host, not the bare apex (2026-09-02).**
+>   Setting it up against the real Slack app, `https://papervine.io/api/slack/events`
+>   failed URL verification: the apex **308-redirects to `www`** at the Vercel domain
+>   level, and Slack does not follow redirects — it reports the 3xx as "your request URL
+>   responded with an HTTP error". `https://www.papervine.io/api/slack/events` answers
+>   directly (401 on a bad signature, as designed). **This is pre-existing and not
+>   Slack-specific:** `POST https://papervine.io/api/github/webhook` 308s identically, so
+>   the GitHub App's documented webhook URL carries the same trap — worth confirming the
+>   live App is configured on `www`. Two other setup traps, both now in `.env.example`:
+>   **Socket Mode must be OFF** (with it on Slack ignores the Request URL entirely and
+>   delivers over a websocket we never open), and `SLACK_SIGNING_SECRET` must be set *and
+>   deployed* **before** saving the Request URL — Slack POSTs its challenge on save and
+>   the route verifies the signature first, so an unconfigured deployment 401s the
+>   handshake.
 > - *Still owed:* a real Slack app for a true round trip (the placeholder token ends at
 >   `invalid_auth`, which is exactly where verification stops without one); streaming the
 >   reply as the agent works (v1 posts `_Reading the docs…_` then edits once — deliberate:
