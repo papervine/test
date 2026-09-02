@@ -146,10 +146,20 @@ test("the ADVERTISED token endpoint redeems a device code, form-encoded", async 
   // endpoints, so a shim forwards this one — without it a spec-following client reads our
   // document, does exactly what it says, and gets a schema error. Nothing else covers that path:
   // our own CLI skips discovery and posts straight to /device/token.
+  //
+  // Same round trip as the two approve/refuse tests either side of this one, and it needs the
+  // same two allowances they already have: `test.slow()` for the whole test, AND an explicit
+  // budget on the heading, because `test.slow()` does not raise the 5s per-assertion default
+  // (CLAUDE.md, the members-roles case). This test was the one that kept the pattern's comment
+  // — "same shape as approving above" — while not actually applying it, and it failed both
+  // attempts on CI at the 5s assertion and then the 30s test budget.
+  test.slow();
   const flow = await requestCode(request);
   await page.goto(flow.verification_uri_complete);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Device connected" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Device connected" })).toBeVisible({
+    timeout: 30_000,
+  });
 
   // Form-encoded, as OAuth specifies for a token request — the encoding the device endpoint
   // would otherwise reject.
