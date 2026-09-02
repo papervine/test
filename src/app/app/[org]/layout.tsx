@@ -2,6 +2,8 @@ import { requireOrg } from "@/lib/dashboard-context";
 import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { getBillingLookup } from "@/lib/billing/store";
 import { trialStatus } from "@/lib/billing/core";
+import { autumnConfigured } from "@/lib/billing/autumn";
+import { unlockDecision } from "@/lib/billing/unlock";
 import { AppRail } from "@/components/app/AppRail";
 import { SiteAssistantWidget } from "@/components/app/SiteAssistantWidget";
 import { PlatformAdminBanner } from "@/components/app/PlatformAdminBanner";
@@ -69,7 +71,15 @@ export default async function OrgLayout({
             Settings → Widget puts the thing you just enabled in the corner to try. Mounted
             beside the Toaster for the same reason: one mount for every app-host surface,
             the editor included. Renders nothing until a site has the widget enabled. */}
-        <SiteAssistantWidget sites={sites} />
+        {/* …and not at all when the org's plan lacks the assistant (SPEC §10 unlock states): the
+            pill would take a question and 403 on it. Same decision the Assistant page uses;
+            an install with no billing backend is never locked. */}
+        {unlockDecision({
+          configured: autumnConfigured(),
+          lookup: billing,
+          surface: "assistant",
+          now: new Date(),
+        }).locked ? null : <SiteAssistantWidget sites={sites} />}
         {/* Session replay, control plane ONLY — see LogRocketInit for why it is mounted here and
             not in the root layout (which also renders tenant docs). No-ops without
             NEXT_PUBLIC_LOGROCKET_APP_ID. */}

@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { desc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { creditRateVersion, usageEvent } from "@/lib/db/app-schema";
+import { unlockDecision, type UnlockableSurface, type UnlockDecision } from "./unlock";
 import { type CreditRateTable } from "./catalog";
 import {
   attachPlan,
@@ -152,4 +153,18 @@ export async function recordAiUsage(input: AiUsageInput): Promise<void> {
   } catch (err) {
     console.warn("[billing] recordAiUsage failed (charge dropped):", err);
   }
+}
+
+/**
+ * Should a plan-gated dashboard surface show its unlock state instead of its controls?
+ * The rule lives in ./unlock (pure, unit-tested); this just feeds it the two facts only the
+ * server knows: whether a billing backend is configured at all, and the org's lookup.
+ */
+export async function getUnlock(
+  organizationId: string,
+  surface: UnlockableSurface,
+): Promise<UnlockDecision> {
+  const configured = autumnConfigured();
+  const lookup = configured ? await getBillingLookup(organizationId) : { state: "none" as const };
+  return unlockDecision({ configured, lookup, surface, now: new Date() });
 }

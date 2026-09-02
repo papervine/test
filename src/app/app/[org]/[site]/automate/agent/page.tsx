@@ -1,5 +1,9 @@
 import { Plus } from "lucide-react";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
+import { UnlockCard } from "@/components/app/UnlockCard";
+import { requireSite } from "@/lib/dashboard-context";
+import { siteHref } from "@/lib/dashboard-nav";
+import { getUnlock } from "@/lib/billing/store";
 import {
   AVAILABLE_INTEGRATIONS,
   SlackLogo,
@@ -9,7 +13,28 @@ import {
 // then enable connectors that feed it context. Steady state shares the §9.2 authoring
 // backend — this surface is presentational scaffold (nothing posts yet): a Slack-connect
 // banner, the (empty) enabled list, and the catalog of connectors available to the team.
-export default function AgentPage() {
+export default async function AgentPage({
+  params,
+}: {
+  params: Promise<{ org: string; site: string }>;
+}) {
+  const { org, site } = await params;
+  const { org: activeOrg } = await requireSite(org, site);
+  // Plan gate — see the Automations page for the rule. The agent follows the same
+  // entitlement as automations (src/lib/billing/unlock.ts explains why).
+  const unlock = await getUnlock(activeOrg.id, "agent");
+  if (unlock.locked) {
+    return (
+      <div className="px-4 sm:px-6 lg:px-8 py-6">
+        <AutomateHeader page="Agent" />
+        <UnlockCard
+          surface="agent"
+          decision={unlock}
+          upgradeHref={siteHref(org, site, "settings/billing")}
+        />
+      </div>
+    );
+  }
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-6">
       <AutomateHeader page="Agent" />

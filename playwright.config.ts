@@ -104,6 +104,11 @@ export default defineConfig({
       // identically on a configured dev machine and in CI (empty string is falsy for
       // isExecutorConfigured).
       TRIGGER_SECRET_KEY: "",
+      // Billing (SPEC §10): forwarded only when the operator exports it, otherwise blanked. Without
+      // this line `next dev` reads .env.local's sandbox key on its own, so the APP had a billing
+      // backend while the SPEC process (which loads no env file) believed there was none — and the
+      // unlock spec, which pins "no backend → never locked", saw the seeded org locked to Free.
+      AUTUMN_SECRET_KEY: process.env.AUTUMN_SECRET_KEY ?? "",
       // Same isolation rule for the optional auth integrations (SPEC §11.1). An operator who
       // has configured Google sign-in or Resend in .env.local would otherwise get a DIFFERENT
       // suite than CI: an extra "Continue with Google" button (which broke the exact-match

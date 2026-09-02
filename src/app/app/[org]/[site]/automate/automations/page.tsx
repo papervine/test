@@ -7,6 +7,8 @@ import { RunsLiveRefresh } from "@/components/app/automate/RunsLiveRefresh";
 import type { AutomationView } from "@/components/app/automate/AutomationConfigDialog";
 import type { SiteRef } from "@/app/app/[org]/[site]/automate/automations/actions";
 import { requireSite } from "@/lib/dashboard-context";
+import { getUnlock } from "@/lib/billing/store";
+import { UnlockCard } from "@/components/app/UnlockCard";
 import { siteHref } from "@/lib/dashboard-nav";
 import { db } from "@/lib/db";
 import { automation, automationRun } from "@/lib/db/app-schema";
@@ -58,7 +60,23 @@ export default async function AutomationsPage({
 }) {
   const { org, site } = await params;
   const { tab } = await searchParams;
-  const { site: activeSite } = await requireSite(org, site);
+  const { site: activeSite, org: activeOrg } = await requireSite(org, site);
+  // Plan gate (SPEC §10 Billing): when the org's plan doesn't include automations the page
+  // shows what they are and which plan has them, instead of controls that would 403 on the
+  // first run. Never shown on an install without a billing backend (self-hosted).
+  const unlock = await getUnlock(activeOrg.id, "automations");
+  if (unlock.locked) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
+        <AutomateHeader page="Automations" />
+        <UnlockCard
+          surface="automations"
+          decision={unlock}
+          upgradeHref={siteHref(org, site, "settings/billing")}
+        />
+      </div>
+    );
+  }
   const siteRef = { org, site };
 
   const rows = await db.select().from(automation).where(eq(automation.siteId, activeSite.id));

@@ -5041,6 +5041,21 @@ Minimum to operate the SaaS:
   rendered as a paid plan ("Renews Oct 1" on the seeded org). `subscriptionStatus` in the
   adapter translates active-with-trial-end → trialing, used by both the lookup and the summary;
   pinned against the capture.
+  **Unlock states (2026-09-02).** The AI surfaces (Automations, Agent, Assistant, the widget
+  settings) used to render their controls regardless of plan and let the API 403 on first use.
+  Now each page asks `getUnlock(orgId, surface)` first and, when the plan lacks the
+  entitlement, renders `UnlockCard` — a muted sketch of the surface, one line on what it is,
+  the cheapest listed plan that includes it (read from the catalog, so a tier change is a
+  config edit), a link to the billing page and one to the docs — and returns early, so the
+  real controls never mount. The dashboard's own assistant pill (`SiteAssistantWidget` in the
+  org layout) follows the same decision, so a locked org is not offered a question box that
+  would 403. The rule is pure (`src/lib/billing/unlock.ts`, unit-tested):
+  **no billing backend → never locked** (self-hosted/CLI/CI installs have nothing to sell and
+  every surface works — the promise to self-hosters), lookup error → not locked (fail open,
+  like `authorizeAi`), otherwise Free floor / expired trial → locked. The agent has no
+  entitlement of its own and follows `workflows` (same Pro-tier agent, pointed at Slack); if it
+  becomes its own SKU, add the feature in Autumn and one line in UNLOCKABLE. Copy is ours, not
+  a competitor's; the pattern is the common one because it is the right one.
   **Contract migration (2026-09-02, drizzle 0033).** Expand-then-contract's second half. The
   cutover left nine tables no code read: `billing_plan`, `billing_plan_version`,
   `billing_price`, `credit_pack` (the Postgres catalog), `billing_customer`,

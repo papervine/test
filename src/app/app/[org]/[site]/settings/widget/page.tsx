@@ -1,6 +1,9 @@
 import { headers } from "next/headers";
 import { ChevronRight } from "lucide-react";
 import { requireSite } from "@/lib/dashboard-context";
+import { siteHref } from "@/lib/dashboard-nav";
+import { getUnlock } from "@/lib/billing/store";
+import { UnlockCard } from "@/components/app/UnlockCard";
 import { ensureWidgetId } from "./actions";
 import { WidgetForm } from "./WidgetForm";
 
@@ -13,8 +16,28 @@ export default async function WidgetSettingsPage({
   params: Promise<{ org: string; site: string }>;
 }) {
   const { org: orgSlug, site: siteSlug } = await params;
-  const { site } = await requireSite(orgSlug, siteSlug);
+  const { site, org } = await requireSite(orgSlug, siteSlug);
   const siteRef = { org: orgSlug, site: siteSlug };
+  // Plan gate — before minting a widget id, which an org without the entitlement has no use
+  // for. Same card as the Automate pages, this surface's copy.
+  const unlock = await getUnlock(org.id, "widget");
+  if (unlock.locked) {
+    return (
+      <div className="px-4 sm:px-6 lg:px-8 py-6">
+        <nav className="flex items-center gap-1.5 text-sm text-[var(--muted)]">
+          <span>Settings</span>
+          <ChevronRight className="h-3.5 w-3.5" />
+          <span className="text-[var(--fg)]">Widget</span>
+        </nav>
+        <h1 className="mt-6 text-xl font-semibold">Embed the assistant on any site</h1>
+        <UnlockCard
+          surface="widget"
+          decision={unlock}
+          upgradeHref={siteHref(orgSlug, siteSlug, "settings/billing")}
+        />
+      </div>
+    );
+  }
 
   // A site created before this feature shipped has no widgetId yet — mint one now rather
   // than backfilling every row in the migration.

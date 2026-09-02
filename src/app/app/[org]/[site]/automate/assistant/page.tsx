@@ -9,6 +9,9 @@ import {
 } from "lucide-react";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
 import { requireSite } from "@/lib/dashboard-context";
+import { siteHref } from "@/lib/dashboard-nav";
+import { getUnlock } from "@/lib/billing/store";
+import { UnlockCard } from "@/components/app/UnlockCard";
 import { isPlatformAdminEmail } from "@/lib/platform-admin";
 import { assistantMetrics } from "@/lib/analytics";
 import {
@@ -36,7 +39,21 @@ export default async function AssistantPage({
   params: Promise<{ org: string; site: string }>;
 }) {
   const { org, site } = await params;
-  const { site: activeSite, session } = await requireSite(org, site);
+  const { site: activeSite, session, org: activeOrg } = await requireSite(org, site);
+  // Plan gate — see the Automations page for the rule; same card, this surface's copy.
+  const unlock = await getUnlock(activeOrg.id, "assistant");
+  if (unlock.locked) {
+    return (
+      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
+        <AutomateHeader page="Assistant" />
+        <UnlockCard
+          surface="assistant"
+          decision={unlock}
+          upgradeHref={siteHref(org, site, "settings/billing")}
+        />
+      </div>
+    );
+  }
   // Operator, not org admin — see the Response handling section below.
   const platformAdmin = isPlatformAdminEmail(
     session.user.email,

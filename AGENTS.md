@@ -655,7 +655,12 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   Shared e2e infrastructure values live in **`tests/e2e/constants.ts`** (`TEST_S3`) and are read
   by both `playwright.config.ts` and the specs, so there's one definition to be right. A
   defaulted env read in a spec is a smell: prefer an imported constant, since the default is the
-  only branch that ever runs.
+  only branch that ever runs. **The reverse trap is real too:** the spec process loads no env file,
+  but the APP under Playwright is `next dev`, which reads `.env.local` on its own — so a key you
+  never exported (the Autumn sandbox key, say) reaches the app while the spec believes there is
+  no such backend. Every optional integration the suite reasons about must be forwarded-or-blanked
+  explicitly in `webServer.env`; `AUTUMN_SECRET_KEY` joined that list after the unlock spec saw the
+  seeded org locked to Free on a machine with a sandbox key.
 - **A spec that seeds a site row with raw SQL must use a run-unique slug — the row is cached for
   60s and only `revalidateSiteRow` busts it.** `getSiteBySlug` wraps its query in
   `unstable_cache` tagged `site-row:slug:{slug}` with `SITE_ROW_TTL = 60`; every *product*
