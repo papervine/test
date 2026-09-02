@@ -774,7 +774,7 @@ function log(msg) {
 // Raw GET that honors a custom Host header — undici's fetch silently drops `Host` (a
 // forbidden header), so we can't use it to address the `app.` control-plane host. Manual
 // redirect (no follow), so we can assert the gate's 30x → /login.
-function rawGet(pathname, hostHeader, cookie) {
+function rawGet(pathname, hostHeader, cookie, timeoutMs = 30_000) {
   return new Promise((resolve, reject) => {
     const headers = {};
     if (hostHeader) headers.host = hostHeader;
@@ -805,7 +805,7 @@ function rawGet(pathname, hostHeader, cookie) {
       },
     );
     req.on("error", reject);
-    req.setTimeout(30_000, () => req.destroy(new Error("timeout")));
+    req.setTimeout(timeoutMs, () => req.destroy(new Error("timeout")));
     req.end();
   });
 }
@@ -845,14 +845,31 @@ async function run() {
   const failures = [];
   try {
     await waitForReady();
-    // Warm the marketing apex before anything is measured. `/home` is the heaviest route the
-    // gate visits (two backdrop fields plus the Ask demo) and its FIRST request is a cold
-    // Turbopack compile that has landed on either side of the 30s per-check budget on CI —
-    // green locally, red on a slow runner, on commits that never touched it (three times in
-    // one night). The check below is about what the page RENDERS, not how fast it compiles,
-    // so the compile is paid here, unasserted, with a budget of its own. `waitForReady` does
-    // the same for `/`; this is the same idea for the one route that has actually flaked.
-    await fetch(`${BASE}/home`, { signal: AbortSignal.timeout(120_000) }).catch(() => {});
+    // Warm EVERY control-plane route before anything is measured.
+    //
+    // This gate runs against `next dev`, so a route's first request is also its cold Turbopack
+    // compile, and on a CI runner that has repeatedly landed on either side of the 30s
+    // per-check budget: `/home`, then `/device`, then `/docs-platform-alternatives` — three routes,
+    // on three commits that touched none of them. Warming them one at a time as each flakes is
+    // whack-a-mole, so this warms the whole set.
+    //
+    // It costs nothing that wasn't already being paid: the compile happens either way, and
+    // today it happens *inside* a measured check, competing with that check's budget. Paid
+    // here it is unasserted, sequential (parallel compiles are what push the dev server into
+    // the memory ceiling), and given a budget of its own. Every check still issues its own real
+    // request afterwards, so nothing is asserted against a warm-up response.
+    //
+    // The proper fix is to serve a production build, as the e2e harness now does
+    // (`next build && next start`, playwright.config.ts) — then there are no cold compiles to
+    // warm at all. That is a bigger change to the one gate everyone runs locally; this removes
+    // the class of flake in the meantime.
+    const warmed = new Set();
+    for (const check of CONTROL_PLANE_CHECKS) {
+      const key = `${check.host ?? ""}${check.path}`;
+      if (warmed.has(key)) continue;
+      warmed.add(key);
+      await rawGet(check.path, check.host, check.cookie, 120_000).catch(() => {});
+    }
     for (const check of CHECKS) {
       const before = failures.length;
       const url = `${BASE}/${check.slug}`;
