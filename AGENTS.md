@@ -661,6 +661,45 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   is an **idempotent** `ensureAutomation()` helper: find the row or create it, so the toggle
   test still creates it via UI and the later tests stop caring who did. When a test needs
   something another test makes, make it yourself if it's missing.
+- **A static import is paid by every route that can reach it, and the smoke gate bills per
+  check — so "it compiles" is not the same as "it is free".** Two versions of this bit in one
+  sitting, both showing up as `request failed: timeout` on a *marketing* page that the change
+  never touched, both green locally and red on CI (which is ~4× slower, so the runner is the
+  only place the extra compile crosses the 30s-per-request line).
+  - **The shared shell.** `PlatformShell` wraps eleven routes; adding
+    `import { GradientWaves }` for a shader one page uses put it in all eleven graphs, and
+    `/home` (two backdrop fields plus the Ask demo) went over. Fix: the shell takes
+    `backdrop?: React.ReactNode` and `/pricing` passes the node, so the module is genuinely
+    not imported anywhere else.
+  - **The renderer, via a two-hop import nobody looks at.** `render-tenant.tsx` →
+    `powered-by-store` → `billing/autumn` → a static `import { Autumn } from "autumn-js"`,
+    which is a **36MB dist**. Every tenant docs page compiled the whole billing SDK. Fix:
+    `import type` (erased) plus `await import("autumn-js")` inside the accessor, the same
+    shape `PrismaticBurst` uses for `ogl`.
+  The general rule: before adding a dependency to anything reachable from `render-tenant.tsx`,
+  `PlatformShell`, the root layout or middleware, ask what its dist weighs — and if the module
+  is only needed at call time, import it dynamically. **The diagnostic that turns this from a
+  guess into a fact is checking `main`'s own tip in CI**: same job, green there and red here
+  means it is yours, not the documented e2e flake. Two consecutive identical failures mean a
+  budget, not a race.
+- **A dev server that dies mid-suite prints nothing where you are looking — read the
+  `[WebServer]` lines, not the test verdicts.** The e2e shard that kept failing showed 20
+  tests failing in ~200ms each after one slow one. That shape is a dead server (every
+  `page.goto` → `ERR_CONNECTION_REFUSED`, every `request.post` → `ECONNREFUSED 127.0.0.1:3210`),
+  not twenty bugs — but the three explanations reached for first were all wrong, in order:
+  "the runner is flaky" (it reproduced 3× on identical code), "the heavy shard runs out of
+  memory" (`free -m` after the run: 1.3GB used of 7.9GB, no kernel kill — the instrumentation
+  in `ci.yml` exists because this guess cost a run), and "danger-zone deletes something" (it
+  only opens a modal). The actual cause was seven `[WebServer]` lines between two test
+  verdicts: **Turbopack panicked** (`turbo-tasks-backend … aggregation_update.rs …
+  inner_of_upper_lost_follower is not able to remove follower … Aborting.`) and the process
+  exited. Two lessons. (1) When failures go fast and identical, `grep '\[WebServer\]'` around
+  the first one before theorising — the server's last words were there the whole time. (2)
+  **Do not restore Turbopack's dev filesystem cache (`<distDir>/dev/cache`) across CI runs.**
+  Next 16 has it on by default and it looks like a free compile win; it produced that panic on
+  every run that restored a cache from another shard or commit and on none that compiled cold.
+  The persisted task graph disagrees with the live one and the invariant fails. Reported
+  upstream; `RUST_BACKTRACE=1` is set on the e2e step so the next panic explains itself.
 - **Tests run alongside `npm run dev` — each harness owns its own `distDir`.** Next allows one
   `next dev` per *distDir* (it holds `<distDir>/dev/lock`), and two dev servers sharing one
   output tree also interleave their compiled chunks and manifests — which is how running the

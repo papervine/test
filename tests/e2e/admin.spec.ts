@@ -62,6 +62,12 @@ async function signInAsAdmin(page: Page) {
 
 test.describe("platform admin", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
+  // Nothing else in the suite visits /admin/*, so these tests pay the cold `next dev`
+  // compile of every console route themselves — and each also signs in first, in a
+  // beforeEach. On CI that lands at ~31s against the 30s default, which is why all five
+  // failed on `main`'s own tip while passing locally. Same fix as widget-settings,
+  // members-roles and domain: the budget, not the code, was wrong.
+  test.slow();
   test.beforeEach(async ({ page }) => signInAsAdmin(page));
 
   // The console is list → detail now, not one page: /admin is counts and recent activity,
@@ -142,53 +148,50 @@ test.describe("platform admin", () => {
 // The admin billing console (/admin/billing) lets support put an org on a paid plan for
 // free — a NON-Stripe subscription + the plan's monthly credits. Uses a dedicated
 // throwaway org (not ORG_SLUG) so it can't race billing.spec's mutations of that org.
+// Plan comps go to Autumn now, so the assertions that used to make this test worth having
+// — a non-Stripe subscription row, a grant_monthly ledger entry with the actor and reason —
+// are checking tables the comp path no longer writes. Rather than assert on a database that
+// has stopped being the answer, this keeps the journey (operator fills the form, the comp is
+// accepted) and skips without a billing backend to accept it.
+//
+// The audit trail that moved is called out in SPEC §10: Autumn records the grant, we no
+// longer record who made it.
 test.describe("platform admin — plan comps", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
   const sql = postgres(TEST_DB_URL, { max: 1 });
   const ORG_ID = "grant-e2e-org-id";
   const GRANT_SLUG = "grant-e2e-org";
+  const AUTUMN = Boolean(process.env.AUTUMN_SECRET_KEY);
+  // Skip at DESCRIBE level, not inside the test. A `test.skip()` in the body runs after
+  // `beforeEach`, and this describe's beforeEach signs in — which cold-compiles /admin/*
+  // and blew the 30s default before the skip was ever reached, so the test FAILED in CI
+  // instead of skipping. Skipping the describe means the hooks never run either.
+  test.skip(!AUTUMN, "needs a billing backend (AUTUMN_SECRET_KEY)");
+  // And when it does run, it pays the same cold compile the sibling describe does.
+  test.slow();
 
   test.beforeAll(async () => {
-    // Minimal catalog: a Team plan version with credits, mirroring billing:sync.
-    await sql`insert into billing_plan (key, name, listed, sort) values ('team', 'Team', true, 1)
-              on conflict (key) do nothing`;
-    const ents = JSON.stringify({
-      sites: 10, editors: 25, analyticsRetentionDays: 365,
-      features: {
-        assistant: true, writerAgent: true, workflows: true, sso: true, rbac: true,
-        previewDeployments: true, adminApis: true, advancedInsights: true,
-        multiRepo: true, scim: false,
-      },
-    });
-    await sql`insert into billing_plan_version (id, plan_key, version, entitlements, included_monthly_credits, config_hash)
-              values ('bpv-team-grant-e2e', 'team', 1, ${ents}::jsonb, 5000, 'e2e')
-              on conflict do nothing`;
-    // A standalone target org with no billing row — the comp is what puts it on a plan.
+    // The org is ours; its plan is Autumn's. Nothing else to seed.
     await sql`insert into organization (id, name, slug, created_at)
               values (${ORG_ID}, 'Grant E2E', ${GRANT_SLUG}, now())
               on conflict (id) do nothing`;
-    await sql`delete from billing_subscription where organization_id = ${ORG_ID}`;
-    await sql`delete from credit_ledger where organization_id = ${ORG_ID}`;
-    await sql`delete from credit_balance where organization_id = ${ORG_ID}`;
   });
 
   test.afterAll(async () => {
-    await sql`delete from billing_subscription where organization_id = ${ORG_ID}`;
-    await sql`delete from credit_ledger where organization_id = ${ORG_ID}`;
-    await sql`delete from credit_balance where organization_id = ${ORG_ID}`;
     await sql`delete from organization where id = ${ORG_ID}`;
     await sql.end();
   });
 
   test.beforeEach(async ({ page }) => signInAsAdmin(page));
 
-  test("grant Team for free → non-Stripe active subscription + monthly credits + audit trail", async ({
-    page,
-  }) => {
+  test("the console lists the Autumn catalog and accepts a comp", async ({ page }) => {
     await page.goto("/admin/billing");
     // "Billing", not "Billing console": the page's heading now matches its nav label, since the
     // console's sidebar already says where you are.
     await expect(page.getByRole("heading", { name: "Billing" })).toBeVisible();
+    // The catalog table is read straight from Autumn — an empty one means the key is wrong
+    // or the environment has no plans, which is worth failing on rather than skipping past.
+    await expect(page.getByText("No catalog —")).toHaveCount(0);
 
     // The Grant-plan form (first Organization/Reason on the page; the credit-adjustment
     // form below reuses those labels). Blank months = an indefinite comp.
@@ -197,28 +200,5 @@ test.describe("platform admin — plan comps", () => {
     await page.getByLabel("Reason").first().fill("e2e partner comp");
     await page.getByRole("button", { name: "Grant plan" }).click();
     await expect(page.getByText("Granted.")).toBeVisible();
-
-    // A non-Stripe (comped) ACTIVE Team subscription, not scheduled to cancel.
-    const [sub] = await sql`
-      select s.status, s.stripe_subscription_id, s.cancel_at_period_end, s.current_period_end, v.plan_key
-      from billing_subscription s
-      join billing_plan_version v on v.id = s.plan_version_id
-      where s.organization_id = ${ORG_ID}`;
-    expect(sub?.plan_key).toBe("team");
-    expect(sub?.status).toBe("active");
-    expect(sub?.stripe_subscription_id).toBeNull();
-    expect(sub?.cancel_at_period_end).toBe(false); // blank months → indefinite
-    expect(sub?.current_period_end).toBeNull();
-
-    // The plan's monthly credits, granted with the actor + reason on the ledger, cached.
-    const [grant] = await sql`
-      select delta, bucket, reason, actor_user_id from credit_ledger
-      where organization_id = ${ORG_ID} and kind = 'grant_monthly'`;
-    expect(grant?.delta).toBe(5000);
-    expect(grant?.bucket).toBe("monthly");
-    expect(grant?.reason).toBe("e2e partner comp");
-    expect(grant?.actor_user_id).toBeTruthy();
-    const [bal] = await sql`select monthly_credits from credit_balance where organization_id = ${ORG_ID}`;
-    expect(bal?.monthly_credits).toBe(5000);
   });
 });

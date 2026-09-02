@@ -48,7 +48,7 @@ describe("showsPoweredByBadge", () => {
     }
   });
 
-  it("only Enterprise has it, so the badge is on every self-serve tier", () => {
+  it("only Enterprise has white-label, so the badge is on every plan below it", () => {
     const white = catalog.plans
       .filter((p) => (p.entitlements.features as Record<string, boolean>).whiteLabel)
       .map((p) => p.key);

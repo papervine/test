@@ -15,15 +15,25 @@ import { PrismaticBurst } from "./PrismaticBurst";
 //             It degrades to a static wash under reduced motion or without WebGL2.
 //   "home"  — glow + ambient seedling field + growing vine + grain. The landing page's
 //             living backdrop (SproutField behind VineField), in place of the static grid.
+//   "waves" — glow + grain, no grid, and whatever you pass as `backdrop`. Unlike the other
+//             variants this one does NOT import its backdrop: eleven routes render this shell,
+//             and a static import puts the module in all eleven module graphs to serve one.
+//             That is not theoretical — importing GradientWaves here pushed `/home`'s cold
+//             compile past the smoke gate's 30s-per-check budget on CI (green locally, failed
+//             twice in a row on the runner, while `main` was green). Pass the node instead and
+//             it stays in the graph of the one page that wants it.
 //   "lite"  — glow only. For the data-dense app, so the grid/grain never sit behind
 //             tables and forms and hurt legibility.
 export function PlatformShell({
   variant = "full",
   className = "",
+  backdrop,
   children,
 }: {
-  variant?: "full" | "auth" | "lite" | "home";
+  variant?: "full" | "auth" | "lite" | "home" | "waves";
   className?: string;
+  /** The `waves` variant's backdrop. A node, not an import — see the note above. */
+  backdrop?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
@@ -44,6 +54,7 @@ export function PlatformShell({
           colors={["#261B62", "#5b8cff", "#a974ff", "#BDA4F1"]}
         />
       )}
+      {variant === "waves" && backdrop}
       {variant === "home" && <SproutField />}
       {variant === "home" && <VineField />}
       {variant !== "lite" && <div className="db-grain" />}

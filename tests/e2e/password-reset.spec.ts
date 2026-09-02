@@ -50,13 +50,22 @@ const resetLink = (token: string) =>
 test("a forgotten password can be reset from the emailed link, and the old one stops working", async ({
   page,
 }) => {
+  // First test in its shard, so it cold-compiles /signup, /onboarding, /forgot-password,
+  // /reset-password and /login itself. Unsharded this ran ~19 files deep, after those routes
+  // were warm — which is why it was green for months and went red the moment the suite split.
+  test.slow();
   // Its own account, created through the real signup form.
   await page.goto("/signup");
   await page.getByLabel("Name").fill(RESET_USER.name);
   await page.getByLabel("Email").fill(RESET_USER.email);
   await page.getByLabel("Password").fill(RESET_USER.password);
   await page.getByRole("button", { name: "Sign up", exact: true }).click();
-  await expect(page).not.toHaveURL(/\/signup/);
+  // NOT `expect(page).not.toHaveURL(/signup/)`: that carries the 5s per-assertion default,
+  // which `test.slow()` does not raise (CLAUDE.md, the members-roles case), and it fired
+  // while the cold signup POST was still compiling its route — twice in a row on CI, once as
+  // a 35s test timeout and once as an assertion failure at 90s, which read as two different
+  // bugs. The budget an assertion needs is the server round trip, not the render.
+  await page.waitForURL((url) => !/\/signup/.test(url.pathname), { timeout: 90_000 });
   await page.context().clearCookies();
 
   await page.goto("/forgot-password");
@@ -83,7 +92,10 @@ test("a forgotten password can be reset from the emailed link, and the old one s
   await page.getByLabel("Email").fill(RESET_USER.email);
   await page.getByLabel("Password").fill(RESET_USER.password);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeEnabled();
+  // Same shape: /login is cold on this shard, so the sign-in round trip gets a real budget.
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeEnabled({
+    timeout: 30_000,
+  });
   await expect(page).toHaveURL(/\/login/);
 
   // The new one works.

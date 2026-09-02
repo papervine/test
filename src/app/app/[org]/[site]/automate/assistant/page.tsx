@@ -6,7 +6,6 @@ import {
   Globe,
   Plus,
   Info,
-  AlertTriangle,
 } from "lucide-react";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
 import { requireSite } from "@/lib/dashboard-context";
@@ -52,7 +51,7 @@ export default async function AssistantPage({
   ];
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
-      <AutomateHeader page="Ask" />
+      <AutomateHeader page="Assistant" />
 
       {/* Usage overview — links to the Analytics deep-dive (§10.1) */}
       <div className="mt-6 grid grid-cols-1 divide-y divide-[rgba(var(--ink-rgb),0.06)] overflow-hidden rounded-xl border border-[rgba(var(--ink-rgb),0.06)] sm:grid-cols-2 sm:divide-y-0 lg:grid-cols-4 lg:divide-x">
@@ -150,20 +149,6 @@ export default async function AssistantPage({
             Save Changes
           </button>
         </Card>
-
-        {/* Enterprise gate — Search Domains is plan-locked */}
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-900/20 px-4 py-3">
-          <span className="flex items-center gap-2 text-sm text-amber-200/90">
-            <AlertTriangle className="h-4 w-4" />
-            This feature is only available for enterprise plans
-          </span>
-          <button
-            disabled
-            className="inline-flex shrink-0 cursor-not-allowed items-center gap-1.5 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-black/90"
-          >
-            Contact Sales <ArrowRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
 
         <Card className="mt-3 opacity-60">
           <div className="flex items-start justify-between gap-4">

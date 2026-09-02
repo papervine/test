@@ -1,0 +1,89 @@
+---
+title: "Billing operations"
+description: "How the hosted platform's billing is configured: Autumn as the source of truth, AUTUMN_SECRET_KEY, and what happens without it."
+public: true
+---
+
+This page is for whoever **operates** the multi-tenant platform. If you self-host the
+renderer or use the CLI, there is no billing at all and nothing here applies — see
+[Plans & billing](/control-plane/billing) for the customer-facing behaviour.
+
+## Autumn is the source of truth
+
+Plans, entitlements, prices, credit packs and the trial are configured in
+[Autumn](https://useautumn.com), which sits above Stripe and provisions the Stripe
+products, prices, subscriptions and invoices from them. Papervine reads that state and
+enforces it; it does not keep its own copy.
+
+That means **editing a plan in Autumn is the deploy**. There is no catalog to sync, no
+publish step, and no Stripe webhook of our own — Autumn keeps subscription state, usage
+and access in step without one.
+
+<Note>
+  One thing is deliberately not in Autumn: the marketing copy on the public pricing page.
+  Plan names, feature bullets and the comparison table live in
+  `src/lib/billing/catalog.json` and ship with a deploy, because Autumn stores no
+  marketing text. **The prices on that page ship with it too** — the public page has to
+  render with no API key and no network — so a price change in Autumn needs the same
+  change committed here, or the storefront and the checkout disagree.
+</Note>
+
+## Configuring it
+
+<Steps>
+  <Step title="Create the environment">
+    Autumn has separate sandbox and production environments, each with its own catalog.
+    Connect the Stripe account you want that environment to bill through.
+  </Step>
+  <Step title="Set the key">
+    Put the environment's secret key in `AUTUMN_SECRET_KEY`. The key selects the
+    environment — there is no separate mode flag.
+
+    ```bash
+    AUTUMN_SECRET_KEY=am_sk_test_...
+    ```
+  </Step>
+  <Step title="Match the plan ids">
+    The application refers to two plans by id: `free` (auto-enabled for every new
+    customer) and `pro_trial` (the limited-time trial attached at signup). Credit
+    balances are the `ai_credits` feature, and every plan entitlement maps to a feature
+    id — `sso`, `rbac`, `writer_agent`, `white_label` and so on. Renaming one of these in
+    Autumn without renaming it in `src/lib/billing/autumn.ts` makes the feature read as
+    *not granted*.
+  </Step>
+</Steps>
+
+## What happens without a key
+
+Leaving `AUTUMN_SECRET_KEY` unset is a supported state, not a broken one — it is how
+renderer work, `npx papervine dev` and CI all run.
+
+- Docs sites render exactly as normal. Billing is never on the render path.
+- Every organization resolves to **Free**: AI features are gated off, and nothing meters.
+- Settings → Billing reports that billing is not configured; no plan can be purchased.
+- The "Powered by Papervine" badge follows the Free plan.
+
+## When Autumn is unreachable
+
+A billing outage must never take down a surface someone paid for, so the failure
+directions are chosen rather than incidental:
+
+- **The AI gate fails open.** If the lookup fails, the request is allowed and *not*
+  metered. Losing a few credits' revenue is cheaper than refusing a paying customer.
+- **The badge fails toward hiding.** Showing "Powered by Papervine" on an Enterprise
+  customer's white-labelled docs is a visible regression of the thing they bought;
+  omitting it from a Free site for a minute costs nothing. The badge answer is also cached
+  for a minute, which is what keeps a third-party API off the docs render path.
+- **Metering never surfaces to the reader.** Usage is recorded after the answer has
+  streamed; if the deduction fails it is logged and dropped.
+
+## Rating stays here
+
+Token-to-credit conversion is Papervine's, not Autumn's. The rate table is calibrated so a
+typical assistant answer costs around ten credits, and it prices self-hosted inference
+(the `ollama/` provider prefix) at **zero** — a customer running their own GPU costs us
+nothing, and a table priced from public model rates has no way to know that. Autumn holds
+the balance; we decide what an operation costs and report the number.
+
+Usage events — which feature spent which credits, on which model — stay in Papervine's own
+database. That is what the usage chart reads and what future rate calibration depends on.

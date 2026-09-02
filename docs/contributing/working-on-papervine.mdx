@@ -201,8 +201,6 @@ docker compose up -d        # local Postgres (+pgvector) + MinIO (S3) — `npm r
 npm run dev                 # the whole stack: docker services, the app, and the automations
                             # worker (cron ticks and runs execute only while it's connected).
                             # Peripheral layers attach when you've configured them — Stripe
-                            # webhook forwarding starts only if STRIPE_SECRET_KEY,
-                            # STRIPE_WEBHOOK_SECRET, and the `stripe` CLI are all present;
                             # GitHub webhook forwarding (smee) only if GITHUB_APP_ID and
                             # GITHUB_APP_WEBHOOK_PROXY_URL are.
                             # Every layer degrades independently: no docker → no-DB mode, no

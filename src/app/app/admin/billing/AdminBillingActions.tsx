@@ -2,45 +2,15 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import {
-  adminAdjustCredits,
-  adminGrantPlan,
-  adminPublishToStripe,
-} from "@/lib/actions/billing";
+import { adminAdjustCredits, adminGrantPlan } from "@/lib/actions/billing";
 
-// Client controls for the admin billing console: publish-to-Stripe and the support
-// credit-adjustment form (actor + reason land on the ledger entry).
-
-export function PublishButton() {
-  const router = useRouter();
-  const [pending, start] = useTransition();
-  const [note, setNote] = useState<string | null>(null);
-
-  return (
-    <div className="flex items-center gap-3">
-      <button
-        type="button"
-        disabled={pending}
-        className="db-cta rounded-lg px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        onClick={() => {
-          setNote(null);
-          start(async () => {
-            const res = await adminPublishToStripe();
-            setNote(
-              res.ok
-                ? `Published: ${res.products} products, ${res.prices} prices created.`
-                : (res.error ?? "Publish failed."),
-            );
-            if (res.ok) router.refresh();
-          });
-        }}
-      >
-        {pending ? "Publishing…" : "Publish to Stripe"}
-      </button>
-      {note && <span className="text-sm text-[var(--muted)]">{note}</span>}
-    </div>
-  );
-}
+// Client controls for the admin billing console: the plan comp and the support
+// credit-adjustment form.
+//
+// There is no publish-to-Stripe button any more. It existed because the catalog lived in
+// our Postgres and had to be pushed into Stripe; Autumn holds the catalog and provisions
+// Stripe from it, so editing a plan in Autumn IS the publish. The console links out
+// instead of pretending to own the catalog.
 
 export function GrantPlanForm({
   orgs,

@@ -288,8 +288,9 @@ async function syncToStorage({ repoOwner, repoName, branch, prefix }) {
 
 // 0. Reset to ONLY seeded data (prod-guarded above). Truncate every dev/tenant table so
 // leftover experiments — extra orgs, hand-connected sites, orphaned automations/sessions — are
-// gone; the seed below rebuilds the fixtures from scratch. The billing CATALOG survives (it's
-// `billing:sync` output, not dev data, and the seed reads it to put dev-org on Pro).
+// gone; the seed below rebuilds the fixtures from scratch. The billing CATALOG tables survive
+// the truncate, but only because they are legacy: Autumn holds the catalog now, and these are
+// unread until the contract migration drops them.
 const CATALOG_TABLES = new Set([
   "billing_plan",
   "billing_plan_version",
@@ -495,111 +496,70 @@ for (const s of DEV.sites) {
 }
 console.log(`• seeded ${DEV.sites.length} sites + ${feed.length} activity rows each`);
 
-// Billing state (SPEC §10 Billing): put dev-org on an ACTIVE Pro subscription with its
-// monthly credit grant, so the seeded environment exercises the whole metered path
-// (assistant/editor-agent authorize -> stream -> usage_event + ledger + balance). An
-// org with NO billing row resolves to Free (no AI) — right for legacy prod orgs, wrong
-// for a dev playground. Requires `npm run billing:sync` to have published the catalog;
-// skipped with a warning otherwise. Idempotent: re-seeding resets to a fresh Pro state.
-const [proVersion] = await sql`
-  select id, included_monthly_credits from billing_plan_version
-  where plan_key = 'pro' order by version desc limit 1`;
-if (!proVersion) {
-  console.warn("• billing skipped — no catalog in DB (run `npm run billing:sync` first)");
-} else {
-  const period = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const periodEnd = new Date(now.getTime() + 30 * 86_400_000);
-  await sql`
-    insert into billing_subscription (organization_id, plan_version_id, status, current_period_start, current_period_end)
-    values (${orgId}, ${proVersion.id}, 'active', ${now}, ${periodEnd})
-    on conflict (organization_id) do update set
-      plan_version_id = ${proVersion.id}, status = 'active', trial_ends_at = null,
-      current_period_start = ${now}, current_period_end = ${periodEnd}, updated_at = now()`;
-  // Fresh monthly grant for this period (ledger + balance reset — dev only; prod grants
-  // are written exactly once per period by the renewal webhook, enforced by the partial
-  // unique index on (org, kind, period_key)).
-  await sql`delete from credit_ledger where organization_id = ${orgId}`;
-  await sql`delete from usage_event where organization_id = ${orgId}`;
-  await sql`
-    insert into credit_ledger (id, organization_id, delta, kind, bucket, period_key, expires_at, reason)
-    values (${randomUUID()}, ${orgId}, ${proVersion.included_monthly_credits}, 'grant_monthly',
-            'monthly', ${period}, ${periodEnd}, 'seed: Pro monthly grant')`;
-
-  // 30 days of metered history, so Settings → Usage has a chart to draw (an org that has
-  // never called an AI route shows an empty one, which tells you nothing about whether
-  // the surface works). Deterministic, not random: a fixed per-day pattern per feature so
-  // two seeds produce the same bars and a screenshot diff means something. Written as
-  // usage_event + a matching 'usage' ledger burn per event — the same pair recordUsage
-  // writes — so the meter, the ledger and the chart can't disagree.
-  const MODELS = {
-    assistant: "claude-haiku-4-5-20251001",
-    writer: "claude-sonnet-5",
-    workflow: "claude-sonnet-5",
-  };
-  const usageRows = [];
-  const ledgerRows = [];
-  for (let back = 29; back >= 0; back--) {
-    const day = new Date(now.getTime() - back * 86_400_000);
-    // A weekday-ish rhythm (quiet weekends) with each feature at its own scale:
-    // assistant ~50% of the spend, editor agent ~30%, automations ~20%.
-    const weekend = day.getDay() === 0 || day.getDay() === 6;
-    const wave = 1 + 0.35 * Math.sin(back / 2.7);
-    const scale = (weekend ? 0.35 : 1) * wave;
-    for (const [feature, share, calls] of [
-      ["assistant", 500, 8],
-      ["writer", 300, 3],
-      ["workflow", 200, 1],
-    ]) {
-      // Skip the odd feature on the odd day so some bars are two-segment, not three —
-      // that's the case where a legend/tooltip mixes up its series alignment.
-      if ((back + share) % 7 === 0) continue;
-      for (let i = 0; i < calls; i++) {
-        const credits = Math.max(1, Math.round((share / calls) * scale));
-        const at = new Date(day);
-        at.setHours(9 + i, (17 * i) % 60, 0, 0);
-        const id = randomUUID();
-        usageRows.push({
-          id,
-          organization_id: orgId,
-          site_id: null,
-          feature,
-          model: MODELS[feature],
-          tokens_in: credits * 90,
-          tokens_out: credits * 30,
-          credits,
-          rate_version: 1,
-          request_id: null,
-          created_at: at,
-        });
-        ledgerRows.push({
-          id: randomUUID(),
-          organization_id: orgId,
-          delta: -credits,
-          kind: "usage",
-          bucket: "monthly",
-          usage_event_id: id,
-          reason: "seed: metered usage",
-          created_at: at,
-        });
-      }
+// Metered usage history (SPEC §10 Billing). Plan state itself is no longer seeded here:
+// Autumn is the source of truth for subscriptions and balances, so a dev org's plan is
+// whatever Autumn says (Free by default, since `getOrCreate` auto-enables it). To dogfood
+// a paid tier locally, comp dev-org onto Pro from /admin/billing, or attach it in the
+// Autumn dashboard.
+//
+// What still belongs in the seed is `usage_event`, because that table stays ours — it is
+// the record of WHICH feature spent credits, and it is what Settings → Usage charts. An
+// org that has never called an AI route draws an empty chart, which tells you nothing
+// about whether the surface works.
+// 30 days of metered history, so Settings → Usage has a chart to draw (an org that has
+// never called an AI route shows an empty one, which tells you nothing about whether
+// the surface works). Deterministic, not random: a fixed per-day pattern per feature so
+// two seeds produce the same bars and a screenshot diff means something. Written as
+// usage_event rows, the same shape recordAiUsage writes, so the chart and the product
+// agree about what a day of usage looks like.
+const MODELS = {
+  assistant: "claude-haiku-4-5-20251001",
+  writer: "claude-sonnet-5",
+  workflow: "claude-sonnet-5",
+};
+const usageRows = [];
+for (let back = 29; back >= 0; back--) {
+  const day = new Date(now.getTime() - back * 86_400_000);
+  // A weekday-ish rhythm (quiet weekends) with each feature at its own scale:
+  // assistant ~50% of the spend, editor agent ~30%, automations ~20%.
+  const weekend = day.getDay() === 0 || day.getDay() === 6;
+  const wave = 1 + 0.35 * Math.sin(back / 2.7);
+  const scale = (weekend ? 0.35 : 1) * wave;
+  for (const [feature, share, calls] of [
+    ["assistant", 500, 8],
+    ["writer", 300, 3],
+    ["workflow", 200, 1],
+  ]) {
+    // Skip the odd feature on the odd day so some bars are two-segment, not three —
+    // that's the case where a legend/tooltip mixes up its series alignment.
+    if ((back + share) % 7 === 0) continue;
+    for (let i = 0; i < calls; i++) {
+      const credits = Math.max(1, Math.round((share / calls) * scale));
+      const at = new Date(day);
+      at.setHours(9 + i, (17 * i) % 60, 0, 0);
+      const id = randomUUID();
+      usageRows.push({
+        id,
+        organization_id: orgId,
+        site_id: null,
+        feature,
+        model: MODELS[feature],
+        tokens_in: credits * 90,
+        tokens_out: credits * 30,
+        credits,
+        rate_version: 1,
+        request_id: null,
+        created_at: at,
+      });
     }
   }
-  await sql`insert into usage_event ${sql(usageRows)}`;
-  await sql`insert into credit_ledger ${sql(ledgerRows)}`;
-  const burned = usageRows.reduce((sum, r) => sum + r.credits, 0);
-  const remaining = Math.max(0, proVersion.included_monthly_credits - burned);
-
-  await sql`
-    insert into credit_balance (organization_id, trial_credits, monthly_credits, pack_credits)
-    values (${orgId}, 0, ${remaining}, 0)
-    on conflict (organization_id) do update set
-      trial_credits = 0, monthly_credits = ${remaining},
-      pack_credits = 0, updated_at = now()`;
-  console.log(
-    `• billing: dev-org on Pro (active), ${proVersion.included_monthly_credits} monthly credits` +
-      ` − ${burned} used over 30 days (${usageRows.length} metered calls)`,
-  );
 }
+await sql`delete from usage_event where organization_id = ${orgId}`;
+await sql`insert into usage_event ${sql(usageRows)}`;
+const burned = usageRows.reduce((sum, r) => sum + r.credits, 0);
+console.log(
+  `• usage: ${burned} credits over 30 days (${usageRows.length} metered calls) for the chart`,
+);
 
 await sql.end();
 

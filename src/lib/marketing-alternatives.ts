@@ -16,7 +16,7 @@
  * IT IS A SALES PAGE, and it should read like one. The first draft was a neutral market
  * survey that cheerfully routed readers to four competitors before mentioning us — accurate,
  * useless, and not what a storefront is for. Every section now argues a position: the format
- * is what decides the switch, we read the one you already have, and $50 buys what the
+ * is what decides the switch, we read the one you already have, and $65 buys what the
  * category holds for an enterprise call. Order, emphasis and framing are ours to choose.
  *
  * WHAT IS STILL NOT NEGOTIABLE, because it is what keeps the page an asset instead of a
@@ -88,23 +88,23 @@ export const ALTERNATIVES: Alternative[] = [
     key: "papervine",
     name: "Papervine",
     us: true,
-    bestFor: "The repo you already have, live in minutes, with SSO at $50 instead of a sales call",
+    bestFor: "The repo you already have, live in minutes, with SSO at $65 instead of a sales call",
     price: "Free",
-    topTier: "$300/mo (Pro)",
+    topTier: "$250/mo (Pro)",
     hosting: "Hosted or self-host",
     format: "docs.json + MDX",
-    ssoOn: "$50/mo (Team)",
+    ssoOn: "$65/mo (Team)",
     body:
       "Point it at your existing repo and you\u2019re done — Papervine reads the same docs.json + " +
       "MDX, so there is nothing to convert, no export, and no re-authoring. Everything the rest " +
       "of this page sells as an upgrade is included with the repo: full-text search, an AI " +
       "assistant with citations, an embeddable widget for your own product, MCP servers so your " +
       "docs work inside Claude and Cursor, browser editing with an agent, and analytics that " +
-      "separate human readers from crawling agents. SSO and role-based access are on the $50 " +
-      "Team plan — the category holds both for an enterprise negotiation. Pro is $300/mo with " +
-      "25,000 AI credits: $150/mo less than the flagship it competes with, and 2.5\u00d7 the " +
-      "credits. Every account starts with 30 days of everything and 5,000 credits, no card, and " +
-      "`npx papervine dev` runs the same renderer on your laptop with no database and no signup.",
+      "separate human readers from crawling agents. SSO and role-based access are on the $65 " +
+      "Team plan — the category holds both for an enterprise negotiation. Pro is $250/mo for " +
+      "scheduled workflows, insights, and production limits, with optional hosted AI credit pools. " +
+      "Every account starts with a 30-day free trial of Pro and 10,000 credits, no card. BYOK available " +
+      "from day one, and `npx papervine dev` runs the same renderer on your laptop with no database and no signup.",
     caveat:
       "We\u2019re the newest name here, and we\u2019d rather you find that out from us: bring your " +
       "repo, run it locally in one command, and judge the render instead of the logo. The CLI " +
@@ -129,7 +129,7 @@ export const ALTERNATIVES: Alternative[] = [
       "OSS program, which is genuinely generous and explicitly not available to companies.",
     caveat:
       "The jump from free to $450/mo is the whole reason this page gets searched for. SSO, " +
-      "SCIM, role-based permissions, SLAs and advanced insights are Enterprise, i.e. a sales " +
+      "SCIM, role-based permissions, SLAs and insights are Enterprise, i.e. a sales " +
       "call. Self-hosting is an Enterprise engagement shipping proprietary containers — their " +
       "own guide sizes a production deployment at roughly 45–60 vCPU, 160–220 GB of memory and " +
       "about 1 TB of SSD, over \"typically weeks\", with cloud-dependent integrations " +
@@ -315,17 +315,17 @@ export const PICKS = [
   },
   {
     need: "SSO without a sales call",
-    answer: "$50/mo, self-serve",
+    answer: "$65/mo, self-serve",
     why:
       "Single sign-on and role-based access are on the Team plan. At the incumbent, ReadMe and " +
       "GitBook they\u2019re an Enterprise conversation.",
   },
   {
-    need: "AI credits that go further",
-    answer: "25,000 for $300",
+    need: "Production docs at $250",
+    answer: "Not $450/mo",
     why:
-      "Pro costs $150/mo less than the tier it competes with and carries 2.5\u00d7 the credits \u2014 " +
-      "with a chart showing which feature is spending them.",
+      "Pro delivers workflows, insights, and production limits without the category's typical " +
+      "enterprise pricing. Optional hosted AI credits, not the headline feature.",
   },
   {
     need: "Run it yourself, today",
@@ -344,8 +344,8 @@ export const REASONS = [
       "the incumbent\u2019s Starter is free and Pro is $450/mo billed annually ($540 monthly), with " +
       "nothing in between. A two-person team that outgrows free gets a bill that reads like a " +
       "seed-stage line item for a docs site. Our Team plan exists because of exactly that " +
-      "shape: $50/mo, with the AI features AND SSO already in it \u2014 nine times less, for the " +
-      "step most teams actually need to take.",
+      "shape: $65/mo, with SSO, RBAC, and AI search already in it \u2014 filling the gap the " +
+      "category created.",
     source: "https://example.com/pricing",
   },
   {
@@ -353,7 +353,7 @@ export const REASONS = [
     body:
       "Single sign-on is this category\u2019s classic enterprise hostage: Enterprise-only at " +
       "the incumbent and at ReadMe, SAML-on-Enterprise at GitBook. Two options on this page will " +
-      "just sell it to you \u2014 Redocly at $24/seat/mo, and us at $50/mo flat, no seat math and " +
+      "just sell it to you \u2014 Redocly at $24/seat/mo, and us at $65/mo flat, no seat math and " +
       "no procurement thread. Locking your docs down should be a checkbox, not a quarter.",
     source: "https://redocly.com/pricing",
   },
@@ -376,9 +376,10 @@ export const REASONS = [
       "Every hosted platform here meters AI separately from seats: the incumbent\u2019s Pro includes " +
       "10,000 credits, GitBook caps assistant answers, ReadMe charges $150/mo for Ask AI on top " +
       "of the plan. It\u2019s the axis that grows with your READERS rather than your team, which is " +
-      "why it\u2019s the one that surprises people. We include 5,000 credits at $50 and 25,000 at " +
-      "$300, put a chart on the usage page showing which feature spent them, and hard-cap by " +
-      "default so there is no surprise invoice \u2014 overage is something you opt into.",
+      "why it\u2019s the one that surprises people. We support BYOK from day one on all plans, " +
+      "with optional hosted credit pools available on Team and Pro. We put a chart on the usage " +
+      "page showing which feature spent them, and hard-cap by default so there is no surprise " +
+      "invoice \u2014 overage is something you opt into.",
     source: "https://readme.com/pricing",
   },
 ];
@@ -429,7 +430,7 @@ export const FAQS: Faq[] = [
       "\u2014 are free and MIT-licensed, and everything a docs platform does beyond rendering " +
       "(search, auth, analytics, AI, editing) is yours to build. Among hosted platforms, " +
       "Papervine\u2019s free tier renders your existing docs.json with search included, and every " +
-      "new account gets 30 days of the paid features plus 5,000 AI credits without a card.",
+      "new account gets a 30-day free trial of Pro plus 10,000 AI credits without a card.",
   },
   {
     q: "Can I self-host the incumbent?",
@@ -462,8 +463,8 @@ export const FAQS: Faq[] = [
     q: "What's the cheapest way to get SSO on a docs site?",
     a:
       `As of ${PRICES_CHECKED}, two options will sell it to you without a call: Redocly at $24 ` +
-      "per seat/month, and Papervine\u2019s Team plan at $50/month flat \u2014 which also includes " +
-      "role-based access, the AI assistant and 5,000 credits. At the incumbent, ReadMe and GitBook, " +
+      "per seat/month, and Papervine\u2019s Team plan at $65/month flat \u2014 which also includes " +
+      "role-based access, the AI assistant and 1,000 credits. At the incumbent, ReadMe and GitBook, " +
       "single sign-on is an Enterprise conversation.",
   },
   {

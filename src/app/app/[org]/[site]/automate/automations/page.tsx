@@ -79,7 +79,7 @@ export default async function AutomationsPage({
 
   return (
     <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">
-      <AutomateHeader page="Routines" />
+      <AutomateHeader page="Automations" />
 
       {!isExecutorConfigured() && (
         <div className="mt-6 rounded-xl border border-amber-500/25 bg-amber-500/5 px-5 py-4 text-sm">

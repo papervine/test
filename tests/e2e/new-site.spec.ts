@@ -156,6 +156,11 @@ test.describe("a Papervine-hosted site", () => {
   });
 
   test("Exports points at Studio rather than telling you to connect a repo", async ({ page }) => {
+    // The only test in the suite that visits settings/exports, so it cold-compiles that route
+    // itself. Failed on its shard at the 30s default with `net::ERR_ABORTED; maybe frame was
+    // detached?` — the test clock expiring mid-navigation, which reads as a crashed page and
+    // is not one. Budget, not code; same shape as the rest of this file's slow() calls.
+    test.slow();
     await page.goto(sitePath(SITE.slug, "settings/exports"));
     // status is 'live', so the export is available; the copy is what differs per source.
     await expect(page.getByText(/Connect and sync a repo first/)).toBeHidden();

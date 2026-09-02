@@ -157,7 +157,7 @@ neutral market survey: it opened with four cards routing readers to GitBook, Rea
 Docusaurus before making a single argument, gave our own entry a longer self-critique than
 any competitor's, and led each rival with "Best for:". Accurate, and the wrong genre for a
 storefront. Every section now argues a position — the format decides the switch, we read
-the one you already have, $50 buys what the category holds for an enterprise call — and
+the one you already have, $65 buys what the category holds for an enterprise call — and
 the labels moved with it ("Best for" → the pitch, "Watch out for" → "The trade" on
 competitors, one short "One thing to know" on ours).
 What did NOT move is the part that keeps the page an asset rather than a liability, and
@@ -714,6 +714,52 @@ tracked public docs; locally, `_private/` is gitignored for that work. The curre
 `/pricing` implementation is still presentational and may lag this thesis until the
 next page update; the billing backend's schema + versioned catalog + credit core landed
 2026-07-16, with enforcement, Stripe, and surfaces to follow (§10 "Billing").
+
+> **Status (2026-09-01): repriced, and the page is five offers rather than four columns.**
+> This note supersedes the intermediate figures the same branch recorded on its way here
+> ($29/$19 and $199/$159, then $149, then $99 — none shipped; the only numbers that ever
+> reached a commit on `main` are below). Final shape:
+>
+> | | Self-host | Free | Team | Pro | Enterprise |
+> |---|---|---|---|---|---|
+> | Price | $0 (OSS) | $0 | **$65/mo** | **$250/mo** | Contact us |
+> | Sites / editors | unlimited / — | 1 / 5 | 3 / unlimited | 10 / unlimited | custom |
+> | Hosted credits | — (BYOK) | 250/mo | 1,000/mo | 25,000/mo | committed |
+>
+> **Self-host is a full-width band above the grid, not a fifth column.** It is a different
+> *kind* of offer — `listed: false`, no `prices[]` row, GitHub/Vercel CTAs instead of signup —
+> and a fifth column would have invited a $0-vs-$65 comparison on the wrong axis while leaving
+> ~165px per card. The comparison matrix underneath still carries all five columns; that is
+> where feature-by-feature belongs. **Free is the highlighted card** (was Pro), and Pro's
+> "Popular" badge is retired with it — one emphasis per page.
+>
+> **The cards quote monthly only.** Annual prices stay in `prices[]` and still go to Stripe
+> (Team 66000, Pro 240000 cents); they are simply not on the card, so the headline stays one
+> number. `priceDisplay()` returns a bare `/mo`, pinned by a unit test so the note can't creep
+> back.
+>
+> **Entitlement moves, not just copy.** `advancedInsights` + `multiRepo` collapse to a single
+> `insights` (multi-repo is gone). `assistant` is now **false on Free** — the reader-facing
+> assistant and the embeddable widget both authorize on it, so it is a paid feature, and
+> `FREE_ENTITLEMENTS` derives from the catalog so no-billing-row / canceled / expired-trial all
+> refuse it with `upgrade_required` (the plan check runs *before* the balance check, so a
+> lapsed trial with credits left still gets the upgrade prompt, not `out_of_credits`).
+> `writerAgent` stays true Free→Pro: the editor's writing agent is part of Studio and is
+> metered against whatever credits the plan carries. `whiteLabel` moves **Pro → Enterprise
+> only**, so Pro sites now carry the Powered-by badge again.
+>
+> **Trial doubles: 30 days of Pro + 10,000 credits** (was 5,000).
+>
+> Backdrop swapped from `.db-grid` to `GradientWaves` (§2 backdrops), and the three-card
+> "positioning" strip is removed from the page.
+>
+> **Known gap, deliberately shipped:** Pro's "AI Agent" bullet names the Automate › Agent
+> surface, which is still presentational scaffold (§10.2) and carries no entitlement of its own
+> — only the `automate.agent: "admin"` rollout flag. Unverified as a purchasable capability.
+>
+> Follow-ups: `billing:sync` runs on deploy (`vercel.json` build command) so Postgres tracks
+> the catalog automatically, but **Stripe does not** — `npm run billing:publish` is a separate
+> act, or checkout keeps billing the archived Price objects.
 
 **Landing backdrop: a growing vine, not a grid (landed 2026-06-28).** The marketing
 landing swaps the static `.db-grid` for `VineField` (`src/components/platform/VineField.tsx`,
@@ -1757,7 +1803,7 @@ Ship a styled component set resolved at compile time. Parity targets with hosted
 > (satori does support `background-clip: text`, which is how "grows" is painted). It's a separate
 > component from the tenant card on purpose — that one renders a customer's `docs.json`, and the
 > apex has none. The pricing card is **price-free**: prices live in the billing catalog and ship
-> via `billing:sync` (§10), so baking "$50" into a PNG would strand a stale image on every
+> via `billing:sync` (§10), so baking "$65" into a PNG would strand a stale image on every
 > timeline that had already scraped it, with nothing to signal it.
 >
 > **`metadataBase` for a static image route, verified in Next's source rather than guessed**
@@ -4893,6 +4939,82 @@ Minimum to operate the SaaS:
   light + dark 2026-07-16, console clean; `node tests/crawl.mjs docs` 30/30, 0×500.*
   §2's pricing-thesis paragraph is superseded by this section for plan shape; the
   wedge ("all features from day one, security before procurement") is unchanged.
+  *(The four-tier shape recorded above is the 2026-07-16 one; superseded by the
+  2026-09-01 reprice below — five offers at $0/$0/$65/$250/contact.)*
+  **Repriced 2026-09-01 — Team $50→$65, Pro $300→$250, Self-host promoted to an offer.**
+  Full shape, rationale and entitlement moves are in the §2 status note; this is the
+  billing-side record. Prices: Team 6500/66000, Pro 25000/240000 cents. Entitlements:
+  `advancedInsights`+`multiRepo` → `insights`; `assistant` false on Free; `whiteLabel`
+  Pro → Enterprise; Team editors 5 → unlimited; Team credits 5000 → 1000; trial grant
+  5000 → 10000. **Every one of those is a config-hash change, so `billing:sync` mints a new
+  immutable plan version per plan and existing subscriptions stay pinned to what they bought**
+  — which is the mechanism working, not a migration to write. Old prices are archived
+  (`active=false`), never mutated. Sync runs on deploy; **Stripe is still the one manual
+  step** (`npm run billing:publish`).
+  *Drift swept the same day:* five surfaces were quoting numbers that never shipped —
+  `billing-core.test.ts` (Team 5k, a failing assertion), `e2e/billing.spec.ts` (asserted $29
+  against its own $50 seed), `marketing-alternatives.ts` (a $50→$29 regression in the header
+  rationale, plus the SSO FAQ), `docs-platform-alternatives/page.tsx`, and
+  `docs/control-plane/billing.mdx` (editors 5/8/25, Team 5k credits, "workflows (Team+)",
+  "multi-repo"). The lesson is the routing one: prices on `/pricing` are *derived* and were
+  never wrong; everything that broke was a number retyped somewhere else.
+  **Decision — Autumn becomes the billing source of truth (2026-09-01).** Papervine's
+  billing was a full Stripe integration of its own: a versioned catalog in Postgres, a
+  webhook that mirrored Stripe subscription state back, a credit ledger with bucket
+  ordering, and a monthly grant rollover. All of it worked, and all of it is undifferentiated
+  — it is the part of this product nobody chooses us for. Autumn (https://useautumn.com) is a
+  billing-state layer above Stripe that owns exactly that surface: plans, entitlements,
+  balances, subscription lifecycle, and the Stripe objects underneath them.
+
+  **What that means concretely.** `catalog.json` stops being the billing source and shrinks to
+  what only we can own: the marketing copy on `/pricing` (`display`, `matrix`). Plans,
+  entitlements, prices, credit packs and the trial live in Autumn; `billing:sync` and
+  `billing:publish` are deleted along with the `node scripts/sync-billing.mjs` step in
+  `vercel.json`'s build command. Repricing stops being a commit and becomes a catalog edit —
+  which is a real loss of the GitOps property (§10 "repricing is a config edit, not a deploy"
+  was about *our* config, in git, reviewed like code) traded for not maintaining the
+  machinery. Accepted deliberately: the reprice earlier today is the argument, where the
+  numbers were right in `catalog.json` and wrong in five other files.
+
+  **The Stripe webhook goes, but LAST, not first.** `billing/webhooks.ts` is the only writer of
+  `billing_subscription` / `credit_balance` / `credit_ledger`, and those are what `authorizeAi`
+  reads before every AI call. Delete it before the readers move and every paid org silently
+  resolves to Free — a data-loss-shaped bug with no error anywhere. Order is: adapter, then
+  readers, then writers, then schema.
+
+  **Six seams, each swapped behind its existing signature** so the call sites and their tests
+  do not move: `authorizeAi` → Autumn `check`; `recordAiUsage` → `track`; `getPlanOffers` /
+  `getBillingSummary` → `listPlans` / `getCustomer`; `actions/billing.ts` → `attach` /
+  `updateSubscription`; `powered-by-store` → the `white_label` flag; `startTrial` → `attach
+  pro_trial`. Autumn's own webhooks are optional notifications — subscription state, usage and
+  access are synchronized without them — so nothing replaces the endpoint we remove.
+
+  **Rating stays ours.** Autumn offers an `ai_credit_system` that prices tokens from Models.dev
+  plus a markup, and we are deliberately not using it. `rateTokensToCredits` is calibrated so a
+  typical assistant answer costs ~9–10 credits, it is pinned by unit tests, and — the deciding
+  reason — it rates the `ollama/` provider prefix at **zero** so self-hosted inference is free
+  (§18). A Models.dev-priced system has no way to know that a customer's own GPU costs us
+  nothing. So `ai_credits` is a plain metered consumable in Autumn, we convert tokens to
+  credits here, and `track` the integer.
+
+  **Two properties that must survive the move, because they are load-bearing.** (1)
+  `authorizeAi` **fails OPEN** on lookup failure — "billing outages must not kill paid
+  surfaces", pinned by a unit test. Against Postgres that covered a dead connection; against
+  Autumn it covers a network hop from a serverless function, so it matters more, not less.
+  (2) The renderer **must survive with no billing backend at all**: `powered-by-store` runs on
+  every tenant page render and `npm test` boots the whole renderer with no database and fails
+  on any 500. Both stay cached and both stay fail-open; a billing call is never on the critical
+  path of rendering someone's docs.
+
+  **`usage_event` stays local.** It is analytics, not billing — it backs the usage chart and the
+  analytics page, and it is the only record of *which feature* spent a credit. Autumn holds the
+  balance; we keep the story of how it was spent.
+
+  Migration for existing paid orgs is Autumn's `billing.import` (Stripe customer + subscription
+  + matching `plan_id`), which leaves the live Stripe subscriptions untouched. The billing
+  tables are left in place, unread, and dropped in a separate contract migration once
+  production is imported — expand-then-contract, per the migrations rule above.
+
   **Plan switching + downgrade landed 2026-07-17** (gap found dogfooding: no way to
   downgrade). `changePlan` routes by billing state — a live Stripe sub gets an
   in-place `subscriptions.update` with proration (a second Checkout would mint a
@@ -5193,6 +5315,14 @@ gaps" all derive from this. Backed by PostHog or a first-party events table; res
 > "Automate"→**"Autopilot"** with Automations→**Routines**, Agent→**Teammate**,
 > Assistant→**Ask**; section "Admin"→**"Workspace"** (MCP kept), Platform Admin→**Operator**.
 > Design-log prose below keeps the original names; the product surfaces the new ones.
+>
+> **Reverted for this section (2026-09-01).** The four labels in this rail read further from
+> what the things are than the originals did: "Routines" for scheduled runs, "Teammate" for a
+> Slack agent, "Ask" for the reader assistant, under "Autopilot". Back to **Automate ›
+> Automations · Agent · Assistant**, matching the routes (`automate/{automations,agent,assistant}`),
+> the feature keys, and this section's own prose. Display labels only, again — no routes, keys
+> or components renamed. The lead group (Overview · Studio · Insights), "Workspace" and
+> "Operator" are untouched.
 
 The **Automate** rail section groups the three surfaces where Papervine *acts on* the
 docs instead of just rendering them. All three mirror hosted docs platforms' "Automate" area and are

@@ -1,4 +1,4 @@
-import { Rocket, Users, Zap, Briefcase, type LucideIcon } from "lucide-react";
+import { Rocket, Users, Zap, Briefcase, Code, Building2, type LucideIcon } from "lucide-react";
 import rawCatalog from "./catalog.json";
 
 // Marketing view over THE catalog (catalog.json). The tier feature bullets, comparison
@@ -9,10 +9,21 @@ import rawCatalog from "./catalog.json";
 // A bad edit (unknown icon, matrix column that isn't a plan) fails at module load, so
 // typecheck/tests catch it — not production.
 
-export type PlanKey = "free" | "team" | "pro" | "enterprise";
+// The five columns of the comparison matrix. `selfhost` is a card and a matrix column
+// but NOT a purchasable plan — it has no prices[] rows and is listed:false, which is why
+// the pricing page pulls it out of the tier grid (see HOSTED_TIERS below).
+export type PlanKey = "selfhost" | "free" | "team" | "pro" | "enterprise";
 
 // Icon names allowed in catalog.json plans[].display.icon → the lucide component.
-const ICONS: Record<string, LucideIcon> = { Rocket, Users, Zap, Briefcase };
+// 5-column layout: Selfhost (Code), Cloud/Free (Rocket), Team (Users), Pro (Zap), Enterprise (Building2)
+const ICONS: Record<string, LucideIcon> = { Rocket, Users, Zap, Briefcase, Code, Building2 };
+
+// A card CTA. `brand` swaps the plain label for a wordmark button (the GitHub mark, the
+// Vercel triangle) — these are third-party logos, so they're inline SVG in the page rather
+// than lucide glyphs, and the catalog only names which one.
+export type BrandMark = "github" | "vercel";
+export const BRAND_MARKS: readonly BrandMark[] = ["github", "vercel"] as const;
+export type PlanCta = { label: string; href: string; brand?: BrandMark };
 
 export type PlanTier = {
   key: PlanKey;
@@ -23,7 +34,10 @@ export type PlanTier = {
   blurb: string;
   badge: string | null;
   highlight: boolean;
-  cta: { label: string; href: string };
+  cta: PlanCta;
+  // A second, lower-emphasis button under the CTA. Self-host pairs "Star on GitHub" with
+  // "Deploy with Vercel"; every other tier has one call to action and leaves this null.
+  secondaryCta: PlanCta | null;
   lead: string | null;
   features: string[];
 };
@@ -44,7 +58,8 @@ type RawPlan = {
     badge: string | null;
     highlight: boolean;
     priceOverride: string | null;
-    cta: { label: string; href: string };
+    cta: PlanCta;
+    secondaryCta?: PlanCta | null;
     lead: string | null;
     features: string[];
   };
@@ -62,21 +77,18 @@ function fail(msg: string): never {
 }
 
 // Derive the card price + note from prices[]. A plan with a display.priceOverride
-// ("$0", "Contact us") uses that verbatim; otherwise the monthly price becomes "$50"
-// and the annual becomes the "/mo · $40/mo billed annually" note.
+// ("$0", "Contact us") uses that verbatim; otherwise the monthly price becomes "$65"
+// and the note is a bare "/mo". The annual price is still in prices[] and still sold —
+// the cards just quote one number, so the headline stays legible; the annual discount
+// is surfaced at checkout and on the in-app billing page instead.
 function priceDisplay(
   planKey: string,
   override: string | null,
 ): { price: string; priceNote: string | null } {
   if (override) return { price: override, priceNote: null };
   const month = raw.prices.find((p) => p.planKey === planKey && p.interval === "month");
-  const year = raw.prices.find((p) => p.planKey === planKey && p.interval === "year");
   if (!month) fail(`plan '${planKey}' has no price and no display.priceOverride`);
-  const price = `$${Math.round(month.unitAmountCents / 100)}`;
-  const priceNote = year
-    ? `/mo · $${Math.round(year.unitAmountCents / 1200)}/mo billed annually`
-    : "/mo";
-  return { price, priceNote };
+  return { price: `$${Math.round(month.unitAmountCents / 100)}`, priceNote: "/mo" };
 }
 
 // The listed tier cards (plans that carry a `display` block), in sort order. `trial`
@@ -88,6 +100,10 @@ export const PLAN_TIERS: PlanTier[] = raw.plans
     const d = p.display!;
     const icon = ICONS[d.icon];
     if (!icon) fail(`plan '${p.key}': unknown display.icon '${d.icon}'`);
+    for (const cta of [d.cta, d.secondaryCta]) {
+      if (cta?.brand && !BRAND_MARKS.includes(cta.brand))
+        fail(`plan '${p.key}': unknown cta.brand '${cta.brand}'`);
+    }
     const { price, priceNote } = priceDisplay(p.key, d.priceOverride);
     return {
       key: p.key as PlanKey,
@@ -99,6 +115,7 @@ export const PLAN_TIERS: PlanTier[] = raw.plans
       badge: d.badge,
       highlight: d.highlight,
       cta: d.cta,
+      secondaryCta: d.secondaryCta ?? null,
       lead: d.lead,
       features: d.features,
     };
@@ -107,6 +124,14 @@ export const PLAN_TIERS: PlanTier[] = raw.plans
 export const PLAN_TIER_BY_KEY: Record<PlanKey, PlanTier> = Object.fromEntries(
   PLAN_TIERS.map((t) => [t.key, t]),
 ) as Record<PlanKey, PlanTier>;
+
+// Self-host is a different KIND of offer — OSS, no account, GitHub/Vercel CTAs instead of
+// signup — so the pricing page gives it a full-width band of its own and keeps the grid to
+// the four hosted tiers people actually choose between. The matrix below still carries all
+// five columns; that's where the feature-by-feature comparison belongs.
+export const SELFHOST_TIER: PlanTier | null =
+  PLAN_TIERS.find((t) => t.key === "selfhost") ?? null;
+export const HOSTED_TIERS: PlanTier[] = PLAN_TIERS.filter((t) => t.key !== "selfhost");
 
 // Enterprise CTA href, surfaced for hosts that render their own contact button.
 export const CONTACT_HREF =
@@ -120,7 +145,7 @@ export const MATRIX_TIERS = PLAN_TIERS.map((t) => ({
   icon: t.icon,
 }));
 
-const MATRIX_KEYS: PlanKey[] = ["free", "team", "pro", "enterprise"];
+const MATRIX_KEYS: PlanKey[] = ["selfhost", "free", "team", "pro", "enterprise"];
 
 export const PLAN_MATRIX: MatrixGroup[] = raw.matrix;
 // Validate every matrix row covers exactly the four tier columns.

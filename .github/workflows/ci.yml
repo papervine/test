@@ -141,8 +141,33 @@ jobs:
   # Authed control-plane journeys (Playwright + real Postgres). The @external connect
   # spec hits the GitHub API, so it's skipped here to keep CI deterministic; run it
   # locally with `npm run test:e2e`.
+  #
+  # SHARDED, because the suite's cost is `next dev` cold-compiling each route on first
+  # visit, serialized behind a single worker: a test that lands on a warm route runs in
+  # 1-6s, one that lands on a cold route runs in 30-55s, and the whole run took ~25min.
+  # The worker count can't fix that — one dev server, one Postgres, one MinIO, and the
+  # specs race on shared DB state — and per-worker servers don't fit in the runner's
+  # memory (see the NODE_OPTIONS note in playwright.config.ts). So the parallelism lives
+  # at the JOB level instead: each shard is a whole isolated environment with its own
+  # runner, services and dev server, and shares nothing. Each pays its own auth.setup
+  # (~80s) and compiles only the routes its third of the files touch.
+  #
+  # `fail-fast: false` so one red shard doesn't cancel the others — the point of a failure
+  # here is to see the whole picture, not the first bad file. A shard failing on a test
+  # that passes unsharded means that test was inheriting state from a file that used to
+  # run before it: a latent bug found, not one introduced (the repo's notes on
+  # order-dependent specs cover the fix — set up the precondition you assert on).
+  #
+  # `timeout-minutes` is a ceiling, not a target. Without it GitHub's default is six
+  # hours, and a genuinely hung dev server would burn all of it silently.
   e2e:
+    name: e2e (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
     services:
       postgres:
         image: postgres:16
@@ -165,7 +190,35 @@ jobs:
 
       - run: npm ci
 
+      # NO Turbopack filesystem cache across runs — deliberately, after measuring. Next 16
+      # turns it on by default for `next dev` and it lives under `<distDir>/dev/cache`, so
+      # restoring it between CI runs looked like the obvious compile win. It is also what made
+      # the heavy shard's dev server ABORT mid-suite:
+      #
+      #   thread 'tokio-rt-worker' panicked at
+      #   turbopack/crates/turbo-tasks-backend/src/backend/operation/aggregation_update.rs
+      #   inner_of_upper_lost_follower is not able to remove follower TaskId … analyze_ecmascript_module
+      #   turbo-tasks: an internal panic occurred outside the per-task panic boundary. Aborting.
+      #
+      # Zero panics on the run before the cache step existed; one on every run after it that
+      # restored a cache — the persisted task graph (from another shard or commit) disagrees
+      # with the live one and the aggregation invariant fails. The process aborts, the port
+      # closes, and every remaining test fails in ~200ms with ECONNREFUSED, which reads as
+      # "the runner is flaky" until you read the server's last lines. `free -m` before/after
+      # (below) proved it was never memory. A Turbopack bug, reported upstream; until it is
+      # fixed, each shard compiles cold and RUST_BACKTRACE is set so the next panic explains
+      # itself.
+      # The browser download is ~26s per shard and changes only when Playwright does.
+      - name: Restore Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright browser
+        # Idempotent: on a cache hit the binary is already present, so this only installs
+        # the OS deps. No conditional flags — fewer ways for a cache miss to look like a bug.
         run: npx playwright install --with-deps chromium
 
       # MinIO (S3) — same images/creds/bucket as docker-compose. A `services:` block
@@ -184,13 +237,34 @@ jobs:
             done
             mc mb --ignore-existing local/papervine-content && echo "bucket ready"'
 
-      - name: E2E (deterministic — skips @external)
-        run: npm run test:e2e -- --grep-invert @external
+      # Instrumentation, not a fix. A dev server that dies mid-shard prints NOTHING in its own
+      # output (a kernel OOM kill is silent to the process it kills), and the only symptom the
+      # suite shows is a cascade of ECONNREFUSED in ~200ms each. Without these two steps the
+      # post-mortem is a guess between "runner was degraded" and "the heavy shard reproducibly
+      # runs out of memory" — which was exactly the guess we were left making. `free -m` before
+      # and after, plus the kernel's own record of any kill, makes the next one diagnosable.
+      - name: Memory before E2E
+        run: free -m
 
+      - name: E2E (deterministic — skips @external)
+        env:
+          # Turbopack's panic message says "run with RUST_BACKTRACE=1"; do it up front so the
+          # one time it matters we are not reproducing to find out where.
+          RUST_BACKTRACE: "1"
+        run: npm run test:e2e -- --grep-invert @external --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+      - name: Memory after E2E + kernel OOM record
+        if: always()
+        run: |
+          free -m
+          echo "--- kernel: processes killed for memory (empty = none) ---"
+          sudo dmesg --ctime 2>/dev/null | grep -iE 'killed process|out of memory|oom-kill' || true
+
+      # Artifact names must be unique within a run, so each shard uploads its own.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
-          name: playwright-report
+          name: playwright-report-shard-${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
 

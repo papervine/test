@@ -691,34 +691,38 @@ const CONTROL_PLANE_CHECKS = [
   },
   {
     path: "/pricing",
-    desc: "marketing pricing page renders all four tiers, the $50/$300 anchors, the trial banner, and the matrix",
+    desc: "marketing pricing page renders all five tiers, the $65/$250 anchors, the trial banner, and the matrix",
     // db-glow proves PlatformShell wraps it; the tier names + matrix groups prove the
-    // table content rendered (not just the chrome). "$50"/"$300" are the Team/Pro
-    // anchors (SPEC §10 Billing; mirrors billing/catalog.json), "billed annually" the
-    // annual notes, and the 30-day trial banner replaces the old 90-day SSO promo.
+    // table content rendered (not just the chrome). "$65"/"$250" are the Team/Pro
+    // anchors (SPEC §10 Billing; mirrors billing/catalog.json) and the 30-day trial
+    // banner replaces the old 90-day SSO promo. The cards quote monthly only, so
+    // "billed annually" must NOT appear (see the exclude list).
     include: [
       // The apex's second-most-shared URL had no og:/twitter: tags at all, so it unfurled
       // bare. Same shared helper as the landing page, so the handle rides along.
       'name="twitter:site" content="@papervine_io"',
       "opengraph-image",
-      "Pricing on",
+      ">Pricing</h1>",
       "db-glow",
+      "Self-host",
       "Free",
       "Team",
       "Pro",
       "Enterprise",
-      "$50",
-      "$300",
-      "billed annually",
-      "30 days of everything",
-      "5,000 AI credits",
-      "25,000 / month",
-      "Dashboard SSO",
-      "Security before procurement",
+      "$65",
+      "$250",
+      "30-day free trial of Pro",
+      "10,000 AI credits",
+      "250 AI credits",
+      "1,000 AI credits",
+      "SSO &amp; RBAC",
+      "Star on GitHub",
+      "Deploy with Vercel",
       'href="/signup"',
     ],
-    // The 90-day promo is dead; its copy must not resurface.
-    exclude: ["Free for 90 days"],
+    // The 90-day promo is dead; its copy must not resurface — and neither must the
+    // annual note the cards deliberately dropped.
+    exclude: ["Free for 90 days", "billed annually"],
   },
   {
     path: "/docs-platform-alternatives",

@@ -1,34 +1,83 @@
 {
-  "$comment": "THE single editable source for EVERYTHING about plans — the billing numbers AND the marketing copy. Two consumers read this file: (1) billing (src/lib/billing/catalog.ts + scripts/sync-billing.mjs) uses plans[].{key,name,blurb,listed,sort,includedMonthlyCredits,overage,entitlements}, prices, creditPacks, creditRates — `npm run billing:sync` publishes them to the DB (append-only: an entitlement/credit change mints a NEW immutable plan version so existing subscriptions stay pinned to what they bought — legacy vs new is automatic — and prices are archived, never mutated); `npm run billing:publish` mirrors them to Stripe. (2) marketing (src/lib/billing/plan-content.ts) uses plans[].display, positioning, and matrix for the /pricing page and the in-app Settings→Billing surface. IMPORTANT: display/matrix/positioning are DISPLAY-ONLY — editing them does NOT mint a new billing plan version (a bullet-wording change must not reprice anyone). Price strings on the cards are DERIVED from prices[] (not stored here), so a price change updates the cards automatically. A unit test (billing-plan-content.test.ts) fails if the matrix's numeric/flag claims disagree with entitlements, so the copy can't silently drift from what's enforced. Money is integer cents; credits are integers.",
+  "$comment": "MARKETING COPY + THE OFFLINE FREE FLOOR. Autumn is the billing source of truth (SPEC §10): plans, entitlements, prices, credit packs and the trial are configured THERE, and `billing:sync` / `billing:publish` are gone. Two things still live here, for reasons that are not laziness. (1) DISPLAY: plans[].display, matrix and positioning drive /pricing and the in-app plan cards. Autumn stores no marketing text and never will. (2) THE OFFLINE FREE FLOOR: plans[].entitlements feeds FREE_ENTITLEMENTS in catalog.ts, which is what an org resolves to when there is no billing backend to ask — no AUTUMN_SECRET_KEY, an unknown customer, the CLI. It is deliberately the most conservative answer rather than a mirror of whatever Free currently grants. KNOWN DRIFT RISK, recorded rather than solved: prices[] still supplies the numbers on the PUBLIC /pricing page, because that page must render with no key and no network (the smoke gate boots it with neither). Autumn supplies the numbers everywhere money actually moves. Change a price in Autumn and you MUST change it here too, or the storefront and the checkout disagree — no test can catch it, because catching it needs a live Autumn call. Money is integer cents; credits are integers.",
   "trial": {
     "days": 30,
-    "credits": 5000,
+    "credits": 10000,
     "planKey": "trial",
     "representsPlanKey": "pro"
   },
   "plans": [
     {
-      "key": "free",
-      "name": "Free",
-      "blurb": "For open-source projects and small docs sites",
-      "listed": true,
-      "sort": 0,
+      "key": "selfhost",
+      "name": "Self-host",
+      "blurb": "For individuals",
+      "listed": false,
+      "sort": -1,
       "includedMonthlyCredits": 0,
       "overageCentsPerThousandCredits": null,
       "entitlements": {
-        "sites": 1,
-        "editors": 3,
-        "analyticsRetentionDays": 7,
+        "sites": -1,
+        "editors": -1,
+        "analyticsRetentionDays": 0,
         "features": {
-          "assistant": false,
+          "assistant": true,
           "writerAgent": false,
           "workflows": false,
           "sso": false,
           "rbac": false,
           "previewDeployments": false,
           "adminApis": false,
-          "advancedInsights": false,
-          "multiRepo": false,
+          "insights": false,
+          "scim": false,
+          "whiteLabel": false
+        }
+      },
+      "display": {
+        "icon": "Code",
+        "badge": "OSS",
+        "highlight": false,
+        "priceOverride": "$0",
+        "cta": {
+          "label": "Star on GitHub",
+          "href": "https://github.com/papervine/papervine",
+          "brand": "github"
+        },
+        "secondaryCta": {
+          "label": "Deploy with Vercel",
+          "href": "https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fpapervine%2Fpapervine&root-directory=apps%2Fcli&project-name=papervine-docs&repository-name=papervine-docs",
+          "brand": "vercel"
+        },
+        "lead": null,
+        "features": [
+          "Custom domain",
+          "In-memory search",
+          "LLMs.txt",
+          "MCP server",
+          "AI Assistant (BYOK)"
+        ]
+      }
+    },
+    {
+      "key": "free",
+      "name": "Free",
+      "blurb": "For individuals and small teams",
+      "listed": true,
+      "sort": 0,
+      "includedMonthlyCredits": 250,
+      "overageCentsPerThousandCredits": null,
+      "entitlements": {
+        "sites": 1,
+        "editors": 5,
+        "analyticsRetentionDays": 7,
+        "features": {
+          "assistant": false,
+          "writerAgent": true,
+          "workflows": false,
+          "sso": false,
+          "rbac": false,
+          "previewDeployments": true,
+          "adminApis": false,
+          "insights": false,
           "scim": false,
           "whiteLabel": false
         }
@@ -36,43 +85,47 @@
       "display": {
         "icon": "Rocket",
         "badge": null,
-        "highlight": false,
+        "highlight": true,
         "priceOverride": "$0",
         "cta": { "label": "Get started", "href": "/signup" },
         "lead": null,
         "features": [
-          "Git-backed docs",
+          "5 team members",
+          "Web editor",
           "Custom domain",
-          "Reader authentication",
-          "Visual + MDX editor",
-          "Search and analytics",
+          "Search",
+          "Authentication",
           "API playground",
-          "MCP server"
+          "Preview deployments",
+          "Sync with GitHub",
+          "LLMs.txt",
+          "MCP server",
+          "250 AI credits",
+          "Analytics"
         ]
       }
     },
     {
       "key": "team",
       "name": "Team",
-      "blurb": "For small teams that want AI docs and real security",
+      "blurb": "For startups and growing teams",
       "listed": true,
       "sort": 1,
-      "includedMonthlyCredits": 5000,
+      "includedMonthlyCredits": 1000,
       "overageCentsPerThousandCredits": 800,
       "entitlements": {
         "sites": 3,
-        "editors": 8,
+        "editors": 9999,
         "analyticsRetentionDays": 90,
         "features": {
           "assistant": true,
           "writerAgent": true,
-          "workflows": true,
+          "workflows": false,
           "sso": true,
           "rbac": true,
           "previewDeployments": true,
           "adminApis": true,
-          "advancedInsights": false,
-          "multiRepo": false,
+          "insights": false,
           "scim": false,
           "whiteLabel": false
         }
@@ -85,26 +138,25 @@
         "cta": { "label": "Start free trial", "href": "/signup" },
         "lead": "Everything in Free",
         "features": [
-          "5,000 AI credits / month",
-          "AI assistant and writing agent",
-          "Workflow automations",
-          "SSO & RBAC",
-          "Preview deployments",
-          "Admin APIs"
+          "Unlimited team members",
+          "Multiplayer Editing",
+          "AI Assistant",
+          "1,000 AI credits",
+          "SSO & RBAC"
         ]
       }
     },
     {
       "key": "pro",
       "name": "Pro",
-      "blurb": "For production docs teams",
+      "blurb": "For global teams",
       "listed": true,
       "sort": 2,
       "includedMonthlyCredits": 25000,
       "overageCentsPerThousandCredits": 600,
       "entitlements": {
         "sites": 10,
-        "editors": 25,
+        "editors": 9999,
         "analyticsRetentionDays": 365,
         "features": {
           "assistant": true,
@@ -114,26 +166,25 @@
           "rbac": true,
           "previewDeployments": true,
           "adminApis": true,
-          "advancedInsights": true,
-          "multiRepo": true,
+          "insights": true,
           "scim": false,
           "whiteLabel": false
         }
       },
       "display": {
         "icon": "Zap",
-        "badge": "Popular",
-        "highlight": true,
+        "badge": null,
+        "highlight": false,
         "priceOverride": null,
         "cta": { "label": "Start free trial", "href": "/signup" },
         "lead": "Everything in Team",
         "features": [
-          "25,000 AI credits / month",
+          "AI Agent",
+          "AI Automations",
+          "AI Insights",
+          "Bring your own model (BYOK)",
           "Advanced insights",
-          "Multi-repo docs",
-          "More sites and editors",
-          "1-year analytics retention",
-          "Priority support"
+          "Advanced customization"
         ]
       }
     },
@@ -157,14 +208,13 @@
           "rbac": true,
           "previewDeployments": true,
           "adminApis": true,
-          "advancedInsights": true,
-          "multiRepo": true,
+          "insights": true,
           "scim": true,
           "whiteLabel": true
         }
       },
       "display": {
-        "icon": "Briefcase",
+        "icon": "Building2",
         "badge": null,
         "highlight": false,
         "priceOverride": "Contact us",
@@ -174,6 +224,7 @@
         },
         "lead": "Everything in Pro",
         "features": [
+          "No branding",
           "Committed AI credit volume",
           "SCIM provisioning",
           "Security and legal review",
@@ -203,8 +254,7 @@
           "rbac": true,
           "previewDeployments": true,
           "adminApis": true,
-          "advancedInsights": true,
-          "multiRepo": true,
+          "insights": true,
           "scim": false,
           "whiteLabel": false
         }
@@ -212,10 +262,10 @@
     }
   ],
   "prices": [
-    { "planKey": "team", "interval": "month", "unitAmountCents": 5000, "currency": "usd" },
-    { "planKey": "team", "interval": "year", "unitAmountCents": 48000, "currency": "usd" },
-    { "planKey": "pro", "interval": "month", "unitAmountCents": 30000, "currency": "usd" },
-    { "planKey": "pro", "interval": "year", "unitAmountCents": 300000, "currency": "usd" }
+    { "planKey": "team", "interval": "month", "unitAmountCents": 6500, "currency": "usd" },
+    { "planKey": "team", "interval": "year", "unitAmountCents": 66000, "currency": "usd" },
+    { "planKey": "pro", "interval": "month", "unitAmountCents": 25000, "currency": "usd" },
+    { "planKey": "pro", "interval": "year", "unitAmountCents": 240000, "currency": "usd" }
   ],
   "creditPacks": [
     { "key": "pack-5k", "name": "5,000 credits", "credits": 5000, "priceCents": 3500 },
@@ -235,11 +285,11 @@
   "positioning": [
     {
       "title": "Security before procurement",
-      "body": "SSO and role-based access live in the $50 plan, not behind an enterprise negotiation. Growing teams shouldn't need a sales call to lock down their docs."
+      "body": "SSO and role-based access live in the $65 Team plan, not behind an enterprise negotiation. Growing teams shouldn't need a sales call to lock down their docs."
     },
     {
-      "title": "A real plan between $0 and $450",
-      "body": "The docs-platform category jumps from free straight to enterprise-lite pricing. Team fills that gap; Pro undercuts the category flagship with 2.5× the AI credits."
+      "title": "Self-host for free; hosted if you want auth/Studio/workflows",
+      "body": "Elastic License 2.0 OSS renderer. BYOK AI from day one. Hosted credits optional, hard caps by default. Scheduled workflows at $250, not enterprise-only."
     },
     {
       "title": "Your docs, never locked in",
@@ -250,67 +300,60 @@
     {
       "group": "Limits",
       "rows": [
-        { "label": "Docs sites", "free": "1", "team": "3", "pro": "10", "enterprise": "Custom" },
-        { "label": "Editors", "free": "3", "team": "8", "pro": "25", "enterprise": "Custom" },
-        { "label": "Analytics retention", "free": "7 days", "team": "90 days", "pro": "1 year", "enterprise": "Custom" }
+        { "label": "Docs sites", "selfhost": "Unlimited", "free": "1", "team": "3", "pro": "10", "enterprise": "Custom" },
+        { "label": "Team members", "selfhost": false, "free": "5 team members", "team": "Unlimited team members", "pro": "Unlimited team members", "enterprise": "Custom" },
+        { "label": "Analytics retention", "selfhost": false, "free": "7 days", "team": "90 days", "pro": "1 year", "enterprise": "Custom" }
       ]
     },
     {
-      "group": "AI",
+      "group": "Core Features",
       "rows": [
-        { "label": "AI credits", "free": "Trial only", "team": "5,000 / month", "pro": "25,000 / month", "enterprise": "Committed volume" },
-        { "label": "Assistant", "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "Writing agent", "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "Routines", "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "Credit packs", "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "Overage (opt-in, hard caps by default)", "free": false, "team": "$0.008 / credit", "pro": "$0.006 / credit", "enterprise": "Best rate" }
+        { "label": "Custom domain", "selfhost": "DIY reverse proxy", "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Search", "selfhost": "In-memory search", "free": "Search", "team": "Search", "pro": "Search", "enterprise": "Search" },
+        { "label": "LLMs.txt", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "MCP server", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Bring your own model (BYOK)", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Web editor", "selfhost": false, "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Authentication", "selfhost": false, "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "API playground", "selfhost": true, "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Preview deployments", "selfhost": false, "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Sync with GitHub", "selfhost": false, "free": true, "team": true, "pro": true, "enterprise": true }
       ]
     },
     {
-      "group": "Features",
+      "group": "AI Features",
       "rows": [
-        { "label": "Git sync", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Search", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Visual + MDX editor", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "API playground", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "MCP server", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Analytics", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "User feedback", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Admin APIs", "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "Advanced insights", "free": false, "team": false, "pro": true, "enterprise": true },
-        { "label": "Multi-repo", "free": false, "team": false, "pro": true, "enterprise": true }
+        { "label": "AI credits", "selfhost": "BYOK", "free": "250 / month", "team": "1,000 / month", "pro": "25,000 / month", "enterprise": "Committed volume" },
+        { "label": "AI search", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "AI Assistant", "selfhost": true, "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "AI Automations", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "AI Insights", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true }
       ]
     },
     {
-      "group": "Publishing",
+      "group": "Advanced Features",
       "rows": [
-        { "label": "Custom domain", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Preview deployments", "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "SEO optimizations", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Agent-readable output", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Custom components, CSS, and JS", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "White labeling", "free": true, "team": true, "pro": true, "enterprise": true }
+        { "label": "Analytics", "selfhost": false, "free": true, "team": true, "pro": true, "enterprise": true },
+        { "label": "Password-protected docs", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "Advanced Analytics", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "PDF Exports", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "Multiplayer Editing", "selfhost": false, "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "SSO & RBAC", "selfhost": false, "free": false, "team": true, "pro": true, "enterprise": true },
+        { "label": "AI Widget Embed", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "No branding", "selfhost": false, "free": false, "team": false, "pro": false, "enterprise": true }
       ]
     },
     {
-      "group": "Security",
+      "group": "Enterprise",
       "rows": [
-        { "label": "Reader authentication", "free": true, "team": true, "pro": true, "enterprise": true },
-        { "label": "Role-based permissions", "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "Dashboard SSO", "free": false, "team": true, "pro": true, "enterprise": true },
-        { "label": "SCIM", "free": false, "team": false, "pro": false, "enterprise": true },
-        { "label": "Security review", "free": false, "team": false, "pro": false, "enterprise": true },
-        { "label": "Legal review", "free": false, "team": false, "pro": false, "enterprise": true },
-        { "label": "Custom SLAs", "free": false, "team": false, "pro": false, "enterprise": true }
-      ]
-    },
-    {
-      "group": "Services",
-      "rows": [
-        { "label": "Priority support", "free": false, "team": false, "pro": true, "enterprise": true },
-        { "label": "Migration services", "free": false, "team": false, "pro": false, "enterprise": true },
-        { "label": "Dedicated customer success", "free": false, "team": false, "pro": false, "enterprise": true },
-        { "label": "24/7 incident monitoring", "free": false, "team": false, "pro": false, "enterprise": true }
+        { "label": "Priority support", "selfhost": false, "free": false, "team": false, "pro": true, "enterprise": true },
+        { "label": "SCIM", "selfhost": false, "free": false, "team": false, "pro": false, "enterprise": true },
+        { "label": "Security review", "selfhost": false, "free": false, "team": false, "pro": false, "enterprise": true },
+        { "label": "Legal review", "selfhost": false, "free": false, "team": false, "pro": false, "enterprise": true },
+        { "label": "Custom SLAs", "selfhost": false, "free": false, "team": false, "pro": false, "enterprise": true },
+        { "label": "Migration services", "selfhost": false, "free": false, "team": false, "pro": false, "enterprise": true },
+        { "label": "Dedicated customer success", "selfhost": false, "free": false, "team": false, "pro": false, "enterprise": true },
+        { "label": "24/7 incident monitoring", "selfhost": false, "free": false, "team": false, "pro": false, "enterprise": true }
       ]
     }
   ]

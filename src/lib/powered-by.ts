@@ -4,9 +4,9 @@ import type { PlanFeatureKey, PlanKey } from "./billing/catalog";
  * Whether a tenant docs site shows the "Powered by Papervine" badge.
  *
  * Expressed as a plan ENTITLEMENT (`whiteLabel`) rather than a `planKey === "enterprise"`
- * comparison, because that's how every other plan difference in this codebase is expressed: it
- * goes through catalog.json → `billing:sync` → `billing:publish`, so moving the badge to Pro
- * later is a catalog edit and a republish rather than a deploy.
+ * comparison, because that's how every other plan difference in this codebase is expressed:
+ * entitlements come from Autumn, so moving the badge to a different tier is a catalog edit
+ * there rather than a deploy here.
  *
  * Pure and free of `server-only` so it can be unit-tested directly; the DB read and the caching
  * live in `powered-by-store.ts`.
