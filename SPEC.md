@@ -5041,6 +5041,18 @@ Minimum to operate the SaaS:
   rendered as a paid plan ("Renews Oct 1" on the seeded org). `subscriptionStatus` in the
   adapter translates active-with-trial-end → trialing, used by both the lookup and the summary;
   pinned against the capture.
+  **Contract migration (2026-09-02, drizzle 0033).** Expand-then-contract's second half. The
+  cutover left nine tables no code read: `billing_plan`, `billing_plan_version`,
+  `billing_price`, `credit_pack` (the Postgres catalog), `billing_customer`,
+  `billing_subscription` (the Stripe mirrors), `stripe_event` (webhook log),
+  `credit_ledger`, `credit_balance` (the ledger and its cache). Verified by grepping every
+  table's schema export across src/scripts/tests — zero references outside the schema file —
+  and dropped. Kept: `usage_event` (what Settings → Usage draws; Autumn holds balances, not
+  which feature spent them) and `credit_rate_version` (the rate tables usage is rated with).
+  The seed's keep-list shrank to that one table, and the e2e test that drove
+  `billing_subscription` by hand was retired with a note — its honest replacement needs a paid
+  plan attached in sandbox, i.e. checkout. Nobody is paying, so nothing needed backfilling out
+  of the dropped rows.
   **Backfill (2026-09-01).** Customers are created lazily (org-creation hook, first billing
   action), so every org that predates the cutover or is seeded by SQL has none and sits on the
   Free floor unmetered. `scripts/sync-autumn-customers.mjs` creates the missing customers with

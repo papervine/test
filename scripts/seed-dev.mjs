@@ -288,16 +288,12 @@ async function syncToStorage({ repoOwner, repoName, branch, prefix }) {
 
 // 0. Reset to ONLY seeded data (prod-guarded above). Truncate every dev/tenant table so
 // leftover experiments — extra orgs, hand-connected sites, orphaned automations/sessions — are
-// gone; the seed below rebuilds the fixtures from scratch. The billing CATALOG tables survive
-// the truncate, but only because they are legacy: Autumn holds the catalog now, and these are
-// unread until the contract migration drops them.
-const CATALOG_TABLES = new Set([
-  "billing_plan",
-  "billing_plan_version",
-  "billing_price",
-  "credit_pack",
-  "credit_rate_version",
-]);
+// gone; the seed below rebuilds the fixtures from scratch. One billing table survives the
+// truncate: `credit_rate_version`, the token->credit rate tables usage is rated with. It is
+// versioned, append-only reference data, not fixture data — wiping it would make every seeded
+// usage_event row "unrated". (The rest of the old Postgres billing catalog is gone: Autumn holds
+// plans and subscriptions now, and the contract migration dropped the tables.)
+const CATALOG_TABLES = new Set(["credit_rate_version"]);
 async function wipeDb() {
   const rows = await sql`select tablename from pg_tables where schemaname = 'public'`;
   const wipe = rows.map((r) => r.tablename).filter((t) => !CATALOG_TABLES.has(t));

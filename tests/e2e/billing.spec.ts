@@ -208,43 +208,10 @@ test.describe("billing settings", () => {
     await expect(page.getByRole("heading", { name: "Billing", exact: true })).toBeVisible();
   });
 
-  test("downgrade to Free and resume", async ({ page }) => {
-    test.skip(!AUTUMN, "needs a billing backend (AUTUMN_SECRET_KEY)");
-    // Put the org on a non-Stripe active paid plan (the seed/support-granted shape).
-    const [org] = await sql`select id from organization where slug = ${ORG_SLUG}`;
-    const periodEnd = new Date(Date.now() + 20 * 86_400_000);
-    await sql`update billing_subscription set status = 'active', trial_ends_at = null,
-              stripe_subscription_id = null, cancel_at_period_end = false,
-              current_period_start = now(), current_period_end = ${periodEnd}
-              where organization_id = ${org.id}`;
+  // "downgrade to Free and resume" used to live here. It drove the flow by writing the
+  // billing_subscription mirror directly (put the org on an active paid plan, click Downgrade,
+  // read cancel_at_period_end back). That table is gone — Autumn holds subscription state —
+  // and the honest replacement needs a paid plan attached in sandbox, which means Stripe
+  // checkout. Cover it when the checkout path gets its own sandbox-only spec.
 
-    await page.goto(billingPath);
-    await expect(page.getByText(/Renews /)).toBeVisible();
-
-    await page.getByRole("button", { name: "Downgrade to Free" }).click();
-    await page.getByRole("button", { name: "Confirm downgrade" }).click();
-    await expect(page.getByText(/Downgrades to Free on /)).toBeVisible();
-    await expect(page.getByText(/Cancels /)).toBeVisible();
-    const [afterCancel] = await sql`select cancel_at_period_end from billing_subscription
-                                    where organization_id = ${org.id}`;
-    expect(afterCancel.cancel_at_period_end).toBe(true);
-
-    await page.getByRole("button", { name: "Resume plan" }).click();
-    await expect(page.getByText(/Renews /)).toBeVisible();
-    // After resume the control must return to the initial "Downgrade to Free" state —
-    // NOT the mid-confirm "Confirm downgrade" (the `confirming` flag leaked across the
-    // refresh and stuck the button on the confirm step; regression guard).
-    await expect(page.getByRole("button", { name: "Downgrade to Free" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Confirm downgrade" })).toHaveCount(0);
-    const [afterResume] = await sql`select cancel_at_period_end from billing_subscription
-                                    where organization_id = ${org.id}`;
-    expect(afterResume.cancel_at_period_end).toBe(false);
-
-    // Restore the trial state the other tests assume.
-    const ends = new Date(Date.now() + 30 * 86_400_000);
-    await sql`update billing_subscription set plan_version_id = 'bpv-trial-e2e',
-              status = 'trialing', trial_ends_at = ${ends}, cancel_at_period_end = false,
-              current_period_start = null, current_period_end = null
-              where organization_id = ${org.id}`;
-  });
 });

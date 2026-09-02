@@ -344,7 +344,7 @@ hand-walk signup → onboarding. Seed a known account and drive a real browser:
   real-time collab (SPEC §9.2; same-browser tabs share a BroadcastChannel and can't show
   cross-machine remote carets). Plus an org and connected sites with activity + analytics
   data. It's a **full reset**: it first truncates every dev/tenant table and clears the
-  content bucket's `sites/` prefix (keeping only the `billing:sync` catalog), so leftover experiments — extra
+  content bucket's `sites/` prefix (keeping only the `credit_rate_version` rate tables), so leftover experiments — extra
   orgs, hand-connected sites — are gone and the DB holds *only* the seed. **Prod-guarded**
   (refuses any non-localhost `DATABASE_URL`). Needs `docker compose up` (Postgres + MinIO).
   With a **sandbox** `AUTUMN_SECRET_KEY` in `.env.local` it also creates the seeded org as an
