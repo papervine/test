@@ -100,3 +100,71 @@ describe("disconnectConnection", () => {
     expect(dbDelete).not.toHaveBeenCalled();
   });
 });
+
+// Regression: what an operator is TOLD when Nango rejects a request.
+//
+// Found live (2026-09-02) wiring up the first real account: connecting failed with
+// "Request failed with status code 400" — axios's message, technically true and totally
+// unactionable — while Nango's response body said exactly what was wrong ("Integration
+// does not exist") and named the field. Cost a debugging session that a readable error
+// would have ended immediately.
+describe("nangoErrorMessage", () => {
+  // The real body Nango returned for a missing integration.
+  const integrationMissing = {
+    response: {
+      status: 400,
+      data: {
+        error: {
+          code: "invalid_body",
+          errors: [
+            { code: "custom", message: "Integration does not exist", path: ["allowed_integrations", 0] },
+          ],
+        },
+      },
+    },
+  };
+
+  it("turns the missing-integration 400 into the actual fix, naming the key", async () => {
+    const { nangoErrorMessage } = await load();
+    const msg = nangoErrorMessage(integrationMissing, { providerConfigKey: "google-drive" });
+    expect(msg).toContain('"google-drive"');
+    expect(msg).toMatch(/create it in the nango dashboard/i);
+    // The useless axios text must not be what surfaces.
+    expect(msg).not.toMatch(/status code 400/i);
+  });
+
+  it("surfaces a structured validation message with its code", async () => {
+    const { nangoErrorMessage } = await load();
+    expect(
+      nangoErrorMessage({
+        response: { data: { error: { code: "invalid_body", message: "end_user.id is required" } } },
+      }),
+    ).toBe("end_user.id is required (invalid_body)");
+  });
+
+  it("prefers the field-level error over the envelope message", async () => {
+    const { nangoErrorMessage } = await load();
+    expect(
+      nangoErrorMessage({
+        response: {
+          data: { error: { message: "Invalid body", errors: [{ message: "bad allowed_integrations" }] } },
+        },
+      }),
+    ).toContain("bad allowed_integrations");
+  });
+
+  it("falls back to the error's own message, then to a default", async () => {
+    const { nangoErrorMessage } = await load();
+    expect(nangoErrorMessage(new Error("socket hang up"))).toBe("socket hang up");
+    expect(nangoErrorMessage(null)).toBe("Nango request failed.");
+    expect(nangoErrorMessage({ response: { data: "html error page" } })).toBe(
+      "Nango request failed.",
+    );
+  });
+
+  it("doesn't claim a missing integration when there's no key for context", async () => {
+    const { nangoErrorMessage } = await load();
+    // Without the key the advice can't name what to create, so report the raw complaint.
+    expect(nangoErrorMessage(integrationMissing)).toContain("Integration does not exist");
+  });
+});

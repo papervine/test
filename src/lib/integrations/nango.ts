@@ -23,6 +23,37 @@ export function nangoConfigured(): boolean {
   return !!process.env.NANGO_SECRET_KEY?.trim();
 }
 
+/**
+ * What actually went wrong, out of an axios-shaped Nango error.
+ *
+ * `err.message` alone is "Request failed with status code 400" — true, useless, and it
+ * cost a real debugging session: the operator saw that while the actual complaint,
+ * "Integration does not exist", sat in the response body naming the exact field. Nango
+ * reports structured validation errors, so dig them out and say which one.
+ *
+ * Exported and pure so the shapes are unit-tested rather than discovered in production.
+ */
+export function nangoErrorMessage(err: unknown, context?: { providerConfigKey?: string }): string {
+  const response = (err as { response?: { data?: unknown; status?: number } } | null)?.response;
+  const data = response?.data as
+    | { error?: { code?: string; message?: string; errors?: { message?: string; path?: unknown[] }[] } }
+    | undefined;
+  const error = data?.error;
+  const detail = error?.errors?.find((e) => e?.message)?.message ?? error?.message;
+
+  // The overwhelmingly common setup mistake, and one nobody can act on from the raw text:
+  // the integration has to be created in the Nango dashboard, under this exact key.
+  if (detail && /integration does not exist/i.test(detail) && context?.providerConfigKey) {
+    return (
+      `Nango has no integration with the key "${context.providerConfigKey}". Create it in ` +
+      `the Nango dashboard (with your own OAuth client) using exactly that unique key.`
+    );
+  }
+  if (detail) return error?.code ? `${detail} (${error.code})` : detail;
+  if (err instanceof Error && err.message) return err.message;
+  return "Nango request failed.";
+}
+
 async function nangoClient() {
   const secretKey = process.env.NANGO_SECRET_KEY?.trim();
   if (!secretKey) return null;
@@ -67,7 +98,7 @@ export async function createConnectSession(input: {
     const token = res?.data?.token;
     return token ? { token } : { error: "Nango returned no session token." };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
+    return { error: nangoErrorMessage(err, { providerConfigKey: connector.providerConfigKey }) };
   }
 }
 
@@ -169,8 +200,11 @@ export async function disconnectConnection(
       await nango.deleteConnection(connector.providerConfigKey, row.nangoConnectionId);
     } catch (err) {
       // Already gone on their side is success, not failure: converge, don't bookkeep.
-      const message = err instanceof Error ? err.message : String(err);
-      if (!/not.?found|404/i.test(message)) return { error: message };
+      // Match on the raw message too — a 404 may arrive as the bare axios text with no
+      // structured body to read.
+      const raw = err instanceof Error ? err.message : String(err);
+      const message = nangoErrorMessage(err, { providerConfigKey: connector.providerConfigKey });
+      if (!/not.?found|404/i.test(`${raw} ${message}`)) return { error: message };
     }
   }
   await db.delete(integrationConnection).where(eq(integrationConnection.id, row.id));
@@ -220,6 +254,6 @@ export async function proxy<T = unknown>(input: {
     });
     return { data: res.data as T };
   } catch (err) {
-    return { error: err instanceof Error ? err.message : String(err) };
+    return { error: nangoErrorMessage(err, { providerConfigKey: connector.providerConfigKey }) };
   }
 }
