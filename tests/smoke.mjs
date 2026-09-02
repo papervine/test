@@ -373,6 +373,15 @@ const SEARCH_CHECKS = [
 // app-host routing from regressing.
 const CONTROL_PLANE_CHECKS = [
   {
+    // The Autumn webhook receiver (SPEC §10). A GET is 405 (POST-only route): proves the route
+    // exists on the app host and isn't swallowed by the auth gate or a rewrite. The POST path
+    // (signature verification, 401/503) is pinned by tests/unit/billing-webhook.test.ts.
+    host: "app.localhost",
+    path: "/api/webhooks/autumn",
+    expectStatus: 405,
+    desc: "the Autumn webhook route exists on the app host (GET → 405, not a login redirect)",
+  },
+  {
     host: "app.localhost",
     path: "/",
     desc: "unauthenticated app host / redirects to /login (edge gate)",

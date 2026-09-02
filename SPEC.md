@@ -5041,6 +5041,28 @@ Minimum to operate the SaaS:
   rendered as a paid plan ("Renews Oct 1" on the seeded org). `subscriptionStatus` in the
   adapter translates active-with-trial-end → trialing, used by both the lookup and the summary;
   pinned against the capture.
+  **Webhook + cache (2026-09-02).** Until now every dashboard render read Autumn live (the
+  layout once, the four gated pages a second time; billing settings three times) and nothing
+  told an open page that billing had changed. Two changes, one mechanism. Dashboard reads go
+  through `getBillingLookup` → React `cache()` (dedupes layout + page within a render) →
+  `unstable_cache` per org, 60s, tagged `billing:{orgId}`; a failed lookup is not cached. The
+  AI gate stays live on purpose (a stale "allowed" is money). And `/api/webhooks/autumn`
+  receives Autumn's Svix-delivered events — verified by hand with Node crypto over
+  `id.timestamp.body` (Standard Webhooks; no dependency for one endpoint), 5-minute replay
+  window, rotation-tolerant — and on any plan/balance event revalidates that tag and publishes
+  `billing:changed` on a new per-org private channel (`private-org-{id}`, membership-gated in
+  the Pusher auth route). `OrgRealtimeRefresh` in the org layout subscribes and calls
+  `router.refresh()`, so an unlock card becomes the real page without a reload. No delivery
+  table: a nudge is idempotent, which is what let the Stripe webhook's state machinery go.
+  Unconfigured → 503 (visible in Autumn's delivery log); realtime unconfigured → the cache drop
+  alone makes the next navigation correct. One trap the cache introduced: `unstable_cache`
+  stores JSON, so the lookup's one Date (`trialEndsAt`) came back as a string on every HIT
+  and the layout's `trialStatus` 500'd on the second render of every dashboard page —
+  `reviveBillingLookup` (core.ts, pure) normalises it and is pinned by a round-trip unit test.
+  Unit-tested: 11 cases on the verifier/parser + 4 on the reviver; smoke pins the route on
+  the app host (GET → 405, not a login redirect). Verified in-browser: the dev org's page
+  authenticated `private-org-{id}` (200), a published signal produced exactly one RSC
+  refetch of the open route, console clean.
   **Unlock states (2026-09-02).** The AI surfaces (Automations, Agent, Assistant, the widget
   settings) used to render their controls regardless of plan and let the API 403 on first use.
   Now each page asks `getUnlock(orgId, surface)` first and, when the plan lacks the

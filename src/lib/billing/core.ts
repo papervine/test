@@ -181,6 +181,17 @@ export type BillingLookup =
   | { state: "none" } // org predates billing / catalog unsynced -> Free
   | { state: "error" }; // DB unreachable -> allow, warn, skip metering
 
+// A BillingLookup that has been through a JSON round trip (Next's data cache serializes
+// values) has its one Date — `sub.trialEndsAt` — as an ISO string. Revive it, so consumers
+// keep calling `.getTime()` on a Date. Anything already a Date passes through untouched, and
+// the `none`/`error` shapes carry nothing to revive.
+export function reviveBillingLookup(lookup: BillingLookup): BillingLookup {
+  if (lookup.state !== "ok") return lookup;
+  const raw: unknown = lookup.sub.trialEndsAt;
+  if (raw === null || raw instanceof Date) return lookup;
+  return { ...lookup, sub: { ...lookup.sub, trialEndsAt: new Date(raw as string) } };
+}
+
 export type AiAuthorization =
   | { allowed: true; metered: boolean }
   | { allowed: false; code: "upgrade_required" | "out_of_credits" };

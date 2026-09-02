@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { getSession, listOrganizations } from "@/lib/session";
 import { db } from "@/lib/db";
 import { site } from "@/lib/db/app-schema";
-import { authorizeRealtime, siteChannel } from "@/lib/realtime";
+import { authorizeRealtime, orgChannel, siteChannel } from "@/lib/realtime";
 
 // Private-channel auth for the live Activity feed (SPEC §10.3). pusher-js POSTs
 // { socket_id, channel_name } here before subscribing to `private-site-<id>`; we only sign
@@ -23,20 +23,35 @@ export async function POST(req: NextRequest) {
   const socketId = String(form.get("socket_id") ?? "");
   const channel = String(form.get("channel_name") ?? "");
 
-  // Channel must be exactly the canonical name for the site it claims — derive the id from
-  // it and re-form, rejecting anything that doesn't round-trip (no wildcard/foreign access).
+  // Two channel shapes, both canonical-or-nothing: derive the id from the name and re-form,
+  // rejecting anything that doesn't round-trip (no wildcard/foreign access).
+  //   private-org-<id>  — billing signals (SPEC §10); the viewer must be a member of the org.
+  //   private-site-<id> — the Activity feed; the viewer must be a member of the site's org.
+  const orgId = channel.startsWith("private-org-") ? channel.slice("private-org-".length) : null;
   const siteId = channel.startsWith("private-site-")
     ? channel.slice("private-site-".length)
     : null;
-  if (!socketId || !siteId || channel !== siteChannel(siteId)) {
+  const canonical = orgId
+    ? channel === orgChannel(orgId)
+    : siteId !== null && channel === siteChannel(siteId);
+  if (!socketId || !canonical) {
     return NextResponse.json({ error: "bad_request" }, { status: 400 });
+  }
+  if (orgId) {
+    const orgs = await listOrganizations();
+    if (!orgs?.some((o) => o.id === orgId)) {
+      return NextResponse.json({ error: "forbidden" }, { status: 403 });
+    }
+    const orgAuth = authorizeRealtime(socketId, channel);
+    if (!orgAuth) return NextResponse.json({ error: "realtime_disabled" }, { status: 503 });
+    return NextResponse.json(orgAuth);
   }
 
   // The site exists and the viewer is a member of its org — else 403 (don't leak existence).
   const [row] = await db
     .select({ organizationId: site.organizationId })
     .from(site)
-    .where(eq(site.id, siteId))
+    .where(eq(site.id, siteId as string))
     .limit(1);
   const orgs = row ? await listOrganizations() : null;
   if (!row || !orgs?.some((o) => o.id === row.organizationId)) {

@@ -10,6 +10,8 @@ import "server-only";
 import { randomUUID } from "node:crypto";
 import { desc } from "drizzle-orm";
 import { db } from "@/lib/db";
+import { cache } from "react";
+import { unstable_cache } from "next/cache";
 import { creditRateVersion, usageEvent } from "@/lib/db/app-schema";
 import { unlockDecision, type UnlockableSurface, type UnlockDecision } from "./unlock";
 import { type CreditRateTable } from "./catalog";
@@ -27,6 +29,7 @@ import {
   type AiAuthorization,
   type BillingLookup,
   type PlanFeatureKey,
+  reviveBillingLookup,
 } from "./core";
 
 export type { AiAuthorization } from "./core";
@@ -67,8 +70,43 @@ export async function startTrial(
  *  'none' = no billing state (Free), 'error' = backend trouble (fail open). The mapping and
  *  every defensive branch live in ./autumn — this stays a one-liner so the seam is obvious. */
 export async function getBillingLookup(organizationId: string): Promise<BillingLookup> {
-  return lookupOrg(organizationId);
+  return cachedLookup(organizationId);
 }
+
+/** The cache tag the Autumn webhook revalidates when an org's plan or balances change. */
+export function billingCacheTag(organizationId: string): string {
+  return `billing:${organizationId}`;
+}
+
+// Dashboard reads are cached for a minute per org and dropped the instant Autumn tells us
+// something changed (the webhook revalidates the tag). Two layers on purpose: React's request
+// cache dedupes the layout's read and the page's read within one render — the unlock gate
+// added a second call per page, and this folds it back to one — and Next's data cache spans
+// requests. A failed lookup is NOT cached (it throws out of the cached function and is caught
+// here), so an outage clears with the next request rather than sticking for a minute. The AI
+// gate (`authorizeAi`) deliberately does not use this: that is an authorization on a metered
+// call, and a stale "allowed" is money.
+const STALE_LOOKUP_ERROR = "__billing_lookup_error__";
+const cachedLookup = cache(async (organizationId: string): Promise<BillingLookup> => {
+  const read = unstable_cache(
+    async () => {
+      const lookup = await lookupOrg(organizationId);
+      if (lookup.state === "error") throw new Error(STALE_LOOKUP_ERROR);
+      return lookup;
+    },
+    ["billing-lookup", organizationId],
+    { revalidate: 60, tags: [billingCacheTag(organizationId)] },
+  );
+  try {
+    // The cache hands back JSON, so the Date inside is a string on a hit (but a Date on the
+    // miss that populated it) — normalise both ways. This bit on the first render: the org
+    // layout's `trialStatus` calls `trialEndsAt.getTime()`.
+    return reviveBillingLookup(await read());
+  } catch (err) {
+    if (err instanceof Error && err.message === STALE_LOOKUP_ERROR) return { state: "error" };
+    throw err;
+  }
+});
 
 /** Gate an AI request. `metered:false` means "let it run but don't try to debit"
  *  (platform docs, DB error, or a Free-plan feature that happens to be ungated). */
@@ -76,7 +114,8 @@ export async function authorizeAi(
   organizationId: string,
   feature: AiFeature,
 ): Promise<AiAuthorization> {
-  const lookup = await getBillingLookup(organizationId);
+  // Live, never cached — see cachedLookup for why.
+  const lookup = await lookupOrg(organizationId);
   return authorizeAiDecision(lookup, feature, new Date());
 }
 

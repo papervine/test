@@ -691,6 +691,15 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   is an **idempotent** `ensureAutomation()` helper: find the row or create it, so the toggle
   test still creates it via UI and the later tests stop caring who did. When a test needs
   something another test makes, make it yourself if it's missing.
+- **`unstable_cache` hands back JSON — a `Date` in the cached value is a string on every HIT,
+  and nothing types that.** The function's return type still says `Date`, the MISS that
+  populates the entry returns a real `Date`, and only the *second* render of the route
+  throws (`getTime is not a function`) — so the first load in a fresh dev server passes and
+  the smoke gate (one request per page) can never see it. This is how caching the billing
+  lookup 500'd every dashboard page: `trialEndsAt` reached the layout's `trialStatus` as an
+  ISO string. When you cache a value, either store primitives only or revive on read with a
+  pure helper that handles BOTH shapes (`reviveBillingLookup`), and unit-test it through a
+  `JSON.parse(JSON.stringify(x))` round trip — that is the cache, minus the cache.
 - **A static import is paid by every route that can reach it, and the smoke gate bills per
   check — so "it compiles" is not the same as "it is free".** Two versions of this bit in one
   sitting, both showing up as `request failed: timeout` on a *marketing* page that the change

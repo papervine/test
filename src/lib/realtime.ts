@@ -1,9 +1,8 @@
 import "server-only";
 import Pusher from "pusher";
-import { ACTIVITY_EVENT, siteChannel } from "./realtime-client";
+import { ACTIVITY_EVENT, BILLING_EVENT, orgChannel, siteChannel } from "./realtime-client";
 
-export { ACTIVITY_EVENT, siteChannel };
-
+export { ACTIVITY_EVENT, BILLING_EVENT, orgChannel, siteChannel };
 // Realtime publish + channel auth over the Pusher protocol (SPEC §10.3). Locally this
 // talks to a self-hosted, Pusher-compatible Soketi container (docker-compose); in prod the
 // same code points at hosted Pusher Channels — only env changes, the same swap pattern as
@@ -62,6 +61,22 @@ export async function triggerActivity(siteId: string): Promise<void> {
     await client.trigger(siteChannel(siteId), ACTIVITY_EVENT, {});
   } catch (e) {
     console.error(`[realtime] failed to publish ${ACTIVITY_EVENT} site=${siteId}`, e);
+  }
+}
+
+/**
+ * Tell any open dashboard for this org that its billing changed (SPEC §10 Billing) — the
+ * Autumn webhook calls this after a plan/balance event, and OrgRealtimeRefresh re-renders the
+ * route. Empty payload, same contract as triggerActivity: the listener re-reads from the
+ * source of truth (Autumn, via the now-invalidated cache), nothing transits the socket.
+ */
+export async function triggerBilling(orgId: string): Promise<void> {
+  const client = serverClient();
+  if (!client) return;
+  try {
+    await client.trigger(orgChannel(orgId), BILLING_EVENT, {});
+  } catch (e) {
+    console.error(`[realtime] failed to publish ${BILLING_EVENT} org=${orgId}`, e);
   }
 }
 

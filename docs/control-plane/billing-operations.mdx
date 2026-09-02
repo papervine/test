@@ -91,6 +91,25 @@ sandbox key, so the seeded organization arrives in Autumn on the trial with no e
 The seed refuses to write to the live environment.
 </Note>
 
+## Webhooks
+
+Autumn can tell Papervine the moment an organization's plan or balances change. Register
+`https://<your app host>/api/webhooks/autumn` as a webhook endpoint in Autumn — once per
+environment — and put the endpoint secret Autumn shows (`whsec_…`) in
+`AUTUMN_WEBHOOK_SECRET`.
+
+With it configured, a delivery does two things and writes nothing: it drops the
+organization's cached billing read, and it signals any dashboard that organization has open,
+which re-renders in place. A page showing "Automations come with Pro" becomes the real
+Automations page as the upgrade lands; the rail's trial pills disappear when a trial ends.
+
+Without it, nothing breaks. Dashboard reads are cached for at most a minute, so any
+navigation shows the new state within that window. Deliveries are verified by signature;
+unsigned or badly signed requests are refused, and a registered URL with no secret answers
+503 so the failure is visible in Autumn's delivery log rather than silent. Realtime
+re-rendering also needs the realtime service configured; without it the cache drop alone
+still makes the next navigation correct.
+
 ## What happens without a key
 
 Leaving `AUTUMN_SECRET_KEY` unset is a supported state, not a broken one — it is how

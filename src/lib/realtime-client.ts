@@ -10,6 +10,14 @@ export function siteChannel(siteId: string): string {
 
 export const ACTIVITY_EVENT = "activity:changed";
 
+// One private channel per ORG for billing (SPEC §10): the Autumn webhook publishes here when a
+// plan or balance changes, and the dashboard shell re-renders. Org-scoped because entitlements
+// are — every site under the org unlocks or locks together.
+export function orgChannel(orgId: string): string {
+  return `private-org-${orgId}`;
+}
+export const BILLING_EVENT = "billing:changed";
+
 // pusher-js client options, minus the version-specific type (kept loose so we don't pull the
 // SDK's types into shared code). `cluster: ""` is required by pusher-js when using an
 // explicit wsHost (Soketi) — it would otherwise build a `*.pusher.com` URL.

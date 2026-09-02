@@ -6,6 +6,7 @@ import { autumnConfigured } from "@/lib/billing/autumn";
 import { unlockDecision } from "@/lib/billing/unlock";
 import { AppRail } from "@/components/app/AppRail";
 import { SiteAssistantWidget } from "@/components/app/SiteAssistantWidget";
+import { OrgRealtimeRefresh } from "@/components/app/OrgRealtimeRefresh";
 import { PlatformAdminBanner } from "@/components/app/PlatformAdminBanner";
 import { PlatformShell } from "@/components/platform/PlatformShell";
 import { Toaster } from "@/components/ui/sonner";
@@ -66,6 +67,10 @@ export default async function OrgLayout({
         {/* Dashboard-wide action feedback (sonner) — the single mount for every app-host surface,
             the editor included. A second <Toaster/> inside a page renders every toast twice. */}
         <Toaster />
+        {/* Re-renders the route when Autumn says this org's billing changed (SPEC §10) — an
+            unlock card becomes the real page, trial pills drop, no reload. Renders nothing; no-op
+            without realtime configured. */}
+        <OrgRealtimeRefresh orgId={org.id} />
         {/* The owner's OWN assistant widget, for whichever site the rail considers active
             (SPEC §8.7) — the real embed script, not a preview, so enabling it on
             Settings → Widget puts the thing you just enabled in the corner to try. Mounted
