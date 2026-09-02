@@ -190,24 +190,24 @@ jobs:
 
       - run: npm ci
 
-      # Turbopack's filesystem cache (on by default for `next dev` in Next 16) persists
-      # compiler artifacts under `<distDir>/dev/cache` — 436MB after one run, and the single
-      # biggest cost in this job is that without it every run compiles every route from zero.
-      # Keyed on the lockfile and a source hash; the restore-keys fall back to a same-lockfile
-      # cache from any earlier commit or any other shard, which is where the value actually is:
-      # the exact key hits rarely, but the cache is content-addressed, so a partial hit still
-      # leaves every unchanged module warm. Only `dev/cache` is cached — never `dev/server` or
-      # `dev/static` (derived output; Turbopack regenerates them fast from the cache) and never
-      # `dev/lock` (a stale pid is harmless to the dev-lock guard but pointless to ship).
-      - name: Restore Turbopack cache
-        uses: actions/cache@v4
-        with:
-          path: .next-e2e/dev/cache
-          key: e2e-turbopack-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'packages/**', 'next.config.mjs', 'tailwind.config.ts') }}-shard-${{ matrix.shard }}
-          restore-keys: |
-            e2e-turbopack-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'packages/**', 'next.config.mjs', 'tailwind.config.ts') }}-
-            e2e-turbopack-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
-
+      # NO Turbopack filesystem cache across runs — deliberately, after measuring. Next 16
+      # turns it on by default for `next dev` and it lives under `<distDir>/dev/cache`, so
+      # restoring it between CI runs looked like the obvious compile win. It is also what made
+      # the heavy shard's dev server ABORT mid-suite:
+      #
+      #   thread 'tokio-rt-worker' panicked at
+      #   turbopack/crates/turbo-tasks-backend/src/backend/operation/aggregation_update.rs
+      #   inner_of_upper_lost_follower is not able to remove follower TaskId … analyze_ecmascript_module
+      #   turbo-tasks: an internal panic occurred outside the per-task panic boundary. Aborting.
+      #
+      # Zero panics on the run before the cache step existed; one on every run after it that
+      # restored a cache — the persisted task graph (from another shard or commit) disagrees
+      # with the live one and the aggregation invariant fails. The process aborts, the port
+      # closes, and every remaining test fails in ~200ms with ECONNREFUSED, which reads as
+      # "the runner is flaky" until you read the server's last lines. `free -m` before/after
+      # (below) proved it was never memory. A Turbopack bug, reported upstream; until it is
+      # fixed, each shard compiles cold and RUST_BACKTRACE is set so the next panic explains
+      # itself.
       # The browser download is ~26s per shard and changes only when Playwright does.
       - name: Restore Playwright browser
         id: pw-cache
@@ -247,6 +247,10 @@ jobs:
         run: free -m
 
       - name: E2E (deterministic — skips @external)
+        env:
+          # Turbopack's panic message says "run with RUST_BACKTRACE=1"; do it up front so the
+          # one time it matters we are not reproducing to find out where.
+          RUST_BACKTRACE: "1"
         run: npm run test:e2e -- --grep-invert @external --shard=${{ matrix.shard }}/${{ strategy.job-total }}
 
       - name: Memory after E2E + kernel OOM record

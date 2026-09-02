@@ -682,6 +682,24 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   guess into a fact is checking `main`'s own tip in CI**: same job, green there and red here
   means it is yours, not the documented e2e flake. Two consecutive identical failures mean a
   budget, not a race.
+- **A dev server that dies mid-suite prints nothing where you are looking — read the
+  `[WebServer]` lines, not the test verdicts.** The e2e shard that kept failing showed 20
+  tests failing in ~200ms each after one slow one. That shape is a dead server (every
+  `page.goto` → `ERR_CONNECTION_REFUSED`, every `request.post` → `ECONNREFUSED 127.0.0.1:3210`),
+  not twenty bugs — but the three explanations reached for first were all wrong, in order:
+  "the runner is flaky" (it reproduced 3× on identical code), "the heavy shard runs out of
+  memory" (`free -m` after the run: 1.3GB used of 7.9GB, no kernel kill — the instrumentation
+  in `ci.yml` exists because this guess cost a run), and "danger-zone deletes something" (it
+  only opens a modal). The actual cause was seven `[WebServer]` lines between two test
+  verdicts: **Turbopack panicked** (`turbo-tasks-backend … aggregation_update.rs …
+  inner_of_upper_lost_follower is not able to remove follower … Aborting.`) and the process
+  exited. Two lessons. (1) When failures go fast and identical, `grep '\[WebServer\]'` around
+  the first one before theorising — the server's last words were there the whole time. (2)
+  **Do not restore Turbopack's dev filesystem cache (`<distDir>/dev/cache`) across CI runs.**
+  Next 16 has it on by default and it looks like a free compile win; it produced that panic on
+  every run that restored a cache from another shard or commit and on none that compiled cold.
+  The persisted task graph disagrees with the live one and the invariant fails. Reported
+  upstream; `RUST_BACKTRACE=1` is set on the e2e step so the next panic explains itself.
 - **Tests run alongside `npm run dev` — each harness owns its own `distDir`.** Next allows one
   `next dev` per *distDir* (it holds `<distDir>/dev/lock`), and two dev servers sharing one
   output tree also interleave their compiled chunks and manifests — which is how running the
