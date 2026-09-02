@@ -1,5 +1,5 @@
 {
-  "_comment": "Papervine's Slack app (SPEC §10.2 — the Agent's transport). Create the app from this manifest at https://api.slack.com/apps → Create New App → From a manifest, once per environment (dev + prod). After creating: copy the Client ID / Client Secret / Signing Secret into SLACK_CLIENT_ID / SLACK_CLIENT_SECRET / SLACK_SIGNING_SECRET, and replace the papervine.io hosts below with your deployment's (the redirect URL lives on the app host, the events URL on the apex — same split as the GitHub App). Slack requires https for both, so a dev app needs a tunnel. Keep oauth scopes in sync with REQUIRED_BOT_SCOPES in src/lib/slack.ts.",
+  "_comment": "Papervine's Slack app (SPEC §10.2 — the Agent's transport). Create the app from this manifest at https://api.slack.com/apps → Create New App → From a manifest, once per environment (dev + prod). After creating: copy the Client ID / Client Secret / Signing Secret into SLACK_CLIENT_ID / SLACK_CLIENT_SECRET / SLACK_SIGNING_SECRET, and replace the hosts below with your deployment's. The redirect URL lives on the APP host (it needs the dashboard session to know which org is installing); the events URL lives on the MARKETING host, which passes /api/ through ungated — the app host would redirect Slack's unauthed POST to /login. NOTE the events URL uses `www`, not the bare apex: papervine.io 308-redirects to www at the domain level and Slack does NOT follow redirects — it reports the 3xx as 'your request URL responded with an HTTP error' (the same trap applies to the GitHub App's webhook URL). Slack requires https for both URLs, so verify in production or a preview with real domains; a single dev tunnel can't serve both hosts. Keep oauth scopes in sync with REQUIRED_BOT_SCOPES in src/lib/slack.ts.",
   "display_information": {
     "name": "Papervine",
     "description": "Your docs agent — ask questions and keep documentation current from Slack.",
@@ -19,7 +19,7 @@
   },
   "settings": {
     "event_subscriptions": {
-      "request_url": "https://papervine.io/api/slack/events",
+      "request_url": "https://www.papervine.io/api/slack/events",
       "bot_events": ["app_mention", "message.im"]
     },
     "interactivity": {
