@@ -62,6 +62,12 @@ async function signInAsAdmin(page: Page) {
 
 test.describe("platform admin", () => {
   test.use({ storageState: { cookies: [], origins: [] } });
+  // Nothing else in the suite visits /admin/*, so these tests pay the cold `next dev`
+  // compile of every console route themselves — and each also signs in first, in a
+  // beforeEach. On CI that lands at ~31s against the 30s default, which is why all five
+  // failed on `main`'s own tip while passing locally. Same fix as widget-settings,
+  // members-roles and domain: the budget, not the code, was wrong.
+  test.slow();
   test.beforeEach(async ({ page }) => signInAsAdmin(page));
 
   // The console is list → detail now, not one page: /admin is counts and recent activity,
