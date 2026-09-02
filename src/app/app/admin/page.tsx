@@ -6,6 +6,7 @@ import { db } from "@/lib/db";
 import { organization, user } from "@/lib/db/schema";
 import { analyticsEvent, deployment, site } from "@/lib/db/app-schema";
 import { timeAgo } from "@/lib/overview";
+import { AUTUMN_DASHBOARD_URL, autumnEnvironment } from "@/lib/billing/autumn";
 import { AdminPage, Empty, PageHead, StatCard, StatusPill, Table, Td, Th, dateFmt } from "./ui";
 
 // Operator › Overview (SPEC §10.10). Counts and the most recent activity — the "is anything
@@ -108,6 +109,19 @@ export default async function AdminOverviewPage() {
       </section>
       <p className="mt-2 text-xs text-[var(--muted)]">
         {events.toLocaleString()} analytics events across all sites in the last 30 days.
+      </p>
+      <p className="mt-1 text-xs text-[var(--muted)]">
+        Billing — plans, comps, credit adjustments, invoices — is operated in{" "}
+        <a
+          href={AUTUMN_DASHBOARD_URL}
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 hover:text-[var(--fg)]"
+        >
+          Autumn
+        </a>
+        {autumnEnvironment() === "sandbox" ? " (sandbox)" : autumnEnvironment() === "none" ? " (not configured here)" : ""}
+        . Each organization's page links to its customer record.
       </p>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-2">

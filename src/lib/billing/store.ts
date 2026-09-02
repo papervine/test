@@ -49,9 +49,15 @@ const USAGE_FEATURE: Record<AiFeature, string> = {
  * Idempotent and non-fatal, exactly as before: with no billing backend, or on any failure,
  * the org simply resolves to Free. Creating an organization is never blocked by billing.
  */
-export async function startTrial(organizationId: string): Promise<void> {
+export async function startTrial(
+  organizationId: string,
+  identity: { name?: string | null; email?: string | null } = {},
+): Promise<void> {
   if (!autumnConfigured()) return;
-  const created = await ensureCustomer({ organizationId });
+  // Name and email are what make the customer findable in Autumn's dashboard (customers are
+  // keyed by our opaque org id). A record created without them is a bare id — which is how
+  // the first GitHub-signup org arrived, and why the hook now passes them.
+  const created = await ensureCustomer({ organizationId, ...identity });
   if (!created) return; // already warned
   await attachPlan({ organizationId, planId: TRIAL_PLAN_ID });
 }

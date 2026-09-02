@@ -1,0 +1,148 @@
+{
+  "id": "org_fixture_free",
+  "name": "Fixture Org (free)",
+  "email": "owner@example.test",
+  "createdAt": 1788316456618,
+  "fingerprint": null,
+  "stripeId": "cus_fixture",
+  "env": "sandbox",
+  "metadata": {},
+  "sendEmailReceipts": false,
+  "billingControls": {},
+  "subscriptions": [
+    {
+      "id": "cus_prod_3IklTkeXIZzJ7gSBlyazSp9L4rS",
+      "planId": "free",
+      "autoEnable": true,
+      "addOn": false,
+      "status": "active",
+      "pastDue": false,
+      "canceledAt": null,
+      "expiresAt": null,
+      "trialEndsAt": null,
+      "startedAt": 1788316456626,
+      "currentPeriodStart": null,
+      "currentPeriodEnd": null,
+      "quantity": 1,
+      "scope": "customer"
+    }
+  ],
+  "purchases": [],
+  "licenses": [],
+  "balances": {
+    "ai_credits": {
+      "featureId": "ai_credits",
+      "granted": 250,
+      "remaining": 250,
+      "usage": 0,
+      "unlimited": false,
+      "overageAllowed": false,
+      "maxPurchase": null,
+      "nextResetAt": 1790908456626,
+      "breakdown": [
+        {
+          "id": "cus_ent_3IklTew3PW6iwcdJhcCHpvRWEBE",
+          "planId": "free",
+          "includedGrant": 250,
+          "prepaidGrant": 0,
+          "remaining": 250,
+          "usage": 0,
+          "unlimited": false,
+          "reset": {
+            "interval": "month",
+            "resetsAt": 1790908456626
+          },
+          "price": null,
+          "expiresAt": null
+        }
+      ]
+    },
+    "sites": {
+      "featureId": "sites",
+      "granted": 1,
+      "remaining": 1,
+      "usage": 0,
+      "unlimited": false,
+      "overageAllowed": false,
+      "maxPurchase": null,
+      "nextResetAt": null,
+      "breakdown": [
+        {
+          "id": "cus_ent_3IklTek9Gu5CDg49cEW7DdhwBky",
+          "planId": "free",
+          "includedGrant": 1,
+          "prepaidGrant": 0,
+          "remaining": 1,
+          "usage": 0,
+          "unlimited": false,
+          "reset": null,
+          "price": null,
+          "expiresAt": null
+        }
+      ]
+    },
+    "editors": {
+      "featureId": "editors",
+      "granted": 5,
+      "remaining": 5,
+      "usage": 0,
+      "unlimited": false,
+      "overageAllowed": false,
+      "maxPurchase": null,
+      "nextResetAt": null,
+      "breakdown": [
+        {
+          "id": "cus_ent_3IklTjFKjyXKBlB8LRahs8Um4CM",
+          "planId": "free",
+          "includedGrant": 5,
+          "prepaidGrant": 0,
+          "remaining": 5,
+          "usage": 0,
+          "unlimited": false,
+          "reset": null,
+          "price": null,
+          "expiresAt": null
+        }
+      ]
+    },
+    "analytics_retention_days": {
+      "featureId": "analytics_retention_days",
+      "granted": 7,
+      "remaining": 7,
+      "usage": 0,
+      "unlimited": false,
+      "overageAllowed": false,
+      "maxPurchase": null,
+      "nextResetAt": null,
+      "breakdown": [
+        {
+          "id": "cus_ent_3IklTePGgnmjVKhPJQBumnfGlWz",
+          "planId": "free",
+          "includedGrant": 7,
+          "prepaidGrant": 0,
+          "remaining": 7,
+          "usage": 0,
+          "unlimited": false,
+          "reset": null,
+          "price": null,
+          "expiresAt": null
+        }
+      ]
+    }
+  },
+  "flags": {
+    "preview_deployments": {
+      "id": "cus_ent_3IklTkmGAQEIFFQjdyJHBF1gvV4",
+      "planId": "free",
+      "expiresAt": null,
+      "featureId": "preview_deployments"
+    },
+    "writer_agent": {
+      "id": "cus_ent_3IklTjnoD2ryXP6LjTEAZ6nCxVy",
+      "planId": "free",
+      "expiresAt": null,
+      "featureId": "writer_agent"
+    }
+  },
+  "config": {}
+}

@@ -1,0 +1,1209 @@
+{
+  "list": [
+    {
+      "id": "pro_trial",
+      "name": "Pro Trial",
+      "description": null,
+      "group": null,
+      "version": 1,
+      "versionSlug": "v1",
+      "active": true,
+      "addOn": false,
+      "autoEnable": false,
+      "price": null,
+      "items": [
+        {
+          "featureId": "admin_apis",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Admin APIs"
+          }
+        },
+        {
+          "featureId": "assistant",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Assistant"
+          }
+        },
+        {
+          "featureId": "workflows",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Automations"
+          }
+        },
+        {
+          "featureId": "ai_credits",
+          "included": 10000,
+          "unlimited": false,
+          "pooled": false,
+          "reset": {
+            "interval": "one_off"
+          },
+          "price": null,
+          "display": {
+            "primaryText": "10,000 AI credits"
+          }
+        },
+        {
+          "featureId": "insights",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Insights"
+          }
+        },
+        {
+          "featureId": "analytics_retention_days",
+          "included": 365,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "365 analytics retention (days)"
+          }
+        },
+        {
+          "featureId": "sites",
+          "included": 10,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "10 docs sites"
+          }
+        },
+        {
+          "featureId": "writer_agent",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Editor writing agent"
+          }
+        },
+        {
+          "featureId": "editors",
+          "included": 0,
+          "unlimited": true,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Unlimited editors"
+          }
+        },
+        {
+          "featureId": "preview_deployments",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Preview deployments"
+          }
+        },
+        {
+          "featureId": "rbac",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "RBAC"
+          }
+        },
+        {
+          "featureId": "sso",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "SSO"
+          }
+        }
+      ],
+      "freeTrial": {
+        "durationLength": 30,
+        "durationType": "day",
+        "cardRequired": false,
+        "onEnd": null
+      },
+      "createdAt": 1788301407764,
+      "env": "sandbox",
+      "archived": false,
+      "config": {
+        "ignorePastDue": false
+      },
+      "billingControls": {},
+      "metadata": {},
+      "baseVariantId": null
+    },
+    {
+      "id": "free",
+      "name": "Free",
+      "description": null,
+      "group": null,
+      "version": 1,
+      "versionSlug": "v1",
+      "active": true,
+      "addOn": false,
+      "autoEnable": true,
+      "price": null,
+      "items": [
+        {
+          "featureId": "ai_credits",
+          "included": 250,
+          "unlimited": false,
+          "pooled": false,
+          "reset": {
+            "interval": "month"
+          },
+          "price": null,
+          "display": {
+            "primaryText": "250 AI credits"
+          }
+        },
+        {
+          "featureId": "analytics_retention_days",
+          "included": 7,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "7 analytics retention (days)"
+          }
+        },
+        {
+          "featureId": "sites",
+          "included": 1,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "1 docs site"
+          }
+        },
+        {
+          "featureId": "writer_agent",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Editor writing agent"
+          }
+        },
+        {
+          "featureId": "editors",
+          "included": 5,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "5 editors"
+          }
+        },
+        {
+          "featureId": "preview_deployments",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Preview deployments"
+          }
+        }
+      ],
+      "createdAt": 1788301401275,
+      "env": "sandbox",
+      "archived": false,
+      "config": {
+        "ignorePastDue": false
+      },
+      "billingControls": {},
+      "metadata": {},
+      "baseVariantId": null
+    },
+    {
+      "id": "enterprise",
+      "name": "Enterprise",
+      "description": null,
+      "group": null,
+      "version": 1,
+      "versionSlug": "v1",
+      "active": true,
+      "addOn": false,
+      "autoEnable": false,
+      "price": null,
+      "items": [
+        {
+          "featureId": "admin_apis",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Admin APIs"
+          }
+        },
+        {
+          "featureId": "assistant",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Assistant"
+          }
+        },
+        {
+          "featureId": "workflows",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Automations"
+          }
+        },
+        {
+          "featureId": "ai_credits",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": {
+            "interval": "month"
+          },
+          "price": null,
+          "display": {
+            "primaryText": "0 AI credits"
+          }
+        },
+        {
+          "featureId": "insights",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Insights"
+          }
+        },
+        {
+          "featureId": "analytics_retention_days",
+          "included": 0,
+          "unlimited": true,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Unlimited analytics retention (days)"
+          }
+        },
+        {
+          "featureId": "sites",
+          "included": 0,
+          "unlimited": true,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Unlimited docs sites"
+          }
+        },
+        {
+          "featureId": "writer_agent",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Editor writing agent"
+          }
+        },
+        {
+          "featureId": "editors",
+          "included": 0,
+          "unlimited": true,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Unlimited editors"
+          }
+        },
+        {
+          "featureId": "preview_deployments",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Preview deployments"
+          }
+        },
+        {
+          "featureId": "rbac",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "RBAC"
+          }
+        },
+        {
+          "featureId": "scim",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "SCIM provisioning"
+          }
+        },
+        {
+          "featureId": "sso",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "SSO"
+          }
+        },
+        {
+          "featureId": "white_label",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "White label (no Papervine badge)"
+          }
+        }
+      ],
+      "createdAt": 1788301407452,
+      "env": "sandbox",
+      "archived": false,
+      "config": {
+        "ignorePastDue": false
+      },
+      "billingControls": {},
+      "metadata": {},
+      "baseVariantId": null
+    },
+    {
+      "id": "team_annual",
+      "name": "Team Annual",
+      "description": null,
+      "group": null,
+      "version": 1,
+      "versionSlug": "v1",
+      "active": true,
+      "addOn": false,
+      "autoEnable": false,
+      "price": {
+        "amount": 660,
+        "interval": "year",
+        "display": {
+          "primaryText": "$660",
+          "secondaryText": "per year"
+        }
+      },
+      "items": [
+        {
+          "featureId": "ai_credits",
+          "included": 1000,
+          "unlimited": false,
+          "pooled": false,
+          "reset": {
+            "interval": "month"
+          },
+          "price": {
+            "amount": 0.008,
+            "interval": "month",
+            "billingUnits": 1,
+            "billingMethod": "usage_based",
+            "maxPurchase": null
+          },
+          "display": {
+            "primaryText": "1,000 AI credits",
+            "secondaryText": "then $0.008 per AI credit"
+          }
+        },
+        {
+          "featureId": "admin_apis",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Admin APIs"
+          }
+        },
+        {
+          "featureId": "assistant",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Assistant"
+          }
+        },
+        {
+          "featureId": "analytics_retention_days",
+          "included": 90,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "90 analytics retention (days)"
+          }
+        },
+        {
+          "featureId": "sites",
+          "included": 3,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "3 docs sites"
+          }
+        },
+        {
+          "featureId": "writer_agent",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Editor writing agent"
+          }
+        },
+        {
+          "featureId": "editors",
+          "included": 0,
+          "unlimited": true,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Unlimited editors"
+          }
+        },
+        {
+          "featureId": "preview_deployments",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Preview deployments"
+          }
+        },
+        {
+          "featureId": "rbac",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "RBAC"
+          }
+        },
+        {
+          "featureId": "sso",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "SSO"
+          }
+        }
+      ],
+      "createdAt": 1788301403102,
+      "env": "sandbox",
+      "archived": false,
+      "config": {
+        "ignorePastDue": false
+      },
+      "billingControls": {
+        "overageAllowed": [
+          {
+            "featureId": "ai_credits",
+            "enabled": false
+          }
+        ]
+      },
+      "metadata": {},
+      "baseVariantId": null,
+      "variantDetails": {
+        "basePlanId": "team",
+        "customize": {
+          "price": {
+            "amount": 660,
+            "interval": "year"
+          }
+        }
+      }
+    },
+    {
+      "id": "team",
+      "name": "Team",
+      "description": null,
+      "group": null,
+      "version": 1,
+      "versionSlug": "v1",
+      "active": true,
+      "addOn": false,
+      "autoEnable": false,
+      "price": {
+        "amount": 65,
+        "interval": "month",
+        "display": {
+          "primaryText": "$65",
+          "secondaryText": "per month"
+        }
+      },
+      "items": [
+        {
+          "featureId": "ai_credits",
+          "included": 1000,
+          "unlimited": false,
+          "pooled": false,
+          "reset": {
+            "interval": "month"
+          },
+          "price": {
+            "amount": 0.008,
+            "interval": "month",
+            "billingUnits": 1,
+            "billingMethod": "usage_based",
+            "maxPurchase": null
+          },
+          "display": {
+            "primaryText": "1,000 AI credits",
+            "secondaryText": "then $0.008 per AI credit"
+          }
+        },
+        {
+          "featureId": "admin_apis",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Admin APIs"
+          }
+        },
+        {
+          "featureId": "assistant",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Assistant"
+          }
+        },
+        {
+          "featureId": "analytics_retention_days",
+          "included": 90,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "90 analytics retention (days)"
+          }
+        },
+        {
+          "featureId": "sites",
+          "included": 3,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "3 docs sites"
+          }
+        },
+        {
+          "featureId": "writer_agent",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Editor writing agent"
+          }
+        },
+        {
+          "featureId": "editors",
+          "included": 0,
+          "unlimited": true,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Unlimited editors"
+          }
+        },
+        {
+          "featureId": "preview_deployments",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Preview deployments"
+          }
+        },
+        {
+          "featureId": "rbac",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "RBAC"
+          }
+        },
+        {
+          "featureId": "sso",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "SSO"
+          }
+        }
+      ],
+      "createdAt": 1788301401645,
+      "env": "sandbox",
+      "archived": false,
+      "config": {
+        "ignorePastDue": false
+      },
+      "billingControls": {
+        "overageAllowed": [
+          {
+            "featureId": "ai_credits",
+            "enabled": false
+          }
+        ]
+      },
+      "metadata": {},
+      "baseVariantId": null
+    },
+    {
+      "id": "pro_annual",
+      "name": "Pro Annual",
+      "description": null,
+      "group": null,
+      "version": 1,
+      "versionSlug": "v1",
+      "active": true,
+      "addOn": false,
+      "autoEnable": false,
+      "price": {
+        "amount": 2400,
+        "interval": "year",
+        "display": {
+          "primaryText": "$2,400",
+          "secondaryText": "per year"
+        }
+      },
+      "items": [
+        {
+          "featureId": "ai_credits",
+          "included": 25000,
+          "unlimited": false,
+          "pooled": false,
+          "reset": {
+            "interval": "month"
+          },
+          "price": {
+            "amount": 0.006,
+            "interval": "month",
+            "billingUnits": 1,
+            "billingMethod": "usage_based",
+            "maxPurchase": null
+          },
+          "display": {
+            "primaryText": "25,000 AI credits",
+            "secondaryText": "then $0.006 per AI credit"
+          }
+        },
+        {
+          "featureId": "admin_apis",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Admin APIs"
+          }
+        },
+        {
+          "featureId": "assistant",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Assistant"
+          }
+        },
+        {
+          "featureId": "workflows",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Automations"
+          }
+        },
+        {
+          "featureId": "insights",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Insights"
+          }
+        },
+        {
+          "featureId": "analytics_retention_days",
+          "included": 365,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "365 analytics retention (days)"
+          }
+        },
+        {
+          "featureId": "sites",
+          "included": 10,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "10 docs sites"
+          }
+        },
+        {
+          "featureId": "writer_agent",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Editor writing agent"
+          }
+        },
+        {
+          "featureId": "editors",
+          "included": 0,
+          "unlimited": true,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Unlimited editors"
+          }
+        },
+        {
+          "featureId": "preview_deployments",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Preview deployments"
+          }
+        },
+        {
+          "featureId": "rbac",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "RBAC"
+          }
+        },
+        {
+          "featureId": "sso",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "SSO"
+          }
+        }
+      ],
+      "createdAt": 1788301405790,
+      "env": "sandbox",
+      "archived": false,
+      "config": {
+        "ignorePastDue": false
+      },
+      "billingControls": {
+        "overageAllowed": [
+          {
+            "featureId": "ai_credits",
+            "enabled": false
+          }
+        ]
+      },
+      "metadata": {},
+      "baseVariantId": null,
+      "variantDetails": {
+        "basePlanId": "pro",
+        "customize": {
+          "price": {
+            "amount": 2400,
+            "interval": "year"
+          }
+        }
+      }
+    },
+    {
+      "id": "pro",
+      "name": "Pro",
+      "description": null,
+      "group": null,
+      "version": 1,
+      "versionSlug": "v1",
+      "active": true,
+      "addOn": false,
+      "autoEnable": false,
+      "price": {
+        "amount": 250,
+        "interval": "month",
+        "display": {
+          "primaryText": "$250",
+          "secondaryText": "per month"
+        }
+      },
+      "items": [
+        {
+          "featureId": "ai_credits",
+          "included": 25000,
+          "unlimited": false,
+          "pooled": false,
+          "reset": {
+            "interval": "month"
+          },
+          "price": {
+            "amount": 0.006,
+            "interval": "month",
+            "billingUnits": 1,
+            "billingMethod": "usage_based",
+            "maxPurchase": null
+          },
+          "display": {
+            "primaryText": "25,000 AI credits",
+            "secondaryText": "then $0.006 per AI credit"
+          }
+        },
+        {
+          "featureId": "admin_apis",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Admin APIs"
+          }
+        },
+        {
+          "featureId": "assistant",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Assistant"
+          }
+        },
+        {
+          "featureId": "workflows",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Automations"
+          }
+        },
+        {
+          "featureId": "insights",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "AI Insights"
+          }
+        },
+        {
+          "featureId": "analytics_retention_days",
+          "included": 365,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "365 analytics retention (days)"
+          }
+        },
+        {
+          "featureId": "sites",
+          "included": 10,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "10 docs sites"
+          }
+        },
+        {
+          "featureId": "writer_agent",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Editor writing agent"
+          }
+        },
+        {
+          "featureId": "editors",
+          "included": 0,
+          "unlimited": true,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Unlimited editors"
+          }
+        },
+        {
+          "featureId": "preview_deployments",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "Preview deployments"
+          }
+        },
+        {
+          "featureId": "rbac",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "RBAC"
+          }
+        },
+        {
+          "featureId": "sso",
+          "included": 0,
+          "unlimited": false,
+          "pooled": false,
+          "reset": null,
+          "price": null,
+          "display": {
+            "primaryText": "SSO"
+          }
+        }
+      ],
+      "createdAt": 1788301404613,
+      "env": "sandbox",
+      "archived": false,
+      "config": {
+        "ignorePastDue": false
+      },
+      "billingControls": {
+        "overageAllowed": [
+          {
+            "featureId": "ai_credits",
+            "enabled": false
+          }
+        ]
+      },
+      "metadata": {},
+      "baseVariantId": null
+    },
+    {
+      "id": "pack_5k",
+      "name": "5,000 credits",
+      "description": null,
+      "group": null,
+      "version": 1,
+      "versionSlug": "v1",
+      "active": true,
+      "addOn": true,
+      "autoEnable": false,
+      "price": {
+        "amount": 35,
+        "interval": "one_off",
+        "display": {
+          "primaryText": "$35",
+          "secondaryText": "one-off"
+        }
+      },
+      "items": [
+        {
+          "featureId": "ai_credits",
+          "included": 5000,
+          "unlimited": false,
+          "pooled": false,
+          "reset": {
+            "interval": "one_off"
+          },
+          "price": null,
+          "display": {
+            "primaryText": "5,000 AI credits"
+          }
+        }
+      ],
+      "createdAt": 1788301408094,
+      "env": "sandbox",
+      "archived": false,
+      "config": {
+        "ignorePastDue": false
+      },
+      "billingControls": {},
+      "metadata": {},
+      "baseVariantId": null
+    },
+    {
+      "id": "pack_25k",
+      "name": "25,000 credits",
+      "description": null,
+      "group": null,
+      "version": 1,
+      "versionSlug": "v1",
+      "active": true,
+      "addOn": true,
+      "autoEnable": false,
+      "price": {
+        "amount": 150,
+        "interval": "one_off",
+        "display": {
+          "primaryText": "$150",
+          "secondaryText": "one-off"
+        }
+      },
+      "items": [
+        {
+          "featureId": "ai_credits",
+          "included": 25000,
+          "unlimited": false,
+          "pooled": false,
+          "reset": {
+            "interval": "one_off"
+          },
+          "price": null,
+          "display": {
+            "primaryText": "25,000 AI credits"
+          }
+        }
+      ],
+      "createdAt": 1788301408744,
+      "env": "sandbox",
+      "archived": false,
+      "config": {
+        "ignorePastDue": false
+      },
+      "billingControls": {},
+      "metadata": {},
+      "baseVariantId": null
+    }
+  ]
+}

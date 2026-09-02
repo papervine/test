@@ -366,6 +366,8 @@ if (!orgId) {
             values (${orgId}, ${DEV.org.name}, ${DEV.org.slug}, ${now})`;
   console.log(`• created org ${DEV.org.slug}`);
 }
+// Membership first (below), then the Autumn customer — the sync reads the owner's email off
+// the member table. See after the membership loop.
 for (const [i, u] of DEV.users.entries()) {
   const id = userIds[i];
   const member = await sql`select id from member where organization_id = ${orgId} and user_id = ${id} limit 1`;
@@ -375,6 +377,32 @@ for (const [i, u] of DEV.users.entries()) {
     console.log(`• added ${u.role} membership for ${u.email}`);
   } else {
     await sql`update member set role = ${u.role} where id = ${member[0].id}`;
+  }
+}
+
+// 2b. The org as an Autumn customer (SPEC §10 Billing). An org inserted by SQL bypasses the
+// auth hook that gives a real new org its customer + 30-day trial, so without this dev-org
+// resolves to the Free floor with nothing metered and the billing surfaces have nothing to
+// show. Same trial a real signup gets. The org id is fresh on every reseed, so each reseed
+// starts a clean customer in sandbox and leaves the previous one orphaned there — harmless,
+// and truer to "full reset" than reusing an id that would carry test subscriptions across.
+// Skipped, quietly, when AUTUMN_SECRET_KEY is unset: billing is optional for dev.
+if (process.env.AUTUMN_SECRET_KEY) {
+  const { syncAutumnCustomers, autumnEnvFor } = await import("./sync-autumn-customers.mjs");
+  const env = autumnEnvFor(process.env.AUTUMN_SECRET_KEY);
+  if (env !== "sandbox") {
+    console.log(`• skipped Autumn sync: AUTUMN_SECRET_KEY is a ${env} key, and the seed only writes to sandbox`);
+  } else {
+    const results = await syncAutumnCustomers({
+      sql,
+      secretKey: process.env.AUTUMN_SECRET_KEY,
+      apply: true,
+      trial: true,
+      log: (line) => console.log(`• autumn:${line}`),
+    });
+    if (results.some((r) => r.action === "error")) {
+      console.warn("• Autumn sync had errors — dev-org may resolve to Free. Re-run: node --env-file=.env.local scripts/sync-autumn-customers.mjs --apply --trial");
+    }
   }
 }
 
@@ -499,8 +527,8 @@ console.log(`• seeded ${DEV.sites.length} sites + ${feed.length} activity rows
 // Metered usage history (SPEC §10 Billing). Plan state itself is no longer seeded here:
 // Autumn is the source of truth for subscriptions and balances, so a dev org's plan is
 // whatever Autumn says (Free by default, since `getOrCreate` auto-enables it). To dogfood
-// a paid tier locally, comp dev-org onto Pro from /admin/billing, or attach it in the
-// Autumn dashboard.
+// a paid tier locally, attach it in the Autumn dashboard — that is the support surface
+// (the in-app comp console was removed 2026-09-01; Autumn's own UI is the audited one).
 //
 // What still belongs in the seed is `usage_event`, because that table stays ours — it is
 // the record of WHICH feature spent credits, and it is what Settings → Usage charts. An

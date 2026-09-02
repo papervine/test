@@ -19,6 +19,13 @@ That means **editing a plan in Autumn is the deploy**. There is no catalog to sy
 publish step, and no Stripe webhook of our own — Autumn keeps subscription state, usage
 and access in step without one.
 
+The same goes for support work. Putting an organization on a plan without charging it,
+adjusting a credit balance, reading an invoice or a subscription's history — all of it is
+done in Autumn's dashboard, which records who did what. Papervine has no billing console
+of its own: the operator console links to Autumn, and every organization's page there
+links straight to its customer record (customers are keyed by the organization id, and
+carry the organization's name and its owner's email so they can be found by either).
+
 <Note>
   One thing is deliberately not in Autumn: the marketing copy on the public pricing page.
   Plan names, feature bullets and the comparison table live in
@@ -52,6 +59,37 @@ and access in step without one.
     *not granted*.
   </Step>
 </Steps>
+
+## Backfilling existing organizations
+
+A customer is created in Autumn lazily: when an organization is created through the
+product, and on its first billing action. An organization that predates billing, or one
+inserted straight into the database, has no customer and resolves to the Free floor with
+nothing metered. The sync script creates the missing ones:
+
+```bash
+node --env-file=.env.local scripts/sync-autumn-customers.mjs            # dry run
+node --env-file=.env.local scripts/sync-autumn-customers.mjs --apply    # create them
+node --env-file=.env.local scripts/sync-autumn-customers.mjs --apply --trial
+```
+
+It reads every organization from `DATABASE_URL`, sends the same fields the application
+sends (the organization id as the customer id, the organization name, the owner's email),
+and is idempotent: a customer that already exists is reported and left alone. `--trial`
+attaches the 30-day trial to each customer the run creates — what a new organization gets
+at signup — and never to one that already existed. Nothing is ever deleted.
+
+Which environment it writes to is decided by `AUTUMN_SECRET_KEY` alone, and the script
+prints both the Autumn environment and the database host before touching anything, so a
+mismatched pair is visible rather than silent. The same script therefore serves every
+pairing: a development database into the sandbox while testing, and the production
+database into the live environment once the key is switched.
+
+<Note>
+**Local development.** `npm run db:seed` runs this sync itself when `AUTUMN_SECRET_KEY` is a
+sandbox key, so the seeded organization arrives in Autumn on the trial with no extra step.
+The seed refuses to write to the live environment.
+</Note>
 
 ## What happens without a key
 

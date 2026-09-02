@@ -209,9 +209,9 @@ export const auth = betterAuth({
         // credit grant (SPEC §10 Billing). startTrial is idempotent and swallows its
         // own failures — a billing hiccup must never block workspace creation (the
         // org just resolves to Free until support intervenes).
-        afterCreateOrganization: async ({ organization: org }) => {
+        afterCreateOrganization: async ({ organization: org, user }) => {
           const { startTrial } = await import("@/lib/billing/store");
-          await startTrial(org.id);
+          await startTrial(org.id, { name: org.name, email: user.email });
         },
       },
       // Invitation delivery (SPEC §10). Now a real send — but the Members settings action

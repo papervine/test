@@ -13,6 +13,7 @@ import {
   fetchCustomer,
   fetchPlans,
   type AutumnPlan,
+  subscriptionStatus,
 } from "./autumn";
 import { PLAN_TIER_BY_KEY, type PlanKey as ContentPlanKey } from "./plan-content";
 import { trialStatus, type TrialStatus } from "./core";
@@ -65,7 +66,7 @@ export async function getBillingSummary(orgId: string): Promise<BillingSummary> 
   return {
     sub: sub
       ? {
-          status: (sub.status as BillingSubSummary["status"]) ?? "active",
+          status: subscriptionStatus(sub),
           trialEndsAt: ms(sub.trial_ends_at),
           currentPeriodEnd: ms(sub.current_period_end),
           // Autumn records the intent to stop as canceled_at while the plan runs out its
@@ -159,7 +160,11 @@ function cents(amount: number | null | undefined): number | undefined {
  * what a plan costs means a new tier lands in the right place without a second edit.
  */
 export async function getPlanOffers(): Promise<PlanOffer[]> {
-  const plans = await fetchPlans();
+  return offersFromPlans(await fetchPlans());
+}
+
+/** PURE core of getPlanOffers — unit-tested against the captured catalog. */
+export function offersFromPlans(plans: AutumnPlan[]): PlanOffer[] {
   const offers = new Map<string, PlanOffer>();
 
   for (const plan of plans) {
@@ -205,7 +210,11 @@ export type CreditPackOffer = {
 
 /** One-time credit top-ups — Autumn add-on plans with a one-off price, cheapest first. */
 export async function getCreditPacks(): Promise<CreditPackOffer[]> {
-  const plans = await fetchPlans();
+  return packsFromPlans(await fetchPlans());
+}
+
+/** PURE core of getCreditPacks. */
+export function packsFromPlans(plans: AutumnPlan[]): CreditPackOffer[] {
   return plans
     .filter((p) => p.add_on && p.price?.interval === "one_off" && p.price?.amount)
     .map((p) => ({

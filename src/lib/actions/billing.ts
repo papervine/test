@@ -13,9 +13,7 @@ import {
   attachPlan,
   autumnConfigured,
   billingPortalUrl,
-  compPlan,
   ensureCustomer,
-  grantCredits,
   setCancelation,
   setOverage,
 } from "@/lib/billing/autumn";
@@ -143,53 +141,4 @@ export async function setOverageEnabled(
   if (!ctx.ok) return { ok: false, error: ctx.error };
   if (!autumnConfigured()) return { ok: false, error: NOT_CONFIGURED };
   return setOverage({ organizationId: ctx.org.id, enabled });
-}
-
-/**
- * Platform-admin manual credit adjustment (support's escape hatch). Gated by the
- * PLATFORM_ADMIN_EMAILS allowlist, NOT org membership.
- *
- * The reason is still required and still validated here, but it is now recorded in
- * Autumn's own balance history rather than in a `credit_ledger` row carrying our actor id.
- * That is a real reduction in the audit trail we control — noted in the SPEC decision.
- */
-export async function adminAdjustCredits(input: {
-  organizationId: string;
-  delta: number;
-  reason: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  const { requirePlatformAdmin } = await import("@/lib/dashboard-context");
-  await requirePlatformAdmin();
-  const delta = Math.trunc(input.delta);
-  if (!delta) return { ok: false, error: "Delta must be a non-zero integer." };
-  if (!input.reason.trim()) return { ok: false, error: "A reason is required." };
-  if (!autumnConfigured()) return { ok: false, error: NOT_CONFIGURED };
-  return grantCredits({ organizationId: input.organizationId, amount: delta });
-}
-
-/**
- * Platform-admin comp: put an org on a paid plan for free (support / partner grants).
- * Gated by the PLATFORM_ADMIN_EMAILS allowlist. `months` null/blank → indefinite comp;
- * a positive N → ends after ~N months.
- */
-export async function adminGrantPlan(input: {
-  organizationId: string;
-  planKey: string;
-  months: number | null;
-  reason: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  const { requirePlatformAdmin } = await import("@/lib/dashboard-context");
-  await requirePlatformAdmin();
-  if (!input.organizationId) return { ok: false, error: "Pick an organization." };
-  if (!input.planKey) return { ok: false, error: "Pick a plan." };
-  if (!input.reason.trim()) return { ok: false, error: "A reason is required." };
-  if (!autumnConfigured()) return { ok: false, error: NOT_CONFIGURED };
-  const months =
-    input.months == null || input.months <= 0 ? null : Math.trunc(input.months);
-  await ensureCustomer({ organizationId: input.organizationId });
-  return compPlan({
-    organizationId: input.organizationId,
-    planId: input.planKey,
-    months,
-  });
 }

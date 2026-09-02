@@ -39,7 +39,7 @@ describe("adminHref", () => {
 
   it("builds a section path", () => {
     expect(adminHref("orgs")).toBe("/admin/orgs");
-    expect(adminHref("billing")).toBe("/admin/billing");
+    expect(adminHref("deploys")).toBe("/admin/deploys");
   });
 });
 
@@ -47,7 +47,7 @@ describe("activeAdminSlug", () => {
   it("matches each section exactly", () => {
     expect(activeAdminSlug("/admin")).toBe("");
     expect(activeAdminSlug("/admin/orgs")).toBe("orgs");
-    expect(activeAdminSlug("/admin/billing")).toBe("billing");
+    expect(activeAdminSlug("/admin/deploys")).toBe("deploys");
   });
 
   it("tolerates a trailing slash", () => {

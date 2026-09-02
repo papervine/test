@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { desc, eq } from "drizzle-orm";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ArrowUpRight } from "lucide-react";
+import { autumnConfigured, autumnCustomerUrl } from "@/lib/billing/autumn";
 import { requirePlatformAdmin } from "@/lib/dashboard-context";
 import { db } from "@/lib/db";
 import { member, organization, user } from "@/lib/db/schema";
@@ -80,6 +81,19 @@ export default async function AdminOrgDetailPage({
         <ArrowLeft className="h-3.5 w-3.5" />
         Organizations
       </Link>
+      {autumnConfigured() && (
+        // Billing for this org — plan, balances, invoices, comps — is Autumn's to show and to
+        // change; this is the customer record, keyed by our org id. Sandbox-aware.
+        <a
+          href={autumnCustomerUrl(orgId)}
+          target="_blank"
+          rel="noreferrer"
+          className="ml-4 inline-flex items-center gap-1 text-sm text-[var(--muted)] transition-colors hover:text-[var(--fg)]"
+        >
+          Billing in Autumn
+          <ArrowUpRight className="h-3.5 w-3.5" />
+        </a>
+      )}
 
       <div className="mt-4">
         <PageHead

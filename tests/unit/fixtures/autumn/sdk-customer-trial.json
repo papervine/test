@@ -1,0 +1,352 @@
+{
+  "id": "org_fixture_trial",
+  "name": "Fixture Org (trial)",
+  "email": "owner@example.test",
+  "createdAt": 1788317201648,
+  "fingerprint": null,
+  "stripeId": "cus_fixture",
+  "env": "sandbox",
+  "metadata": {},
+  "sendEmailReceipts": false,
+  "billingControls": {},
+  "subscriptions": [
+    {
+      "id": "cus_prod_3IkmzVKv9zmW8nbraNlJV17Iwhr",
+      "plan": {
+        "id": "pro_trial",
+        "name": "Pro Trial",
+        "description": null,
+        "group": null,
+        "version": 1,
+        "versionSlug": "v1",
+        "active": true,
+        "addOn": false,
+        "autoEnable": false,
+        "price": null,
+        "items": [
+          {
+            "featureId": "admin_apis",
+            "included": 0,
+            "unlimited": false,
+            "pooled": false,
+            "reset": null,
+            "price": null,
+            "display": {
+              "primaryText": "Admin APIs"
+            }
+          },
+          {
+            "featureId": "assistant",
+            "included": 0,
+            "unlimited": false,
+            "pooled": false,
+            "reset": null,
+            "price": null,
+            "display": {
+              "primaryText": "AI Assistant"
+            }
+          },
+          {
+            "featureId": "workflows",
+            "included": 0,
+            "unlimited": false,
+            "pooled": false,
+            "reset": null,
+            "price": null,
+            "display": {
+              "primaryText": "AI Automations"
+            }
+          },
+          {
+            "featureId": "ai_credits",
+            "included": 10000,
+            "unlimited": false,
+            "pooled": false,
+            "reset": {
+              "interval": "one_off"
+            },
+            "price": null,
+            "display": {
+              "primaryText": "10,000 AI credits"
+            }
+          },
+          {
+            "featureId": "insights",
+            "included": 0,
+            "unlimited": false,
+            "pooled": false,
+            "reset": null,
+            "price": null,
+            "display": {
+              "primaryText": "AI Insights"
+            }
+          },
+          {
+            "featureId": "analytics_retention_days",
+            "included": 365,
+            "unlimited": false,
+            "pooled": false,
+            "reset": null,
+            "price": null,
+            "display": {
+              "primaryText": "365 analytics retention (days)"
+            }
+          },
+          {
+            "featureId": "sites",
+            "included": 10,
+            "unlimited": false,
+            "pooled": false,
+            "reset": null,
+            "price": null,
+            "display": {
+              "primaryText": "10 docs sites"
+            }
+          },
+          {
+            "featureId": "writer_agent",
+            "included": 0,
+            "unlimited": false,
+            "pooled": false,
+            "reset": null,
+            "price": null,
+            "display": {
+              "primaryText": "Editor writing agent"
+            }
+          },
+          {
+            "featureId": "editors",
+            "included": 0,
+            "unlimited": true,
+            "pooled": false,
+            "reset": null,
+            "price": null,
+            "display": {
+              "primaryText": "Unlimited editors"
+            }
+          },
+          {
+            "featureId": "preview_deployments",
+            "included": 0,
+            "unlimited": false,
+            "pooled": false,
+            "reset": null,
+            "price": null,
+            "display": {
+              "primaryText": "Preview deployments"
+            }
+          },
+          {
+            "featureId": "rbac",
+            "included": 0,
+            "unlimited": false,
+            "pooled": false,
+            "reset": null,
+            "price": null,
+            "display": {
+              "primaryText": "RBAC"
+            }
+          },
+          {
+            "featureId": "sso",
+            "included": 0,
+            "unlimited": false,
+            "pooled": false,
+            "reset": null,
+            "price": null,
+            "display": {
+              "primaryText": "SSO"
+            }
+          }
+        ],
+        "freeTrial": {
+          "durationLength": 30,
+          "durationType": "day",
+          "cardRequired": false,
+          "onEnd": null
+        },
+        "createdAt": 1788301407764,
+        "env": "sandbox",
+        "archived": false,
+        "config": {
+          "ignorePastDue": false
+        },
+        "billingControls": {},
+        "metadata": {},
+        "baseVariantId": null
+      },
+      "planId": "pro_trial",
+      "autoEnable": false,
+      "addOn": false,
+      "status": "active",
+      "pastDue": false,
+      "canceledAt": null,
+      "expiresAt": null,
+      "trialEndsAt": 1790909202512,
+      "startedAt": 1788317202512,
+      "currentPeriodStart": 1788317202512,
+      "currentPeriodEnd": 1790909202512,
+      "quantity": 1,
+      "scope": "customer"
+    }
+  ],
+  "purchases": [],
+  "licenses": [],
+  "balances": {
+    "editors": {
+      "featureId": "editors",
+      "granted": 0,
+      "remaining": 0,
+      "usage": 0,
+      "unlimited": true,
+      "overageAllowed": false,
+      "maxPurchase": null,
+      "nextResetAt": null,
+      "breakdown": [
+        {
+          "id": "cus_ent_3IkmzViLBtBIR2QFBSPqfrzDjJg",
+          "planId": "pro_trial",
+          "includedGrant": 0,
+          "prepaidGrant": 0,
+          "remaining": 0,
+          "usage": 0,
+          "unlimited": true,
+          "reset": null,
+          "price": null,
+          "expiresAt": null
+        }
+      ]
+    },
+    "sites": {
+      "featureId": "sites",
+      "granted": 10,
+      "remaining": 10,
+      "usage": 0,
+      "unlimited": false,
+      "overageAllowed": false,
+      "maxPurchase": null,
+      "nextResetAt": null,
+      "breakdown": [
+        {
+          "id": "cus_ent_3IkmzTtCQ7wGEKShSyGWnUEwdbV",
+          "planId": "pro_trial",
+          "includedGrant": 10,
+          "prepaidGrant": 0,
+          "remaining": 10,
+          "usage": 0,
+          "unlimited": false,
+          "reset": null,
+          "price": null,
+          "expiresAt": null
+        }
+      ]
+    },
+    "analytics_retention_days": {
+      "featureId": "analytics_retention_days",
+      "granted": 365,
+      "remaining": 365,
+      "usage": 0,
+      "unlimited": false,
+      "overageAllowed": false,
+      "maxPurchase": null,
+      "nextResetAt": null,
+      "breakdown": [
+        {
+          "id": "cus_ent_3IkmzPsQ02k6SQmKP2s9JZAROBu",
+          "planId": "pro_trial",
+          "includedGrant": 365,
+          "prepaidGrant": 0,
+          "remaining": 365,
+          "usage": 0,
+          "unlimited": false,
+          "reset": null,
+          "price": null,
+          "expiresAt": null
+        }
+      ]
+    },
+    "ai_credits": {
+      "featureId": "ai_credits",
+      "granted": 10000,
+      "remaining": 10000,
+      "usage": 0,
+      "unlimited": false,
+      "overageAllowed": false,
+      "maxPurchase": null,
+      "nextResetAt": null,
+      "breakdown": [
+        {
+          "id": "cus_ent_3IkmzUv5HHMl1a0Uzp3DQkTbzWL",
+          "planId": "pro_trial",
+          "includedGrant": 10000,
+          "prepaidGrant": 0,
+          "remaining": 10000,
+          "usage": 0,
+          "unlimited": false,
+          "reset": {
+            "interval": "one_off",
+            "resetsAt": null
+          },
+          "price": null,
+          "expiresAt": null
+        }
+      ]
+    }
+  },
+  "flags": {
+    "insights": {
+      "id": "cus_ent_3IkmzUgHFSBIOauuB3ETs92o11Q",
+      "planId": "pro_trial",
+      "expiresAt": null,
+      "featureId": "insights"
+    },
+    "admin_apis": {
+      "id": "cus_ent_3IkmzOiQqELsXMKGprzkrVI6Hul",
+      "planId": "pro_trial",
+      "expiresAt": null,
+      "featureId": "admin_apis"
+    },
+    "preview_deployments": {
+      "id": "cus_ent_3IkmzSveiNhT89S6FLiUgk6KcaR",
+      "planId": "pro_trial",
+      "expiresAt": null,
+      "featureId": "preview_deployments"
+    },
+    "rbac": {
+      "id": "cus_ent_3IkmzW3TlCGci6owkAAVyFL6aWH",
+      "planId": "pro_trial",
+      "expiresAt": null,
+      "featureId": "rbac"
+    },
+    "sso": {
+      "id": "cus_ent_3IkmzPxZEQfv4QUSSQSGoOkvpgt",
+      "planId": "pro_trial",
+      "expiresAt": null,
+      "featureId": "sso"
+    },
+    "workflows": {
+      "id": "cus_ent_3IkmzTLZuslMkadDztzH8g2Z361",
+      "planId": "pro_trial",
+      "expiresAt": null,
+      "featureId": "workflows"
+    },
+    "writer_agent": {
+      "id": "cus_ent_3IkmzVtnb1fpCOCELiJBwP8QRGQ",
+      "planId": "pro_trial",
+      "expiresAt": null,
+      "featureId": "writer_agent"
+    },
+    "assistant": {
+      "id": "cus_ent_3IkmzTVbYURORBVB58jVMisuoNa",
+      "planId": "pro_trial",
+      "expiresAt": null,
+      "featureId": "assistant"
+    }
+  },
+  "config": {},
+  "processors": {
+    "stripe": {
+      "id": "cus_fixture"
+    }
+  }
+}

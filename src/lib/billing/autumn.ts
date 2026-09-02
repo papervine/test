@@ -2,6 +2,7 @@ import "server-only";
 import type { Autumn } from "autumn-js";
 import type { BillingLookup, PlanEntitlements, PlanFeatureKey } from "./core";
 import { PLAN_FEATURE_KEYS } from "./catalog";
+import { snakeCaseKeys } from "./autumn-keys";
 
 /**
  * Autumn adapter (SPEC §10 Billing). Autumn is the source of truth for plans,
@@ -91,7 +92,37 @@ export function autumnConfigured(): boolean {
   return Boolean(process.env.AUTUMN_SECRET_KEY);
 }
 
+/**
+ * Which Autumn environment the configured key addresses. The key IS the environment
+ * selector (there is no mode flag), and its prefix says which: `am_sk_test_` → sandbox,
+ * `am_sk_live_` → production.
+ */
+export function autumnEnvironment(): "sandbox" | "live" | "none" {
+  const key = process.env.AUTUMN_SECRET_KEY ?? "";
+  if (!key) return "none";
+  return key.startsWith("am_sk_test_") ? "sandbox" : "live";
+}
+
+/**
+ * Deep links into Autumn's dashboard, for the operator console. Support work — comping a
+ * plan, adjusting a balance, reading invoices — happens THERE, on purpose: it is the audited,
+ * maintained UI for the billing system we adopted so we would stop building our own. (An
+ * in-app comp/adjust console existed until 2026-09-01; it wrapped two Autumn calls behind a
+ * form that collected a "reason" and dropped it, and was removed for exactly that reason.)
+ */
+export const AUTUMN_DASHBOARD_URL = "https://app.useautumn.com";
+export function autumnCustomerUrl(organizationId: string): string {
+  const env = autumnEnvironment() === "sandbox" ? "/sandbox" : "";
+  return `${AUTUMN_DASHBOARD_URL}${env}/customers/${encodeURIComponent(organizationId)}`;
+}
+
 // --- response shapes we read -----------------------------------------------------------
+// Everything below is in Autumn's DOCUMENTED spelling — snake_case — which is what the REST
+// API, webhooks and dashboard show. The SDK camelCases its responses (`planId`,
+// `trialEndsAt`, `variantDetails.basePlanId`), so every SDK read in this file passes through
+// `snakeCaseKeys` first (see autumn-keys.ts). Before that normalisation existed, these types
+// were satisfied and every snake_case read was `undefined`: no trial end, no overage, and
+// a credit pack indistinguishable from the plan — silently, in a build that typechecked.
 // Structural, and deliberately OPEN (`[k: string]: unknown`): a real Autumn payload carries
 // far more than this, and the index signature is what lets a verbatim captured response be
 // used as a test fixture without trimming it down to what we happen to read today. Narrow
@@ -151,8 +182,21 @@ function primarySubscription(customer: AutumnCustomer) {
 const STATUSES = ["trialing", "active", "past_due", "canceled"] as const;
 type Status = (typeof STATUSES)[number];
 
-function statusOf(raw: string | null | undefined): Status {
-  return (STATUSES as readonly string[]).includes(raw ?? "") ? (raw as Status) : "active";
+/**
+ * Autumn's status vocabulary → ours. Autumn has no "trialing": a subscription inside its
+ * free-trial window is `status: "active"` with `trial_ends_at` set (captured in
+ * tests/unit/fixtures/autumn/sdk-customer-trial.json). Our core keys every trial behaviour
+ * on `"trialing"` — `trialStatus` (the "N days left" banner and the "Trial ends" copy, versus
+ * "Renews") and the expiry backstop in `resolveEntitlements` — so without this translation a
+ * trial reads as a paid plan everywhere. Exported so the summary reads the same answer.
+ */
+export function subscriptionStatus(sub: {
+  status?: string | null;
+  trial_ends_at?: number | null;
+}): Status {
+  const raw = sub.status ?? "";
+  if (raw === "active" && typeof sub.trial_ends_at === "number") return "trialing";
+  return (STATUSES as readonly string[]).includes(raw) ? (raw as Status) : "active";
 }
 
 /**
@@ -168,7 +212,7 @@ export function lookupFromCustomer(customer: AutumnCustomer): BillingLookup {
   return {
     state: "ok",
     sub: {
-      status: statusOf(sub.status),
+      status: subscriptionStatus(sub),
       trialEndsAt: sub.trial_ends_at ? new Date(sub.trial_ends_at) : null,
       entitlements: entitlementsOf(customer),
     },
@@ -194,9 +238,9 @@ export async function lookupOrg(organizationId: string): Promise<BillingLookup> 
   const client = await autumn();
   if (!client) return { state: "none" };
   try {
-    const customer = (await client.customers.get({
-      customerId: organizationId,
-    })) as unknown as AutumnCustomer;
+    const customer = snakeCaseKeys<AutumnCustomer>(
+      await client.customers.get({ customerId: organizationId }),
+    );
     return lookupFromCustomer(customer);
   } catch (err) {
     // A customer Autumn has never seen is "no billing state", not an outage: gate to Free
@@ -256,12 +300,14 @@ export async function attachPlan(input: {
   const client = await autumn();
   if (!client) return { ok: false, error: "Billing is not configured." };
   try {
-    const res = (await client.billing.attach({
-      customerId: input.organizationId,
-      planId: input.planId,
-      ...(input.successUrl ? { successUrl: input.successUrl } : {}),
-    })) as unknown as { checkout_url?: string | null; checkoutUrl?: string | null };
-    return { ok: true, checkoutUrl: res?.checkout_url ?? res?.checkoutUrl ?? null };
+    const res = snakeCaseKeys<{ checkout_url?: string | null }>(
+      await client.billing.attach({
+        customerId: input.organizationId,
+        planId: input.planId,
+        ...(input.successUrl ? { successUrl: input.successUrl } : {}),
+      }),
+    );
+    return { ok: true, checkoutUrl: res?.checkout_url ?? null };
   } catch (err) {
     console.warn("[billing] Autumn attach failed:", err);
     return { ok: false, error: "Could not start that plan change." };
@@ -320,10 +366,12 @@ export async function fetchCustomer(organizationId: string): Promise<AutumnCusto
   const client = await autumn();
   if (!client) return null;
   try {
-    return (await client.customers.get({
-      customerId: organizationId,
-      expand: ["subscriptions.plan"],
-    })) as unknown as AutumnCustomer;
+    return snakeCaseKeys<AutumnCustomer>(
+      await client.customers.get({
+        customerId: organizationId,
+        expand: ["subscriptions.plan"],
+      }),
+    );
   } catch (err) {
     if (!isNotFound(err)) console.warn("[billing] Autumn customer read failed:", err);
     return null;
@@ -335,7 +383,9 @@ export async function fetchPlans(): Promise<AutumnPlan[]> {
   const client = await autumn();
   if (!client) return [];
   try {
-    const res = (await client.plans.list({})) as unknown as { list?: AutumnPlan[] } | AutumnPlan[];
+    const res = snakeCaseKeys<{ list?: AutumnPlan[] } | AutumnPlan[]>(
+      await client.plans.list({}),
+    );
     const list = Array.isArray(res) ? res : (res?.list ?? []);
     return list.filter((p) => !p.archived);
   } catch (err) {
@@ -352,10 +402,12 @@ export async function billingPortalUrl(input: {
   const client = await autumn();
   if (!client) return null;
   try {
-    const res = (await client.billing.openCustomerPortal({
-      customerId: input.organizationId,
-      ...(input.returnUrl ? { returnUrl: input.returnUrl } : {}),
-    })) as unknown as { url?: string | null };
+    const res = snakeCaseKeys<{ url?: string | null }>(
+      await client.billing.openCustomerPortal({
+        customerId: input.organizationId,
+        ...(input.returnUrl ? { returnUrl: input.returnUrl } : {}),
+      }),
+    );
     return res?.url ?? null;
   } catch (err) {
     console.warn("[billing] Autumn portal failed:", err);
@@ -412,58 +464,5 @@ export async function setOverage(input: {
   } catch (err) {
     console.error("[billing] Autumn overage toggle failed:", err);
     return { ok: false, error: "Could not update overage — try again." };
-  }
-}
-
-/**
- * Support's escape hatch: hand an org credits directly. This replaces the actor-attributed
- * `credit_ledger` adjustment — Autumn keeps its own audit trail of balance grants, so the
- * reason rides along as metadata rather than in a column we own.
- */
-export async function grantCredits(input: {
-  organizationId: string;
-  amount: number;
-}): Promise<{ ok: boolean; error?: string }> {
-  const client = await autumn();
-  if (!client) return { ok: false, error: "Billing is not configured." };
-  try {
-    await client.balances.create({
-      customerId: input.organizationId,
-      featureId: AI_CREDITS_FEATURE,
-      includedGrant: input.amount,
-    });
-    return { ok: true };
-  } catch (err) {
-    console.error("[billing] Autumn credit grant failed:", err);
-    return { ok: false, error: "Could not adjust credits — see server logs." };
-  }
-}
-
-/**
- * Platform-admin comp: put an org on a paid plan without charging for it.
- * `noBillingChanges` is what makes it a comp rather than a sale — Autumn grants the
- * entitlements and bills nothing. `months` bounds it; null is indefinite.
- */
-export async function compPlan(input: {
-  organizationId: string;
-  planId: string;
-  months: number | null;
-}): Promise<{ ok: boolean; error?: string }> {
-  const client = await autumn();
-  if (!client) return { ok: false, error: "Billing is not configured." };
-  try {
-    const endsAt = input.months
-      ? Date.now() + input.months * 30 * 24 * 60 * 60 * 1000
-      : undefined;
-    await client.billing.attach({
-      customerId: input.organizationId,
-      planId: input.planId,
-      noBillingChanges: true,
-      ...(endsAt ? { endsAt } : {}),
-    });
-    return { ok: true };
-  } catch (err) {
-    console.error("[billing] Autumn comp failed:", err);
-    return { ok: false, error: "Could not grant the plan — see server logs." };
   }
 }

@@ -346,7 +346,11 @@ hand-walk signup → onboarding. Seed a known account and drive a real browser:
   data. It's a **full reset**: it first truncates every dev/tenant table and clears the
   content bucket's `sites/` prefix (keeping only the `billing:sync` catalog), so leftover experiments — extra
   orgs, hand-connected sites — are gone and the DB holds *only* the seed. **Prod-guarded**
-  (refuses any non-localhost `DATABASE_URL`). Needs `docker compose up` (Postgres + MinIO). Seeded sites (all from **`papervine/starter`** except
+  (refuses any non-localhost `DATABASE_URL`). Needs `docker compose up` (Postgres + MinIO).
+  With a **sandbox** `AUTUMN_SECRET_KEY` in `.env.local` it also creates the seeded org as an
+  Autumn customer on the 30-day trial (`scripts/sync-autumn-customers.mjs`, the same backfill
+  that will put production orgs into live Autumn when that key flips) — without the key, billing
+  is simply absent and every org is Free; with a live key it refuses to sync. Seeded sites (all from **`papervine/starter`** except
   the scale test — one repo to rule them all: the forkable user example AND the renderer/
   reader-auth test bed):
   - **`starter`** — reader-auth OFF: the public showcase.
@@ -518,6 +522,27 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   if you defer a menu's *open* out of the render phase with `queueMicrotask`, defer its *close*
   too, or a synchronous close is applied before an open queued ahead of it and the menu sticks.
   Guarded by an `editor.spec.ts` case that types `/` inside a tab pane.
+- **`autumn-js` camelCases every response; Autumn's docs, REST API, webhooks and MCP are
+  snake_case — and a fixture written from the docs passes against code that reads the SDK wrong.**
+  The adapter's types said `plan_id` / `trial_ends_at` / `add_on` / `overage_allowed` /
+  `variant_details.base_plan_id`; the SDK sends `planId` / `trialEndsAt` / `addOn` /
+  `overageAllowed` / `variantDetails.basePlanId`. Every one of those reads was `undefined`:
+  no trial end (the expiry backstop never fires), no overage (an opted-in org is refused at
+  zero), a credit pack indistinguishable from the plan, and the annual variants shown as
+  separate cards. Typecheck was clean (the types are open), and `billing-autumn.test.ts` was
+  green — its "verbatim capture" fixture had been transcribed from the MCP's snake_case output,
+  not from the SDK. It surfaced only because the customer-sync script printed `plans: none` for a
+  customer Autumn showed on `pro_trial`. The fix is one boundary: every SDK read in
+  `src/lib/billing/autumn.ts` goes through `snakeCaseKeys` (`autumn-keys.ts`), so the rest of the
+  billing code keeps the documented spelling. Two rules from it: **a fixture is a capture only if
+  it came from the same client the code uses** (`tests/unit/fixtures/autumn/*.json` are the SDK's
+  own output, run through the normaliser in the test exactly as production does), and **when an
+  SDK and its API disagree on spelling, pick one at the edge** — never read both spellings
+  ad hoc, or the next field will be the one nobody dual-read. **Vocabulary is spelling too:**
+  Autumn has no `trialing` status — a trial is `active` + `trial_ends_at` — and the core's
+  `trialStatus` only recognises `trialing`, so the seeded trial showed "Renews Oct 1" as if paid.
+  `subscriptionStatus` (autumn.ts) is the one translation; a new status-dependent read goes
+  through it, not `sub.status`.
 - **A random dedupe key is not a dedupe key.** `fireContentUpdateAutomations` is the
   self-trigger loop breaker for `content_update` automations: an automation's own commit
   re-syncs under a sha that already has a run row, so it doesn't re-fire. Its no-sha fallback
@@ -787,6 +812,7 @@ npm run mirror:starter -- --dry-run   # same, for the forkable example site → 
 node tests/crawl.mjs examples/starter # crawl the example site (a CI gate)
 npm run db:generate         # generate a versioned SQL migration from schema changes
 npm run db:migrate          # apply migrations to the local dev DB (reads .env.local)
+node --env-file=.env.local scripts/sync-autumn-customers.mjs [--apply] [--trial]  # every org in DATABASE_URL exists as an Autumn customer; env chosen by the key; dry run by default
 node bin/papervine.mjs dev <dir>     # preview any docs repo (docs dev analogue)
 node apps/cli/bin/papervine.mjs dev <dir>  # the PUBLISHED CLI's bin — serves a PREBUILT server, so renderer/theme edits are invisible until you rebuild
 npm run prepack --workspace papervine     # rebuild that server (the bin now warns when it's stale)

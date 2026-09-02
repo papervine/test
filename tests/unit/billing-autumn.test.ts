@@ -4,9 +4,12 @@
 // that doesn't match reads as "not granted", which a paying customer experiences as an
 // upgrade prompt, and nothing logs.
 //
-// FREE_CUSTOMER is a verbatim capture from the sandbox (a real getOrCreate response, Free
-// auto-enabled) rather than a hand-written literal — a fixture we invented would encode
-// what we *think* Autumn returns, which is the assumption under test.
+// FREE_CUSTOMER is hand-written in Autumn's DOCUMENTED shape (snake_case, as the REST API,
+// webhooks and dashboard show it) — which is the shape the adapter reads, because every SDK
+// response is normalised to it first (autumn-keys.ts). It is NOT what the SDK returns: the SDK
+// camelCases, and a fixture in this spelling passed for as long as the adapter read the SDK
+// payload unconverted and got `undefined` for every field. The real captures live in
+// billing-autumn-captures.test.ts; this file tests the mapping's branches on a small literal.
 import { describe, expect, it } from "vitest";
 import { authorizeAiDecision } from "@/lib/billing/core";
 import { lookupFromCustomer, type AutumnCustomer } from "@/lib/billing/autumn";

@@ -5010,6 +5010,33 @@ Minimum to operate the SaaS:
   analytics page, and it is the only record of *which feature* spent a credit. Autumn holds the
   balance; we keep the story of how it was spent.
 
+  **Bug found by the backfill (2026-09-01): the SDK camelCases, the adapter read snake_case.**
+  `autumn-js` returns `planId`/`trialEndsAt`/`addOn`/`overageAllowed`/`variantDetails.basePlanId`;
+  every documented-spelling read in `autumn.ts` and `summary.ts` was `undefined` — no trial
+  expiry backstop, overage opt-in ignored, packs mistakable for the plan, annual variants
+  unfolded. Flag-presence gating (`FEATURE_ID in flags`) and balance lookups were unaffected,
+  since those are keyed by feature id, which is why AI gating looked right. Fixed at the boundary
+  (`autumn-keys.ts`: every SDK response → snake_case once); the plan-folding got pure cores
+  (`offersFromPlans`, `packsFromPlans`); and the unit fixtures are now the SDK's own captured
+  output (`tests/unit/fixtures/autumn/`), with one test pinning that the raw payload reads wrong
+  so the normaliser can be retired the day the SDK changes. CLAUDE.md gotcha added.
+  **Second mismatch, same session: Autumn has no `trialing` status.** A subscription inside
+  its trial window is `status: "active"` + `trial_ends_at`; our core keys every trial behaviour
+  (`trialStatus` → banner / "Trial ends" copy / expiry backstop) on `"trialing"`, so a trial
+  rendered as a paid plan ("Renews Oct 1" on the seeded org). `subscriptionStatus` in the
+  adapter translates active-with-trial-end → trialing, used by both the lookup and the summary;
+  pinned against the capture.
+  **Backfill (2026-09-01).** Customers are created lazily (org-creation hook, first billing
+  action), so every org that predates the cutover or is seeded by SQL has none and sits on the
+  Free floor unmetered. `scripts/sync-autumn-customers.mjs` creates the missing customers with
+  the fields `ensureCustomer` sends, idempotently, dry-run by default, `--trial` to mirror the
+  signup trial for the ones it creates; the Autumn environment is whatever `AUTUMN_SECRET_KEY`
+  addresses and is printed with the DB host before any write. `db:seed` imports the same
+  function so a reseeded dev org lands in sandbox on the trial (it refuses a live key). Decided
+  the same day: production stays on the sandbox key while the lifecycle is exercised against
+  the seeded org locally; production orgs are NOT mirrored into sandbox (throwaway state, and
+  real visitors would see Stripe test-mode checkout) — they stay on the Free floor, and the
+  live backfill is one run of this script when the key flips.
   Migration for existing paid orgs is Autumn's `billing.import` (Stripe customer + subscription
   + matching `plan_id`), which leaves the live Stripe subscriptions untouched. The billing
   tables are left in place, unread, and dropped in a separate contract migration once
@@ -5107,6 +5134,13 @@ Minimum to operate the SaaS:
   bot submissions (it now surfaces an "I am an AI agent" checkbox) — but checkout
   creation and the post-completion webhook are both proven, so a real human purchase
   works. Credit-rate calibration against real token logs is still the remaining pre-GA item.
+  **`/admin/billing` removed (2026-09-01).** Once Autumn became the source of truth the console
+  was a re-skin of two Autumn dashboard actions (comp a plan → `attach` with no billing changes;
+  adjust credits → `balances.create`) behind a form that required a "reason" and then dropped
+  it before the call — so Autumn's own UI left a better audit trail than ours. Deleted with its
+  two server actions and the adapter's `grantCredits`/`compPlan`; the operator console now links
+  to Autumn (index → dashboard, each org → its customer record, sandbox-aware). The note below
+  is the history.
   **Admin plan comps landed 2026-07-18 (support lever).** The `/admin/billing` console
   gains a **Grant plan** form beside credit-adjustment: put any org on a paid plan for
   free (partner/support comps). It reuses the non-Stripe subscription shape the seed and

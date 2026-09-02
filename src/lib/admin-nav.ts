@@ -1,6 +1,5 @@
 import {
   Building2,
-  CreditCard,
   Globe,
   LayoutDashboard,
   MailPlus,
@@ -35,7 +34,6 @@ export const ADMIN_NAV: AdminNavSection[] = [
   {
     heading: "Commercial",
     items: [
-      { slug: "billing", label: "Billing", icon: CreditCard },
       // Under Commercial rather than Platform: it's demand, not infrastructure.
       { slug: "waitlist", label: "Waitlist", icon: MailPlus },
       // Under Platform would be defensible too, but what an operator does here is decide whether
