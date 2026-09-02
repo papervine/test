@@ -107,6 +107,43 @@ const LAYERS = [
       );
     },
   },
+  {
+    tag: "autumn",
+    color: YELLOW,
+    // Autumn → Papervine webhook delivery (SPEC §10 Billing). Autumn's servers can't reach
+    // localhost either, so without a relay a plan change made in the sandbox dashboard only
+    // shows up locally when the 60s billing cache expires — and the realtime "unlock card
+    // becomes the page" refresh never fires. `svix listen` is the Svix analogue of
+    // `stripe listen`: a public Play URL that forwards POSTs (headers intact, so the
+    // signature still verifies) to the local route. `--token` reconnects to the SAME Play
+    // URL every start, which is what lets the endpoint be registered in Autumn once.
+    when: () =>
+      has("AUTUMN_WEBHOOK_SECRET") && has("AUTUMN_WEBHOOK_PLAY_TOKEN") && onPath("svix"),
+    cmd: "svix",
+    args: [
+      "listen",
+      "--token",
+      process.env.AUTUMN_WEBHOOK_PLAY_TOKEN ?? "",
+      `http://127.0.0.1:${PORT}/api/webhooks/autumn`,
+    ],
+    hint: () => {
+      if (!has("AUTUMN_SECRET_KEY")) return null; // no billing work — stay quiet
+      if (!onPath("svix")) {
+        return (
+          "AUTUMN_SECRET_KEY is set but the svix CLI isn't installed, so Autumn webhooks " +
+          "can't reach you: sandbox plan changes show up only after the billing cache " +
+          "expires. `brew install svix/svix/svix-cli`, then see docs/control-plane/billing-operations."
+        );
+      }
+      return (
+        "AUTUMN_SECRET_KEY is set but AUTUMN_WEBHOOK_SECRET / AUTUMN_WEBHOOK_PLAY_TOKEN " +
+        "aren't, so Autumn webhooks can't reach you. Run `svix listen http://127.0.0.1:" +
+        PORT +
+        "/api/webhooks/autumn` once, register the printed Play URL as a sandbox webhook " +
+        "endpoint in Autumn, and put its token + the endpoint secret in .env.local."
+      );
+    },
+  },
 ];
 
 // --- runner -----------------------------------------------------------------------

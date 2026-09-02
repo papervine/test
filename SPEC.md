@@ -5062,7 +5062,11 @@ Minimum to operate the SaaS:
   Unit-tested: 11 cases on the verifier/parser + 4 on the reviver; smoke pins the route on
   the app host (GET → 405, not a login redirect). Verified in-browser: the dev org's page
   authenticated `private-org-{id}` (200), a published signal produced exactly one RSC
-  refetch of the open route, console clean.
+  refetch of the open route, console clean. **Local delivery** is a `scripts/dev.mjs` layer
+  (`autumn`): `svix listen --token …` relays a stable Play URL to the local route when
+  `AUTUMN_WEBHOOK_SECRET` + `AUTUMN_WEBHOOK_PLAY_TOKEN` are set — the `stripe listen`
+  analogue, registered in the sandbox once; the hint fires when a billing key is present
+  without it, since the symptom (sandbox changes not showing up) reads as a bug.
   **Unlock states (2026-09-02).** The AI surfaces (Automations, Agent, Assistant, the widget
   settings) used to render their controls regardless of plan and let the API 403 on first use.
   Now each page asks `getUnlock(orgId, surface)` first and, when the plan lacks the
