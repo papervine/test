@@ -190,7 +190,35 @@ jobs:
 
       - run: npm ci
 
+      # Turbopack's filesystem cache (on by default for `next dev` in Next 16) persists
+      # compiler artifacts under `<distDir>/dev/cache` — 436MB after one run, and the single
+      # biggest cost in this job is that without it every run compiles every route from zero.
+      # Keyed on the lockfile and a source hash; the restore-keys fall back to a same-lockfile
+      # cache from any earlier commit or any other shard, which is where the value actually is:
+      # the exact key hits rarely, but the cache is content-addressed, so a partial hit still
+      # leaves every unchanged module warm. Only `dev/cache` is cached — never `dev/server` or
+      # `dev/static` (derived output; Turbopack regenerates them fast from the cache) and never
+      # `dev/lock` (a stale pid is harmless to the dev-lock guard but pointless to ship).
+      - name: Restore Turbopack cache
+        uses: actions/cache@v4
+        with:
+          path: .next-e2e/dev/cache
+          key: e2e-turbopack-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'packages/**', 'next.config.mjs', 'tailwind.config.ts') }}-shard-${{ matrix.shard }}
+          restore-keys: |
+            e2e-turbopack-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ hashFiles('src/**', 'packages/**', 'next.config.mjs', 'tailwind.config.ts') }}-
+            e2e-turbopack-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
+      # The browser download is ~26s per shard and changes only when Playwright does.
+      - name: Restore Playwright browser
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
       - name: Install Playwright browser
+        # Idempotent: on a cache hit the binary is already present, so this only installs
+        # the OS deps. No conditional flags — fewer ways for a cache miss to look like a bug.
         run: npx playwright install --with-deps chromium
 
       # MinIO (S3) — same images/creds/bucket as docker-compose. A `services:` block
