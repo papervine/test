@@ -14,7 +14,11 @@ import { generateText, stepCountIs } from "ai";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../lib/db";
 import { agentRun as agentRunTable, site as siteTable, usageEvent } from "../lib/db/app-schema";
-import { getSlackWorkspaceByTeamId, botTokenFor } from "../lib/slack-workspaces";
+import {
+  getSlackWorkspaceByTeamId,
+  botTokenFor,
+  botTokenFailureReason,
+} from "../lib/slack-workspaces";
 import { postThreadMessage, updateMessage, fitSlackText } from "../lib/slack-api";
 import { authorizeAi, recordAiUsage } from "../lib/billing/store";
 import { assistantTools } from "@papervine/renderer/lib/assistant-tools";
@@ -100,7 +104,7 @@ export const slackAgentRunTask = task({
       // to reply through, so the failure is recorded and nothing is posted.
       const error = !workspace
         ? "slack workspace is no longer connected"
-        : "the stored Slack bot token could not be read — reconnect the workspace";
+        : botTokenFailureReason(process.env.PAPERVINE_ENCRYPTION_KEY);
       await db
         .update(agentRunTable)
         .set({ status: "failed", error, finishedAt: new Date() })
