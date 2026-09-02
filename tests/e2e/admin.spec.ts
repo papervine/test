@@ -162,6 +162,13 @@ test.describe("platform admin — plan comps", () => {
   const ORG_ID = "grant-e2e-org-id";
   const GRANT_SLUG = "grant-e2e-org";
   const AUTUMN = Boolean(process.env.AUTUMN_SECRET_KEY);
+  // Skip at DESCRIBE level, not inside the test. A `test.skip()` in the body runs after
+  // `beforeEach`, and this describe's beforeEach signs in — which cold-compiles /admin/*
+  // and blew the 30s default before the skip was ever reached, so the test FAILED in CI
+  // instead of skipping. Skipping the describe means the hooks never run either.
+  test.skip(!AUTUMN, "needs a billing backend (AUTUMN_SECRET_KEY)");
+  // And when it does run, it pays the same cold compile the sibling describe does.
+  test.slow();
 
   test.beforeAll(async () => {
     // The org is ours; its plan is Autumn's. Nothing else to seed.
@@ -178,7 +185,6 @@ test.describe("platform admin — plan comps", () => {
   test.beforeEach(async ({ page }) => signInAsAdmin(page));
 
   test("the console lists the Autumn catalog and accepts a comp", async ({ page }) => {
-    test.skip(!AUTUMN, "needs a billing backend (AUTUMN_SECRET_KEY)");
     await page.goto("/admin/billing");
     // "Billing", not "Billing console": the page's heading now matches its nav label, since the
     // console's sidebar already says where you are.
