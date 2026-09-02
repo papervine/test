@@ -10,10 +10,11 @@ agent), and **Assistant** (the in-docs reader assistant). All three are gated be
 **Trialing** entitlement.
 
 <Note>
-  **Automations are functional; the Agent is still a scaffold.** Automations can be configured,
+  **Automations are functional; the Agent is partially wired.** Automations can be configured,
   toggled, and run — runs execute on the background executor and land through the shared
-  authoring backend. The Agent page (Slack + integrations) is UI only, and parts of the
-  Assistant page persist while others are scaffold (see
+  authoring backend. On the Agent page the **Slack workspace connection is live**
+  (install/disconnect); the agent doesn't answer mentions yet and the connector catalog is
+  UI only. Parts of the Assistant page persist while others are scaffold (see
   [below](#where-each-toggles-state-lives)). Where the spec and the implementation diverge,
   the spec wins.
 </Note>
@@ -215,9 +216,25 @@ scheduled/triggered (Automations)**, over the same underlying tools.
   offer Teams, Discord, or a web console, or keep Slack the canonical home.
 </Info>
 
-The plumbing (none of it built yet) needs a Slack OAuth app and per-org install (bot token), the
-`channels:read` and `chat:write` scopes, a channel allowlist, and an events endpoint for
-`app_mention`.
+### Connecting Slack
+
+The Slack connection is a **per-organization install** of the deployment's own Slack app:
+**Install Slack app** sends a workspace admin through Slack's consent screen, and on approval
+Papervine stores the workspace's bot credential encrypted, ties the workspace to your
+organization, and the banner flips to **Connected** with the workspace's name. **Reinstall**
+re-runs the same flow (refreshing the credential and any newly required permissions);
+**Disconnect** removes the workspace link immediately — either that, or removing the app from
+Slack's side, is enough on its own to stop the agent.
+
+Self-hosting? The Slack app itself is created once from the `slack-app-manifest.json` at the
+repository root and configured through the `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, and
+`SLACK_SIGNING_SECRET` environment variables — unset, the banner reads **Not configured** and
+the rest of the dashboard is unaffected. The install callback lives on the app host (it needs
+your dashboard session to know which organization is installing); Slack requires an `https`
+redirect URL, so local development needs a tunnel or its own development Slack app.
+
+Answering mentions is the next piece: the events endpoint and the agent's background run
+aren't built yet, so a connected workspace doesn't talk back yet.
 
 ## Assistant
 

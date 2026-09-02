@@ -5699,6 +5699,58 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 > logic in `lib/automations/runs.ts` is what's unit-tested), so adding one for a same-shape
 > side-effect call would be new test infrastructure disproportionate to the change; `realtime.ts`'s
 > own unit tests already cover `triggerActivity`'s no-op-when-unconfigured contract.
+>
+> **Decision — integrations split: Slack first-party, everything else through Nango
+> (2026-09-02).** Build-order steps (3) Agent-over-Slack and (4) the integrations
+> connection store resolve to two different auth homes, on purpose:
+> - **Slack is first-party**: our own Slack app (committed manifest,
+>   `slack-app-manifest.json`), OAuth v2 install per org, bot token AES-encrypted on the
+>   new `slack_workspace` table (the `github_installation` shape). Three reasons: (a)
+>   inbound — Slack events/slash-commands demand a synchronous signed response our own
+>   endpoint must serve regardless (Nango's forwarding is async-only, and its
+>   interactivity gap is closed-not-planned upstream); (b) the §18 Chat SDK adapter wants
+>   the bot token + signing secret directly — a vault API in the hot chat path buys
+>   nothing; (c) "Slack for everyone" scales connections with orgs, so a per-connection
+>   vault fee would tax the core transport (~$0.29/org/mo) vs. $0 for a table row.
+> - **The connector catalog (Notion, Linear, Jira, …) goes through Nango** (ELv2;
+>   planned, next slice): connect-session UI, tokens live in Nango's vault (never our
+>   DB), agent reads via `nango.proxy()` at run time — matching the §10.2 live-access
+>   decision (no synced copies; disconnect = instantly revoked). §18 escape hatch: the
+>   auth+proxy core we depend on is the free-self-host part (3 containers), `NANGO_HOST`
+>   is env from day one, and a cloud→self-host move keeps every connection because the
+>   OAuth apps are always ours (export `GET /connection?refresh_token=true`, import
+>   `POST /connection`; rotating-refresh-token providers need an ordered cutover) — so
+>   **never ship Nango's shared dev OAuth apps in production**. A verified self-host dry
+>   run is owed before GA, same rule as Trigger.dev.
+> - *Alternatives considered:* Composio (best pre-built agent-tool catalog +
+>   `@composio/vercel` DX, but SDK-only-OSS — vault/execution are closed cloud on every
+>   tool call, exit = full tool-layer rewrite + mass re-auth, plus demonstrated pricing
+>   volatility in mid-2026); Merge (sync-first unified models — the opposite of
+>   live-access — and per-linked-account pricing); Pipedream Connect (closed,
+>   Workday-acquired), Arcade (hosted execution), Klavis (3-person team risk), ACI.dev
+>   (abandoned OSS, pivoted), Zapier MCP (account-owner creds, wrong multi-tenant shape).
+>   For ~10 providers × a few read-only tools each, hand-written 20-40-line wrappers we
+>   own forever beat a hosted catalog's lock-in.
+>
+> **Status — Agent slice A1 landed (2026-09-02): first-party Slack workspace install.**
+> The Agent page's banner is live: `slack_workspace` table (migration 0034 — org-FK
+> cascade, unique `team_id`, `bot_token_enc` via crypto.ts, granted-scopes column for
+> future reinstall prompts), `src/lib/slack.ts` (config gate + AES-GCM install state
+> with 30-min TTL, the `GithubFlowState` discipline + `redirect_uri` derived once from
+> `BETTER_AUTH_URL` mapped to the app host so authorize/exchange can't drift),
+> `src/lib/slack-workspaces.ts` (upsert-on-team-id / `botTokenFor` choke point /
+> disconnect-deletes-row), and `GET /api/slack/oauth` on the **app host** (the
+> github/setup pattern: session ties install→org, state only picks the return page,
+> login-resume keeps the redirect). Banner states: not configured (no SLACK_* env,
+> nothing 500s) / install link / connected (team name + Reinstall + Disconnect form
+> action). Unit tests: state round-trip/tamper/TTL, authorize-URL shape, ok:false
+> exchange handling (Slack 200s its failures). Verified in-browser (seeded login,
+> light+dark): install link carries the right scopes/state/redirect, seeded row renders
+> Connected, Disconnect deletes and revalidates, garbage state bounces back with
+> `?slack=state_expired`. *Not yet real-world-verified:* a full OAuth round trip needs
+> the Slack app created from the manifest (dev needs an https tunnel for the redirect
+> URL — Slack refuses http). Next: `/api/slack/events` on the apex + the Trigger.dev
+> agent-run task (slice A2).
 
 - **Workflows** — a catalog of scheduled/triggered jobs that open content changes as
   PRs. Two built-in families plus custom:
@@ -5739,7 +5791,8 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
     web console) or keep Slack the canonical home.
   - *Plumbing.* Needs a Slack OAuth app + per-org install (bot token), the
     `channels:read`/`chat:write` scopes, a channel allowlist, and an events endpoint for
-    `app_mention`. None of this is built — the page is UI only.
+    `app_mention`. The install half is built (see the 2026-09-02 status note below); the
+    events endpoint + agent run are next.
 - **Assistant** — the management page for the **same in-docs AI assistant specified in
   §8 / §8.6**, surfaced under Automate. Not a fourth system; this is the settings surface
   §8.6 calls for. Layout (per the reference): a **usage overview** strip (Total questions

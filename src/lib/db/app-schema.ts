@@ -157,6 +157,43 @@ export const githubInstallation = pgTable(
   (table) => [index("githubInstallation_organizationId_idx").on(table.organizationId)],
 );
 
+// A Slack workspace install (SPEC §10.2 — the Agent's transport). One row per Slack
+// workspace, keyed by the org that installed it, exactly the githubInstallation shape:
+// created/refreshed by the OAuth callback (upsert on the unique team id, since an admin
+// can reinstall or move a workspace between orgs), deleted on disconnect. First-party on
+// purpose — the bot token is OUR Slack app's credential for that workspace, so it lives
+// encrypted here (crypto.ts), not in the Nango vault that backs the attach-services
+// catalog: inbound events need our endpoint + signing secret anyway, and the transport
+// every org connects shouldn't ride a metered third party.
+export const slackWorkspace = pgTable(
+  "slack_workspace",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    // Slack's team id (T…) — what event payloads carry, so the events endpoint resolves
+    // workspace → org through this. Unique: one row per real workspace.
+    teamId: text("team_id").notNull().unique(),
+    // Workspace display name, shown in the connect banner so the owner can tell which
+    // workspace is wired ("Connected to Acme Inc").
+    teamName: text("team_name").notNull(),
+    // The bot's own user id (U…) — needed to ignore the bot's own messages in events.
+    botUserId: text("bot_user_id").notNull(),
+    // xoxb bot token, AES-256-GCM via src/lib/crypto.ts (same seam as repoTokenEnc).
+    botTokenEnc: text("bot_token_enc").notNull(),
+    // Comma-separated granted bot scopes, as oauth.v2.access reports them — lets us
+    // detect an install that predates a scope the code now needs and prompt a reinstall.
+    scopes: text("scopes").notNull(),
+    installedByUserId: text("installed_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("slackWorkspace_organizationId_idx").on(table.organizationId)],
+);
+
 // One row per git-sync / publish — backs the dashboard "Activity" feed.
 export const deployment = pgTable(
   "deployment",
@@ -544,6 +581,13 @@ export const analyticsEventRelations = relations(analyticsEvent, ({ one }) => ({
 export const githubInstallationRelations = relations(githubInstallation, ({ one }) => ({
   organization: one(organization, {
     fields: [githubInstallation.organizationId],
+    references: [organization.id],
+  }),
+}));
+
+export const slackWorkspaceRelations = relations(slackWorkspace, ({ one }) => ({
+  organization: one(organization, {
+    fields: [slackWorkspace.organizationId],
     references: [organization.id],
   }),
 }));

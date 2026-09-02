@@ -4,21 +4,27 @@ import { UnlockCard } from "@/components/app/UnlockCard";
 import { requireSite } from "@/lib/dashboard-context";
 import { siteHref } from "@/lib/dashboard-nav";
 import { getUnlock } from "@/lib/billing/store";
+import { isSlackConfigured, slackInstallUrl, encodeSlackInstallState } from "@/lib/slack";
+import { getSlackWorkspaceForOrg } from "@/lib/slack-workspaces";
+import { disconnectSlack } from "./actions";
 import {
   AVAILABLE_INTEGRATIONS,
   SlackLogo,
 } from "@/components/app/automate/integrations";
 
-// Automate › Agent (SPEC §10.2). The agent is Slack-centric: connect a workspace,
-// then enable connectors that feed it context. Steady state shares the §9.2 authoring
-// backend — this surface is presentational scaffold (nothing posts yet): a Slack-connect
-// banner, the (empty) enabled list, and the catalog of connectors available to the team.
+// Automate › Agent (SPEC §10.2). The agent is Slack-centric: connect a workspace
+// (first-party OAuth — src/lib/slack.ts), then enable connectors that feed it context.
+// The Slack banner is live (install/disconnect); the connector catalog below is still
+// presentational until the Nango connection store lands.
 export default async function AgentPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ org: string; site: string }>;
+  searchParams: Promise<{ slack?: string }>;
 }) {
   const { org, site } = await params;
+  const { slack: slackFlag } = await searchParams;
   const { org: activeOrg } = await requireSite(org, site);
   // Plan gate — see the Automations page for the rule. The agent follows the same
   // entitlement as automations (src/lib/billing/unlock.ts explains why).
@@ -35,6 +41,20 @@ export default async function AgentPage({
       </div>
     );
   }
+  const workspace = await getSlackWorkspaceForOrg(activeOrg.id);
+  const configured = isSlackConfigured();
+  // The state binds the round trip to this org+site (AES-GCM, TTL'd) — the callback
+  // still re-derives authorization from the session; this only picks the return page.
+  const installHref = configured
+    ? slackInstallUrl(encodeSlackInstallState({ org, site }))
+    : null;
+  const installError =
+    slackFlag === "error"
+      ? "Slack didn't complete the install — try again."
+      : slackFlag === "state_expired"
+        ? "The install link expired — try again."
+        : null;
+
   return (
     <div className="px-4 sm:px-6 lg:px-8 py-6">
       <AutomateHeader page="Agent" />
@@ -50,22 +70,67 @@ export default async function AgentPage({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <SlackLogo className="h-5 w-5" />
-              <span className="font-semibold">Connect your Slack workspace</span>
-              <span className="inline-flex items-center gap-1 rounded-md bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400">
-                <span aria-hidden>&bull;</span> Not connected
+              <span className="font-semibold">
+                {workspace ? "Slack workspace" : "Connect your Slack workspace"}
               </span>
+              {workspace ? (
+                <span className="inline-flex items-center gap-1 rounded-md bg-emerald-400/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
+                  <span aria-hidden>&bull;</span> Connected
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-md bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400">
+                  <span aria-hidden>&bull;</span> {configured ? "Not connected" : "Not configured"}
+                </span>
+              )}
             </div>
             <p className="mt-1.5 text-sm text-[var(--muted)]">
-              Connect your Slack workspace to use the agent.
+              {workspace
+                ? `Connected to ${workspace.teamName}. Mention @papervine in a channel to talk to the agent.`
+                : configured
+                  ? "Connect your Slack workspace to use the agent."
+                  : "This deployment has no Slack app configured (SLACK_CLIENT_ID / SLACK_CLIENT_SECRET / SLACK_SIGNING_SECRET)."}
             </p>
+            {installError ? (
+              <p className="mt-1.5 text-sm text-red-400">{installError}</p>
+            ) : null}
           </div>
-          <button
-            type="button"
-            className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black hover:bg-white/90"
-          >
-            <SlackLogo className="h-4 w-4" />
-            Install Slack app
-          </button>
+          {workspace ? (
+            <div className="flex shrink-0 items-center gap-2">
+              {installHref ? (
+                <a
+                  href={installHref}
+                  className="inline-flex items-center rounded-xl border border-[rgba(var(--ink-rgb),0.1)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-2 text-sm font-medium hover:bg-[rgba(var(--ink-rgb),0.05)]"
+                >
+                  Reinstall
+                </a>
+              ) : null}
+              <form action={disconnectSlack.bind(null, { org, site })}>
+                <button
+                  type="submit"
+                  className="inline-flex items-center rounded-xl border border-[rgba(var(--ink-rgb),0.1)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-2 text-sm font-medium text-[var(--muted)] hover:bg-[rgba(var(--ink-rgb),0.05)] hover:text-red-400"
+                >
+                  Disconnect
+                </button>
+              </form>
+            </div>
+          ) : installHref ? (
+            <a
+              href={installHref}
+              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black hover:bg-white/90"
+            >
+              <SlackLogo className="h-4 w-4" />
+              Install Slack app
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled
+              className="inline-flex shrink-0 cursor-not-allowed items-center gap-2 rounded-xl bg-white/40 px-4 py-2.5 text-sm font-semibold text-black/60"
+            >
+              <SlackLogo className="h-4 w-4" />
+              Install Slack app
+            </button>
+          )}
         </div>
       </div>
 
