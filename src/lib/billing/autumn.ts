@@ -1,5 +1,5 @@
 import "server-only";
-import { Autumn } from "autumn-js";
+import type { Autumn } from "autumn-js";
 import type { BillingLookup, PlanEntitlements, PlanFeatureKey } from "./core";
 import { PLAN_FEATURE_KEYS } from "./catalog";
 
@@ -57,11 +57,33 @@ const RETENTION_FEATURE = "analytics_retention_days";
 
 let client: Autumn | null | undefined;
 
-/** Lazy singleton. `null` (not a throw) when unconfigured — see rule 2. */
-export function autumn(): Autumn | null {
+/**
+ * Lazy singleton. `null` (not a throw) when unconfigured — see rule 2.
+ *
+ * **The SDK is imported dynamically, and that is load-bearing rather than tidy.**
+ * `autumn-js` is a 36MB dist, and this module is reachable from `powered-by-store`, which
+ * `render-tenant.tsx` calls on every tenant docs page. A static import therefore pulls the
+ * whole billing SDK into the RENDERER's module graph — which is both the thing this file's
+ * own docs promise never happens ("billing is never on the render path") and, measurably, a
+ * `next dev` compile slow enough to blow the smoke gate's per-request timeout on CI.
+ *
+ * Same reasoning as `PrismaticBurst`'s lazy `ogl` import: the heavy dependency loads when
+ * something actually needs it, and a failure to load is a quiet `null`, not a broken page.
+ */
+async function autumn(): Promise<Autumn | null> {
   if (client !== undefined) return client;
   const secretKey = process.env.AUTUMN_SECRET_KEY;
-  client = secretKey ? new Autumn({ secretKey }) : null;
+  if (!secretKey) {
+    client = null;
+    return client;
+  }
+  try {
+    const { Autumn } = await import("autumn-js");
+    client = new Autumn({ secretKey });
+  } catch (err) {
+    console.warn("[billing] Autumn SDK failed to load — treating billing as absent:", err);
+    client = null;
+  }
   return client;
 }
 
@@ -169,7 +191,7 @@ export function lookupFromCustomer(customer: AutumnCustomer): BillingLookup {
  * open), `ok` = resolved entitlements + spendable credits.
  */
 export async function lookupOrg(organizationId: string): Promise<BillingLookup> {
-  const client = autumn();
+  const client = await autumn();
   if (!client) return { state: "none" };
   try {
     const customer = (await client.customers.get({
@@ -204,7 +226,7 @@ export async function trackCredits(input: {
   siteId?: string | null;
   model: string;
 }): Promise<void> {
-  const client = autumn();
+  const client = await autumn();
   if (!client || input.credits <= 0) return;
   try {
     await client.track({
@@ -231,7 +253,7 @@ export async function attachPlan(input: {
   planId: string;
   successUrl?: string;
 }): Promise<{ ok: boolean; checkoutUrl?: string | null; error?: string }> {
-  const client = autumn();
+  const client = await autumn();
   if (!client) return { ok: false, error: "Billing is not configured." };
   try {
     const res = (await client.billing.attach({
@@ -256,7 +278,7 @@ export async function ensureCustomer(input: {
   name?: string | null;
   email?: string | null;
 }): Promise<boolean> {
-  const client = autumn();
+  const client = await autumn();
   if (!client) return false;
   try {
     await client.customers.getOrCreate({
@@ -295,7 +317,7 @@ export type AutumnPlan = {
  * dashboard reads, and a billing outage should show an empty billing page, not a 500.
  */
 export async function fetchCustomer(organizationId: string): Promise<AutumnCustomer | null> {
-  const client = autumn();
+  const client = await autumn();
   if (!client) return null;
   try {
     return (await client.customers.get({
@@ -310,7 +332,7 @@ export async function fetchCustomer(organizationId: string): Promise<AutumnCusto
 
 /** The whole Autumn catalog. Empty array when unconfigured or unreachable. */
 export async function fetchPlans(): Promise<AutumnPlan[]> {
-  const client = autumn();
+  const client = await autumn();
   if (!client) return [];
   try {
     const res = (await client.plans.list({})) as unknown as { list?: AutumnPlan[] } | AutumnPlan[];
@@ -327,7 +349,7 @@ export async function billingPortalUrl(input: {
   organizationId: string;
   returnUrl?: string;
 }): Promise<string | null> {
-  const client = autumn();
+  const client = await autumn();
   if (!client) return null;
   try {
     const res = (await client.billing.openCustomerPortal({
@@ -354,7 +376,7 @@ export async function setCancelation(input: {
   organizationId: string;
   cancel: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
-  const client = autumn();
+  const client = await autumn();
   if (!client) return { ok: false, error: "Billing is not configured." };
   try {
     await client.billing.update({
@@ -377,7 +399,7 @@ export async function setOverage(input: {
   organizationId: string;
   enabled: boolean;
 }): Promise<{ ok: boolean; error?: string }> {
-  const client = autumn();
+  const client = await autumn();
   if (!client) return { ok: false, error: "Billing is not configured." };
   try {
     await client.customers.update({
@@ -402,7 +424,7 @@ export async function grantCredits(input: {
   organizationId: string;
   amount: number;
 }): Promise<{ ok: boolean; error?: string }> {
-  const client = autumn();
+  const client = await autumn();
   if (!client) return { ok: false, error: "Billing is not configured." };
   try {
     await client.balances.create({
@@ -427,7 +449,7 @@ export async function compPlan(input: {
   planId: string;
   months: number | null;
 }): Promise<{ ok: boolean; error?: string }> {
-  const client = autumn();
+  const client = await autumn();
   if (!client) return { ok: false, error: "Billing is not configured." };
   try {
     const endsAt = input.months
