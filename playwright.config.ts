@@ -13,6 +13,15 @@ export default defineConfig({
   // workers race on that state (a spec that adds a site would break another's
   // "no sites" assertion). One worker keeps DB state deterministic.
   workers: 1,
+  // Playwright's per-assertion default is 5s, which is a RENDER budget. Almost every
+  // assertion here waits on a server round trip — a form post through Better Auth (scrypt),
+  // a Postgres write, an S3 read — on a CI runner about 4x slower than a dev machine, where
+  // sibling tests in the same file were measured passing at 20.4s and 25.7s. Chasing that
+  // one test at a time cost four separate fixes and still missed a fifth with the identical
+  // shape, so the default now matches what the assertions actually wait for. `test.slow()`
+  // does NOT raise this (it multiplies the TEST timeout), which is exactly why the two were
+  // so easy to confuse: the test had budget left and the assertion did not.
+  expect: { timeout: 15_000 },
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   reporter: process.env.CI ? "list" : "line",

@@ -149,7 +149,10 @@ test("the ADVERTISED token endpoint redeems a device code, form-encoded", async 
   const flow = await requestCode(request);
   await page.goto(flow.verification_uri_complete);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Device connected" })).toBeVisible();
+  // Approving is a round trip; same budget as the two tests above that do it.
+  await expect(page.getByRole("heading", { name: "Device connected" })).toBeVisible({
+    timeout: 30_000,
+  });
 
   // Form-encoded, as OAuth specifies for a token request — the encoding the device endpoint
   // would otherwise reject.
