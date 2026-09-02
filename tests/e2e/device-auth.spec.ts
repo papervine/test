@@ -100,11 +100,19 @@ test("approving hands the client a token that works as a bearer credential", asy
   page,
   request,
 }) => {
+  // Approving is a server round trip (Better Auth marks the device code approved, then the
+  // page re-renders), and on the CI runner the device-auth endpoints measurably take tens of
+  // seconds — sibling tests in this file passed at 20.4s and 25.7s in the same run. The 5s
+  // per-assertion default is the render budget, not the round-trip budget, and `test.slow()`
+  // does not raise it (CLAUDE.md, the members-roles case), so the heading gets its own.
+  test.slow();
   const flow = await requestCode(request);
 
   await page.goto(flow.verification_uri_complete);
   await page.getByRole("button", { name: "Approve", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Device connected" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Device connected" })).toBeVisible({
+    timeout: 30_000,
+  });
 
   const granted = await exchange(request, flow.device_code);
   expect(granted.status, JSON.stringify(granted.body)).toBe(200);
@@ -162,11 +170,16 @@ test("refusing in the browser reports access_denied to the waiting client", asyn
   page,
   request,
 }) => {
+  // Same shape as approving above: the click is a round trip, so the heading needs the round
+  // trip's budget rather than the 5s render default.
+  test.slow();
   const flow = await requestCode(request);
 
   await page.goto(flow.verification_uri_complete);
   await page.getByRole("button", { name: /didn’t start this/ }).click();
-  await expect(page.getByRole("heading", { name: "Request refused" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Request refused" })).toBeVisible({
+    timeout: 30_000,
+  });
 
   const denied = await exchange(request, flow.device_code);
   expect(denied.status).toBe(400);
@@ -223,6 +236,11 @@ test.describe("signed out", () => {
     page,
     request,
   }) => {
+    // The longest flow in the file: mint a code, load the gated page, then sign in through the
+    // real form — a password verification plus two navigations. It ran out of the 30s default
+    // *while clicking* Sign in on CI, which reports as `locator.click: Test timeout` and reads
+    // like a stuck button rather than a spent budget.
+    test.slow();
     const flow = await requestCode(request);
 
     // The app host bounces everything unauthenticated to /login. This page must NOT be bounced,
