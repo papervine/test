@@ -1290,7 +1290,19 @@ async function run() {
       const tag = `control-plane ${check.host ? `${check.host}` : ""}${check.path}`;
       try {
         // rawGet (not fetch) so a check can address the `app.` host via a real Host header.
-        const res = await rawGet(check.path, check.host, check.cookie);
+        //
+        // Retried once on timeout, and only on timeout. This gate runs against `next dev`, so the
+        // FIRST request to any route is also its compile — and on CI hardware (~4× slower than a
+        // dev machine) a route with its own bundle can take longer than the 30s budget just to
+        // compile. `/device` did: 30.0s and out, while `/login?stale=1` right behind it took
+        // exactly 30s and passed by luck. A timed-out request doesn't cancel the compile, so the
+        // retry lands on a warm route and answers in milliseconds. Two timeouts in a row is a
+        // route that is actually hanging, which is the thing this check should catch — and a
+        // 60s budget still catches it. Same lesson as widget-settings: not flaky, over budget.
+        const res = await rawGet(check.path, check.host, check.cookie).catch(async (err) => {
+          if (!/timeout/.test(String(err?.message))) throw err;
+          return rawGet(check.path, check.host, check.cookie);
+        });
         if (check.expectStatus) {
           if (res.status !== check.expectStatus) {
             failures.push(`[${tag}] expected ${check.expectStatus}, got ${res.status} → "${res.location}" — ${check.desc}`);
