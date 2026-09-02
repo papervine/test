@@ -50,6 +50,10 @@ const resetLink = (token: string) =>
 test("a forgotten password can be reset from the emailed link, and the old one stops working", async ({
   page,
 }) => {
+  // First test in its shard, so it cold-compiles /forgot-password, /reset-password and /login
+  // itself. Unsharded this ran ~19 files deep, after those routes were warm — which is why it
+  // was green for months and went red the moment the suite was split. Budget, not code.
+  test.slow();
   // Its own account, created through the real signup form.
   await page.goto("/signup");
   await page.getByLabel("Name").fill(RESET_USER.name);

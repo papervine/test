@@ -12,6 +12,8 @@ const ALPHA = { id: "e2e-switch-alpha", slug: "switch-alpha", name: "Switcher Al
 const BETA = { id: "e2e-switch-beta", slug: "switch-beta", name: "Switcher Beta" };
 
 test.describe("dashboard site switcher", () => {
+  // Cold-compiles the dashboard routes on its shard; see password-reset for the shape.
+  test.slow();
   const sql = postgres(TEST_DB_URL, { max: 1 });
 
   test.beforeAll(async () => {
