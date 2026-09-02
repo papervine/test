@@ -5804,6 +5804,49 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   deployed* **before** saving the Request URL — Slack POSTs its challenge on save and
 >   the route verifies the signature first, so an unconfigured deployment 401s the
 >   handshake.
+> **Status — connectors landed, Google Drive first (2026-09-02): slices B + C.** The
+> gallery is live. `integration_connection` (migration 0036, unique on `(org, provider)`)
+> holds a **handle, never a token** — the credential lives in Nango's vault, which is what
+> makes the §10.2 context model literally true: reads are live calls under the authorizing
+> account's own grant, so a disconnect revokes instantly and no copy of anyone's data or
+> token sits here to leak.
+> - *Flow:* `POST /api/integrations/session` (app host, session-authed, **owner/admin
+>   only** — connecting grants the agent live read access to a Drive) mints a Connect
+>   session naming `end_user.organization_id`; Nango's popup runs the provider's OAuth;
+>   `POST /api/nango/webhook` (marketing host, HMAC-SHA256 over the raw body in
+>   `X-Nango-Hmac-Sha256`) echoes that org back and upserts the row. The provider is
+>   allowlisted twice — against our own catalog before Nango sees it, and again as
+>   `allowed_integrations` on the session — so a tampered client can neither pick an
+>   arbitrary integration on our account nor widen the one we chose. Nango's scheme
+>   carries **no timestamp**, hence no replay protection, which is why everything the
+>   route does is idempotent (upsert by connection, or delete).
+> - *Google Drive tools:* `search_google_drive` / `read_google_drive_file`, read-only by
+>   construction. Nango is a keychain, not a unified API, so these are Google's own
+>   endpoints — the ~40-lines-per-connector trade the ADR above accepted. Three things
+>   the wrappers exist for: Drive's `q` is a DSL (an unescaped apostrophe is a syntax
+>   error, not a search), Google Docs/Sheets/Slides have no bytes and must `export`
+>   rather than download, and shared drives — where team documentation actually lives —
+>   are invisible without `supportsAllDrives`/`includeItemsFromAllDrives`. Long files
+>   truncate *and say so*; binary content is refused rather than handed to the model as
+>   mojibake; every failure is a tool RESULT, never a thrown error that would kill a run.
+> - *Prompt:* the agent is told which sources are connected and must **say which source an
+>   answer came from** — a Drive document is not documentation, and letting a stale
+>   internal file pass as policy is the failure mode worth designing against.
+> - *Disconnect revokes at Nango FIRST*, dropping our row only on success (404 counts as
+>   success — convergence, not bookkeeping), so a failed revoke can't orphan a live grant
+>   we've forgotten we hold. Unit-tested, including the no-backend path: a deployment that
+>   lost its key must still be able to detach a source.
+> - *Verified:* 31 unit tests (webhook HMAC + classifier incl. the failed-authorization
+>   case, the allowlist, the Drive query/export/truncation/binary behaviors, disconnect
+>   ordering); a smoke gate that an unsigned Nango webhook is 401'd before it can write a
+>   connection; in-browser, both states render correctly (unconfigured → Connect disabled
+>   with the reason; connected → Drive moves to *Enabled integrations* with its capability
+>   line and a Disconnect). **Unverified:** the live Nango round trip (needs an account +
+>   a Google OAuth client configured there), and clicking Disconnect in-browser — the
+>   server-action form did not submit under the browser driver this session despite the
+>   identical Slack form working earlier by the same method, with analytics POSTs proving
+>   JS was running; the logic behind it is unit-tested instead.
+>
 > - *Still owed:* a real Slack app for a true round trip (the placeholder token ends at
 >   `invalid_auth`, which is exactly where verification stops without one); streaming the
 >   reply as the agent works (v1 posts `_Reading the docs…_` then edits once — deliberate:

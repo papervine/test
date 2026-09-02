@@ -253,6 +253,13 @@
       "when": 1788370247399,
       "tag": "0035_perfect_doorman",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788389552029,
+      "tag": "0036_faithful_bullseye",
+      "breakpoints": true
     }
   ]
 }

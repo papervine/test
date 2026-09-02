@@ -238,6 +238,51 @@ export const agentRun = pgTable(
   (table) => [index("agentRun_site_queuedAt_idx").on(table.siteId, table.queuedAt)],
 );
 
+// A third-party service an org attached to the agent (SPEC §10.2 — the connector
+// catalog on Automate › Agent). One row per (org, provider).
+//
+// **No token here, by design.** Unlike slack_workspace — where we hold the credential
+// because Slack is our own first-party app and its inbound events need our endpoint —
+// these credentials live in Nango's vault and we store only the handle. That's what
+// makes §10.2's context model literally true: reads are live API calls through the
+// authorizing account's own grant, so a disconnect revokes access instantly and there is
+// no durable copy of anyone's data (or of their token) here to leak.
+export const integrationConnection = pgTable(
+  "integration_connection",
+  {
+    id: text("id").primaryKey(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    // Our connector id (src/lib/integrations/catalog.ts), e.g. "google-drive". Ours
+    // rather than Nango's key so renaming an integration there isn't a breaking change.
+    provider: text("provider").notNull(),
+    // The connection handle Nango generates. Everything we do with the provider is
+    // "make this call as connection X" — we never see the access token.
+    nangoConnectionId: text("nango_connection_id").notNull(),
+    // 'active' | 'revoked' — a connection Nango told us is gone (or that we
+    // disconnected) is kept only long enough for the UI to say so; see the store.
+    status: text("status").default("active").notNull(),
+    connectedByUserId: text("connected_by_user_id").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    // Display detail from the provider (the connected account's email, a drive name).
+    // Free-form because every provider reports something different.
+    metadata: jsonb("metadata").$type<Record<string, unknown>>(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("integrationConnection_organizationId_idx").on(table.organizationId),
+    // One connection per provider per org: connecting again re-authorizes rather than
+    // accumulating rows, which is also what makes the webhook's upsert well-defined.
+    uniqueIndex("integrationConnection_org_provider_idx").on(
+      table.organizationId,
+      table.provider,
+    ),
+  ],
+);
+
 // One row per git-sync / publish — backs the dashboard "Activity" feed.
 export const deployment = pgTable(
   "deployment",
@@ -632,6 +677,13 @@ export const githubInstallationRelations = relations(githubInstallation, ({ one 
 export const slackWorkspaceRelations = relations(slackWorkspace, ({ one }) => ({
   organization: one(organization, {
     fields: [slackWorkspace.organizationId],
+    references: [organization.id],
+  }),
+}));
+
+export const integrationConnectionRelations = relations(integrationConnection, ({ one }) => ({
+  organization: one(organization, {
+    fields: [integrationConnection.organizationId],
     references: [organization.id],
   }),
 }));

@@ -1360,6 +1360,36 @@ async function run() {
       log(`  ${failures.length === before ? "✓" : "✗"} slack events rejects an unsigned delivery (401)`);
     }
 
+    // Nango connection webhook signature gate (SPEC §10.2 connectors). Same shape and
+    // reasoning as the two above: an unsigned delivery is rejected 401 before the route
+    // parses the body or writes a connection row, so it runs with no Postgres and no
+    // Nango account. This one matters more than most — the webhook is what grants an org
+    // agent access to a connected Drive, so forging one must not be possible.
+    {
+      const before = failures.length;
+      const deliver = () =>
+        fetch(`${BASE}/api/nango/webhook`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-nango-hmac-sha256": "deadbeef", // not a valid HMAC of the body
+          },
+          body: JSON.stringify({ type: "auth", operation: "creation", connectionId: "c1" }),
+          signal: AbortSignal.timeout(30_000),
+        });
+      try {
+        let res = await deliver();
+        // Retried once on 404 only — see the note on the slack check above.
+        if (res.status === 404) res = await deliver();
+        if (res.status !== 401) {
+          failures.push(`[nango-webhook] expected 401 for a bad signature, got ${res.status}`);
+        }
+      } catch (e) {
+        failures.push(`[nango-webhook] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} nango webhook rejects an unsigned delivery (401)`);
+    }
+
     for (const check of CONTROL_PLANE_CHECKS) {
       const before = failures.length;
       const tag = `control-plane ${check.host ? `${check.host}` : ""}${check.path}`;

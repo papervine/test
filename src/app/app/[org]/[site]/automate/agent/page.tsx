@@ -6,7 +6,10 @@ import { siteHref } from "@/lib/dashboard-nav";
 import { getUnlock } from "@/lib/billing/store";
 import { isSlackConfigured, slackInstallUrl, encodeSlackInstallState } from "@/lib/slack";
 import { getSlackWorkspaceForOrg } from "@/lib/slack-workspaces";
-import { disconnectSlack } from "./actions";
+import { listConnections, nangoConfigured } from "@/lib/integrations/nango";
+import { findConnector } from "@/lib/integrations/catalog";
+import { ConnectSource } from "@/components/app/automate/ConnectSource";
+import { disconnectSlack, disconnectSource } from "./actions";
 import {
   AVAILABLE_INTEGRATIONS,
   SlackLogo,
@@ -43,6 +46,25 @@ export default async function AgentPage({
   }
   const workspace = await getSlackWorkspaceForOrg(activeOrg.id);
   const configured = isSlackConfigured();
+
+  // Split the one catalog into what's attached and what's on offer. Connections are the
+  // source of truth; the gallery entry supplies the name/logo, and the connector entry
+  // (when there is one) supplies what the agent can actually do with it.
+  // Connections are listed regardless of configuration: a deployment that loses its
+  // NANGO_SECRET_KEY still HAS the rows, and hiding them would leave an org unable to see
+  // — or disconnect — a source it had already attached. Only connecting a NEW one needs
+  // the backend.
+  const integrationsConfigured = nangoConfigured();
+  const connections = await listConnections(activeOrg.id);
+  const connectedIds = new Set(
+    connections.filter((c) => c.status === "active").map((c) => c.provider),
+  );
+  const decorated = AVAILABLE_INTEGRATIONS.map((entry) => ({
+    ...entry,
+    connector: findConnector(entry.id),
+  }));
+  const connected = decorated.filter((entry) => connectedIds.has(entry.id));
+  const available = decorated.filter((entry) => !connectedIds.has(entry.id));
   // The state binds the round trip to this org+site (AES-GCM, TTL'd) — the callback
   // still re-derives authorization from the session; this only picks the return page.
   const installHref = configured
@@ -139,9 +161,47 @@ export default async function AgentPage({
       {/* Enabled integrations — empty until a connector is wired up */}
       <section className="mt-8">
         <h2 className="text-base font-semibold">Enabled integrations</h2>
-        <div className="mt-5 flex items-center justify-center rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] px-6 py-14 text-sm text-[var(--muted)]">
-          No integrations enabled yet.
-        </div>
+        {connected.length === 0 ? (
+          <div className="mt-5 flex items-center justify-center rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] px-6 py-14 text-sm text-[var(--muted)]">
+            No integrations enabled yet.
+          </div>
+        ) : (
+          <div className="mt-5 grid gap-4 md:grid-cols-2">
+            {connected.map(({ id, name, description, Logo, connector }) => (
+              <div
+                key={id}
+                className="flex items-center justify-between gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.03)] px-4 py-4"
+              >
+                <div className="flex min-w-0 items-center gap-4">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)]">
+                    <Logo className="h-6 w-6" />
+                  </span>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{name}</span>
+                      <span className="inline-flex items-center gap-1 rounded-md bg-emerald-400/10 px-2 py-0.5 text-xs font-medium text-emerald-400">
+                        <span aria-hidden>&bull;</span> Connected
+                      </span>
+                    </div>
+                    <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
+                      {connector?.hasTools
+                        ? connector.capability
+                        : `${description} The agent can't read this source yet.`}
+                    </p>
+                  </div>
+                </div>
+                <form action={disconnectSource.bind(null, { org, site }, id)}>
+                  <button
+                    type="submit"
+                    className="inline-flex shrink-0 items-center rounded-xl border border-[rgba(var(--ink-rgb),0.1)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-2 text-sm font-medium text-[var(--muted)] hover:bg-[rgba(var(--ink-rgb),0.05)] hover:text-red-400"
+                  >
+                    Disconnect
+                  </button>
+                </form>
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <hr className="mt-8 border-[rgba(var(--ink-rgb),0.08)]" />
@@ -149,8 +209,14 @@ export default async function AgentPage({
       {/* Catalog of connectors available to the team */}
       <section className="mt-8">
         <h2 className="text-base font-semibold">Available to your team</h2>
+        {!integrationsConfigured ? (
+          <p className="mt-2 text-sm text-[var(--muted)]">
+            This deployment has no integrations backend configured (NANGO_SECRET_KEY), so
+            sources can&rsquo;t be connected.
+          </p>
+        ) : null}
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          {AVAILABLE_INTEGRATIONS.map(({ id, name, category, description, Logo }) => (
+          {available.map(({ id, name, category, description, Logo, connector }) => (
             <div
               key={id}
               className="flex items-center justify-between gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-4"
@@ -166,18 +232,20 @@ export default async function AgentPage({
                       {category}
                     </span>
                   </div>
-                  <p className="mt-0.5 truncate text-sm text-[var(--muted)]">
-                    {description}
-                  </p>
+                  <p className="mt-0.5 truncate text-sm text-[var(--muted)]">{description}</p>
                 </div>
               </div>
-              <button
-                type="button"
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[rgba(var(--ink-rgb),0.1)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-2 text-sm font-medium hover:bg-[rgba(var(--ink-rgb),0.05)]"
-              >
-                <Plus className="h-4 w-4" />
-                Connect
-              </button>
+              <ConnectSource
+                org={org}
+                provider={id}
+                name={name}
+                disabled={!connector || !integrationsConfigured}
+                disabledReason={
+                  !integrationsConfigured
+                    ? "This deployment has no integrations backend configured."
+                    : "This connector isn't available yet."
+                }
+              />
             </div>
           ))}
         </div>

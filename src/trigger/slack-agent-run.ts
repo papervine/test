@@ -27,6 +27,7 @@ import { contentContext } from "@papervine/renderer/lib/content";
 import { s3Source } from "../lib/s3-source";
 import { contentVersion, liveContentPrefix } from "../lib/revisions";
 import { resolveDocsBaseUrl } from "../lib/widget";
+import { connectedTools, connectedSourceNames } from "../lib/integrations/tools";
 import {
   aiModel,
   aiModelId,
@@ -179,22 +180,35 @@ export const slackAgentRunTask = task({
         siteRow,
       );
 
+      // Sources the org has attached (SPEC §10.2). Read-only, live, and composed per run
+      // from the connection rows — so a disconnect takes effect on the very next mention.
+      const sourceTools = await connectedTools(siteRow.organizationId);
+      const sources = await connectedSourceNames(siteRow.organizationId);
+
       const system =
         `You are the documentation agent for "${siteRow.name}", answering in Slack. ` +
         `Answer from the site's documentation using the read tools (searchDocs, readPage, ` +
         `listPages) — search before you answer, and never guess at product behavior the ` +
-        `docs don't state. Reply in Slack mrkdwn: short paragraphs, *bold* not **bold**, ` +
-        `links as <url|label>. The tools return root-relative hrefs; make them absolute ` +
+        `docs don't state. ` +
+        (sources.length
+          ? `This workspace has also connected ${sources.join(", ")}; you may read from ` +
+            `those tools when the docs don't answer the question, and you must say which ` +
+            `source an answer came from — a Drive document is not documentation, and ` +
+            `presenting it as though it were is how a stale internal file becomes policy. ` +
+            `Prefer the docs when they cover it. `
+          : "") +
+        `Reply in Slack mrkdwn: short paragraphs, *bold* not **bold**, ` +
+        `links as <url|label>. The docs tools return root-relative hrefs; make them absolute ` +
         `against ${docsBaseUrl} and NEVER invent a different host. Be concise — a few ` +
-        `sentences beats an essay — and link the pages you used. If the docs genuinely ` +
-        `don't cover it, say so plainly and suggest what would need documenting.`;
+        `sentences beats an essay — and link the pages you used. If neither the docs nor ` +
+        `the connected sources cover it, say so plainly and suggest what would need documenting.`;
 
       const result = await contentContext.run(source, async () =>
         generateText({
           model: aiModel(model),
           system,
           prompt: run.prompt,
-          tools: assistantTools,
+          tools: { ...assistantTools, ...sourceTools },
           stopWhen: stepCountIs(12),
           providerOptions: aiProviderOptions(model),
         }),
