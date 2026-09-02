@@ -16,6 +16,7 @@ import { PLATFORM_ICONS } from "@/lib/brand";
 import { EnvBadge } from "@/components/platform/EnvBadge";
 import { LogRocketInit } from "@/components/platform/LogRocketInit";
 import { ChatwootWidget } from "@/components/platform/ChatwootWidget";
+import { GoogleAdsTag } from "@/components/platform/GoogleAdsTag";
 import { SupportWidget } from "@/components/platform/SupportWidget";
 
 /** Flip back to `true` to restore the Chatwoot inbox and drop <SupportWidget /> above it. */
@@ -149,6 +150,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <>
             <Analytics />
             <LogRocketInit appId={process.env.NEXT_PUBLIC_LOGROCKET_APP_ID} />
+            {/* Google Ads conversion tag. Production only, for the same reason the widget below
+                is: a conversion fired from localhost or a preview URL is a real row in the ad
+                account that never corresponded to a real signup, and attribution you can't trust
+                is worse than none. `!isTenant` keeps an advertising tag off customers' docs. */}
+            {process.env.VERCEL_ENV === "production" && (
+              <GoogleAdsTag conversionId={process.env.NEXT_PUBLIC_GOOGLE_ADS_ID} />
+            )}
             {/* Our support channel. Same gate for a sharper reason: on a tenant's docs site this
                 would invite THEIR readers to chat with US, and it would collide with the
                 tenant's own assistant launcher in the same corner.
