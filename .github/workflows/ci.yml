@@ -237,8 +237,24 @@ jobs:
             done
             mc mb --ignore-existing local/papervine-content && echo "bucket ready"'
 
+      # Instrumentation, not a fix. A dev server that dies mid-shard prints NOTHING in its own
+      # output (a kernel OOM kill is silent to the process it kills), and the only symptom the
+      # suite shows is a cascade of ECONNREFUSED in ~200ms each. Without these two steps the
+      # post-mortem is a guess between "runner was degraded" and "the heavy shard reproducibly
+      # runs out of memory" — which was exactly the guess we were left making. `free -m` before
+      # and after, plus the kernel's own record of any kill, makes the next one diagnosable.
+      - name: Memory before E2E
+        run: free -m
+
       - name: E2E (deterministic — skips @external)
         run: npm run test:e2e -- --grep-invert @external --shard=${{ matrix.shard }}/${{ strategy.job-total }}
+
+      - name: Memory after E2E + kernel OOM record
+        if: always()
+        run: |
+          free -m
+          echo "--- kernel: processes killed for memory (empty = none) ---"
+          sudo dmesg --ctime 2>/dev/null | grep -iE 'killed process|out of memory|oom-kill' || true
 
       # Artifact names must be unique within a run, so each shard uploads its own.
       - uses: actions/upload-artifact@v4
