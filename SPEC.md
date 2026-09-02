@@ -201,6 +201,19 @@ footer link to the public CLI repo (`github.com/papervine/papervine` — the mir
 from `papervine/cli` on 2026-08-28). Absolute `<a>`, not `<Link>` — it's a different host.
 Smoke asserts the href on `/home`.
 
+**Status 2026-09-02 — a feature spotlight below the bento: "Instant rollbacks".** The bento
+lists capabilities; this shows one. A two-panel card between the bento and the CTA band: a
+light panel carrying the claim in the brand face plus one paragraph from
+`docs/guides/rollbacks.mdx` (every deployment stays as a complete copy; roll back or forward
+in one click; nothing rebuilt, nothing lost), and a dark inset panel that is a *still* of the
+product — the deployment row's "live" state with its Roll back button and details (source ref,
+commit, seconds to restore). The still is `aria-hidden` and its button is a `div`, so the
+block adds no controls. Colors are explicit, so the card is the same object in light and dark
+mode, the way the CTA band fixes its own ground. Modelled on the format hosted docs platforms
+use for the same feature; ours, not theirs — no competitor mark, our wordmark in the corner.
+Smoke's `/home` check passes unchanged; the block is the pattern to reuse for the next
+capability worth a picture rather than a bullet.
+
 **Status 2026-08-27 — the hero is the product tour, click-to-play.** The hero's product shot
 was a static skeleton mock (fake sidebar, grey bars). It is now the poster frame of a real
 1:45 tour of the product, which plays in place when clicked (`src/components/HeroVideo.tsx`).

@@ -14,6 +14,11 @@ import {
   Globe,
   BarChart3,
   Github,
+  CheckCircle2,
+  RotateCcw,
+  GitBranch,
+  GitCommitHorizontal,
+  Clock3,
 } from "lucide-react";
 import { cookies, headers } from "next/headers";
 import { PlatformShell } from "@/components/platform/PlatformShell";
@@ -371,6 +376,95 @@ export default async function LandingPage() {
               </p>
             </div>
           ))}
+        </div>
+      </section>
+
+      {/* Feature spotlight — one capability, shown rather than listed. A two-panel card: a
+          light panel that carries the claim in the brand face, and a dark panel that is a
+          still of the product doing it. The still is decorative (aria-hidden): a mock of the
+          deployment row's rolled-back state, so its "button" is a div, not a control. Colors
+          are explicit on purpose — the card is the same object in light and dark mode, the
+          way the CTA band below fixes its own ground. Copy follows docs/guides/rollbacks.mdx:
+          every deployment stays as a complete copy, so rolling back points at one, and rolling
+          forward is the same move. */}
+      <section className="mx-auto max-w-6xl px-6 pb-28">
+        <div
+          className="grid overflow-hidden rounded-[2rem] bg-[#efece4] text-[#233129] md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]"
+          style={{ boxShadow: "0 0 0 1px rgba(35,49,41,0.08), 0 30px 80px -40px rgba(0,0,0,0.5)" }}
+        >
+          <div className="relative flex flex-col justify-between p-8 sm:p-10 md:p-12">
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0"
+              style={{
+                backgroundImage: "radial-gradient(rgba(35,49,41,0.28) 1px, transparent 1.3px)",
+                backgroundSize: "9px 9px",
+                maskImage:
+                  "radial-gradient(70% 55% at 100% 35%, black, transparent 72%), radial-gradient(50% 45% at 0% 100%, black, transparent 70%)",
+                WebkitMaskImage:
+                  "radial-gradient(70% 55% at 100% 35%, black, transparent 72%), radial-gradient(50% 45% at 0% 100%, black, transparent 70%)",
+              }}
+            />
+            <div className="relative">
+              <h2 className="font-brand text-5xl leading-[0.95] tracking-tight sm:text-6xl">
+                Instant
+                <br />
+                rollbacks
+              </h2>
+              <p className="mt-6 max-w-xs text-base leading-relaxed text-[#5a6a60]">
+                Every deployment stays as a complete copy of your site. Roll back in one
+                click, and roll forward the same way — nothing is rebuilt, nothing is lost.
+              </p>
+            </div>
+            <Brand size="sm" className="relative mt-10 text-[#1b2620]" />
+          </div>
+
+          <div className="md:pt-12">
+            <div
+              aria-hidden
+              className="relative h-full overflow-hidden rounded-t-[2rem] bg-[#0c0f0d] p-8 text-white sm:p-10 md:rounded-tr-none md:rounded-tl-[2.5rem] md:p-12"
+              style={{
+                backgroundImage:
+                  "radial-gradient(80% 70% at 100% 100%, rgba(120,120,255,0.14), transparent 70%), radial-gradient(rgba(255,255,255,0.10) 1px, transparent 1.3px)",
+                backgroundSize: "auto, 9px 9px",
+              }}
+            >
+              <div className="flex items-center gap-3 text-2xl font-semibold tracking-tight sm:text-3xl">
+                <CheckCircle2 className="h-7 w-7 shrink-0 text-emerald-400" />
+                Deployment live
+              </div>
+              <p className="mt-2 text-lg text-white/55">Your changes are now live</p>
+
+              <div className="mt-8 inline-flex items-center gap-2.5 rounded-xl bg-white px-6 py-3.5 text-lg font-medium text-[#121513] shadow-[0_10px_30px_-12px_rgba(0,0,0,0.6)]">
+                <RotateCcw className="h-5 w-5" strokeWidth={2.4} />
+                Roll back
+              </div>
+
+              <div className="mt-12 text-xs font-semibold uppercase tracking-[0.22em] text-white/40">
+                Deployment details
+              </div>
+              <ul className="mt-4 space-y-3 text-base text-white/60 sm:text-lg">
+                <li className="flex items-center gap-3">
+                  <GitBranch className="h-5 w-5 shrink-0 text-white/35" />
+                  <span>
+                    source <span className="text-white/80">refs/heads/main</span>
+                  </span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <GitCommitHorizontal className="h-5 w-5 shrink-0 text-white/35" />
+                  <span>
+                    commit <span className="font-mono text-white/80">21c6146</span>
+                  </span>
+                </li>
+                <li className="flex items-center gap-3">
+                  <Clock3 className="h-5 w-5 shrink-0 text-white/35" />
+                  <span>
+                    live again in <span className="text-white/80">4 seconds</span>
+                  </span>
+                </li>
+              </ul>
+            </div>
+          </div>
         </div>
       </section>
 
