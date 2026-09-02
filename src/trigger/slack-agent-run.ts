@@ -122,24 +122,24 @@ export const slackAgentRunTask = task({
     // (src/lib/billing/unlock.ts explains why they share one flag).
     const billing = await authorizeAi(siteRow.organizationId, "workflows");
     if (!billing.allowed) {
-      // An `upgrade_required` from an executor with NO billing backend configured is
-      // almost never a real plan problem: with no AUTUMN_SECRET_KEY every org reads as
-      // Free (billing/core.ts), so a paying customer gets told to upgrade. That happened
-      // on the first live prod run — the org was on a Pro trial and the executor, which
-      // does not inherit the web app's env, simply couldn't see billing. Name the actual
-      // cause; "upgrade your plan" is unactionable advice when the plan is fine.
-      const misconfigured = billing.code !== "out_of_credits" && !autumnConfigured();
       return fail(
-        billing.code === "out_of_credits"
-          ? "out of AI credits"
-          : misconfigured
-            ? "this deployment's executor has no billing backend configured (AUTUMN_SECRET_KEY), so every org reads as Free — set it in the executor's environment to the same value the web app uses"
-            : "plan does not include the agent",
+        billing.code === "out_of_credits" ? "out of AI credits" : "plan does not include the agent",
         billing.code === "out_of_credits"
           ? "This workspace is out of AI credits."
-          : misconfigured
-            ? "The docs agent isn't configured on this deployment yet."
-            : "This workspace's plan doesn't include the docs agent.",
+          : "This workspace's plan doesn't include the docs agent.",
+      );
+    }
+    // Allowed but unmetered with no billing backend is the self-host promise
+    // (authorizeAiDecision / unlock.ts rule 1) — and, on a HOSTED deploy, a silent cost
+    // leak: the executor is a separate deploy that doesn't inherit the web app's env
+    // (SPEC §10.2), so a dropped AUTUMN_SECRET_KEY would give away unmetered agent runs
+    // with nothing in usage_event to notice it by. Say so loudly; §18 is metering-first.
+    if (!billing.metered && !autumnConfigured()) {
+      logger.warn(
+        "running UNMETERED: this executor has no AUTUMN_SECRET_KEY, so no billing backend " +
+          "is visible to it. Correct for a self-hosted install; on a hosted deployment it " +
+          "means the executor's environment is missing the key the web app has.",
+        { runId, organizationId: siteRow.organizationId },
       );
     }
 

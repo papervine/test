@@ -196,11 +196,34 @@ export type AiAuthorization =
   | { allowed: true; metered: boolean }
   | { allowed: false; code: "upgrade_required" | "out_of_credits" };
 
+/**
+ * `configured` = is a billing backend wired up at all (AUTUMN_SECRET_KEY present)?
+ *
+ * It defaults to true so every existing caller and test keeps asserting plan behavior,
+ * and `store.authorizeAi` passes the real value — the same fact `unlockDecision` already
+ * takes. Without it this gate could not tell "the Free plan excludes this feature" from
+ * "this install has no billing at all", and answered *Free* to both. That contradicted
+ * rule 1 of unlock.ts, which treats an unconfigured install as never locked because
+ * billing is what gates features and an install without billing has nothing to sell: a
+ * self-hosted deployment showed the Agent and Automations surfaces unlocked and then
+ * refused every AI call with "upgrade your plan". It also mis-diagnosed a hosted
+ * misconfiguration — the first live Slack agent run in production told an org on a Pro
+ * trial to upgrade, because the executor (a separate deploy, SPEC §10.2) had no billing
+ * key and therefore read every org as Free.
+ *
+ * Deliberately narrow: only a MISSING BACKEND allows through unmetered. A configured
+ * backend that has never seen this customer still resolves to the Free floor — that's
+ * the case autumn.ts's not-found branch protects, and an unknown org id must not earn
+ * free AI.
+ */
 export function authorizeAiDecision(
   lookup: BillingLookup,
   feature: PlanFeatureKey,
   now: Date,
+  configured = true,
 ): AiAuthorization {
+  // No billing backend → nothing to sell, nothing to meter (unlock.ts rule 1).
+  if (!configured) return { allowed: true, metered: false };
   if (lookup.state === "error") return { allowed: true, metered: false };
   if (lookup.state === "none") {
     // Free gates all AI features — same answer resolveEntitlements(null) gives.

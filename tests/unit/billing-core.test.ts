@@ -193,6 +193,31 @@ describe("authorizeAiDecision (the gate in front of every AI route)", () => {
       metered: false,
     });
   });
+  // An install with NO billing backend has nothing to sell, so it gates nothing — the
+  // same rule unlock.ts applies to dashboard surfaces (rule 1). Before this axis existed
+  // the gate answered "Free" to both "the Free plan excludes this" and "there is no
+  // billing here", so a self-hosted deploy showed the surfaces unlocked and then refused
+  // every AI call, and a hosted executor that had lost its billing key told a Pro-trial
+  // org to upgrade (the first live Slack agent run in production).
+  it("no billing backend at all → allowed, unmetered (the self-host promise)", () => {
+    expect(authorizeAiDecision({ state: "none" }, "assistant", now, false)).toEqual({
+      allowed: true,
+      metered: false,
+    });
+    // Every feature, not just the ones Free happens to carry.
+    expect(authorizeAiDecision({ state: "none" }, "workflows", now, false)).toEqual({
+      allowed: true,
+      metered: false,
+    });
+  });
+  it("a CONFIGURED backend that has never seen this customer still gates to Free", () => {
+    // Deliberately narrow: only a missing backend opens the gate. An unknown org id on a
+    // configured install must not earn free AI (autumn.ts's not-found branch).
+    expect(authorizeAiDecision({ state: "none" }, "workflows", now, true)).toEqual({
+      allowed: false,
+      code: "upgrade_required",
+    });
+  });
   it("no billing row refuses the assistant (Free doesn't carry it) with an upgrade prompt", () => {
     expect(authorizeAiDecision({ state: "none" }, "assistant", now)).toEqual({
       allowed: false,

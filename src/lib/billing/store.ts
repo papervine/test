@@ -114,9 +114,13 @@ export async function authorizeAi(
   organizationId: string,
   feature: AiFeature,
 ): Promise<AiAuthorization> {
-  // Live, never cached — see cachedLookup for why.
-  const lookup = await lookupOrg(organizationId);
-  return authorizeAiDecision(lookup, feature, new Date());
+  // Live, never cached — see cachedLookup for why. `configured` is threaded through the
+  // same way getUnlock does it, so the gate and the dashboard's lock agree about an
+  // install with no billing backend (see authorizeAiDecision); skipping the lookup when
+  // there's nothing to look up also spares a pointless round trip.
+  const configured = autumnConfigured();
+  const lookup = configured ? await lookupOrg(organizationId) : { state: "none" as const };
+  return authorizeAiDecision(lookup, feature, new Date(), configured);
 }
 
 /** Human-facing refusal messages, shared by every AI route so copy can't drift. */
