@@ -88,6 +88,26 @@ describe("slackInstallUrl", () => {
     const m = await import("../../src/lib/slack");
     expect(m.slackInstallUrl("s")).toBeNull();
   });
+
+  // Local dev only. Slack requires https, and the derivation can't reach a tunnel:
+  // appOriginFor maps a host onto its `app.` label, so `foo.ngrok.app` would become
+  // `app.foo.ngrok.app` — a host no tunnel serves and no cert covers.
+  it("SLACK_REDIRECT_URI overrides the derived app-host URL", async () => {
+    process.env.SLACK_REDIRECT_URI = "https://foo.ngrok.app/api/slack/oauth";
+    const m = await import("../../src/lib/slack");
+    expect(m.slackRedirectUri()).toBe("https://foo.ngrok.app/api/slack/oauth");
+    // The authorize URL must carry the SAME value — Slack rejects a mismatch between
+    // authorize and the code exchange, which is why both read this one function.
+    expect(new URL(m.slackInstallUrl("s")!).searchParams.get("redirect_uri")).toBe(
+      "https://foo.ngrok.app/api/slack/oauth",
+    );
+  });
+
+  it("ignores a blank override rather than producing an empty redirect", async () => {
+    process.env.SLACK_REDIRECT_URI = "   ";
+    const m = await import("../../src/lib/slack");
+    expect(m.slackRedirectUri()).toBe("https://app.papervine.io/api/slack/oauth");
+  });
 });
 
 describe("exchangeSlackCode", () => {
