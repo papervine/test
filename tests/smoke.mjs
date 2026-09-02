@@ -774,7 +774,7 @@ function log(msg) {
 // Raw GET that honors a custom Host header — undici's fetch silently drops `Host` (a
 // forbidden header), so we can't use it to address the `app.` control-plane host. Manual
 // redirect (no follow), so we can assert the gate's 30x → /login.
-function rawGet(pathname, hostHeader, cookie) {
+function rawGet(pathname, hostHeader, cookie, timeoutMs = 30_000) {
   return new Promise((resolve, reject) => {
     const headers = {};
     if (hostHeader) headers.host = hostHeader;
@@ -805,7 +805,7 @@ function rawGet(pathname, hostHeader, cookie) {
       },
     );
     req.on("error", reject);
-    req.setTimeout(30_000, () => req.destroy(new Error("timeout")));
+    req.setTimeout(timeoutMs, () => req.destroy(new Error("timeout")));
     req.end();
   });
 }
@@ -853,6 +853,12 @@ async function run() {
     // so the compile is paid here, unasserted, with a budget of its own. `waitForReady` does
     // the same for `/`; this is the same idea for the one route that has actually flaked.
     await fetch(`${BASE}/home`, { signal: AbortSignal.timeout(120_000) }).catch(() => {});
+    // Same treatment for `/device` on the app host, for the same reason and with more history:
+    // it is the one control-plane route with its own bundle that has repeatedly landed on both
+    // sides of the budget. A single retry on timeout was added for it once and was enough until
+    // a runner took longer than TWO 30s attempts to compile it, at which point the gate reports
+    // "request failed: timeout" for a page that renders perfectly. Compile here, assert below.
+    await rawGet("/device", "app.localhost", undefined, 120_000).catch(() => {});
     for (const check of CHECKS) {
       const before = failures.length;
       const url = `${BASE}/${check.slug}`;
