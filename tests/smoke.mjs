@@ -836,6 +836,14 @@ async function run() {
   const failures = [];
   try {
     await waitForReady();
+    // Warm the marketing apex before anything is measured. `/home` is the heaviest route the
+    // gate visits (two backdrop fields plus the Ask demo) and its FIRST request is a cold
+    // Turbopack compile that has landed on either side of the 30s per-check budget on CI —
+    // green locally, red on a slow runner, on commits that never touched it (three times in
+    // one night). The check below is about what the page RENDERS, not how fast it compiles,
+    // so the compile is paid here, unasserted, with a budget of its own. `waitForReady` does
+    // the same for `/`; this is the same idea for the one route that has actually flaked.
+    await fetch(`${BASE}/home`, { signal: AbortSignal.timeout(120_000) }).catch(() => {});
     for (const check of CHECKS) {
       const before = failures.length;
       const url = `${BASE}/${check.slug}`;

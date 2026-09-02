@@ -703,7 +703,12 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
     shape `PrismaticBurst` uses for `ogl`.
   The general rule: before adding a dependency to anything reachable from `render-tenant.tsx`,
   `PlatformShell`, the root layout or middleware, ask what its dist weighs — and if the module
-  is only needed at call time, import it dynamically. **The diagnostic that turns this from a
+  is only needed at call time, import it dynamically. **And separate "compiles slowly" from
+  "renders wrong":** even after both diets, `/home`'s cold compile still landed on either side of
+  the 30s budget on CI (red on three commits that never touched it), so `tests/smoke.mjs` now
+  warms `/home` once, unasserted, right after `waitForReady`. The check asserts what the page
+  renders; the compile is paid up front with its own budget. If another route starts flaking
+  the same way, warm it there rather than raising the per-check budget for everything. **The diagnostic that turns this from a
   guess into a fact is checking `main`'s own tip in CI**: same job, green there and red here
   means it is yours, not the documented e2e flake. Two consecutive identical failures mean a
   budget, not a race.
