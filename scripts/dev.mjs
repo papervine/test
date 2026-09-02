@@ -43,24 +43,45 @@ const has = (name) => !!process.env[name]?.trim();
 const onPath = (bin) => spawnSync("which", [bin], { stdio: "ignore" }).status === 0;
 
 // The https tunnel Slack needs, as {cmd, args} — or null when this stack has no tunnel
-// to run. Resolved once (it is called from both when() and the manifest spread).
+// to run.
 //
-// DEV_TUNNEL_CMD wins and runs through `sh -c`, so any tunnel works verbatim. Otherwise
-// ngrok is pinned to the host already named in SLACK_REDIRECT_URI. A localhost value there
-// means someone set it by hand for a non-tunnelled flow — nothing to tunnel, stay out.
+// The HOSTNAME picks the tunnel. SLACK_REDIRECT_URI already names the public host (the
+// app reads it for the same reason — src/lib/slack.ts), and each provider's host shape is
+// unambiguous, so there's nothing further to declare and no way for the tunnel and the app
+// to disagree about the hostname. Slack rejects such a mismatch outright.
+//
+// Both supported providers give a STABLE host, which is the real requirement: Slack stores
+// the URL in the app config, so a hostname that changed per restart would mean re-editing
+// the app every boot. That's also why `cloudflared tunnel --url` (random *.trycloudflare.com
+// per run) isn't wired up — it needs a Cloudflare-hosted domain to be stable, and then it's
+// a named tunnel, which DEV_TUNNEL_CMD already covers.
 function tunnelCommand() {
+  // Any other tunnel, verbatim (a cloudflared named tunnel, an ssh reverse tunnel, …).
   const custom = process.env.DEV_TUNNEL_CMD?.trim();
   if (custom) return { cmd: "sh", args: ["-c", custom] };
+
   const redirect = process.env.SLACK_REDIRECT_URI?.trim();
-  if (!redirect || !onPath("ngrok")) return null;
+  if (!redirect) return null;
   let host;
   try {
     host = new URL(redirect).host;
   } catch {
     return null; // malformed — the app's own config gate reports it
   }
+  // A localhost value was set by hand for some non-tunnelled flow: nothing to tunnel.
   if (!host || /(^|\.)localhost(:|$)|^127\.|^\[?::1\]?/.test(host)) return null;
-  return { cmd: "ngrok", args: ["http", `--domain=${host}`, PORT] };
+
+  // Tailscale Funnel: the host is the machine's own tailnet name, so there is no domain
+  // to pass — Funnel serves whatever it is. Free, stable, and no interstitial (ngrok's
+  // free tier shows one for browser HTML, which the OAuth redirect is).
+  if (/\.ts\.net$/i.test(host) && onPath("tailscale")) {
+    return { cmd: "tailscale", args: ["funnel", PORT] };
+  }
+  // ngrok, pinned to the reserved static domain (one per free account).
+  if (/\.ngrok(-free)?\.(app|io|dev)$/i.test(host) && onPath("ngrok")) {
+    return { cmd: "ngrok", args: ["http", `--domain=${host}`, PORT] };
+  }
+  return null;
 }
 
 // Resolved once: the manifest needs the command at construction time and when() needs the
@@ -160,15 +181,17 @@ const LAYERS = [
         return (
           "SLACK_CLIENT_ID is set but SLACK_REDIRECT_URI isn't, so Slack can't reach you: " +
           "it requires https for both the install redirect and the events endpoint, so " +
-          "neither works against localhost. Start a tunnel on a STABLE host (ngrok gives " +
-          "one free static domain), point a DEV Slack app's two URLs at it, and set " +
+          "neither works against localhost. Easiest is Tailscale Funnel — `tailscale funnel " +
+          "3000` publishes a STABLE https host (your machine's *.ts.net name), which is what " +
+          "Slack's stored app config needs. Point a DEV Slack app's two URLs at it and set " +
           "SLACK_REDIRECT_URI=https://<host>/api/slack/oauth in .env.local — see .env.example."
         );
       }
       return (
-        "SLACK_REDIRECT_URI is set but no tunnel could be started: install ngrok (`brew " +
-        "install ngrok`) so it can be pinned to that host, or set DEV_TUNNEL_CMD to the " +
-        "command for the tunnel you use."
+        "SLACK_REDIRECT_URI is set but no tunnel matched its host. A *.ts.net host runs " +
+        "Tailscale Funnel and an ngrok domain runs ngrok — both need that CLI installed. " +
+        "For anything else (a cloudflared named tunnel, ssh -R), set DEV_TUNNEL_CMD to the " +
+        "full command."
       );
     },
   },
