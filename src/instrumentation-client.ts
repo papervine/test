@@ -12,7 +12,9 @@ Sentry.init({
   // test throws + corrupted-.next chunk errors during dev) created PAPERVINE-5/6/7/8 and
   // buried real signal. Vercel sets NODE_ENV=production for prod *and* preview builds, so
   // those still report, distinguished by the auto-detected `environment` tag.
-  enabled: process.env.NODE_ENV === "production",
+  // …and never from the e2e suite, which is a production build (see src/lib/env.ts).
+  enabled:
+    process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_PAPERVINE_TEST_MODE !== "1",
 
   // Add optional integrations for additional features.
   // Replays are UNMASKED: by default Replay masks all text and blocks all media, which is why

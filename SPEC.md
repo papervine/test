@@ -9193,6 +9193,28 @@ Three layers; the test lives where the logic does:
   dashboard, plus the logged-out gate. `globalSetup` creates/migrates/truncates the test DB;
   `auth.setup.ts` logs in once and reuses the session (storageState). Network-dependent specs
   (the GitHub connect flow) are tagged `@external` so CI skips them for determinism.
+  **Production build, not `next dev` (2026-09-02).** The webServer is `next build && next
+  start` into `.next-e2e`. Under dev each route compiled on first visit inside some test's
+  30s budget — seconds locally, the whole budget on the ~4× slower CI runner — which is
+  where every "passes locally, fails on CI" e2e flake came from (the cold-route timeouts,
+  the dev server's memory self-restarts, the Turbopack dev-cache panic). Now the compile is
+  paid once with its own budget and the suite exercises the bundle customers run. Because
+  `next start` is NODE_ENV=production, the dev-only affordances the specs depend on (dev
+  reader sign-in, console email, localhost trusted origins, secret-less cron routes) are
+  gated on `isDevLike()` (`src/lib/env.ts`) = not-production OR `PAPERVINE_TEST_MODE=1`, which
+  only `playwright.config.ts` sets; a self-hoster's production build still gets none of them,
+  and Sentry stays off in the suite via the `NEXT_PUBLIC_` spelling inlined at build time.
+  The switch also found a real bug in the product: `<Analytics/>`'s default `mode="auto"`
+  resolves NODE_ENV to `/_vercel/insights/script.js`, a path only Vercel's edge serves, so a
+  SELF-HOSTED control plane requested it on every page and logged a 404 forever. It now mounts
+  with real analytics on Vercel, in debug mode under the suite (so `tenant-render.spec.ts` can
+  still prove we never load it on a customer's docs site), and not at all anywhere else.
+  Finally, `reset-db.mjs` drops `<distDir>/cache/fetch-cache` with the database: a production
+  build persists `unstable_cache` entries between runs, their TTLs (60s for a site row, an hour
+  for an S3 config read) outlive a run, and every spec recreates its fixtures under the same ids
+  without the product mutation that would revalidate the tag — so a run could inherit a null
+  cached after the previous run's cleanup and render "this site hasn't synced any content yet"
+  for a site whose row and content both exist. Fresh database, cold data cache.
 - **Real-repo crawl** (`tests/crawl.mjs <dir>`): the `papervine dev` analogue used to validate
   against representative docs repos; reports rendered / degraded / 500, non-zero exit on any 500.
 - **CI** (`.github/workflows/ci.yml`): five parallel jobs — `checks` (typecheck + unit),

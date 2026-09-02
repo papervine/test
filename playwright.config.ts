@@ -34,39 +34,65 @@ export default defineConfig({
     },
   ],
   webServer: {
-    // The DB rebuild runs INSIDE the command, before `next dev` boots — not in a
+    // A PRODUCTION build, not `next dev`. Dev compiled each route on first visit, inside
+    // whichever test got there first — a few seconds here, the whole 30s budget on the ~4×
+    // slower CI runner, which is where every "passes locally, ERR_ABORTED on CI" flake came
+    // from (and the dev server's memory self-restarts and Turbopack dev-cache panics with it).
+    // `next build` pays the compile once (~2 min on CI) and `next start` serves finished
+    // output, so a test's budget is spent on the test. Dev-only affordances the specs need
+    // come back via PAPERVINE_TEST_MODE below (src/lib/env.ts).
+    //
+    // The DB rebuild runs INSIDE the command, before the server boots — not in a
     // globalSetup hook, which Playwright runs AFTER starting the webServer (a rebuild
     // there drops the schema underneath the app's live pool + warm Next cache →
     // poisoned connections randomly 500 requests mid-suite). See tests/e2e/reset-db.mjs.
-    command: `node tests/e2e/reset-db.mjs && next dev -p ${PORT}`,
+    command:
+      `node tests/e2e/reset-db.mjs && ` +
+      // The build gets the same cap as CI's own build job (6144); `next start` keeps the
+      // smaller one below. The cap that mattered under `next dev` was the SERVER's, because
+      // it compiled the whole app on demand while Chromium ran; a build peaks before any
+      // browser launches, so licensing it more memory doesn't re-create the kernel OOM that
+      // forced 6144 down to 3072 for the dev server.
+      `NODE_OPTIONS=--max-old-space-size=6144 next build && ` +
+      `next start -p ${PORT}`,
     url: `http://127.0.0.1:${PORT}`,
     // Never reuse: a leftover server carries the previous run's pool + data cache (the
     // exact poisoning above) and skips the DB rebuild. If the port is busy, Playwright
     // errors — kill the stray server rather than inheriting its state.
     reuseExistingServer: false,
-    timeout: 120_000,
+    // Covers the build (~35s here, ~2 min on CI) plus the DB rebuild and server boot.
+    timeout: 600_000,
     // process.env wins over .env.local in Next, so this points the app at the test DB.
     env: {
-      // Raise V8's old-space cap for the dev server. On CI the runner's cgroup makes Node
-      // default to ~2GB; `next dev` compiling the whole app on-demand across the suite crosses
-      // its memory threshold and SELF-RESTARTS mid-run ("Server is approaching the used memory
-      // threshold, restarting…"), and each restart is a brief window where page.goto hits
-      // ERR_CONNECTION_REFUSED and cascades spec failures. Same fix the CI build step already uses.
-      // 6144 was too generous, and the failure it caused is nastier than the one it fixed: a CI
-      // runner has ~8GB (measured — `free -m` on the e2e job reported 1257MB used / 6681MB
-      // available), and this cap licenses the dev server alone to take 6GB of it while Postgres,
-      // MinIO, Chromium and the Playwright process share what's left. When the peak compile (the
-      // marketing home, which pulls the whole editor bundle) landed near the ceiling, the KERNEL
-      // picked a victim: the job died with `##[error]The operation was canceled.`, no failing spec,
-      // no output, and once with no retrievable log at all — intermittently, on identical code, so
-      // it read like a code regression and cost a five-PR bisect to disprove. 3072 still comfortably
-      // clears the ~2GB cgroup default that caused the self-restarts this cap was added for, and
-      // leaves the rest of the box room to exist.
+      // V8's old-space cap for the SERVER phase (`next start`), and for reset-db. The build
+      // overrides it upward in the command above.
+      //
+      // History worth keeping, because both failure modes were expensive: on CI the runner's
+      // cgroup makes Node default to ~2GB, and under `next dev` — which compiled the whole app
+      // on demand across the suite — that threshold triggered mid-run SELF-RESTARTS ("Server is
+      // approaching the used memory threshold, restarting…"), each one a window where page.goto
+      // hit ERR_CONNECTION_REFUSED and cascaded spec failures. Raising it to 6144 fixed that and
+      // caused something nastier: a runner has ~8GB (measured — `free -m` on this job reported
+      // 1257MB used / 6681MB available), so a 6GB license for the server alone, while Postgres,
+      // MinIO, Chromium and Playwright shared the rest, let the KERNEL pick a victim — the job
+      // died with `##[error]The operation was canceled.`, no failing spec, sometimes no
+      // retrievable log, intermittently, on identical code. It read like a code regression and
+      // cost a five-PR bisect to disprove. 3072 clears the cgroup default with room to spare and
+      // leaves the box room to exist; a served build needs far less than a compiling one anyway.
       NODE_OPTIONS: "--max-old-space-size=3072",
       // Own build output, so the suite runs alongside `npm run dev` instead of fighting it
       // over `.next` (one dev server per distDir — see next.config.mjs). reset-db.mjs reads
       // the same value to check the right lock.
       NEXT_DIST_DIR: ".next-e2e",
+      // The production build keeps its dev-only affordances (dev reader sign-in, console
+      // email, localhost trusted origins, secret-less cron routes) and stays out of Sentry.
+      // Both spellings: the server reads the bare one, the client bundle inlines NEXT_PUBLIC_.
+      PAPERVINE_TEST_MODE: "1",
+      NEXT_PUBLIC_PAPERVINE_TEST_MODE: "1",
+      // Session recording is an optional integration like the rest: blanked so an operator who
+      // has it configured doesn't record their own test runs (and doesn't get a different suite
+      // from CI's). Sentry is handled by the flag above, which its three inits read.
+      NEXT_PUBLIC_LOGROCKET_APP_ID: "",
       // Forwarded so the GitHub App surfaces render their real shape. Without the client
       // credentials the hosted→Git page shows only its existing-repo view, and a spec
       // asserting the one-click choice would silently skip the thing it tests.

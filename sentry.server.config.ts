@@ -10,7 +10,9 @@ Sentry.init({
   // Only report from real deployments — see instrumentation-client.ts for why (local
   // dev was polluting the prod project: PAPERVINE-5/6/7/8). Vercel prod + preview both
   // run NODE_ENV=production and still report, tagged by environment.
-  enabled: process.env.NODE_ENV === "production",
+  // …and never from the e2e suite, which is a production build (see src/lib/env.ts).
+  enabled:
+    process.env.NODE_ENV === "production" && process.env.NEXT_PUBLIC_PAPERVINE_TEST_MODE !== "1",
 
   // Define how likely traces are sampled. Adjust this value in production, or use tracesSampler for greater control.
   tracesSampleRate: 1,

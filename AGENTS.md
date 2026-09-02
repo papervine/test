@@ -263,11 +263,24 @@ browser + real services. Three layers — put the test where the logic lives:
    `NEXT_PUBLIC_COLLAB_URL`, which `playwright.config.ts` forwards to the app only when the
    operator exports it (and starts `apps/collab`). Two `browser.newContext()`s model two
    machines; same-browser BroadcastChannel does **not** sync cursor awareness, so carets
-   can't be faked with two tabs. The webServer runs with `NODE_OPTIONS=--max-old-space-size=6144`
-   (`playwright.config.ts`) — without it, CI's cgroup caps Node at ~2GB and `next dev`
-   compiling the app on-demand across the suite crosses its memory threshold and **self-restarts
-   mid-run**, and each restart is an `ERR_CONNECTION_REFUSED` window that cascades spec failures
-   that look like flakes but aren't.
+   can't be faked with two tabs. **The webServer is a production build** — `next build &&
+   next start` into `.next-e2e`, not `next dev`. Dev compiled each route on its first visit,
+   inside whichever test got there first: a few seconds on a dev machine, the whole 30s test
+   budget on the ~4× slower CI runner. That single fact was every "passes locally, fails on
+   CI" e2e flake this repo has logged (the `widget-settings` / `members-roles` / `domain` /
+   `device-auth` / `dashboard` cold-route failures below, the dev server's memory
+   self-restarts, the Turbopack dev-cache panic). The build pays the compile once, up front,
+   with its own budget (`webServer.timeout`), and every test's budget is spent on the test.
+   The catch is `NODE_ENV`: `next start` is "production", and the specs depend on affordances
+   gated to non-production (the dev reader sign-in on a JWT site, console email delivery that
+   the password-reset spec reads its link from, the localhost trusted-origin wildcards, the
+   secret-less cron routes). A self-hoster's `papervine serve` is NODE_ENV=production too and
+   must get none of those, so the suite opts back in explicitly: `webServer.env` sets
+   `PAPERVINE_TEST_MODE=1` (+ `NEXT_PUBLIC_` for the inlined client bundle, which keeps Sentry
+   off) and those gates ask `isDevLike()` from `src/lib/env.ts` instead of reading `NODE_ENV`.
+   **A new "dev-only" affordance must go through `isDevLike()`**, or it silently vanishes from
+   the e2e build and the spec that needs it fails on a production-shaped surface. Unit-pinned
+   in `tests/unit/env.test.ts`.
 
 CI (`.github/workflows/ci.yml`): five **parallel** jobs cover what `verify` used to run
 sequentially — `checks` (typecheck + unit), `build`, `smoke`, `crawl`, `cli-package` — and
@@ -656,7 +669,7 @@ qualifies and how to write an entry). When a debugging session meets the bar, ad
   by both `playwright.config.ts` and the specs, so there's one definition to be right. A
   defaulted env read in a spec is a smell: prefer an imported constant, since the default is the
   only branch that ever runs. **The reverse trap is real too:** the spec process loads no env file,
-  but the APP under Playwright is `next dev`, which reads `.env.local` on its own — so a key you
+  but the APP under Playwright is `next build`/`next start`, which read `.env.local` on their own — so a key you
   never exported (the Autumn sandbox key, say) reaches the app while the spec believes there is
   no such backend. Every optional integration the suite reasons about must be forwarded-or-blanked
   explicitly in `webServer.env`; `AUTUMN_SECRET_KEY` joined that list after the unlock spec saw the

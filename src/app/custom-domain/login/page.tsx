@@ -1,3 +1,4 @@
+import { isDevLike } from "@/lib/env";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getSiteByCustomDomain } from "@/lib/tenant";
@@ -35,7 +36,7 @@ export default async function CustomDomainLoginPage({
   // DEV, offer the dev sign-in (pick groups, no IdP) — hard-gated to non-production.
   const config = (record.authConfig as ReaderAuthConfig | null) ?? {};
   if (record.authMethod === "jwt") {
-    if (process.env.NODE_ENV !== "production") {
+    if (isDevLike()) {
       return <DevReaderSignIn siteName={record.name} slug={record.slug} redirectTo={redirectTo} />;
     }
     if (config.loginUrl) redirect(customerLoginUrl(config.loginUrl, redirectTo));

@@ -1,3 +1,4 @@
+import { isDevLike } from "@/lib/env";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { getSiteBySlug, resolveTenantSlug } from "@/lib/tenant";
@@ -41,7 +42,7 @@ export default async function ReaderLoginPage({
   // it forges a session and is hard-gated to non-production (here AND in the server action).
   const config = (record.authConfig as ReaderAuthConfig | null) ?? {};
   if (record.authMethod === "jwt") {
-    if (process.env.NODE_ENV !== "production") {
+    if (isDevLike()) {
       return <DevReaderSignIn siteName={record.name} slug={slug} redirectTo={redirectTo} />;
     }
     if (config.loginUrl) redirect(customerLoginUrl(config.loginUrl, redirectTo));

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolveDeployEnv, envBadge } from "@/lib/env";
+import { resolveDeployEnv, envBadge, isDevLike, isTestMode } from "@/lib/env";
 
 describe("resolveDeployEnv", () => {
   it("honors VERCEL_ENV when set", () => {
@@ -27,5 +27,25 @@ describe("envBadge", () => {
 
   it("shows nothing locally — you know where you are, and it covered Publish", () => {
     expect(envBadge("development")).toBeNull();
+  });
+});
+
+// The e2e suite is a production BUILD that still needs dev affordances; a self-hoster's
+// production build must not get them. The flag, not NODE_ENV, is what tells them apart.
+describe("isDevLike / isTestMode", () => {
+  it("next dev is dev-like without any flag", () => {
+    expect(isDevLike({ NODE_ENV: "development" })).toBe(true);
+    expect(isTestMode({ NODE_ENV: "development" })).toBe(false);
+  });
+  it("a production build is NOT dev-like — the self-hoster case", () => {
+    expect(isDevLike({ NODE_ENV: "production" })).toBe(false);
+  });
+  it("a production build under the e2e suite opts back in", () => {
+    expect(isTestMode({ NODE_ENV: "production", PAPERVINE_TEST_MODE: "1" })).toBe(true);
+    expect(isDevLike({ NODE_ENV: "production", PAPERVINE_TEST_MODE: "1" })).toBe(true);
+  });
+  it("only the exact value counts", () => {
+    expect(isDevLike({ NODE_ENV: "production", PAPERVINE_TEST_MODE: "true" })).toBe(false);
+    expect(isDevLike({ NODE_ENV: "production", PAPERVINE_TEST_MODE: "" })).toBe(false);
   });
 });

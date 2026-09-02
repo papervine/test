@@ -1,5 +1,5 @@
 // E2E database reset — runs as the FIRST HALF of playwright.config's webServer command,
-// BEFORE `next dev` boots. It must not live in globalSetup: Playwright starts the
+// BEFORE the app server boots (a production build since the switch off `next dev`). It must not live in globalSetup: Playwright starts the
 // webServer first, so a globalSetup rebuild drops the schema underneath the app's
 // already-open connection pool and Next's warm data cache — poisoned sockets and stale
 // unstable_cache entries then fail random requests for the rest of the suite. Running
@@ -10,14 +10,28 @@
 // tests/e2e/global-setup.ts (which specs import TEST_DB_URL from).
 import { execSync } from "node:child_process";
 import postgres from "postgres";
+import { rm } from "node:fs/promises";
+import { join } from "node:path";
 import { requireNoDevServer } from "../dev-lock.mjs";
 
-// Bail BEFORE dropping the test database: the `next dev` half of the webServer command
+// Bail BEFORE dropping the test database: the build half of the webServer command
 // can't start while a dev server holds this directory, and Playwright would otherwise
 // report only "Process from config.webServer was not able to start" — after this script had
 // already rebuilt the DB. Reusing the dev server isn't an option; it points at the dev
 // database and real integrations, not `papervine_test` with them blanked.
 requireNoDevServer(process.cwd(), "the e2e suite", process.env.NEXT_DIST_DIR ?? ".next-e2e");
+
+// Drop the DATA cache along with the database. Since the app under test is a production build,
+// `unstable_cache` entries persist on disk between runs — and their TTLs outlive a run: a site
+// row is cached for 60s (`SITE_ROW_TTL`) and an S3 config read for an hour, while every spec
+// re-creates its fixture rows with the SAME ids and only the product's own mutations call
+// `revalidateSiteRow`. A raw-SQL fixture therefore inherits whatever the last run cached about
+// that id, including a null from after the previous run's afterAll deleted it — which renders as
+// "this site hasn't synced any content yet" on a site whose row and content are both present.
+// The suite's starting state is: fresh database, cold data cache. Only `cache/fetch-cache` goes;
+// the Turbopack build cache next to it is 500MB+ and makes the build incremental, so it stays.
+const distDir = process.env.NEXT_DIST_DIR ?? ".next-e2e";
+await rm(join(process.cwd(), distDir, "cache", "fetch-cache"), { recursive: true, force: true });
 
 const HOST = "127.0.0.1:5432";
 const ADMIN_URL = `postgres://papervine:papervine@${HOST}/postgres`;

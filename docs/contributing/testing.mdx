@@ -66,6 +66,20 @@ signup → onboarding → connect repo → dashboard, plus the logged-out gate. 
 creates, migrates, and truncates the test DB; `auth.setup.ts` logs in once and saves the
 session (storageState) so specs start authenticated.
 
+The app under test is a **production build**: the web server command runs `next build`
+and then `next start` into its own `.next-e2e` output. Compiling every route up front, with
+its own budget, means a test's time limit is spent on the test rather than on the first
+visit to a cold route — which is what made the same spec pass on a laptop and time out on
+a slower CI runner. It also means the suite exercises the same bundle customers run.
+
+Because a production build sets `NODE_ENV=production`, anything the specs rely on that is
+normally dev-only — the dev reader sign-in on a gated site, console email delivery, the
+localhost trusted origins, cron routes that accept a missing secret — is gated on
+`isDevLike()` from `src/lib/env.ts`, which is true outside production **or** when
+`PAPERVINE_TEST_MODE=1`. Only the Playwright config sets that variable; a self-hosted
+production build never sees those affordances. If you add a new dev-only surface, gate it
+the same way or it will be missing from the e2e build.
+
 <Warning>
   Tag any spec that hits the network (e.g. the GitHub connect flow) `@external` so CI can
   `--grep-invert @external` and stay deterministic.
