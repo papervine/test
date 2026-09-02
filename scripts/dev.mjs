@@ -42,6 +42,31 @@ const PORT = process.env.PORT ?? "3000";
 const has = (name) => !!process.env[name]?.trim();
 const onPath = (bin) => spawnSync("which", [bin], { stdio: "ignore" }).status === 0;
 
+// The https tunnel Slack needs, as {cmd, args} — or null when this stack has no tunnel
+// to run. Resolved once (it is called from both when() and the manifest spread).
+//
+// DEV_TUNNEL_CMD wins and runs through `sh -c`, so any tunnel works verbatim. Otherwise
+// ngrok is pinned to the host already named in SLACK_REDIRECT_URI. A localhost value there
+// means someone set it by hand for a non-tunnelled flow — nothing to tunnel, stay out.
+function tunnelCommand() {
+  const custom = process.env.DEV_TUNNEL_CMD?.trim();
+  if (custom) return { cmd: "sh", args: ["-c", custom] };
+  const redirect = process.env.SLACK_REDIRECT_URI?.trim();
+  if (!redirect || !onPath("ngrok")) return null;
+  let host;
+  try {
+    host = new URL(redirect).host;
+  } catch {
+    return null; // malformed — the app's own config gate reports it
+  }
+  if (!host || /(^|\.)localhost(:|$)|^127\.|^\[?::1\]?/.test(host)) return null;
+  return { cmd: "ngrok", args: ["http", `--domain=${host}`, PORT] };
+}
+
+// Resolved once: the manifest needs the command at construction time and when() needs the
+// same answer later, and re-deciding could report a different one.
+const TUNNEL = tunnelCommand();
+
 // --- the manifest -----------------------------------------------------------------
 // when() decides whether the layer belongs in THIS developer's stack; hint() (optional)
 // returns a one-line nudge printed when the layer is skipped but looks half-configured.
@@ -104,6 +129,46 @@ const LAYERS = [
         "can't reach you: pushes won't auto-sync, and publishing from Studio will commit " +
         "but leave the site stale until a manual Re-sync. Start a channel at https://smee.io, " +
         "set it as the App's webhook URL, and put it in .env.local."
+      );
+    },
+  },
+  {
+    tag: "tunnel",
+    color: BLUE,
+    // Slack app delivery (SPEC §10.2 Agent). Slack accepts only **https** URLs — for the
+    // OAuth redirect AND the events endpoint — so unlike the GitHub App's Setup URL
+    // (a browser redirect, which reaches http://app.localhost fine) neither Slack URL can
+    // point at localhost at all. A tunnel is the only way to exercise the install flow or
+    // a mention locally.
+    //
+    // No new env var: the host is parsed out of SLACK_REDIRECT_URI, which you already set
+    // to the tunnel's URL for the flow to work (src/lib/slack.ts explains why the derived
+    // app-host value can't reach a tunnel). That also means the tunnel and the app can't
+    // disagree about the hostname — a mismatch Slack rejects outright.
+    //
+    // Requires a STABLE hostname, because Slack's app config holds the URL: ngrok grants
+    // one free static domain per account, which is what `--domain` pins. For any other
+    // tunnel (cloudflared, a named ngrok config, an ssh reverse tunnel), set
+    // DEV_TUNNEL_CMD to the full command and that runs instead.
+    when: () => !!TUNNEL,
+    // Unused when TUNNEL is null — when() gates the spawn.
+    cmd: TUNNEL?.cmd ?? "",
+    args: TUNNEL?.args ?? [],
+    hint: () => {
+      if (!has("SLACK_CLIENT_ID")) return null; // no Slack work — stay quiet
+      if (!has("SLACK_REDIRECT_URI")) {
+        return (
+          "SLACK_CLIENT_ID is set but SLACK_REDIRECT_URI isn't, so Slack can't reach you: " +
+          "it requires https for both the install redirect and the events endpoint, so " +
+          "neither works against localhost. Start a tunnel on a STABLE host (ngrok gives " +
+          "one free static domain), point a DEV Slack app's two URLs at it, and set " +
+          "SLACK_REDIRECT_URI=https://<host>/api/slack/oauth in .env.local — see .env.example."
+        );
+      }
+      return (
+        "SLACK_REDIRECT_URI is set but no tunnel could be started: install ngrok (`brew " +
+        "install ngrok`) so it can be pinned to that host, or set DEV_TUNNEL_CMD to the " +
+        "command for the tunnel you use."
       );
     },
   },
