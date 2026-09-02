@@ -1,3 +1,4 @@
+import { isDevLike } from "@/lib/env";
 import { Resend } from "resend";
 import type { EmailBody } from "./email-templates";
 
@@ -50,7 +51,7 @@ export function emailStatusFromEnv(): EmailStatus {
   return emailStatus(
     process.env.RESEND_API_KEY,
     process.env.EMAIL_FROM,
-    process.env.NODE_ENV !== "production",
+    isDevLike(),
   );
 }
 

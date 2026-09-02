@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { Analytics } from "@vercel/analytics/next";
+import { isTestMode } from "@/lib/env";
+
+// Vercel sets VERCEL_ENV on production, preview AND its dev deploys; unset anywhere else.
+const onVercel = !!process.env.VERCEL_ENV;
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import { platformFontVars } from "@/lib/fonts";
@@ -148,7 +152,22 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             the only place a session exists; the init is deduped. */}
         {!isTenant && (
           <>
-            <Analytics />
+            {/* Three cases, because `mode="auto"` resolves NODE_ENV to a script URL that only
+                Vercel can serve (`/_vercel/insights/script.js`):
+                  · on Vercel — real analytics, as before;
+                  · under the e2e suite (a production BUILD on localhost) — debug mode, which
+                    loads the same host `next dev` uses and sends no beacons. Mounted rather
+                    than skipped on purpose: `tenant-render.spec.ts` proves we never put our
+                    analytics on a customer's docs site by looking for that host, and a
+                    component that isn't rendered proves nothing;
+                  · anywhere else — nothing. A SELF-HOSTED production build is the case that
+                    matters: `auto` had it requesting a Vercel-only path on every page of the
+                    control plane, which 404s in the operator's console forever. That is also
+                    what the e2e suite started seeing the moment it stopped using `next dev`,
+                    and it read as four unrelated console-cleanliness failures. */}
+            {(onVercel || isTestMode()) && (
+              <Analytics mode={isTestMode() ? "development" : "auto"} />
+            )}
             <LogRocketInit appId={process.env.NEXT_PUBLIC_LOGROCKET_APP_ID} />
             {/* Google Ads conversion tag. Production only, for the same reason the widget below
                 is: a conversion fired from localhost or a preview URL is a real row in the ad

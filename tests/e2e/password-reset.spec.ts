@@ -44,16 +44,33 @@ async function latestResetToken(email: string): Promise<string> {
   }
 }
 
+// Remove the journey's account if a previous run (or a previous attempt of this one) left it
+// behind. `user` is the root of Better Auth's graph, so the cascade takes the rest.
+async function deleteAccount(email: string): Promise<void> {
+  const sql = postgres(TEST_DB_URL, { max: 1 });
+  try {
+    await sql`delete from "user" where email = ${email}`;
+  } finally {
+    await sql.end();
+  }
+}
+
 const resetLink = (token: string) =>
   `/api/auth/reset-password/${token}?callbackURL=${encodeURIComponent("/reset-password")}`;
 
 test("a forgotten password can be reset from the emailed link, and the old one stops working", async ({
   page,
 }) => {
-  // First test in its shard, so it cold-compiles /signup, /onboarding, /forgot-password,
-  // /reset-password and /login itself. Unsharded this ran ~19 files deep, after those routes
-  // were warm — which is why it was green for months and went red the moment the suite split.
-  test.slow();
+  // Four password hashes (signup, the reset itself, then a rejected and an accepted sign-in)
+  // and six navigations in one test. Compilation is no longer part of it — the suite runs a
+  // production build — but scrypt on the CI runner is not free, and `test.slow()`'s 90s was
+  // still spent by the last sign-in. An explicit budget, because this test is a journey.
+  test.setTimeout(180_000);
+  // Own the precondition rather than inheriting it: signup rejects an address that already
+  // exists, so without this a RETRY could never pass — it would sit on /signup until the
+  // budget ran out and report a timeout on the wrong line. Deleting the user cascades to its
+  // account, sessions and verification rows.
+  await deleteAccount(RESET_USER.email);
   // Its own account, created through the real signup form.
   await page.goto("/signup");
   await page.getByLabel("Name").fill(RESET_USER.name);

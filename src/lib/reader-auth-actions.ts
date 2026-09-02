@@ -1,5 +1,6 @@
 "use server";
 
+import { isDevLike } from "@/lib/env";
 import { cookies, headers } from "next/headers";
 import { getSiteBySlug } from "@/lib/tenant";
 import { decryptSecret } from "@/lib/crypto";
@@ -27,7 +28,7 @@ export async function devReaderSignIn(input: {
   groups: string;
   redirectTo: string;
 }): Promise<ReaderLoginState> {
-  if (process.env.NODE_ENV === "production") {
+  if (!isDevLike()) {
     return { error: "Dev reader sign-in is disabled in production." };
   }
   const record = await getSiteBySlug(input.slug);
@@ -46,7 +47,7 @@ export async function devReaderSignIn(input: {
 async function setReaderCookie(value: string): Promise<void> {
   (await cookies()).set(READER_COOKIE, value, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: !isDevLike(),
     sameSite: "lax",
     path: "/",
     maxAge: READER_SESSION_TTL_S,

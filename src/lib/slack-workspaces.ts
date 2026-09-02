@@ -76,10 +76,23 @@ export async function getSlackWorkspaceByTeamId(
   return rows[0] ?? null;
 }
 
-/** The live xoxb token for a stored workspace — the `repoTokenForSite` analogue: the
- * single choke point that turns the stored credential into something callable. */
-export function botTokenFor(row: SlackWorkspaceRow): string {
-  return decryptSecret(row.botTokenEnc);
+/**
+ * The live xoxb token for a stored workspace — the `repoTokenForSite` analogue: the
+ * single choke point that turns the stored credential into something callable.
+ *
+ * Returns **null** rather than throwing when the stored value can't be decrypted (a
+ * rotated/incorrect PAPERVINE_ENCRYPTION_KEY, a truncated column, a hand-inserted row).
+ * `decryptSecret` throws on a bad envelope, and this is called from the agent-run task
+ * *before* its try/catch — an unhandled throw there left the run row stuck at `queued`
+ * forever, which reads to the user as a bot that silently ignored them. A null makes it
+ * a visible failed run that says to reconnect the workspace, which is the real remedy.
+ */
+export function botTokenFor(row: SlackWorkspaceRow): string | null {
+  try {
+    return decryptSecret(row.botTokenEnc);
+  } catch {
+    return null;
+  }
 }
 
 /**

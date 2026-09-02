@@ -1,3 +1,4 @@
+import { isDevLike } from "@/lib/env";
 import { NextResponse } from "next/server";
 import { reconcileDomainRemovals } from "@/lib/domain-reconcile";
 
@@ -13,7 +14,7 @@ export const maxDuration = 60;
 // (local/dev), allow it so the loop is runnable by hand.
 function authorized(req: Request): boolean {
   const secret = process.env.CRON_SECRET;
-  if (!secret) return process.env.NODE_ENV !== "production";
+  if (!secret) return isDevLike();
   return req.headers.get("authorization") === `Bearer ${secret}`;
 }
 

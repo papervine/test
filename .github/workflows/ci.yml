@@ -261,12 +261,19 @@ jobs:
           sudo dmesg --ctime 2>/dev/null | grep -iE 'killed process|out of memory|oom-kill' || true
 
       # Artifact names must be unique within a run, so each shard uploads its own.
+      # Both, and `test-results/` is the one that matters: the CI reporter is `list`, so no HTML
+      # report is written and that upload has been silently empty. `test-results/` carries the
+      # trace Playwright keeps on a retry plus each failure's error-context snapshot — the
+      # difference between reading what the page was doing and guessing from a stack trace.
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() }}
         with:
           name: playwright-report-shard-${{ matrix.shard }}
-          path: playwright-report/
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 7
+          if-no-files-found: ignore
 
   # Deploy the automations executor (SPEC §10.2). Vercel ships the Next app that
   # *enqueues* runs; the Trigger.dev tasks (automation-run, automation-cron) run on

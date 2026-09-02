@@ -10,13 +10,12 @@ agent), and **Assistant** (the in-docs reader assistant). All three are gated be
 **Trialing** entitlement.
 
 <Note>
-  **Automations are functional; the Agent is partially wired.** Automations can be configured,
-  toggled, and run — runs execute on the background executor and land through the shared
-  authoring backend. On the Agent page the **Slack workspace connection is live**
-  (install/disconnect); the agent doesn't answer mentions yet and the connector catalog is
-  UI only. Parts of the Assistant page persist while others are scaffold (see
-  [below](#where-each-toggles-state-lives)). Where the spec and the implementation diverge,
-  the spec wins.
+  **Automations and the Agent answer questions; the connector catalog is still UI only.**
+  Automations can be configured, toggled, and run, and a connected Slack workspace can ask the
+  agent questions about the docs. Not yet wired: the connectors under *Available to your team*,
+  and asking the agent to *change* the docs from Slack. Parts of the Assistant page persist
+  while others are scaffold (see [below](#where-each-toggles-state-lives)). Where the spec and
+  the implementation diverge, the spec wins.
 </Note>
 
 ## Why one section
@@ -233,8 +232,34 @@ the rest of the dashboard is unaffected. The install callback lives on the app h
 your dashboard session to know which organization is installing); Slack requires an `https`
 redirect URL, so local development needs a tunnel or its own development Slack app.
 
-Answering mentions is the next piece: the events endpoint and the agent's background run
-aren't built yet, so a connected workspace doesn't talk back yet.
+### Asking the agent something
+
+Once a workspace is connected, mention the bot in any channel it's in — `@papervine how does
+reader auth work?` — or send it a direct message, where no mention is needed. It replies **in
+a thread**, never at the channel's top level, so a question and its answer stay together.
+
+What happens next: the agent searches your published documentation, reads the pages it needs,
+and answers from what it finds, linking the pages it used. It reads the **live** docs — the
+same content your readers see, not an in-progress draft — and it only reads: asking it to
+*change* the docs from Slack isn't wired yet. If your documentation genuinely doesn't cover
+something, it says so rather than guessing, which is also a useful signal about what to write
+next.
+
+The reply posts as a placeholder that turns into the answer, because a question can take up to
+a minute to research. That work happens on the same background executor automations use, so a
+long answer can't be cut short by a timeout — and if a deployment has no executor configured,
+the agent simply doesn't answer (nothing else breaks).
+
+Each answer is metered against your plan's [AI credits](/control-plane/billing), exactly as an
+automation run is, and there's a generous daily ceiling per organization so a runaway loop
+can't drain an account. A retried Slack delivery never produces a second answer: each message
+is answered once.
+
+<Note>
+  The agent answers questions about the docs; it doesn't have your other tools yet. Connecting
+  a source under *Available to your team* will let it draw on that source when it answers —
+  that's the next piece of this surface.
+</Note>
 
 ## Assistant
 

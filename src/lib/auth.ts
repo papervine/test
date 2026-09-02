@@ -1,3 +1,4 @@
+import { isDevLike } from "@/lib/env";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -36,14 +37,15 @@ import {
 // 403'd every other port's sign-in ("Invalid origin") — which forced a per-worktree
 // BETTER_AUTH_URL edit. In these patterns `*` matches any characters except `/`, so
 // `http://*.localhost:*` covers the app host and every tenant subdomain on every port
-// (see better-auth's matchesOriginPattern). Gated to non-production builds so the
-// wildcards never ship: NODE_ENV is "development" under `next dev` (and the e2e/smoke
-// servers), "production" on Vercel.
+// (see better-auth's matchesOriginPattern). Gated to dev-like runs so the wildcards never
+// ship: NODE_ENV is "development" under `next dev` (and the smoke server), "production" on
+// Vercel — and the e2e suite, which runs a production BUILD, opts back in with
+// PAPERVINE_TEST_MODE (src/lib/env.ts).
 const trustedOrigins = [
   "https://papervine.io",
   "https://*.papervine.io",
   ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
-  ...(process.env.NODE_ENV !== "production"
+  ...(isDevLike()
     ? ["http://localhost:*", "http://*.localhost:*", "http://127.0.0.1:*"]
     : []),
 ];
