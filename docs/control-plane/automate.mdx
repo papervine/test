@@ -12,9 +12,9 @@ agent), and **Assistant** (the in-docs reader assistant). All three are gated be
 <Note>
   **Automations and the Agent answer questions; most of the connector catalog is still UI
   only.** Automations can be configured, toggled, and run; a connected Slack workspace can ask
-  the agent questions about the docs; and Google Drive can be connected as a source it reads.
-  Not yet wired: the remaining connectors under *Available to your team*, and asking the agent
-  to *change* the docs from Slack. Parts of the Assistant page persist
+  the agent questions about the docs; and Google Drive, Notion and Jira can be connected as
+  sources it reads. Not yet wired: the remaining connectors under *Available to your team*, and
+  asking the agent to *change* the docs from Slack. Parts of the Assistant page persist
   while others are scaffold (see [below](#where-each-toggles-state-lives)). Where the spec and
   the implementation diverge, the spec wins.
 </Note>
@@ -259,9 +259,9 @@ is answered once.
 ### Connecting a source
 
 *Available to your team* lists the services the agent can draw on beyond your documentation.
-**Google Drive** and **Notion** work today; the rest of the catalog reads **Coming soon** until
-its connector lands, so you can see what's planned without being offered a button that would
-only fail.
+**Google Drive**, **Notion** and **Jira** work today; the rest of the catalog reads
+**Coming soon** until its connector lands, so you can see what's planned without being offered a
+button that would only fail.
 
 Connecting takes one click: a popup runs that provider's own sign-in, and the connection moves
 up into **Enabled integrations** with a line describing what the agent can do with it. Only
@@ -279,6 +279,11 @@ what the connected account can see, right now.
 With **Google Drive** connected the agent can search the Drive and read documents — Google Docs,
 Sheets and Slides included, and shared drives as well as personal ones. With **Notion**, it can
 search the workspace and read a page's content.
+
+With **Jira**, it can search issues with JQL and read one in full, including its comment
+thread — which is usually where the answer actually is. Useful for questions your documentation
+can't answer on its own: whether a behaviour someone is asking about is a known bug, or what
+changed in a recent piece of work.
 
 Notion has one behaviour worth knowing, because it surprises people: Notion only exposes pages
 that have been **explicitly shared with the integration**, which is narrower than "the

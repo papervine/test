@@ -5877,6 +5877,21 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   result says so — otherwise the agent reports "no such page" about pages that exist.
 >   Search is a POST with a JSON body and needs a custom header, so the proxy seam grew
 >   `data` and `headers`.
+> - *Jira, the third connector (2026-09-02).* `search_jira_issues` (JQL) and
+>   `read_jira_issue` (with its comment thread, where the answer usually is). Two Jira
+>   Cloud specifics, both of which fail loudly rather than subtly and are pinned by tests:
+>   the path carries the site's **`cloudId`** (`/ex/jira/{cloudId}/rest/api/3/…`), which
+>   Nango resolves into the connection config at connect time rather than exposing a
+>   stable base URL — so it's read per connection, resolved once per run, and a connection
+>   missing it says "reconnect Jira" instead of firing a request at a path containing
+>   `undefined`; and **`GET /rest/api/3/search` is gone** (410 on Cloud since the 2025
+>   sunset), replaced by `POST /rest/api/3/search/jql`, which pages by opaque
+>   `nextPageToken` — no `startAt`, no `total`, so "more issues match" is the only honest
+>   thing to report — and returns NO fields unless they are named. Descriptions and
+>   comments are **ADF** (Atlassian's node tree, as in Confluence), flattened to Markdown
+>   the way Notion's blocks are; an unknown node still contributes its text, so a new ADF
+>   type degrades to prose instead of vanishing. A comments failure returns the issue with
+>   `commentsError` rather than losing a readable issue to a forbidden discussion.
 > - *Prompt:* the agent is told which sources are connected and must **say which source an
 >   answer came from** — a Drive document is not documentation, and letting a stale
 >   internal file pass as policy is the failure mode worth designing against.

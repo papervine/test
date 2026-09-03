@@ -63,7 +63,13 @@ export default async function AgentPage({
     connector: findConnector(entry.id),
   }));
   const connected = decorated.filter((entry) => connectedIds.has(entry.id));
-  const available = decorated.filter((entry) => !connectedIds.has(entry.id));
+  const unconnected = decorated.filter((entry) => !connectedIds.has(entry.id));
+  // Three sections, because "you can connect this" and "this doesn't exist yet" are
+  // different answers and shouldn't share a heading. A card with no connector entry has
+  // no tool set written, so it goes below with the rest of the roadmap rather than
+  // sitting among things that work.
+  const available = unconnected.filter((entry) => entry.connector);
+  const comingSoon = unconnected.filter((entry) => !entry.connector);
   // The state binds the round trip to this org+site (AES-GCM, TTL'd) — the callback
   // still re-derives authorization from the session; this only picks the return page.
   const installHref = configured
@@ -215,7 +221,7 @@ export default async function AgentPage({
           </p>
         ) : null}
         <div className="mt-5 grid gap-4 md:grid-cols-2">
-          {available.map(({ id, name, category, description, Logo, connector }) => (
+          {available.map(({ id, name, category, description, Logo }) => (
             <div
               key={id}
               className="flex items-center justify-between gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-4"
@@ -234,28 +240,64 @@ export default async function AgentPage({
                   <p className="mt-0.5 truncate text-sm text-[var(--muted)]">{description}</p>
                 </div>
               </div>
-              {/* A card with no connector entry has no tool set written yet, so it can't
-                  be connected at all — say "Coming soon" rather than offering a Connect
-                  that could only fail. A connector that IS built but has no backend
-                  configured keeps its Connect button, disabled with the real reason:
-                  that's a deployment gap the operator can fix, not a missing feature. */}
-              {connector ? (
-                <ConnectSource
-                  org={org}
-                  provider={id}
-                  name={name}
-                  disabled={!integrationsConfigured}
-                  disabledReason="This deployment has no integrations backend configured."
-                />
-              ) : (
-                <span className="inline-flex shrink-0 items-center rounded-xl border border-[rgba(var(--ink-rgb),0.08)] px-4 py-2 text-sm font-medium text-[var(--muted)]">
-                  Coming soon
-                </span>
-              )}
+              {/* Everything in this section HAS a connector; the only reason its button
+                  might be disabled is a missing backend, which is a deployment gap an
+                  operator can fix rather than a missing feature — so it says so. */}
+              <ConnectSource
+                org={org}
+                provider={id}
+                name={name}
+                disabled={!integrationsConfigured}
+                disabledReason="This deployment has no integrations backend configured."
+              />
             </div>
           ))}
         </div>
       </section>
+
+      {comingSoon.length > 0 ? (
+        <>
+          <hr className="mt-8 border-[rgba(var(--ink-rgb),0.08)]" />
+
+          {/* Connectors we intend to build but haven't. Their own section rather than
+              greyed-out cards among the working ones: "you can connect this" and "this
+              doesn't exist yet" are different answers, and mixing them makes the whole
+              catalog read as broken. */}
+          <section className="mt-8">
+            <h2 className="text-base font-semibold">Coming soon</h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Planned connectors. They&rsquo;ll move up to{" "}
+              <span className="italic">Available to your team</span> as each one lands.
+            </p>
+            <div className="mt-5 grid gap-4 md:grid-cols-2">
+              {comingSoon.map(({ id, name, category, description, Logo }) => (
+                <div
+                  key={id}
+                  className="flex items-center justify-between gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.01)] px-4 py-4 opacity-70"
+                >
+                  <div className="flex min-w-0 items-center gap-4">
+                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)]">
+                      <Logo className="h-6 w-6" />
+                    </span>
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-semibold">{name}</span>
+                        <span className="rounded bg-[rgba(var(--ink-rgb),0.06)] px-1.5 py-0.5 text-xs text-[var(--muted)]">
+                          {category}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-sm text-[var(--muted)]">{description}</p>
+                    </div>
+                  </div>
+                  <span className="inline-flex shrink-0 items-center rounded-xl border border-[rgba(var(--ink-rgb),0.08)] px-4 py-2 text-sm font-medium text-[var(--muted)]">
+                    Coming soon
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </>
+      ) : null}
     </div>
   );
 }

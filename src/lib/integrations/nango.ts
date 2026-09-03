@@ -263,3 +263,31 @@ export async function proxy<T = unknown>(input: {
     return { error: nangoErrorMessage(err, { providerConfigKey: connector.providerConfigKey }) };
   }
 }
+
+/**
+ * The provider-specific values Nango stored when the connection was made.
+ *
+ * Jira needs this: an Atlassian Cloud API path embeds the site's `cloudId`
+ * (`/ex/jira/{cloudId}/rest/api/3/…`), and Nango resolves that at connect time rather
+ * than exposing a stable base URL. Returns `{}` rather than throwing when anything is
+ * missing, so a connector can degrade to a tool-result error instead of killing a run.
+ */
+export async function connectionConfig(
+  organizationId: string,
+  provider: string,
+): Promise<Record<string, string>> {
+  const connector = findConnector(provider);
+  const connection = await getConnection(organizationId, provider);
+  const nango = await nangoClient();
+  if (!connector || !connection || !nango) return {};
+  try {
+    const res = await nango.getConnection(
+      connector.providerConfigKey,
+      connection.nangoConnectionId,
+    );
+    return ((res as { connection_config?: Record<string, string> })?.connection_config ??
+      {}) as Record<string, string>;
+  } catch {
+    return {};
+  }
+}

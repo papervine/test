@@ -4,6 +4,7 @@ import { listConnections } from "./nango";
 import { findConnector } from "./catalog";
 import { googleDriveTools } from "./providers/google-drive";
 import { notionTools } from "./providers/notion";
+import { jiraTools } from "./providers/jira";
 
 /**
  * The agent's tools for whatever an org has connected (SPEC §10.2).
@@ -19,6 +20,7 @@ import { notionTools } from "./providers/notion";
 const TOOL_SETS: Record<string, (organizationId: string) => ToolSet> = {
   "google-drive": googleDriveTools,
   notion: notionTools,
+  jira: jiraTools,
 };
 
 export async function connectedTools(organizationId: string): Promise<ToolSet> {

@@ -37,6 +37,12 @@ export const CONNECTORS: ConnectorProvider[] = [
     hasTools: true,
   },
   {
+    id: "jira",
+    providerConfigKey: "jira",
+    capability: "Search issues with JQL and read one with its comment thread.",
+    hasTools: true,
+  },
+  {
     id: "notion",
     providerConfigKey: "notion",
     // Worth being precise: Notion only exposes what the integration was explicitly
