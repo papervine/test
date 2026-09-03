@@ -1,4 +1,3 @@
-import { Plus } from "lucide-react";
 import { AutomateHeader } from "@/components/app/automate/AutomateHeader";
 import { UnlockCard } from "@/components/app/UnlockCard";
 import { requireSite } from "@/lib/dashboard-context";
@@ -235,17 +234,24 @@ export default async function AgentPage({
                   <p className="mt-0.5 truncate text-sm text-[var(--muted)]">{description}</p>
                 </div>
               </div>
-              <ConnectSource
-                org={org}
-                provider={id}
-                name={name}
-                disabled={!connector || !integrationsConfigured}
-                disabledReason={
-                  !integrationsConfigured
-                    ? "This deployment has no integrations backend configured."
-                    : "This connector isn't available yet."
-                }
-              />
+              {/* A card with no connector entry has no tool set written yet, so it can't
+                  be connected at all — say "Coming soon" rather than offering a Connect
+                  that could only fail. A connector that IS built but has no backend
+                  configured keeps its Connect button, disabled with the real reason:
+                  that's a deployment gap the operator can fix, not a missing feature. */}
+              {connector ? (
+                <ConnectSource
+                  org={org}
+                  provider={id}
+                  name={name}
+                  disabled={!integrationsConfigured}
+                  disabledReason="This deployment has no integrations backend configured."
+                />
+              ) : (
+                <span className="inline-flex shrink-0 items-center rounded-xl border border-[rgba(var(--ink-rgb),0.08)] px-4 py-2 text-sm font-medium text-[var(--muted)]">
+                  Coming soon
+                </span>
+              )}
             </div>
           ))}
         </div>
