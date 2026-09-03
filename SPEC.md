@@ -8190,6 +8190,33 @@ reflects in the switcher); typecheck + unit (`normalizeSiteName`) + smoke + craw
 
 ### 10.10 Platform superadmin (`/admin`)
 
+> **Status 2026-09-02 — the operator is immune to billing and launch-flag gates.** An
+> allowlisted `PLATFORM_ADMIN_EMAILS` address is never told to upgrade and never has a
+> surface hidden from it: `authorizeAi` and `getUnlock` short-circuit before consulting
+> billing at all, and `canSeeFeature` returns true regardless of the `FEATURES` audience
+> (including `"off"`). The motivation is plain — an unlock card in front of the thing
+> you're being asked to debug helps nobody, and an operator dogfooding a surface
+> shouldn't need a plan to do it.
+>
+> **The line this does NOT cross is permission.** Availability gates ("is it in your
+> plan", "has it shipped") lift; authorization gates do not. `canSee` itself is
+> deliberately untouched, because several callers use it for permission questions — e.g.
+> whether billing may be *managed* — and the cross-tenant platform-admin view stays
+> read-only by construction (`requireOrg` leaves `role` null for a non-member, and every
+> mutation path is membership-scoped through `findSite`). So an operator can *see* any
+> tenant's surfaces working; they still can't mutate a tenant they don't belong to.
+>
+> Two implementation notes. The actor is passed **explicitly** (`{ actorEmail }`) rather
+> than read from the session inside `billing/store.ts`: that module is in the executor's
+> bundle, and reaching for `getSession` would drag `next/headers` into a runtime with no
+> request — the import class that has broken that bundle before. Consequently a
+> **background run is never immune**: it has no acting user, which is correct, since a
+> scheduled automation isn't an operator acting. To un-gate an org's *runs*, use the
+> existing plan comp (`grantPlan`), which is the designed mechanism. And an operator's AI
+> is still **metered**: immunity means not being blocked, not spending invisibly (§18 is
+> metering-first). `OrgContext.isPlatformAdmin` carries the flag to the UI gates, distinct
+> from `platformAdminView`, which means specifically "here without membership".
+
 > **Status 2026-08-24 — split into a real console.** It was one page: four stat cards followed by
 > an unbounded stack of org cards, each inlining that org's members and sites. Fine at three
 > customers, unusable at thirty — and there was no way to answer "which sites are stuck in

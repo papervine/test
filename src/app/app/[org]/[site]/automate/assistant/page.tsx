@@ -41,7 +41,7 @@ export default async function AssistantPage({
   const { org, site } = await params;
   const { site: activeSite, session, org: activeOrg } = await requireSite(org, site);
   // Plan gate — see the Automations page for the rule; same card, this surface's copy.
-  const unlock = await getUnlock(activeOrg.id, "assistant");
+  const unlock = await getUnlock(activeOrg.id, "assistant", { actorEmail: session.user.email });
   if (unlock.locked) {
     return (
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-10">

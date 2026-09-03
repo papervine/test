@@ -57,7 +57,9 @@ export async function POST(req: Request) {
 
   // Billing gate (SPEC §10 Billing): the writing agent is a plan feature with credit
   // metering. Fails open on DB errors; only metered results get charged (billing/core.ts).
-  const billing = await authorizeAi(organization.id, "writerAgent");
+  const billing = await authorizeAi(organization.id, "writerAgent", {
+    actorEmail: session.user.email,
+  });
   if (!billing.allowed) return aiRefusalResponse(billing.code);
 
   // The agent always operates on an open session — auto-checkout if the client didn't

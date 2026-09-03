@@ -35,6 +35,11 @@ export type OrgContext = {
   // (SPEC §10.10): a read-only cross-tenant view. role is null in that case, so the
   // role-gated manage UI naturally degrades to viewer; drives the banner in the shell.
   platformAdminView: boolean;
+  // True whenever the viewer is on the operator allowlist — INCLUDING in an org they're
+  // a real member of, which `platformAdminView` deliberately isn't (that one means
+  // "here without membership"). This is what lifts the billing and launch-flag gates:
+  // an operator is never told to upgrade, and sees surfaces that haven't shipped.
+  isPlatformAdmin: boolean;
 };
 
 export type SiteContext = OrgContext & { site: SiteRow };
@@ -72,7 +77,7 @@ export async function requireOrg(orgSlug: string): Promise<OrgContext> {
         .limit(1);
       if (!row) notFound();
       const sites = await orgSites(row.id);
-      return { session, org: row, role: null, sites, platformAdminView: true };
+      return { session, org: row, role: null, sites, platformAdminView: true, isPlatformAdmin: true };
     }
     if (!orgs?.length) redirect("/onboarding");
     notFound();
@@ -81,7 +86,14 @@ export async function requireOrg(orgSlug: string): Promise<OrgContext> {
   const org = { id: match.id, slug: match.slug, name: match.name };
   const sites = await orgSites(org.id);
   const role = await getMemberRole(org.id, session.user.id);
-  return { session, org, role, sites, platformAdminView: false };
+  return {
+    session,
+    org,
+    role,
+    sites,
+    platformAdminView: false,
+    isPlatformAdmin: isPlatformAdminEmail(session.user.email, process.env.PLATFORM_ADMIN_EMAILS),
+  };
 }
 
 function orgSites(organizationId: string): Promise<SiteListItem[]> {

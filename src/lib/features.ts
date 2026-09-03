@@ -34,9 +34,19 @@ export function canSee(audience: Audience, role: string | null | undefined): boo
 
 // Convenience for the common case: look a feature up by key. Unknown keys default to
 // visible, so a surface only hides when something explicitly lists it in FEATURES.
+//
+// `platformAdmin` opens every surface for an allowlisted operator (SPEC §10.10),
+// including one still dark at "off". These are LAUNCH flags — "is this shipped yet?" —
+// not authorization, and the operator is the person who needs to see an unshipped
+// surface. Deliberately NOT applied to `canSee` itself: several callers use that for
+// permission questions (whether billing can be *managed*, say), and the platform-admin
+// view of someone else's org is read-only by construction (dashboard-context) — so
+// visibility opens, mutation does not.
 export function canSeeFeature(
   key: FeatureKey,
   role: string | null | undefined,
+  platformAdmin = false,
 ): boolean {
+  if (platformAdmin) return true;
   return canSee(FEATURES[key], role);
 }

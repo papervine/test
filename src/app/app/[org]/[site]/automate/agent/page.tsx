@@ -27,10 +27,10 @@ export default async function AgentPage({
 }) {
   const { org, site } = await params;
   const { slack: slackFlag } = await searchParams;
-  const { org: activeOrg } = await requireSite(org, site);
+  const { org: activeOrg, session } = await requireSite(org, site);
   // Plan gate — see the Automations page for the rule. The agent follows the same
   // entitlement as automations (src/lib/billing/unlock.ts explains why).
-  const unlock = await getUnlock(activeOrg.id, "agent");
+  const unlock = await getUnlock(activeOrg.id, "agent", { actorEmail: session.user.email });
   if (unlock.locked) {
     return (
       <div className="px-4 sm:px-6 lg:px-8 py-6">

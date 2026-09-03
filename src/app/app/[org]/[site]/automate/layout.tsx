@@ -22,9 +22,9 @@ export default async function AutomateLayout({
   params: Promise<{ org: string }>;
 }) {
   const { org: orgSlug } = await params;
-  const { role } = await requireOrg(orgSlug);
+  const { role, isPlatformAdmin } = await requireOrg(orgSlug);
 
-  if (!AUTOMATE_FEATURES.some((f) => canSeeFeature(f, role))) notFound();
+  if (!AUTOMATE_FEATURES.some((f) => canSeeFeature(f, role, isPlatformAdmin))) notFound();
 
   return <>{children}</>;
 }

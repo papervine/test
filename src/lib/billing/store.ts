@@ -15,6 +15,7 @@ import { unstable_cache } from "next/cache";
 import { creditRateVersion, usageEvent } from "@/lib/db/app-schema";
 import { unlockDecision, type UnlockableSurface, type UnlockDecision } from "./unlock";
 import { type CreditRateTable } from "./catalog";
+import { isPlatformAdminEmail } from "../platform-admin";
 import {
   attachPlan,
   autumnConfigured,
@@ -108,12 +109,30 @@ const cachedLookup = cache(async (organizationId: string): Promise<BillingLookup
   }
 });
 
+/**
+ * Who is asking, when that's knowable. Only the platform-admin allowlist is read from it
+ * (SPEC §10.10), and it's passed EXPLICITLY rather than read from the session here: this
+ * module is in the executor's bundle, and reaching for `getSession` would drag
+ * `next/headers` into a runtime that has no request — the class of import that has
+ * already broken this bundle once (see trigger.config.ts's stubs).
+ */
+export type BillingActor = { actorEmail?: string | null };
+
+function actorIsPlatformAdmin(actor?: BillingActor): boolean {
+  return isPlatformAdminEmail(actor?.actorEmail, process.env.PLATFORM_ADMIN_EMAILS);
+}
+
 /** Gate an AI request. `metered:false` means "let it run but don't try to debit"
  *  (platform docs, DB error, or a Free-plan feature that happens to be ungated). */
 export async function authorizeAi(
   organizationId: string,
   feature: AiFeature,
+  actor?: BillingActor,
 ): Promise<AiAuthorization> {
+  // The operator is never billing-gated (SPEC §10.10). Still METERED, deliberately:
+  // immunity is about not being blocked, not about spending invisibly — §18 is
+  // metering-first, and an operator burning credits should still show up in usage.
+  if (actorIsPlatformAdmin(actor)) return { allowed: true, metered: true };
   // Live, never cached — see cachedLookup for why. `configured` is threaded through the
   // same way getUnlock does it, so the gate and the dashboard's lock agree about an
   // install with no billing backend (see authorizeAiDecision); skipping the lookup when
@@ -206,7 +225,13 @@ export async function recordAiUsage(input: AiUsageInput): Promise<void> {
 export async function getUnlock(
   organizationId: string,
   surface: UnlockableSurface,
+  actor?: BillingActor,
 ): Promise<UnlockDecision> {
+  // The operator sees every surface working, on any tenant — an unlock card in front of
+  // the thing you're being asked to debug helps nobody (SPEC §10.10). This grants no
+  // write access: mutation stays membership-scoped (dashboard-context's read-only
+  // platform-admin view), so this only decides whether the surface renders its controls.
+  if (actorIsPlatformAdmin(actor)) return { locked: false };
   const configured = autumnConfigured();
   const lookup = configured ? await getBillingLookup(organizationId) : { state: "none" as const };
   return unlockDecision({ configured, lookup, surface, now: new Date() });
