@@ -67,6 +67,35 @@ builds its own output).
 The rest of this page is for running it yourself, which gives you caching, a single long-lived
 process, and no per-request billing.
 
+## Dokploy, Railway, Render and friends
+
+Platforms that build from a repo rather than a Dockerfile run `npm install` and then
+`npm start`. A site created by [`papervine new`](/cli) is ready for that with no configuration:
+its `package.json` already depends on `papervine` and starts it.
+
+```json package.json
+{
+  "scripts": { "start": "papervine serve ." },
+  "dependencies": { "papervine": "^0.1.0" }
+}
+```
+
+Point the platform at your docs repo and deploy. Nothing else to set.
+
+<Note>
+  `serve` binds the port the platform assigns through `$PORT`, and every interface, which is what
+  a health check needs to reach it. If you pass `--port` it wins over `$PORT` — so don't, on a
+  platform that assigns one.
+</Note>
+
+Adding Papervine to a docs repo you already have is the same two lines:
+
+```bash
+npm init -y          # if it has no package.json yet
+npm install papervine
+npm pkg set scripts.start="papervine serve ."
+```
+
 ## Docker
 
 The shortest complete deployment. This installs the CLI, copies your docs in, and serves them:

@@ -154,6 +154,11 @@ Without `--port`, a busy port is skipped and the next free one is used. With an 
 `--port`, a busy port is an error instead — an explicit request shouldn't be quietly
 redirected somewhere you weren't told about.
 
+Each of the three settings takes a flag first, then an environment variable, then a default —
+`--port` / `PORT`, `--host` / `PAPERVINE_HOST`, and the directory / `PAPERVINE_CONTENT`. That is
+what makes a platform deploy work with no arguments: set the variables and run
+`papervine serve`.
+
 `--host` sets the bind address, and its default depends on which command you ran: `dev` binds
 loopback (`127.0.0.1`), so a command you run on your laptop isn't on the network; `serve` binds
 every interface (`0.0.0.0`), because being reachable is the point. Both print which address they
