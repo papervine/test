@@ -5041,6 +5041,23 @@ Minimum to operate the SaaS:
   rendered as a paid plan ("Renews Oct 1" on the seeded org). `subscriptionStatus` in the
   adapter translates active-with-trial-end → trialing, used by both the lookup and the summary;
   pinned against the capture.
+  **Purchase conversion (2026-09-02).** Ad spend needs revenue, not page views, so a
+  completed checkout reports itself to Google Ads. Google's guided setup offers "count a visit
+  to this page", which cannot work here twice over: Stripe returns to `/{org}/billing`, a route
+  that REDIRECTS (a 307 runs no tag, and a redirect drops the query string), and a page-visit
+  conversion carries no amount, so $65, $250 and a refresh all look alike. Instead the return
+  URL carries what was bought and a per-checkout id (`?checkout=success&plan=…&t=…`, minted in
+  `changePlan` so it survives the trip through Stripe), the org-level route forwards both across
+  its redirect, and the billing page resolves the price from Autumn's own plans
+  (`purchaseConversion`, pure, 10 unit tests) and hands it to `PurchaseConversion`, which queues
+  one `conversion` event. Deduped by that id, so a refresh or a bookmark counts once; the params
+  are stripped after firing. Gated exactly like the tag itself — Vercel production only — so a
+  preview or a self-host can never write into the ad account. Two traps worth keeping: a literal
+  `<script>` in a React tree is never executed (the reason `GoogleAdsTag` exists), and the tag
+  loads with next/script's afterInteractive strategy, so on the one navigation that matters
+  `window.gtag` is still undefined — calling it optionally looked right, logged nothing and
+  dropped the purchase. The command is pushed onto `dataLayer` instead, which gtag.js drains
+  when it arrives. Found by watching `dataLayer` in a browser; nothing else would have shown it.
   **Webhook + cache (2026-09-02).** Until now every dashboard render read Autumn live (the
   layout once, the four gated pages a second time; billing settings three times) and nothing
   told an open page that billing had changed. Two changes, one mechanism. Dashboard reads go

@@ -6,8 +6,11 @@ import { CATALOG } from "@/lib/billing/catalog";
 import {
   deriveBillingState,
   getBillingSummary,
+  getCreditPacks,
   getPlanOffers,
 } from "@/lib/billing/summary";
+import { purchaseConversion } from "@/lib/billing/conversion";
+import { PurchaseConversion } from "@/components/billing/PurchaseConversion";
 import { PLAN_TIER_BY_KEY, type PlanKey } from "@/lib/billing/plan-content";
 import { BillingActions, CancelPlanButton } from "@/components/billing/BillingActions";
 import { PlanMatrix } from "@/components/billing/PlanMatrix";
@@ -27,15 +30,35 @@ const dateFmt = new Intl.DateTimeFormat("en-US", {
 
 export default async function BillingSettingsPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ org: string; site: string }>;
+  searchParams: Promise<{ checkout?: string; plan?: string; t?: string }>;
 }) {
   const { org: orgSlug, site: siteSlug } = await params;
+  const { checkout, plan: boughtPlanId, t: checkoutId } = await searchParams;
   const { org, role } = await requireSite(orgSlug, siteSlug);
   const canManage = canSee("admin", role);
 
   const summary = await getBillingSummary(org.id);
   const offers = await getPlanOffers();
+
+  // Just back from Stripe: report the purchase to Google Ads with what it was worth, so ad
+  // spend can be measured against revenue rather than against page views. Resolved here so
+  // the price comes from Autumn, and null in every other case — including a plan change that
+  // needed no payment, an unconfigured ad account, and every self-hosted deployment.
+  const conversion =
+    checkout === "success"
+      ? purchaseConversion({
+          vercelEnv: process.env.VERCEL_ENV,
+          conversionId: process.env.NEXT_PUBLIC_GOOGLE_ADS_ID,
+          label: process.env.NEXT_PUBLIC_GOOGLE_ADS_PURCHASE_LABEL,
+          planId: boughtPlanId,
+          transactionId: checkoutId,
+          offers,
+          packs: await getCreditPacks(),
+        })
+      : null;
   const { sub } = summary;
   const { trial, effectivePlanName, onPaidPlan, isLivePaid } = deriveBillingState(
     summary,
@@ -63,6 +86,8 @@ export default async function BillingSettingsPage({
 
   return (
     <div className="px-4 py-6 sm:px-6 lg:px-8">
+      {/* Renders nothing; fires once when a purchase just landed, then cleans the URL. */}
+      <PurchaseConversion payload={conversion} />
       <nav className="flex items-center gap-1.5 text-sm text-[var(--muted)]">
         <span>Settings</span>
         <ChevronRight className="h-3.5 w-3.5" />
