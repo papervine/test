@@ -5041,6 +5041,25 @@ Minimum to operate the SaaS:
   rendered as a paid plan ("Renews Oct 1" on the seeded org). `subscriptionStatus` in the
   adapter translates active-with-trial-end → trialing, used by both the lookup and the summary;
   pinned against the capture.
+  **Per-site sitemap + robots (2026-09-02).** Every docs site Papervine serves now answers
+  `/sitemap.xml` and `/robots.txt` for ITSELF — tenant subdomain, custom domain, and
+  `papervine serve` alike. Before, both paths were rewritten into the tenant's page space,
+  looked up as a docs page called "sitemap", missed, and returned the site's own not-found
+  HTML under a 200: `docs.papervine.io/sitemap.xml` was 45KB of "Page not found" in
+  production, and our own documentation therefore shipped with no sitemap at all. The page
+  list is the SAME nav walk `/llms.txt` uses (`listPageEntries`), so `noindex` and reader
+  gating are already applied and `seo.indexing: "all"` works identically; external nav links
+  and duplicate hrefs are dropped, and the index page resolves to the origin itself rather
+  than `/index`. `robots.txt` advertises the sitemap of the host that served it, derived from
+  the request Host so a custom domain names itself — the marketing origin stays hardcoded and
+  can never appear on a customer's domain. Both routes are explicitly `force-dynamic`, since
+  their answer varies by Host. **One hazard worth remembering:** `accessForRecord` treats a
+  missing site row as "no gating", which is right for the render path (a missing row 404s
+  anyway) and wrong here, because the content source and the row resolve separately — a cold
+  request that found the content but not the row published a GATED site's internal URLs. Seen
+  exactly once, hence `canPublishSitemap`, which publishes nothing rather than something
+  ungated. Found while verifying the gated seed in a browser; the unit tests could not have
+  seen it.
   **Purchase conversion (2026-09-02).** Ad spend needs revenue, not page views, so a
   completed checkout reports itself to Google Ads. Google's guided setup offers "count a visit
   to this page", which cannot work here twice over: Stripe returns to `/{org}/billing`, a route

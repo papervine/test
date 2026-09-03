@@ -479,19 +479,19 @@ const CONTROL_PLANE_CHECKS = [
   {
     // This gate runs in single-repo mode (PAPERVINE_CONTENT=tests/fixtures) — i.e. exactly the
     // shape `npx papervine dev` / `papervine serve` has, where the apex IS somebody else's
-    // docs repo. It must not publish OUR sitemap at their root. The marketing branch is
-    // covered by tests/unit/seo-routes.test.ts, which needs no host to assert.
+    // docs repo. It advertises THEIR sitemap and never ours. The marketing branch is covered
+    // by tests/unit/seo-routes.test.ts, which needs no host to assert.
     path: "/robots.txt",
-    desc: "a CLI-served repo gets a neutral robots.txt, never our sitemap pointer",
+    desc: "a CLI-served repo advertises its own sitemap, never the platform's",
     // "User-Agent" with a capital A — that's how Next serializes MetadataRoute.Robots, and
     // pinning the real spelling is the point of asserting on the body at all.
-    include: ["User-Agent: *", "Allow: /"],
-    exclude: ["Sitemap:", "papervine.io"],
+    include: ["User-Agent: *", "Allow: /", "/sitemap.xml"],
+    exclude: ["papervine.io"],
   },
   {
     path: "/sitemap.xml",
-    desc: "a CLI-served repo gets an empty sitemap, not the platform's marketing URLs",
-    include: ["<urlset"],
+    desc: "a CLI-served repo gets a sitemap of ITS pages, not the platform's marketing URLs",
+    include: ["<urlset", "<loc>"],
     exclude: ["/docs-platform-alternatives", "/pricing"],
   },
   {
@@ -1218,6 +1218,57 @@ async function run() {
         failures.push(`[llms.txt] request failed: ${e.message}`);
       }
       log(`  ${failures.length === before ? "✓" : "✗"} llms.txt index (sections, .md links, noindex held)`);
+    }
+
+    // sitemap.xml + robots.txt for a DOCS SITE (SPEC §2). This gate runs in single-repo mode,
+    // which is the same code path a tenant subdomain, a custom domain and `papervine serve`
+    // take — so it covers the case that shipped broken: `/sitemap.xml` used to be looked up as
+    // a docs page called "sitemap", miss, and return the site's own not-found HTML under a 200.
+    // The pages come from the nav walk `/llms.txt` uses, so the `noindex` exclusions above must
+    // hold here too, and they are asserted rather than assumed.
+    {
+      const before = failures.length;
+      try {
+        const res = await fetch(`${BASE}/sitemap.xml`, { signal: AbortSignal.timeout(30_000) });
+        const body = await res.text();
+        const ct = res.headers.get("content-type") ?? "";
+        if (res.status !== 200) failures.push(`[sitemap.xml] expected 200, got ${res.status}`);
+        if (!ct.includes("xml")) failures.push(`[sitemap.xml] expected XML, got "${ct}"`);
+        for (const needle of [
+          "<urlset",
+          `<loc>${BASE}</loc>`, // the index page is the origin itself, not /index
+          `<loc>${BASE}/components</loc>`,
+        ]) {
+          if (!body.includes(needle)) failures.push(`[sitemap.xml] missing "${needle}"`);
+        }
+        // Same opt-out, both paths in: a listed page with `noindex` and an unlisted one that
+        // `seo.indexing: "all"` would otherwise sweep up.
+        for (const forbidden of ["llms-noindex", "search-noindex"]) {
+          if (body.includes(forbidden)) {
+            failures.push(`[sitemap.xml] noindex page leaked: "${forbidden}"`);
+          }
+        }
+      } catch (e) {
+        failures.push(`[sitemap.xml] request failed: ${e.message}`);
+      }
+      try {
+        const res = await fetch(`${BASE}/robots.txt`, { signal: AbortSignal.timeout(30_000) });
+        const body = await res.text();
+        if (res.status !== 200) failures.push(`[robots.txt] expected 200, got ${res.status}`);
+        // Its OWN sitemap, on its own origin — never the platform's. That leak is the whole
+        // reason these routes answer per host.
+        if (!body.includes(`Sitemap: ${BASE}/sitemap.xml`)) {
+          failures.push(`[robots.txt] missing its own Sitemap line`);
+        }
+        if (/papervine\.io/.test(body)) {
+          failures.push(`[robots.txt] advertised the platform's host on a docs site`);
+        }
+      } catch (e) {
+        failures.push(`[robots.txt] request failed: ${e.message}`);
+      }
+      log(
+        `  ${failures.length === before ? "✓" : "✗"} sitemap.xml + robots.txt describe THIS docs site (noindex held, no platform leak)`,
+      );
     }
 
     // llms-full.txt inlines every page body after the same index. The risk it guards is the

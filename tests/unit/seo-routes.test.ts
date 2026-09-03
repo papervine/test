@@ -67,16 +67,34 @@ describe("robotsPolicyFor", () => {
     expect(robotsPolicyFor(app)).toEqual({ allow: false });
   });
 
-  it("allows crawling but says nothing about us on a tenant or custom domain", () => {
-    for (const ctx of [tenant, custom]) {
-      expect(robotsPolicyFor(ctx)).toEqual({ allow: true });
-    }
+  it("points a tenant or custom domain at ITS OWN sitemap, on its own origin", () => {
+    // A custom domain has to advertise itself rather than the subdomain behind it, which is
+    // why this comes from the request Host and not from any stored slug.
+    expect(robotsPolicyFor(tenant)).toEqual({
+      allow: true,
+      sitemap: "https://acme.papervine.dev/sitemap.xml",
+    });
+    expect(robotsPolicyFor(custom)).toEqual({
+      allow: true,
+      sitemap: "https://docs.acme.com/sitemap.xml",
+    });
   });
 
   it("never advertises our sitemap from a CLI-served repo", () => {
     // The regression this guards: `papervine serve` on someone's own docs, publishing OUR
-    // sitemap pointer at their root.
-    expect(robotsPolicyFor(cli)).toEqual({ allow: true });
+    // sitemap pointer at their root. It advertises the repo's own sitemap now — over http,
+    // because that is what a local server can answer.
+    expect(robotsPolicyFor(cli)).toEqual({
+      allow: true,
+      sitemap: "http://localhost:3000/sitemap.xml",
+    });
+  });
+
+  it("never names the marketing origin on a host that isn't ours", () => {
+    // The one invariant that must survive any future change here.
+    for (const ctx of [tenant, custom, cli]) {
+      expect(robotsPolicyFor(ctx).sitemap ?? "").not.toContain(MARKETING_ORIGIN);
+    }
   });
 });
 

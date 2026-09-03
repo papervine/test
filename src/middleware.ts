@@ -89,10 +89,12 @@ const WELL_KNOWN_OAUTH = new Set([
  * index would be told "log in". Both routes resolve the host themselves and answer per host
  * (src/lib/seo-routes.ts), so they pass through untouched on the hosts that are OURS.
  *
- * NOT bypassed on tenant subdomains or custom domains, deliberately: there they keep exactly
- * today's behavior (rewritten into the tenant's own path space). Letting them through would
- * mean answering for a customer's domain, and what belongs there is a sitemap of THEIR pages —
- * a renderer feature, not this file's call to make.
+ * Bypassed on tenant subdomains and custom domains too, now that there IS a sitemap of their
+ * pages to serve (`packages/renderer/lib/sitemap.ts`). Rewritten instead, `/sitemap.xml` was
+ * looked up as a docs page called "sitemap", found nothing, and returned the site's own
+ * not-found page — 45KB of HTML under a 200, which is what `docs.papervine.io/sitemap.xml`
+ * answered in production. Both routes resolve the host themselves, and `robots.txt` advertises
+ * the sitemap of the host that served it, so a custom domain still only ever describes itself.
  */
 const CRAWLER_FILES = new Set(["/robots.txt", "/sitemap.xml"]);
 // Papervine's own brand assets (`/brand/logotype.svg`, the favicon set, the webmanifest — see
@@ -381,7 +383,8 @@ export function middleware(req: NextRequest) {
     // x-papervine-site header), and they log agent analytics. Stamp the slug so they
     // read the right content source, but don't rewrite them under /sites/{slug}.
     if (pathname === SENTRY_TUNNEL) return NextResponse.next();
-    if (isAgentSurface(pathname)) return NextResponse.next(withSite(req, tenant));
+    if (isAgentSurface(pathname) || CRAWLER_FILES.has(pathname))
+      return NextResponse.next(withSite(req, tenant));
     if (PAGE_MD_RE.test(pathname)) {
       const url = req.nextUrl.clone();
       url.pathname = pageMdPath(pathname);
@@ -431,7 +434,8 @@ export function middleware(req: NextRequest) {
   if (host && !isReservedPlatformHost(host) && !process.env.PAPERVINE_CONTENT) {
     if (pathname.startsWith("/api/")) return NextResponse.next(withHost(req, host));
     if (pathname === SENTRY_TUNNEL) return NextResponse.next();
-    if (isAgentSurface(pathname)) return NextResponse.next(withHost(req, host));
+    if (isAgentSurface(pathname) || CRAWLER_FILES.has(pathname))
+      return NextResponse.next(withHost(req, host));
     if (PAGE_MD_RE.test(pathname)) {
       const url = req.nextUrl.clone();
       url.pathname = pageMdPath(pathname);

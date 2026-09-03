@@ -13,6 +13,10 @@ import { robotsPolicyFor } from "@/lib/seo-routes";
  * host to be crawled would have its answer served to every other one — the leak this exists
  * to prevent.
  */
+// Explicit, not inferred from the `headers()` call below: this route's answer depends on
+// the request Host, and a cached one would hand a tenant somebody else's file.
+export const dynamic = "force-dynamic";
+
 export default async function robots(): Promise<MetadataRoute.Robots> {
   const host = (await headers()).get("host");
   const policy = robotsPolicyFor({

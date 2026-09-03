@@ -1,0 +1,86 @@
+---
+title: "Search engines"
+description: "Every site publishes its own sitemap.xml and robots.txt, built from your navigation — and gated pages stay out of both."
+public: true
+---
+
+Your site tells search engines what it has, without you maintaining a list. Two files are
+generated from the same navigation your sidebar is built from, and served on your own domain.
+
+## sitemap.xml
+
+`https://your-site/sitemap.xml` lists every page a search engine can actually fetch, in
+navigation order, as absolute URLs on the host that served it. A custom domain lists itself
+rather than the subdomain behind it.
+
+Three things are left out, and each for a reason:
+
+<AccordionGroup>
+  <Accordion title="Pages behind reader authentication">
+    A crawler has no reader session, so the sitemap describes what an anonymous visitor can
+    retrieve. On a site with [reader access](/auth/reader-auth) enabled, that is the public
+    subset. Listing a gated page would publish its URL and send crawlers to a page they cannot
+    open.
+  </Accordion>
+  <Accordion title="Pages marked noindex">
+    `noindex: true` in a page's frontmatter takes it out of the sitemap, out of
+    [llms.txt](/features/llms-txt), and out of search engines. One switch, every surface.
+  </Accordion>
+  <Accordion title="External links in your navigation">
+    A nav entry pointing at another site is somebody else's URL. It stays in your sidebar and
+    out of your sitemap.
+  </Accordion>
+</AccordionGroup>
+
+By default the sitemap lists pages a reader can reach from the navigation. If you keep pages
+that are deliberately not in the sidebar and still want them indexed, set `seo.indexing` to
+`all` in `docs.json` — the same switch that controls what `llms.txt` publishes.
+
+```json docs.json
+{
+  "seo": {
+    "indexing": "all"
+  }
+}
+```
+
+## robots.txt
+
+`https://your-site/robots.txt` allows crawling and points at your sitemap:
+
+```txt
+User-Agent: *
+Allow: /
+
+Sitemap: https://your-site/sitemap.xml
+```
+
+It never mentions Papervine's own pages or sitemap. Your domain describes your site and
+nothing else.
+
+## Adding your site to Google Search Console
+
+Search engines find your pages by following links, so a sitemap is an accelerator rather
+than a requirement. To use it:
+
+<Steps>
+  <Step title="Add your site as a property">
+    Use the exact host readers visit, including the subdomain. A custom domain and the
+    Papervine subdomain are separate properties.
+  </Step>
+  <Step title="Submit the sitemap">
+    Enter `sitemap.xml` under Sitemaps. Google fetches it on its own schedule after that.
+  </Step>
+</Steps>
+
+<Note>
+  Self-hosting? Both files work there too, generated from the repo you serve. Nothing to
+  configure.
+</Note>
+
+## What else is published
+
+Search engines are one audience. Every site also publishes machine-readable indexes for AI
+clients: [llms.txt](/features/llms-txt) for the page list and the whole corpus, a
+Markdown twin of every page, and [skill.md](/features/skill-md) describing what agents can do
+with your product.
