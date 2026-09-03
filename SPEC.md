@@ -5950,6 +5950,12 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
     `src/components/app/automate/integrations.tsx` (no brand-icon dep — we only ship
     lucide-react); the page (`…/automate/agent/page.tsx`) is presentational. Verified
     in-browser, light + dark platform theme.
+  - *Mobile Slack banner (2026-09-03).* The connected-workspace card kept
+    Reinstall + Disconnect in a row at every width, which squeezed "Slack workspace"
+    and the connected-to line into a leftover column on a phone. The banner (and the
+    matching integration cards below) now stack the actions under the copy below `sm`,
+    and the copy column is `min-w-0` so a long workspace name still wraps instead of
+    overflowing. Guarded by `agent-settings.spec.ts` (phone-width bounding boxes).
   - *Why Slack.* The reference product treats Agent as "your docs teammate in Slack" —
     it lives where the team already works rather than as a separate console, and
     threads/channels give it conversational context and an audit trail for the PRs it

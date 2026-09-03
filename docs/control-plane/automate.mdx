@@ -224,7 +224,8 @@ Papervine stores the workspace's bot credential encrypted, ties the workspace to
 organization, and the banner flips to **Connected** with the workspace's name. **Reinstall**
 re-runs the same flow (refreshing the credential and any newly required permissions);
 **Disconnect** removes the workspace link immediately — either that, or removing the app from
-Slack's side, is enough on its own to stop the agent.
+Slack's side, is enough on its own to stop the agent. On a phone the two actions sit under
+the workspace name so the connected-to line can use the full card width.
 
 Self-hosting? The Slack app itself is created once from the `slack-app-manifest.json` at the
 repository root and configured through the `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, and

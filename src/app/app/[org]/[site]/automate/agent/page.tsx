@@ -93,10 +93,15 @@ export default async function AgentPage({
           <p className="mt-1 text-sm text-[var(--muted)]">Manage your docs agent</p>
         </div>
 
-        <div className="flex items-center justify-between gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.03)] px-5 py-4 lg:max-w-2xl lg:flex-1">
-          <div>
+        {/* Stack the actions under the copy on a phone: a row with Reinstall +
+            Disconnect squeezes the title and description into a leftover column. */}
+        <div
+          data-testid="slack-workspace-card"
+          className="flex flex-col gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.03)] px-5 py-4 sm:flex-row sm:items-center sm:justify-between lg:max-w-2xl lg:flex-1"
+        >
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <SlackLogo className="h-5 w-5" />
+              <SlackLogo className="h-5 w-5 shrink-0" />
               <span className="font-semibold">
                 {workspace ? "Slack workspace" : "Connect your Slack workspace"}
               </span>
@@ -122,7 +127,7 @@ export default async function AgentPage({
             ) : null}
           </div>
           {workspace ? (
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex shrink-0 items-center gap-2 self-start sm:self-auto">
               {installHref ? (
                 <a
                   href={installHref}
@@ -143,7 +148,7 @@ export default async function AgentPage({
           ) : installHref ? (
             <a
               href={installHref}
-              className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black hover:bg-white/90"
+              className="inline-flex shrink-0 self-start items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-black hover:bg-white/90 sm:self-auto"
             >
               <SlackLogo className="h-4 w-4" />
               Install Slack app
@@ -152,7 +157,7 @@ export default async function AgentPage({
             <button
               type="button"
               disabled
-              className="inline-flex shrink-0 cursor-not-allowed items-center gap-2 rounded-xl bg-white/40 px-4 py-2.5 text-sm font-semibold text-black/60"
+              className="inline-flex shrink-0 self-start cursor-not-allowed items-center gap-2 rounded-xl bg-white/40 px-4 py-2.5 text-sm font-semibold text-black/60 sm:self-auto"
             >
               <SlackLogo className="h-4 w-4" />
               Install Slack app
@@ -175,7 +180,7 @@ export default async function AgentPage({
             {connected.map(({ id, name, description, Logo, connector }) => (
               <div
                 key={id}
-                className="flex items-center justify-between gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.03)] px-4 py-4"
+                className="flex flex-col gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.03)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
               >
                 <div className="flex min-w-0 items-center gap-4">
                   <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)]">
@@ -195,7 +200,7 @@ export default async function AgentPage({
                     </p>
                   </div>
                 </div>
-                <form action={disconnectSource.bind(null, { org, site }, id)}>
+                <form action={disconnectSource.bind(null, { org, site }, id)} className="self-start sm:self-auto">
                   <button
                     type="submit"
                     className="inline-flex shrink-0 items-center rounded-xl border border-[rgba(var(--ink-rgb),0.1)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-2 text-sm font-medium text-[var(--muted)] hover:bg-[rgba(var(--ink-rgb),0.05)] hover:text-red-400"
@@ -224,7 +229,7 @@ export default async function AgentPage({
           {available.map(({ id, name, category, description, Logo }) => (
             <div
               key={id}
-              className="flex items-center justify-between gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-4"
+              className="flex flex-col gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div className="flex min-w-0 items-center gap-4">
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)]">
@@ -273,7 +278,7 @@ export default async function AgentPage({
               {comingSoon.map(({ id, name, category, description, Logo }) => (
                 <div
                   key={id}
-                  className="flex items-center justify-between gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.01)] px-4 py-4 opacity-70"
+                  className="flex flex-col gap-4 rounded-2xl border border-[rgba(var(--ink-rgb),0.06)] bg-[rgba(var(--ink-rgb),0.01)] px-4 py-4 opacity-70 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex min-w-0 items-center gap-4">
                     <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(var(--ink-rgb),0.08)] bg-[rgba(var(--ink-rgb),0.02)]">
@@ -289,7 +294,7 @@ export default async function AgentPage({
                       <p className="mt-0.5 truncate text-sm text-[var(--muted)]">{description}</p>
                     </div>
                   </div>
-                  <span className="inline-flex shrink-0 items-center rounded-xl border border-[rgba(var(--ink-rgb),0.08)] px-4 py-2 text-sm font-medium text-[var(--muted)]">
+                  <span className="inline-flex shrink-0 self-start items-center rounded-xl border border-[rgba(var(--ink-rgb),0.08)] px-4 py-2 text-sm font-medium text-[var(--muted)] sm:self-auto">
                     Coming soon
                   </span>
                 </div>

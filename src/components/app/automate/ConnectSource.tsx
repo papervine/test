@@ -80,7 +80,7 @@ export function ConnectSource({
       onClick={connect}
       disabled={disabled || isBusy}
       title={disabled ? disabledReason : undefined}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-xl border border-[rgba(var(--ink-rgb),0.1)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-2 text-sm font-medium hover:bg-[rgba(var(--ink-rgb),0.05)] disabled:cursor-not-allowed disabled:opacity-50"
+      className="inline-flex shrink-0 self-start items-center gap-1.5 rounded-xl border border-[rgba(var(--ink-rgb),0.1)] bg-[rgba(var(--ink-rgb),0.02)] px-4 py-2 text-sm font-medium hover:bg-[rgba(var(--ink-rgb),0.05)] disabled:cursor-not-allowed disabled:opacity-50 sm:self-auto"
     >
       {isBusy ? (
         <Loader2 className="h-4 w-4 animate-spin" />
