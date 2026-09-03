@@ -9,7 +9,7 @@
  *
  * No test framework: pure Node + fetch. Run with `npm test`.
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import process from "node:process";
@@ -129,7 +129,13 @@ const CHECKS = [
     desc: "a page breaking the component contract degrades instead of rendering or executing",
     // An import outside /snippets/ is refused before evaluation on either side, and the reader
     // gets the same notice any unsupported feature produces -- never a 500.
-    include: ["couldn", "only /snippets/"],
+    //
+    // The reader sees the notice and NOT the reason: MdxNotice renders the underlying message
+    // only in development (mdx.tsx), so a tenant's visitors never get our internals. This
+    // asserted the message for as long as the gate ran a dev server, where it was visible;
+    // against the production build customers actually run, its ABSENCE is the contract.
+    include: ["couldn"],
+    exclude: ["only /snippets/"],
   },
   {
     slug: "unknowns",
@@ -825,17 +831,53 @@ async function waitForReady(timeoutMs = 180_000) {
 }
 
 async function run() {
-  // Next allows one dev server per directory, and this one needs PAPERVINE_CONTENT pointed
-  // at the fixtures — so a running `npm run dev` has to be stopped, not reused.
+  // A running `npm run dev` still has to be stopped: this gate needs PAPERVINE_CONTENT
+  // pointed at the fixtures, and dev-lock keeps the two from clobbering each other's state.
   requireNoDevServer(PKG_ROOT, "the smoke gate", DIST_DIR);
   // See protectNextEnv: `next dev` repoints next-env.d.ts at DIST_DIR, which would make a
   // later typecheck validate routes against this run's frozen snapshot.
   const restoreNextEnv = protectNextEnv(PKG_ROOT);
-  log(`▶ booting renderer against ${FIXTURES} on :${PORT}`);
-  const server = spawn(nextBin, ["dev", "-H", "0.0.0.0", "-p", String(PORT)], {
+
+  // A PRODUCTION build, not `next dev` — the same move the e2e harness made, for the same
+  // reason and after the same failure. `next dev` keeps a compiler resident for the whole
+  // run, compiling each route on first request: on a CI runner that both blew individual
+  // 30s check budgets AND, as the app grew, killed the job outright — the runner going
+  // away mid-check with no failing assertion, reported as "The operation was canceled".
+  // playwright.config.ts documents that signature in detail (a kernel OOM on an ~8GB box,
+  // which cost a five-PR bisect to disprove as a code regression); this gate had started
+  // dying the same way, at a different check each run.
+  //
+  // `next build` pays the compile once, up front, and `next start` then serves finished
+  // output — so a check's budget is spent on the check, and nothing is compiling while
+  // requests are in flight. Memory follows e2e's split for the same reasons: the build
+  // peaks alone and gets 6144, the served app needs far less and gets 3072, which clears
+  // the runner cgroup's ~2GB default without licensing the box away from the kernel.
+  const buildEnv = { ...process.env, PAPERVINE_CONTENT: FIXTURES, NEXT_DIST_DIR: DIST_DIR };
+  log(`▶ building the renderer for ${FIXTURES} (once, up front)`);
+  const built = spawnSync(nextBin, ["build"], {
+    cwd: PKG_ROOT,
+    env: { ...buildEnv, NODE_OPTIONS: "--max-old-space-size=6144" },
+    stdio: "pipe",
+    encoding: "utf8",
+  });
+  if (built.status !== 0) {
+    restoreNextEnv();
+    console.error(`${(built.stdout ?? "") + (built.stderr ?? "")}`.slice(-4000));
+    console.error("\n✗ the renderer failed to build — the gate can't run.");
+    process.exit(1);
+  }
+
+  log(`▶ serving the built renderer on :${PORT}`);
+  const server = spawn(nextBin, ["start", "-H", "0.0.0.0", "-p", String(PORT)], {
     cwd: PKG_ROOT,
     // Its own build output, so this can run alongside `npm run dev` (see next.config.mjs).
-    env: { ...process.env, PAPERVINE_CONTENT: FIXTURES, NEXT_DIST_DIR: DIST_DIR },
+    // PAPERVINE_TEST_MODE restores the dev-only affordances that a production build would
+    // otherwise gate off (src/lib/env.ts) — the same flag the Playwright webServer sets.
+    env: {
+      ...buildEnv,
+      PAPERVINE_TEST_MODE: "1",
+      NODE_OPTIONS: "--max-old-space-size=3072",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let serverLog = "";
@@ -845,51 +887,6 @@ async function run() {
   const failures = [];
   try {
     await waitForReady();
-    // Warm EVERY control-plane route before anything is measured.
-    //
-    // This gate runs against `next dev`, so a route's first request is also its cold Turbopack
-    // compile, and on a CI runner that has repeatedly landed on either side of the 30s
-    // per-check budget: `/home` (two backdrop fields plus the Ask demo), then `/device` (its own
-    // Better Auth bundle), then `/docs-platform-alternatives` — three routes, on three commits that
-    // touched none of them. Each was warmed individually as it flaked; `/device` even outlasted
-    // TWO consecutive 30s attempts under the retry below, which is when per-route warming stops
-    // being a fix and starts being whack-a-mole. So this warms the whole set.
-    //
-    // It costs nothing that wasn't already being paid: the compile happens either way, and
-    // today it happens *inside* a measured check, competing with that check's budget. Paid
-    // here it is unasserted, sequential (parallel compiles are what push the dev server into
-    // the memory ceiling that already forced 6144 down to 3072 for e2e), and given a budget of
-    // its own. Every check still issues its own real request afterwards, so nothing is asserted
-    // against a warm-up response.
-    //
-    // The proper fix is to serve a production build, as the e2e harness now does
-    // (`next build && next start`, playwright.config.ts) — then there are no cold compiles to
-    // warm at all. That is a bigger change to the one gate everyone runs locally; this removes
-    // the class of flake in the meantime.
-    const warmed = new Set();
-    for (const check of CONTROL_PLANE_CHECKS) {
-      const key = `${check.host ?? ""}${check.path}`;
-      if (warmed.has(key)) continue;
-      warmed.add(key);
-      await rawGet(check.path, check.host, check.cookie, 120_000).catch(() => {});
-    }
-    // The apex marketing pages are fetched by URL rather than through rawGet, so warm the
-    // heaviest one the same way.
-    await fetch(`${BASE}/home`, { signal: AbortSignal.timeout(120_000) }).catch(() => {});
-    // The webhook routes are POSTs asserted in bespoke blocks below rather than through
-    // CONTROL_PLANE_CHECKS, so the loop above never warmed them — and they got slower as
-    // their handlers pulled in SDKs (@slack/web-api, @nangohq/node). All three then
-    // blew the 30s budget on one CI run, including the GitHub one that had passed for
-    // months, which is the tell that it was never about the assertions. Same treatment,
-    // same reasoning: pay the compile here, unasserted, with a budget of its own.
-    for (const path of ["/api/github/webhook", "/api/slack/events", "/api/nango/webhook"]) {
-      await fetch(`${BASE}${path}`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-        signal: AbortSignal.timeout(120_000),
-      }).catch(() => {});
-    }
     for (const check of CHECKS) {
       const before = failures.length;
       const url = `${BASE}/${check.slug}`;
@@ -945,13 +942,24 @@ async function run() {
       try {
         const res = await fetch(`${BASE}/media`, { signal: AbortSignal.timeout(30_000) });
         const html = await res.text();
-        const href = html.match(/href="([^"]+\.css[^"]*)"/)?.[1];
-        if (!href) {
+        // EVERY linked stylesheet, not just the first. A production build splits CSS into
+        // per-route chunks, so the safelisted utilities land in whichever chunk carries the
+        // docs styles while the first <link> may be something else entirely — reading only
+        // that one reported `aspect-video` as purged when it was present all along, three
+        // chunks over. `next dev` served a single stylesheet, which is why the assumption
+        // held for as long as this gate ran against it.
+        const hrefs = [...html.matchAll(/href="([^"]+\.css[^"]*)"/g)].map((m) => m[1]);
+        if (hrefs.length === 0) {
           failures.push(`[${tag}] no stylesheet linked from /media`);
         } else {
-          const css = await (
-            await fetch(new URL(href, BASE), { signal: AbortSignal.timeout(30_000) })
-          ).text();
+          const sheets = await Promise.all(
+            hrefs.map((href) =>
+              fetch(new URL(href, BASE), { signal: AbortSignal.timeout(30_000) }).then((r) =>
+                r.text(),
+              ),
+            ),
+          );
+          const css = sheets.join("\n");
           for (const cls of ["aspect-video", "object-cover", "h-96"]) {
             if (!css.includes(cls)) {
               failures.push(`[${tag}] ".${cls}" purged — tenant MDX using it renders unstyled`);
@@ -1061,10 +1069,10 @@ async function run() {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
         body: JSON.stringify(body),
-        // 120s: the FIRST request cold-compiles the /mcp route (+ MCP SDK) under
-        // `next dev`, which blows a 30s budget on CI runners — the long-standing
-        // "[mcp] request failed: aborted due to timeout" red. Healthy responses are
-        // sub-second; this only tolerates compile latency, a real hang still fails.
+        // 120s, kept from the dev-server era: this used to cold-compile the /mcp route
+        // (+ MCP SDK) on first request and blow a 30s budget on CI — the long-standing
+        // "[mcp] request failed: aborted due to timeout" red. A served build answers in
+        // well under a second, so the headroom now only covers a genuinely slow tool call.
         signal: AbortSignal.timeout(120_000),
       });
     {
@@ -1403,14 +1411,13 @@ async function run() {
       try {
         // rawGet (not fetch) so a check can address the `app.` host via a real Host header.
         //
-        // Retried once on timeout, and only on timeout. This gate runs against `next dev`, so the
-        // FIRST request to any route is also its compile — and on CI hardware (~4× slower than a
-        // dev machine) a route with its own bundle can take longer than the 30s budget just to
-        // compile. `/device` did: 30.0s and out, while `/login?stale=1` right behind it took
-        // exactly 30s and passed by luck. A timed-out request doesn't cancel the compile, so the
-        // retry lands on a warm route and answers in milliseconds. Two timeouts in a row is a
-        // route that is actually hanging, which is the thing this check should catch — and a
-        // 60s budget still catches it. Same lesson as widget-settings: not flaky, over budget.
+        // Retried once on timeout, and only on timeout. This predates the production build
+        // and was aimed at cold compiles — a route's first request used to BE its compile,
+        // which on CI hardware could outlast the 30s budget on its own (`/device` did:
+        // 30.0s and out, while `/login?stale=1` behind it took exactly 30s and passed by
+        // luck). Serving a finished build removes that cause, so the retry should now
+        // almost never fire; it's kept because two timeouts in a row still means a route
+        // that genuinely hangs, which is exactly what this gate should catch.
         const res = await rawGet(check.path, check.host, check.cookie).catch(async (err) => {
           if (!/timeout/.test(String(err?.message))) throw err;
           return rawGet(check.path, check.host, check.cookie);
