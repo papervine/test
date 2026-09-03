@@ -3,6 +3,7 @@ import type { ToolSet } from "ai";
 import { listConnections } from "./nango";
 import { findConnector } from "./catalog";
 import { googleDriveTools } from "./providers/google-drive";
+import { notionTools } from "./providers/notion";
 
 /**
  * The agent's tools for whatever an org has connected (SPEC §10.2).
@@ -17,6 +18,7 @@ import { googleDriveTools } from "./providers/google-drive";
  */
 const TOOL_SETS: Record<string, (organizationId: string) => ToolSet> = {
   "google-drive": googleDriveTools,
+  notion: notionTools,
 };
 
 export async function connectedTools(organizationId: string): Promise<ToolSet> {

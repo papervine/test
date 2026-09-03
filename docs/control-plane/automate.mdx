@@ -259,8 +259,9 @@ is answered once.
 ### Connecting a source
 
 *Available to your team* lists the services the agent can draw on beyond your documentation.
-**Google Drive** works today; the rest of the catalog reads **Coming soon** until its connector
-lands, so you can see what's planned without being offered a button that would only fail.
+**Google Drive** and **Notion** work today; the rest of the catalog reads **Coming soon** until
+its connector lands, so you can see what's planned without being offered a button that would
+only fail.
 
 Connecting takes one click: a popup runs that provider's own sign-in, and the connection moves
 up into **Enabled integrations** with a line describing what the agent can do with it. Only
@@ -275,12 +276,19 @@ and the agent loses those tools on its very next question. Nothing is copied or 
 meantime — every read is a live call at the moment the agent asks, so what it can see is exactly
 what the connected account can see, right now.
 
-With Google Drive connected the agent can **search the Drive** and **read documents** — Google
-Docs, Sheets and Slides included, and shared drives as well as personal ones. It will tell you
-which source an answer came from, which matters: a Drive document isn't documentation, and an
-answer drawn from a stale internal file shouldn't read like published guidance. The agent
-prefers your docs when they cover the question, and a long document is truncated rather than
-quoted whole (it says when that happens).
+With **Google Drive** connected the agent can search the Drive and read documents — Google Docs,
+Sheets and Slides included, and shared drives as well as personal ones. With **Notion**, it can
+search the workspace and read a page's content.
+
+Notion has one behaviour worth knowing, because it surprises people: Notion only exposes pages
+that have been **explicitly shared with the integration**, which is narrower than "the
+workspace". If the agent reports finding nothing, that's the usual reason — share the relevant
+pages or their parent, and search again.
+
+Whatever the source, the agent will tell you which one an answer came from, and that matters: a
+Drive file or a Notion page isn't documentation, and an answer drawn from a stale internal
+document shouldn't read like published guidance. It prefers your docs when they cover the
+question, and a long document is truncated rather than quoted whole (it says when that happens).
 
 <Note>
   Self-hosting? Connectors need an integrations backend configured (`NANGO_SECRET_KEY` and a

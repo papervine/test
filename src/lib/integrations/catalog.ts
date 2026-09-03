@@ -36,6 +36,15 @@ export const CONNECTORS: ConnectorProvider[] = [
     capability: "Search files and read documents the connected account can open.",
     hasTools: true,
   },
+  {
+    id: "notion",
+    providerConfigKey: "notion",
+    // Worth being precise: Notion only exposes what the integration was explicitly
+    // shared with, which is a narrower grant than "the workspace" and the usual reason
+    // a search comes back empty.
+    capability: "Search and read the Notion pages shared with the connected integration.",
+    hasTools: true,
+  },
 ];
 
 export function findConnector(id: string): ConnectorProvider | undefined {

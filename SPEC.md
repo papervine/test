@@ -5865,6 +5865,18 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   are invisible without `supportsAllDrives`/`includeItemsFromAllDrives`. Long files
 >   truncate *and say so*; binary content is refused rather than handed to the model as
 >   mojibake; every failure is a tool RESULT, never a thrown error that would kill a run.
+> - *Notion, the second connector (2026-09-02).* Same shape, more translation: Drive hands
+>   back a file, Notion hands back a **tree of typed blocks** whose text is split into
+>   "rich text" runs, with no endpoint that returns a page as prose — so the connector
+>   flattens blocks to Markdown (headings, lists, checkboxes with their state, code with
+>   its language, links) and drops the ones with nothing to say rather than emitting blank
+>   lines. Three Notion-specific traps, each a test: the version header is mandatory and is
+>   pinned rather than floating; a page's title lives in whichever property has type
+>   `title` (the KEY varies per database, so it can't be looked up by name); and search
+>   returns only what was **explicitly shared with the integration**, which is why an empty
+>   result says so — otherwise the agent reports "no such page" about pages that exist.
+>   Search is a POST with a JSON body and needs a custom header, so the proxy seam grew
+>   `data` and `headers`.
 > - *Prompt:* the agent is told which sources are connected and must **say which source an
 >   answer came from** — a Drive document is not documentation, and letting a stale
 >   internal file pass as policy is the failure mode worth designing against.

@@ -225,6 +225,10 @@ export async function proxy<T = unknown>(input: {
   method?: "GET" | "POST";
   endpoint: string;
   params?: Record<string, string | number | boolean>;
+  /** POST body. Notion's search is a POST with a JSON body, not a query string. */
+  data?: unknown;
+  /** Extra request headers. Notion refuses any request without `Notion-Version`. */
+  headers?: Record<string, string>;
 }): Promise<{ data: T } | { error: string }> {
   const connector = findConnector(input.provider);
   if (!connector) return { error: "Unknown connector." };
@@ -251,6 +255,8 @@ export async function proxy<T = unknown>(input: {
       providerConfigKey: connector.providerConfigKey,
       connectionId: connection.nangoConnectionId,
       ...(params ? { params } : {}),
+      ...(input.data === undefined ? {} : { data: input.data }),
+      ...(input.headers ? { headers: input.headers } : {}),
     });
     return { data: res.data as T };
   } catch (err) {
