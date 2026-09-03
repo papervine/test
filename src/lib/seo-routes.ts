@@ -50,12 +50,36 @@ export interface HostContext {
 export function isMarketingHost(ctx: HostContext): boolean {
   if (ctx.singleRepo) return false;
   const { host } = ctx;
+  if (isDocsLabelHost(host)) return false;
   return (
     isPlatformHost(host) && !isAppHost(host) && resolveTenantSlug(host) === null
   );
 }
 
-export function robotsPolicyFor(ctx: HostContext): RobotsPolicy {
+/**
+ * `docs.{platform}` — reserved from slug resolution (nothing of ours serves it) yet claimable
+ * as a CUSTOM DOMAIN, which is exactly what the dogfood site does with `docs.papervine.io`.
+ * That combination made it look like the marketing apex to a host-only check: not the app
+ * host, and no tenant slug. Harmless while the middleware rewrote its whole path space, and
+ * not harmless the moment the crawler files started answering for themselves — it served the
+ * MARKETING sitemap on the docs host and pointed robots.txt at the marketing sitemap.
+ *
+ * The authoritative answer is the site row (`docsSite` below), which a pure function can't
+ * read. This is the second layer: whatever the database says, `docs.{platform}` is not our
+ * marketing site, so a DB outage degrades to "no sitemap" rather than to the wrong one.
+ */
+export function isDocsLabelHost(host: string | null): boolean {
+  return Boolean(host) && isPlatformHost(host) && /^docs\./i.test(host as string);
+}
+
+export function robotsPolicyFor(ctx: HostContext & { docsSite?: boolean }): RobotsPolicy {
+  // A resolved site row beats every host heuristic: it is how a customer's own domain is
+  // recognised, and how `docs.{platform}` is recognised as the docs site rather than the apex.
+  if (ctx.docsSite) {
+    const origin = docsOriginFor(ctx.host);
+    return origin ? { allow: true, sitemap: `${origin}/sitemap.xml` } : { allow: true };
+  }
+
   // The control plane is an authenticated app. There is nothing on it worth indexing, and
   // its `/login` and `/signup` are the only pages a crawler can even reach — thin duplicates
   // of pages the marketing apex already ranks for.

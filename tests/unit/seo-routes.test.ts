@@ -90,6 +90,29 @@ describe("robotsPolicyFor", () => {
     });
   });
 
+  it("treats docs.{platform} as a docs site, never as the marketing apex", () => {
+    // `docs` is reserved from slug resolution and claimable as a custom domain, which is what
+    // the dogfood site does — so to a host-only check it looked exactly like the apex, and
+    // this route served the MARKETING sitemap on docs.papervine.io in production.
+    const docsHost = { host: "docs.papervine.io", singleRepo: false };
+    expect(isMarketingHost(docsHost)).toBe(false);
+    // With the site row resolved, it advertises its own sitemap…
+    expect(robotsPolicyFor({ ...docsHost, docsSite: true })).toEqual({
+      allow: true,
+      sitemap: "https://docs.papervine.io/sitemap.xml",
+    });
+    // …and without one — a database outage — it says nothing rather than the wrong thing.
+    expect(robotsPolicyFor(docsHost).sitemap ?? "").not.toContain(MARKETING_ORIGIN);
+  });
+
+  it("lets a resolved site row override the host heuristic", () => {
+    // How a customer's own domain is recognised, and the same mechanism the docs host uses.
+    expect(robotsPolicyFor({ host: "docs.acme.com", singleRepo: false, docsSite: true })).toEqual({
+      allow: true,
+      sitemap: "https://docs.acme.com/sitemap.xml",
+    });
+  });
+
   it("never names the marketing origin on a host that isn't ours", () => {
     // The one invariant that must survive any future change here.
     for (const ctx of [tenant, custom, cli]) {
