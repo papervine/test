@@ -8257,6 +8257,46 @@ Deliberately *not* editable here: the **slug** (the stable URL id) and the **ren
 (from the repo's `docs.json`). Status 2026-06-29: built + browser-verified (rename persists +
 reflects in the switcher); typecheck + unit (`normalizeSiteName`) + smoke + crawl green.
 
+> **Status 2026-09-03 — signing in on a Vercel preview.** Reported as "500 on signup" on a
+> preview URL; it was two independent faults, neither of them the database.
+>
+> *The bounce pointed at a host that cannot exist.* `isReservedPlatformHost` is true for
+> `*.vercel.app`, so middleware forwarded `/login` to `appHostFor(host)` —
+> `app.papervine-git-branch-team.vercel.app`, a name Vercel never creates and whose
+> wildcard certificate does not cover a nested label. The browser got a dead host instead
+> of a login page. This is the identical failure the custom-domain guard beside it already
+> documents (`docs.papervine.io` → `app.docs.papervine.io` → ERR_CONNECTION_CLOSED), one
+> host class over; it survived because previews are rarely signed into. New predicate
+> `hasAppSubdomain` gates the bounce, so a preview serves auth paths **in place** on the
+> single host being browsed — where its session cookie is set anyway. `localhost` keeps
+> bouncing, because `app.localhost` resolves and dev depends on it.
+>
+> *And Better Auth had no origin it would accept.* `BETTER_AUTH_URL` is scoped
+> Production-only in Vercel, and it cannot simply be copied to Preview: a preview hostname
+> is generated per deployment, so production's value names an origin the visitor is not on,
+> which Better Auth rejects as foreign. `deploymentOrigin()` (src/lib/env.ts) prefers the
+> explicit variable and falls back to `VERCEL_URL` — the one value that always names the
+> deployment actually being browsed — and feeds `trustedOrigins`. **Preview still needs
+> `BETTER_AUTH_SECRET` set**, which remains dashboard work: Better Auth *throws* on the
+> default secret under `NODE_ENV=production`, which every preview build is (the same fact
+> that broke the smoke gate the day before).
+>
+> *Two findings worth acting on separately.* `DATABASE_URL` is scoped `Production, Preview`
+> with one shared value, so **previews read and write production data** — and since
+> `vercel.json` runs `drizzle-kit migrate` in the build, a preview branch carrying a
+> migration applies it to prod before that code is on main. This contradicts the standing
+> claim that previews each migrate their own Neon branch; either wire up Neon preview
+> branching or stop treating previews as a safe place to click. Separately, prod's
+> `BETTER_AUTH_URL` is marked *Sensitive* (it is a public URL, published as `issuer` in
+> `/.well-known/oauth-authorization-server`) while `BETTER_AUTH_SECRET` is readable — the
+> two flags are the wrong way round.
+>
+> *Still not fixed, deliberately:* the dashboard at bare `/:org/:site` needs the app-host
+> rewrite, so a preview can reach login, signup and onboarding but not the dashboard.
+> Serving both marketing and dashboard from one host is exactly the route collision the
+> `/app` mount exists to resolve (§10), so making previews fully usable means giving them a
+> real app subdomain (a branch domain), not another middleware special case.
+
 ### 10.10 Platform superadmin (`/admin`)
 
 > **Status 2026-09-02 — the operator is immune to billing and launch-flag gates.** An

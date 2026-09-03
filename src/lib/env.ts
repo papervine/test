@@ -52,3 +52,28 @@ export function envBadge(
 ): { label: string; variant: "local" | "preview" } | null {
   return env === "preview" ? { label: "preview", variant: "preview" } : null;
 }
+
+/**
+ * This deployment's own origin — what Better Auth signs cookies and builds callback URLs
+ * against, and what must appear in its trusted origins.
+ *
+ * `BETTER_AUTH_URL` wins whenever it is set, because only the operator knows the stable
+ * public host: on Vercel prod, `VERCEL_URL` is the *deployment-specific* hostname
+ * (`papervine-abc123.vercel.app`), not the custom domain anyone actually visits.
+ *
+ * The fallback exists for **previews**, where the opposite is true: the hostname is
+ * generated per deployment, so no static value can name it, and a value copied from
+ * production names an origin the visitor is not on. Better Auth then either refuses the
+ * request as a foreign origin or issues cookies for a host nobody is browsing. `VERCEL_URL`
+ * is the one thing that always names the deployment you are actually looking at.
+ *
+ * Returns undefined when neither is available (a bare local build), which callers already
+ * treat as "no configured origin" — a warning, not a crash.
+ */
+export function deploymentOrigin(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  const explicit = env.BETTER_AUTH_URL?.trim();
+  if (explicit) return explicit;
+  const vercel = env.VERCEL_URL?.trim();
+  // VERCEL_URL carries no scheme, and every Vercel deployment is https.
+  return vercel ? `https://${vercel.replace(/^https?:\/\//, "")}` : undefined;
+}

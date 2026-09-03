@@ -4,6 +4,7 @@ import {
   resolveTenantSlug,
   isAppHost,
   appHostFor,
+  hasAppSubdomain,
   parentDomain,
   legacyTenantRedirectHost,
   isReservedPlatformHost,
@@ -334,8 +335,14 @@ export function middleware(req: NextRequest) {
   // intact) to the app host is what puts the request back where the PKCE/state cookie was
   // set — those cookies are host-only on `app.`, so exchanging the code on the apex would
   // always fail. A redirect, not a rewrite: the browser has to re-send its cookies.
+  //
+  // `hasAppSubdomain` is the last guard: a Vercel preview has no reachable `app.` sibling
+  // (Vercel never creates it and its wildcard cert does not cover it), so bouncing there
+  // sends the browser to a dead host — which is why signing in on a preview failed. Those
+  // hosts serve auth paths in place instead, on the single host being browsed.
   if (
     isReservedPlatformHost(reqHost) &&
+    hasAppSubdomain(reqHost) &&
     !resolveTenantSlug(reqHost) &&
     !process.env.PAPERVINE_CONTENT &&
     (isAuthPath(pathname) ||
