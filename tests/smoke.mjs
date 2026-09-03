@@ -877,6 +877,15 @@ async function run() {
       ...buildEnv,
       PAPERVINE_TEST_MODE: "1",
       NODE_OPTIONS: "--max-old-space-size=3072",
+      // Better Auth THROWS on the default secret under NODE_ENV=production, where it only
+      // warned under `next dev` — so every auth-touching route 500s on a machine with no
+      // BETTER_AUTH_SECRET. That is CI, which has no .env.local, and it turned the
+      // authoring-MCP check from 401 into 500 the moment this gate started serving a real
+      // build. Set unconditionally rather than only when absent: a gate whose result
+      // depends on whether the developer happens to have a .env.local is exactly the
+      // local/CI divergence that hid this. Nothing here authenticates anyone; the value
+      // only has to not be the default.
+      BETTER_AUTH_SECRET: "smoke-gate-fixed-secret-not-used-to-authenticate-anyone",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -1532,6 +1541,19 @@ async function run() {
   if (failures.length) {
     log(`\n✗ ${failures.length} failure(s):`);
     for (const f of failures) log("  - " + f);
+    // The server's own output, which until now was printed only for a FATAL. A check that
+    // reports "expected 401, got 500" says nothing about WHY, and the one place the reason
+    // exists is this log — on CI, where you can't reproduce by hand, that difference cost a
+    // full push-and-wait cycle to recover (the answer was one line: BetterAuthError, using
+    // the default secret). Errors only, so a passing-but-chatty server doesn't bury it.
+    const serverErrors = serverLog
+      .split("\n")
+      .filter((l) => /error|warn|⨯/i.test(l))
+      .slice(-12);
+    if (serverErrors.length) {
+      log("\n--- server errors (may explain a 500) ---");
+      for (const line of serverErrors) log("  " + line.slice(0, 300));
+    }
     process.exit(1);
   }
   log(
