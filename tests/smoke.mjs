@@ -876,6 +876,20 @@ async function run() {
     // The apex marketing pages are fetched by URL rather than through rawGet, so warm the
     // heaviest one the same way.
     await fetch(`${BASE}/home`, { signal: AbortSignal.timeout(120_000) }).catch(() => {});
+    // The webhook routes are POSTs asserted in bespoke blocks below rather than through
+    // CONTROL_PLANE_CHECKS, so the loop above never warmed them — and they got slower as
+    // their handlers pulled in SDKs (@slack/web-api, @nangohq/node). All three then
+    // blew the 30s budget on one CI run, including the GitHub one that had passed for
+    // months, which is the tell that it was never about the assertions. Same treatment,
+    // same reasoning: pay the compile here, unasserted, with a budget of its own.
+    for (const path of ["/api/github/webhook", "/api/slack/events", "/api/nango/webhook"]) {
+      await fetch(`${BASE}${path}`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+        signal: AbortSignal.timeout(120_000),
+      }).catch(() => {});
+    }
     for (const check of CHECKS) {
       const before = failures.length;
       const url = `${BASE}/${check.slug}`;
@@ -1345,12 +1359,7 @@ async function run() {
           signal: AbortSignal.timeout(30_000),
         });
       try {
-        let res = await deliver();
-        // Retried once on 404, and only on 404: against `next dev` a route's FIRST request
-        // can land before the route is compiled and come back 404 (observed on a cold
-        // .next). The route file's existence isn't in question here — the signature gate
-        // is — so a single warm-up retry keeps the gate about behavior, not compile timing.
-        if (res.status === 404) res = await deliver();
+        const res = await deliver();
         if (res.status !== 401) {
           failures.push(`[slack-events] expected 401 for a bad signature, got ${res.status}`);
         }
@@ -1378,9 +1387,7 @@ async function run() {
           signal: AbortSignal.timeout(30_000),
         });
       try {
-        let res = await deliver();
-        // Retried once on 404 only — see the note on the slack check above.
-        if (res.status === 404) res = await deliver();
+        const res = await deliver();
         if (res.status !== 401) {
           failures.push(`[nango-webhook] expected 401 for a bad signature, got ${res.status}`);
         }
