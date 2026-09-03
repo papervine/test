@@ -81,10 +81,20 @@ export function decodeSlackInstallState(raw: string | null): SlackInstallState |
  * The one redirect URL this deployment uses, derived from BETTER_AUTH_URL (always set)
  * mapped onto the app host — where the session cookie lives. Must be listed in the
  * Slack app's OAuth redirect URLs, and Slack requires the SAME value verbatim in
- * authorize and the code exchange, so both call this. Slack only accepts https
- * redirect URLs, so local dev needs a tunnel or a separate dev app (see .env.example).
+ * authorize and the code exchange, so both call this.
+ *
+ * `SLACK_REDIRECT_URI` overrides the derivation, and exists for LOCAL DEV. Slack accepts
+ * only https redirect URLs, so testing the install flow means tunnelling — and the
+ * derivation can't reach a tunnel: `appOriginFor` maps a host to its `app.` label, so a
+ * tunnel at `foo.ngrok.app` becomes `app.foo.ngrok.app`, which no tunnel serves and no
+ * certificate covers. (A tunnel hostname that already starts with `app.` is a fixed point
+ * and needs no override — but that requires a custom domain.) Same spirit as
+ * GITHUB_APP_WEBHOOK_PROXY_URL: a dev-only escape hatch for a third party that can't
+ * reach localhost. Leave it unset in production, where the derived value is correct.
  */
 export function slackRedirectUri(): string | null {
+  const override = process.env.SLACK_REDIRECT_URI?.trim();
+  if (override) return override;
   const base = process.env.BETTER_AUTH_URL;
   const origin = base ? appOriginFor(base) : null;
   return origin ? new URL("/api/slack/oauth", origin).toString() : null;

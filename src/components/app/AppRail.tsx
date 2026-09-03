@@ -142,7 +142,7 @@ export function AppRail({
     ...section,
     items: section.items.filter(
       (item) =>
-        (!item.feature || canSeeFeature(item.feature, role)) &&
+        (!item.feature || canSeeFeature(item.feature, role, platformAdmin)) &&
         (!item.operatorOnly || platformAdmin),
     ),
   })).filter((section) => section.items.length > 0);

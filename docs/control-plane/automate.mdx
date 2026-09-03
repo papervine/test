@@ -10,10 +10,11 @@ agent), and **Assistant** (the in-docs reader assistant). All three are gated be
 **Trialing** entitlement.
 
 <Note>
-  **Automations and the Agent answer questions; the connector catalog is still UI only.**
-  Automations can be configured, toggled, and run, and a connected Slack workspace can ask the
-  agent questions about the docs. Not yet wired: the connectors under *Available to your team*,
-  and asking the agent to *change* the docs from Slack. Parts of the Assistant page persist
+  **Automations and the Agent answer questions; most of the connector catalog is still UI
+  only.** Automations can be configured, toggled, and run; a connected Slack workspace can ask
+  the agent questions about the docs; and Google Drive, Notion and Jira can be connected as
+  sources it reads. Not yet wired: the remaining connectors under *Available to your team*, and
+  asking the agent to *change* the docs from Slack. Parts of the Assistant page persist
   while others are scaffold (see [below](#where-each-toggles-state-lives)). Where the spec and
   the implementation diverge, the spec wins.
 </Note>
@@ -223,7 +224,8 @@ Papervine stores the workspace's bot credential encrypted, ties the workspace to
 organization, and the banner flips to **Connected** with the workspace's name. **Reinstall**
 re-runs the same flow (refreshing the credential and any newly required permissions);
 **Disconnect** removes the workspace link immediately — either that, or removing the app from
-Slack's side, is enough on its own to stop the agent.
+Slack's side, is enough on its own to stop the agent. On a phone the two actions sit under
+the workspace name so the connected-to line can use the full card width.
 
 Self-hosting? The Slack app itself is created once from the `slack-app-manifest.json` at the
 repository root and configured through the `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`, and
@@ -255,10 +257,50 @@ automation run is, and there's a generous daily ceiling per organization so a ru
 can't drain an account. A retried Slack delivery never produces a second answer: each message
 is answered once.
 
+### Connecting a source
+
+*Available to your team* lists the services the agent can draw on beyond your documentation.
+**Google Drive**, **Notion** and **Jira** work today; the rest of the catalog reads
+**Coming soon** until its connector lands, so you can see what's planned without being offered a
+button that would only fail.
+
+Connecting takes one click: a popup runs that provider's own sign-in, and the connection moves
+up into **Enabled integrations** with a line describing what the agent can do with it. Only
+owners and admins can connect a source, because connecting grants the agent live read access to
+whatever the authorizing account can open — connect it as an account whose reach you're happy
+for the agent to have.
+
+**Papervine never holds the credential.** It goes straight from the provider into the
+integrations vault, and we keep only a handle. That's also what makes disconnecting immediate
+rather than eventual: **Disconnect** revokes the grant at the source and removes the connection,
+and the agent loses those tools on its very next question. Nothing is copied or indexed in the
+meantime — every read is a live call at the moment the agent asks, so what it can see is exactly
+what the connected account can see, right now.
+
+With **Google Drive** connected the agent can search the Drive and read documents — Google Docs,
+Sheets and Slides included, and shared drives as well as personal ones. With **Notion**, it can
+search the workspace and read a page's content.
+
+With **Jira**, it can search issues with JQL and read one in full, including its comment
+thread — which is usually where the answer actually is. Useful for questions your documentation
+can't answer on its own: whether a behaviour someone is asking about is a known bug, or what
+changed in a recent piece of work.
+
+Notion has one behaviour worth knowing, because it surprises people: Notion only exposes pages
+that have been **explicitly shared with the integration**, which is narrower than "the
+workspace". If the agent reports finding nothing, that's the usual reason — share the relevant
+pages or their parent, and search again.
+
+Whatever the source, the agent will tell you which one an answer came from, and that matters: a
+Drive file or a Notion page isn't documentation, and an answer drawn from a stale internal
+document shouldn't read like published guidance. It prefers your docs when they cover the
+question, and a long document is truncated rather than quoted whole (it says when that happens).
+
 <Note>
-  The agent answers questions about the docs; it doesn't have your other tools yet. Connecting
-  a source under *Available to your team* will let it draw on that source when it answers —
-  that's the next piece of this surface.
+  Self-hosting? Connectors need an integrations backend configured (`NANGO_SECRET_KEY` and a
+  webhook secret) — see `.env.example`. Unset, the gallery says so and the rest of the Agent
+  page works normally. The executor needs the same key, since the connector tools run inside
+  the agent's background task.
 </Note>
 
 ## Assistant

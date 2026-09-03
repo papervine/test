@@ -14,14 +14,20 @@ import { generateText, stepCountIs } from "ai";
 import { eq, sql } from "drizzle-orm";
 import { db } from "../lib/db";
 import { agentRun as agentRunTable, site as siteTable, usageEvent } from "../lib/db/app-schema";
-import { getSlackWorkspaceByTeamId, botTokenFor } from "../lib/slack-workspaces";
+import {
+  getSlackWorkspaceByTeamId,
+  botTokenFor,
+  botTokenFailureReason,
+} from "../lib/slack-workspaces";
 import { postThreadMessage, updateMessage, fitSlackText } from "../lib/slack-api";
 import { authorizeAi, recordAiUsage } from "../lib/billing/store";
+import { autumnConfigured } from "../lib/billing/autumn";
 import { assistantTools } from "@papervine/renderer/lib/assistant-tools";
 import { contentContext } from "@papervine/renderer/lib/content";
 import { s3Source } from "../lib/s3-source";
 import { contentVersion, liveContentPrefix } from "../lib/revisions";
 import { resolveDocsBaseUrl } from "../lib/widget";
+import { connectedTools, connectedSourceNames } from "../lib/integrations/tools";
 import {
   aiModel,
   aiModelId,
@@ -100,7 +106,7 @@ export const slackAgentRunTask = task({
       // to reply through, so the failure is recorded and nothing is posted.
       const error = !workspace
         ? "slack workspace is no longer connected"
-        : "the stored Slack bot token could not be read — reconnect the workspace";
+        : botTokenFailureReason(process.env.PAPERVINE_ENCRYPTION_KEY);
       await db
         .update(agentRunTable)
         .set({ status: "failed", error, finishedAt: new Date() })
@@ -122,6 +128,19 @@ export const slackAgentRunTask = task({
         billing.code === "out_of_credits"
           ? "This workspace is out of AI credits."
           : "This workspace's plan doesn't include the docs agent.",
+      );
+    }
+    // Allowed but unmetered with no billing backend is the self-host promise
+    // (authorizeAiDecision / unlock.ts rule 1) — and, on a HOSTED deploy, a silent cost
+    // leak: the executor is a separate deploy that doesn't inherit the web app's env
+    // (SPEC §10.2), so a dropped AUTUMN_SECRET_KEY would give away unmetered agent runs
+    // with nothing in usage_event to notice it by. Say so loudly; §18 is metering-first.
+    if (!billing.metered && !autumnConfigured()) {
+      logger.warn(
+        "running UNMETERED: this executor has no AUTUMN_SECRET_KEY, so no billing backend " +
+          "is visible to it. Correct for a self-hosted install; on a hosted deployment it " +
+          "means the executor's environment is missing the key the web app has.",
+        { runId, organizationId: siteRow.organizationId },
       );
     }
 
@@ -161,22 +180,35 @@ export const slackAgentRunTask = task({
         siteRow,
       );
 
+      // Sources the org has attached (SPEC §10.2). Read-only, live, and composed per run
+      // from the connection rows — so a disconnect takes effect on the very next mention.
+      const sourceTools = await connectedTools(siteRow.organizationId);
+      const sources = await connectedSourceNames(siteRow.organizationId);
+
       const system =
         `You are the documentation agent for "${siteRow.name}", answering in Slack. ` +
         `Answer from the site's documentation using the read tools (searchDocs, readPage, ` +
         `listPages) — search before you answer, and never guess at product behavior the ` +
-        `docs don't state. Reply in Slack mrkdwn: short paragraphs, *bold* not **bold**, ` +
-        `links as <url|label>. The tools return root-relative hrefs; make them absolute ` +
+        `docs don't state. ` +
+        (sources.length
+          ? `This workspace has also connected ${sources.join(", ")}; you may read from ` +
+            `those tools when the docs don't answer the question, and you must say which ` +
+            `source an answer came from — a Drive document is not documentation, and ` +
+            `presenting it as though it were is how a stale internal file becomes policy. ` +
+            `Prefer the docs when they cover it. `
+          : "") +
+        `Reply in Slack mrkdwn: short paragraphs, *bold* not **bold**, ` +
+        `links as <url|label>. The docs tools return root-relative hrefs; make them absolute ` +
         `against ${docsBaseUrl} and NEVER invent a different host. Be concise — a few ` +
-        `sentences beats an essay — and link the pages you used. If the docs genuinely ` +
-        `don't cover it, say so plainly and suggest what would need documenting.`;
+        `sentences beats an essay — and link the pages you used. If neither the docs nor ` +
+        `the connected sources cover it, say so plainly and suggest what would need documenting.`;
 
       const result = await contentContext.run(source, async () =>
         generateText({
           model: aiModel(model),
           system,
           prompt: run.prompt,
-          tools: assistantTools,
+          tools: { ...assistantTools, ...sourceTools },
           stopWhen: stepCountIs(12),
           providerOptions: aiProviderOptions(model),
         }),

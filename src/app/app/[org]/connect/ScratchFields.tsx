@@ -22,6 +22,10 @@ export function ScratchFields() {
         label="Site name"
         placeholder="Acme Docs"
         required
+        // The chooser mounts only the selected method's fields, so this focuses both on
+        // arrival (when scratch is the default) and the moment you pick the card — the
+        // name is the only thing to fill in, so there's nothing else focus could want.
+        autoFocus
         value={name}
         onChange={(e) => setName(e.target.value)}
         hint={

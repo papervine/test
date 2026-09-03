@@ -5041,6 +5041,42 @@ Minimum to operate the SaaS:
   rendered as a paid plan ("Renews Oct 1" on the seeded org). `subscriptionStatus` in the
   adapter translates active-with-trial-end → trialing, used by both the lookup and the summary;
   pinned against the capture.
+  **Per-site sitemap + robots (2026-09-02).** Every docs site Papervine serves now answers
+  `/sitemap.xml` and `/robots.txt` for ITSELF — tenant subdomain, custom domain, and
+  `papervine serve` alike. Before, both paths were rewritten into the tenant's page space,
+  looked up as a docs page called "sitemap", missed, and returned the site's own not-found
+  HTML under a 200: `docs.papervine.io/sitemap.xml` was 45KB of "Page not found" in
+  production, and our own documentation therefore shipped with no sitemap at all. The page
+  list is the SAME nav walk `/llms.txt` uses (`listPageEntries`), so `noindex` and reader
+  gating are already applied and `seo.indexing: "all"` works identically; external nav links
+  and duplicate hrefs are dropped, and the index page resolves to the origin itself rather
+  than `/index`. `robots.txt` advertises the sitemap of the host that served it, derived from
+  the request Host so a custom domain names itself — the marketing origin stays hardcoded and
+  can never appear on a customer's domain. Both routes are explicitly `force-dynamic`, since
+  their answer varies by Host. **One hazard worth remembering:** `accessForRecord` treats a
+  missing site row as "no gating", which is right for the render path (a missing row 404s
+  anyway) and wrong here, because the content source and the row resolve separately — a cold
+  request that found the content but not the row published a GATED site's internal URLs. Seen
+  exactly once, hence `canPublishSitemap`, which publishes nothing rather than something
+  ungated. Found while verifying the gated seed in a browser; the unit tests could not have
+  seen it.
+  **Purchase conversion (2026-09-02).** Ad spend needs revenue, not page views, so a
+  completed checkout reports itself to Google Ads. Google's guided setup offers "count a visit
+  to this page", which cannot work here twice over: Stripe returns to `/{org}/billing`, a route
+  that REDIRECTS (a 307 runs no tag, and a redirect drops the query string), and a page-visit
+  conversion carries no amount, so $65, $250 and a refresh all look alike. Instead the return
+  URL carries what was bought and a per-checkout id (`?checkout=success&plan=…&t=…`, minted in
+  `changePlan` so it survives the trip through Stripe), the org-level route forwards both across
+  its redirect, and the billing page resolves the price from Autumn's own plans
+  (`purchaseConversion`, pure, 10 unit tests) and hands it to `PurchaseConversion`, which queues
+  one `conversion` event. Deduped by that id, so a refresh or a bookmark counts once; the params
+  are stripped after firing. Gated exactly like the tag itself — Vercel production only — so a
+  preview or a self-host can never write into the ad account. Two traps worth keeping: a literal
+  `<script>` in a React tree is never executed (the reason `GoogleAdsTag` exists), and the tag
+  loads with next/script's afterInteractive strategy, so on the one navigation that matters
+  `window.gtag` is still undefined — calling it optionally looked right, logged nothing and
+  dropped the purchase. The command is pushed onto `dataLayer` instead, which gtag.js drains
+  when it arrives. Found by watching `dataLayer` in a browser; nothing else would have shown it.
   **Webhook + cache (2026-09-02).** Until now every dashboard render read Autumn live (the
   layout once, the four gated pages a second time; billing settings three times) and nothing
   told an open page that billing had changed. Two changes, one mechanism. Dashboard reads go
@@ -5804,6 +5840,76 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
 >   deployed* **before** saving the Request URL — Slack POSTs its challenge on save and
 >   the route verifies the signature first, so an unconfigured deployment 401s the
 >   handshake.
+> **Status — connectors landed, Google Drive first (2026-09-02): slices B + C.** The
+> gallery is live. `integration_connection` (migration 0036, unique on `(org, provider)`)
+> holds a **handle, never a token** — the credential lives in Nango's vault, which is what
+> makes the §10.2 context model literally true: reads are live calls under the authorizing
+> account's own grant, so a disconnect revokes instantly and no copy of anyone's data or
+> token sits here to leak.
+> - *Flow:* `POST /api/integrations/session` (app host, session-authed, **owner/admin
+>   only** — connecting grants the agent live read access to a Drive) mints a Connect
+>   session naming `end_user.organization_id`; Nango's popup runs the provider's OAuth;
+>   `POST /api/nango/webhook` (marketing host, HMAC-SHA256 over the raw body in
+>   `X-Nango-Hmac-Sha256`) echoes that org back and upserts the row. The provider is
+>   allowlisted twice — against our own catalog before Nango sees it, and again as
+>   `allowed_integrations` on the session — so a tampered client can neither pick an
+>   arbitrary integration on our account nor widen the one we chose. Nango's scheme
+>   carries **no timestamp**, hence no replay protection, which is why everything the
+>   route does is idempotent (upsert by connection, or delete).
+> - *Google Drive tools:* `search_google_drive` / `read_google_drive_file`, read-only by
+>   construction. Nango is a keychain, not a unified API, so these are Google's own
+>   endpoints — the ~40-lines-per-connector trade the ADR above accepted. Three things
+>   the wrappers exist for: Drive's `q` is a DSL (an unescaped apostrophe is a syntax
+>   error, not a search), Google Docs/Sheets/Slides have no bytes and must `export`
+>   rather than download, and shared drives — where team documentation actually lives —
+>   are invisible without `supportsAllDrives`/`includeItemsFromAllDrives`. Long files
+>   truncate *and say so*; binary content is refused rather than handed to the model as
+>   mojibake; every failure is a tool RESULT, never a thrown error that would kill a run.
+> - *Notion, the second connector (2026-09-02).* Same shape, more translation: Drive hands
+>   back a file, Notion hands back a **tree of typed blocks** whose text is split into
+>   "rich text" runs, with no endpoint that returns a page as prose — so the connector
+>   flattens blocks to Markdown (headings, lists, checkboxes with their state, code with
+>   its language, links) and drops the ones with nothing to say rather than emitting blank
+>   lines. Three Notion-specific traps, each a test: the version header is mandatory and is
+>   pinned rather than floating; a page's title lives in whichever property has type
+>   `title` (the KEY varies per database, so it can't be looked up by name); and search
+>   returns only what was **explicitly shared with the integration**, which is why an empty
+>   result says so — otherwise the agent reports "no such page" about pages that exist.
+>   Search is a POST with a JSON body and needs a custom header, so the proxy seam grew
+>   `data` and `headers`.
+> - *Jira, the third connector (2026-09-02).* `search_jira_issues` (JQL) and
+>   `read_jira_issue` (with its comment thread, where the answer usually is). Two Jira
+>   Cloud specifics, both of which fail loudly rather than subtly and are pinned by tests:
+>   the path carries the site's **`cloudId`** (`/ex/jira/{cloudId}/rest/api/3/…`), which
+>   Nango resolves into the connection config at connect time rather than exposing a
+>   stable base URL — so it's read per connection, resolved once per run, and a connection
+>   missing it says "reconnect Jira" instead of firing a request at a path containing
+>   `undefined`; and **`GET /rest/api/3/search` is gone** (410 on Cloud since the 2025
+>   sunset), replaced by `POST /rest/api/3/search/jql`, which pages by opaque
+>   `nextPageToken` — no `startAt`, no `total`, so "more issues match" is the only honest
+>   thing to report — and returns NO fields unless they are named. Descriptions and
+>   comments are **ADF** (Atlassian's node tree, as in Confluence), flattened to Markdown
+>   the way Notion's blocks are; an unknown node still contributes its text, so a new ADF
+>   type degrades to prose instead of vanishing. A comments failure returns the issue with
+>   `commentsError` rather than losing a readable issue to a forbidden discussion.
+> - *Prompt:* the agent is told which sources are connected and must **say which source an
+>   answer came from** — a Drive document is not documentation, and letting a stale
+>   internal file pass as policy is the failure mode worth designing against.
+> - *Disconnect revokes at Nango FIRST*, dropping our row only on success (404 counts as
+>   success — convergence, not bookkeeping), so a failed revoke can't orphan a live grant
+>   we've forgotten we hold. Unit-tested, including the no-backend path: a deployment that
+>   lost its key must still be able to detach a source.
+> - *Verified:* 31 unit tests (webhook HMAC + classifier incl. the failed-authorization
+>   case, the allowlist, the Drive query/export/truncation/binary behaviors, disconnect
+>   ordering); a smoke gate that an unsigned Nango webhook is 401'd before it can write a
+>   connection; in-browser, both states render correctly (unconfigured → Connect disabled
+>   with the reason; connected → Drive moves to *Enabled integrations* with its capability
+>   line and a Disconnect). **Unverified:** the live Nango round trip (needs an account +
+>   a Google OAuth client configured there), and clicking Disconnect in-browser — the
+>   server-action form did not submit under the browser driver this session despite the
+>   identical Slack form working earlier by the same method, with analytics POSTs proving
+>   JS was running; the logic behind it is unit-tested instead.
+>
 > - *Still owed:* a real Slack app for a true round trip (the placeholder token ends at
 >   `invalid_auth`, which is exactly where verification stops without one); streaming the
 >   reply as the agent works (v1 posts `_Reading the docs…_` then edits once — deliberate:
@@ -5844,6 +5950,12 @@ scaffold is shaped toward — record decisions here as we build, don't treat it 
     `src/components/app/automate/integrations.tsx` (no brand-icon dep — we only ship
     lucide-react); the page (`…/automate/agent/page.tsx`) is presentational. Verified
     in-browser, light + dark platform theme.
+  - *Mobile Slack banner (2026-09-03).* The connected-workspace card kept
+    Reinstall + Disconnect in a row at every width, which squeezed "Slack workspace"
+    and the connected-to line into a leftover column on a phone. The banner (and the
+    matching integration cards below) now stack the actions under the copy below `sm`,
+    and the copy column is `min-w-0` so a long workspace name still wraps instead of
+    overflowing. Guarded by `agent-settings.spec.ts` (phone-width bounding boxes).
   - *Why Slack.* The reference product treats Agent as "your docs teammate in Slack" —
     it lives where the team already works rather than as a separate console, and
     threads/channels give it conversational context and an audit trail for the PRs it
@@ -8145,7 +8257,74 @@ Deliberately *not* editable here: the **slug** (the stable URL id) and the **ren
 (from the repo's `docs.json`). Status 2026-06-29: built + browser-verified (rename persists +
 reflects in the switcher); typecheck + unit (`normalizeSiteName`) + smoke + crawl green.
 
+> **Status 2026-09-03 — signing in on a Vercel preview.** Reported as "500 on signup" on a
+> preview URL; it was two independent faults, neither of them the database.
+>
+> *The bounce pointed at a host that cannot exist.* `isReservedPlatformHost` is true for
+> `*.vercel.app`, so middleware forwarded `/login` to `appHostFor(host)` —
+> `app.papervine-git-branch-team.vercel.app`, a name Vercel never creates and whose
+> wildcard certificate does not cover a nested label. The browser got a dead host instead
+> of a login page. This is the identical failure the custom-domain guard beside it already
+> documents (`docs.papervine.io` → `app.docs.papervine.io` → ERR_CONNECTION_CLOSED), one
+> host class over; it survived because previews are rarely signed into. New predicate
+> `hasAppSubdomain` gates the bounce, so a preview serves auth paths **in place** on the
+> single host being browsed — where its session cookie is set anyway. `localhost` keeps
+> bouncing, because `app.localhost` resolves and dev depends on it.
+>
+> *And Better Auth had no origin it would accept.* `BETTER_AUTH_URL` is scoped
+> Production-only in Vercel, and it cannot simply be copied to Preview: a preview hostname
+> is generated per deployment, so production's value names an origin the visitor is not on,
+> which Better Auth rejects as foreign. `deploymentOrigin()` (src/lib/env.ts) prefers the
+> explicit variable and falls back to `VERCEL_URL` — the one value that always names the
+> deployment actually being browsed — and feeds `trustedOrigins`. **Preview still needs
+> `BETTER_AUTH_SECRET` set**, which remains dashboard work: Better Auth *throws* on the
+> default secret under `NODE_ENV=production`, which every preview build is (the same fact
+> that broke the smoke gate the day before).
+>
+> *Two findings worth acting on separately.* `DATABASE_URL` is scoped `Production, Preview`
+> with one shared value, so **previews read and write production data** — and since
+> `vercel.json` runs `drizzle-kit migrate` in the build, a preview branch carrying a
+> migration applies it to prod before that code is on main. This contradicts the standing
+> claim that previews each migrate their own Neon branch; either wire up Neon preview
+> branching or stop treating previews as a safe place to click. Separately, prod's
+> `BETTER_AUTH_URL` is marked *Sensitive* (it is a public URL, published as `issuer` in
+> `/.well-known/oauth-authorization-server`) while `BETTER_AUTH_SECRET` is readable — the
+> two flags are the wrong way round.
+>
+> *Still not fixed, deliberately:* the dashboard at bare `/:org/:site` needs the app-host
+> rewrite, so a preview can reach login, signup and onboarding but not the dashboard.
+> Serving both marketing and dashboard from one host is exactly the route collision the
+> `/app` mount exists to resolve (§10), so making previews fully usable means giving them a
+> real app subdomain (a branch domain), not another middleware special case.
+
 ### 10.10 Platform superadmin (`/admin`)
+
+> **Status 2026-09-02 — the operator is immune to billing and launch-flag gates.** An
+> allowlisted `PLATFORM_ADMIN_EMAILS` address is never told to upgrade and never has a
+> surface hidden from it: `authorizeAi` and `getUnlock` short-circuit before consulting
+> billing at all, and `canSeeFeature` returns true regardless of the `FEATURES` audience
+> (including `"off"`). The motivation is plain — an unlock card in front of the thing
+> you're being asked to debug helps nobody, and an operator dogfooding a surface
+> shouldn't need a plan to do it.
+>
+> **The line this does NOT cross is permission.** Availability gates ("is it in your
+> plan", "has it shipped") lift; authorization gates do not. `canSee` itself is
+> deliberately untouched, because several callers use it for permission questions — e.g.
+> whether billing may be *managed* — and the cross-tenant platform-admin view stays
+> read-only by construction (`requireOrg` leaves `role` null for a non-member, and every
+> mutation path is membership-scoped through `findSite`). So an operator can *see* any
+> tenant's surfaces working; they still can't mutate a tenant they don't belong to.
+>
+> Two implementation notes. The actor is passed **explicitly** (`{ actorEmail }`) rather
+> than read from the session inside `billing/store.ts`: that module is in the executor's
+> bundle, and reaching for `getSession` would drag `next/headers` into a runtime with no
+> request — the import class that has broken that bundle before. Consequently a
+> **background run is never immune**: it has no acting user, which is correct, since a
+> scheduled automation isn't an operator acting. To un-gate an org's *runs*, use the
+> existing plan comp (`grantPlan`), which is the designed mechanism. And an operator's AI
+> is still **metered**: immunity means not being blocked, not spending invisibly (§18 is
+> metering-first). `OrgContext.isPlatformAdmin` carries the flag to the UI gates, distinct
+> from `platformAdminView`, which means specifically "here without membership".
 
 > **Status 2026-08-24 — split into a real console.** It was one page: four stat cards followed by
 > an unbounded stack of org cards, each inlining that org's members and sites. Fine at three

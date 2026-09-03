@@ -295,3 +295,28 @@ export function isOnPlatformDomain(host: string | null): boolean {
   const name = host.split(":")[0].toLowerCase();
   return name === PLATFORM_DOMAIN || name.endsWith(`.${PLATFORM_DOMAIN}`);
 }
+
+/**
+ * Does this host actually HAVE a reachable `app.` sibling?
+ *
+ * The auth bounce (middleware) sends `/login` to `appHostFor(host)` so the session cookie
+ * is set where the dashboard lives. That works on the platform domain and on `.localhost`,
+ * and it is nonsense on a **Vercel preview**: `appHostFor` turns
+ * `papervine-git-branch-team.vercel.app` into `app.papervine-git-branch-team.vercel.app`,
+ * a name Vercel never creates and whose TLS its wildcard does not cover — so the browser
+ * gets a dead host instead of a login page. That is the same failure the custom-domain
+ * guard above already documents; previews are one host class over, and it went unnoticed
+ * because previews are rarely signed into.
+ *
+ * `*.vercel.app` therefore serves auth paths IN PLACE: one host, cookie set on the host
+ * being browsed. Bare `localhost` keeps bouncing, because `app.localhost` does resolve and
+ * dev depends on it.
+ */
+export function hasAppSubdomain(host: string | null): boolean {
+  if (!host) return false;
+  const name = host.split(":")[0].toLowerCase();
+  if (name.endsWith(".vercel.app")) return false;
+  // A raw IP has no subdomains at all (CI runners address 127.0.0.1 directly).
+  if (/^[0-9.]+$/.test(name)) return false;
+  return true;
+}

@@ -9,7 +9,7 @@
  *
  * No test framework: pure Node + fetch. Run with `npm test`.
  */
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import process from "node:process";
@@ -129,7 +129,13 @@ const CHECKS = [
     desc: "a page breaking the component contract degrades instead of rendering or executing",
     // An import outside /snippets/ is refused before evaluation on either side, and the reader
     // gets the same notice any unsupported feature produces -- never a 500.
-    include: ["couldn", "only /snippets/"],
+    //
+    // The reader sees the notice and NOT the reason: MdxNotice renders the underlying message
+    // only in development (mdx.tsx), so a tenant's visitors never get our internals. This
+    // asserted the message for as long as the gate ran a dev server, where it was visible;
+    // against the production build customers actually run, its ABSENCE is the contract.
+    include: ["couldn"],
+    exclude: ["only /snippets/"],
   },
   {
     slug: "unknowns",
@@ -473,19 +479,19 @@ const CONTROL_PLANE_CHECKS = [
   {
     // This gate runs in single-repo mode (PAPERVINE_CONTENT=tests/fixtures) — i.e. exactly the
     // shape `npx papervine dev` / `papervine serve` has, where the apex IS somebody else's
-    // docs repo. It must not publish OUR sitemap at their root. The marketing branch is
-    // covered by tests/unit/seo-routes.test.ts, which needs no host to assert.
+    // docs repo. It advertises THEIR sitemap and never ours. The marketing branch is covered
+    // by tests/unit/seo-routes.test.ts, which needs no host to assert.
     path: "/robots.txt",
-    desc: "a CLI-served repo gets a neutral robots.txt, never our sitemap pointer",
+    desc: "a CLI-served repo advertises its own sitemap, never the platform's",
     // "User-Agent" with a capital A — that's how Next serializes MetadataRoute.Robots, and
     // pinning the real spelling is the point of asserting on the body at all.
-    include: ["User-Agent: *", "Allow: /"],
-    exclude: ["Sitemap:", "papervine.io"],
+    include: ["User-Agent: *", "Allow: /", "/sitemap.xml"],
+    exclude: ["papervine.io"],
   },
   {
     path: "/sitemap.xml",
-    desc: "a CLI-served repo gets an empty sitemap, not the platform's marketing URLs",
-    include: ["<urlset"],
+    desc: "a CLI-served repo gets a sitemap of ITS pages, not the platform's marketing URLs",
+    include: ["<urlset", "<loc>"],
     exclude: ["/docs-platform-alternatives", "/pricing"],
   },
   {
@@ -825,17 +831,62 @@ async function waitForReady(timeoutMs = 180_000) {
 }
 
 async function run() {
-  // Next allows one dev server per directory, and this one needs PAPERVINE_CONTENT pointed
-  // at the fixtures — so a running `npm run dev` has to be stopped, not reused.
+  // A running `npm run dev` still has to be stopped: this gate needs PAPERVINE_CONTENT
+  // pointed at the fixtures, and dev-lock keeps the two from clobbering each other's state.
   requireNoDevServer(PKG_ROOT, "the smoke gate", DIST_DIR);
   // See protectNextEnv: `next dev` repoints next-env.d.ts at DIST_DIR, which would make a
   // later typecheck validate routes against this run's frozen snapshot.
   const restoreNextEnv = protectNextEnv(PKG_ROOT);
-  log(`▶ booting renderer against ${FIXTURES} on :${PORT}`);
-  const server = spawn(nextBin, ["dev", "-H", "0.0.0.0", "-p", String(PORT)], {
+
+  // A PRODUCTION build, not `next dev` — the same move the e2e harness made, for the same
+  // reason and after the same failure. `next dev` keeps a compiler resident for the whole
+  // run, compiling each route on first request: on a CI runner that both blew individual
+  // 30s check budgets AND, as the app grew, killed the job outright — the runner going
+  // away mid-check with no failing assertion, reported as "The operation was canceled".
+  // playwright.config.ts documents that signature in detail (a kernel OOM on an ~8GB box,
+  // which cost a five-PR bisect to disprove as a code regression); this gate had started
+  // dying the same way, at a different check each run.
+  //
+  // `next build` pays the compile once, up front, and `next start` then serves finished
+  // output — so a check's budget is spent on the check, and nothing is compiling while
+  // requests are in flight. Memory follows e2e's split for the same reasons: the build
+  // peaks alone and gets 6144, the served app needs far less and gets 3072, which clears
+  // the runner cgroup's ~2GB default without licensing the box away from the kernel.
+  const buildEnv = { ...process.env, PAPERVINE_CONTENT: FIXTURES, NEXT_DIST_DIR: DIST_DIR };
+  log(`▶ building the renderer for ${FIXTURES} (once, up front)`);
+  const built = spawnSync(nextBin, ["build"], {
+    cwd: PKG_ROOT,
+    env: { ...buildEnv, NODE_OPTIONS: "--max-old-space-size=6144" },
+    stdio: "pipe",
+    encoding: "utf8",
+  });
+  if (built.status !== 0) {
+    restoreNextEnv();
+    console.error(`${(built.stdout ?? "") + (built.stderr ?? "")}`.slice(-4000));
+    console.error("\n✗ the renderer failed to build — the gate can't run.");
+    process.exit(1);
+  }
+
+  log(`▶ serving the built renderer on :${PORT}`);
+  const server = spawn(nextBin, ["start", "-H", "0.0.0.0", "-p", String(PORT)], {
     cwd: PKG_ROOT,
     // Its own build output, so this can run alongside `npm run dev` (see next.config.mjs).
-    env: { ...process.env, PAPERVINE_CONTENT: FIXTURES, NEXT_DIST_DIR: DIST_DIR },
+    // PAPERVINE_TEST_MODE restores the dev-only affordances that a production build would
+    // otherwise gate off (src/lib/env.ts) — the same flag the Playwright webServer sets.
+    env: {
+      ...buildEnv,
+      PAPERVINE_TEST_MODE: "1",
+      NODE_OPTIONS: "--max-old-space-size=3072",
+      // Better Auth THROWS on the default secret under NODE_ENV=production, where it only
+      // warned under `next dev` — so every auth-touching route 500s on a machine with no
+      // BETTER_AUTH_SECRET. That is CI, which has no .env.local, and it turned the
+      // authoring-MCP check from 401 into 500 the moment this gate started serving a real
+      // build. Set unconditionally rather than only when absent: a gate whose result
+      // depends on whether the developer happens to have a .env.local is exactly the
+      // local/CI divergence that hid this. Nothing here authenticates anyone; the value
+      // only has to not be the default.
+      BETTER_AUTH_SECRET: "smoke-gate-fixed-secret-not-used-to-authenticate-anyone",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   let serverLog = "";
@@ -845,37 +896,6 @@ async function run() {
   const failures = [];
   try {
     await waitForReady();
-    // Warm EVERY control-plane route before anything is measured.
-    //
-    // This gate runs against `next dev`, so a route's first request is also its cold Turbopack
-    // compile, and on a CI runner that has repeatedly landed on either side of the 30s
-    // per-check budget: `/home` (two backdrop fields plus the Ask demo), then `/device` (its own
-    // Better Auth bundle), then `/docs-platform-alternatives` — three routes, on three commits that
-    // touched none of them. Each was warmed individually as it flaked; `/device` even outlasted
-    // TWO consecutive 30s attempts under the retry below, which is when per-route warming stops
-    // being a fix and starts being whack-a-mole. So this warms the whole set.
-    //
-    // It costs nothing that wasn't already being paid: the compile happens either way, and
-    // today it happens *inside* a measured check, competing with that check's budget. Paid
-    // here it is unasserted, sequential (parallel compiles are what push the dev server into
-    // the memory ceiling that already forced 6144 down to 3072 for e2e), and given a budget of
-    // its own. Every check still issues its own real request afterwards, so nothing is asserted
-    // against a warm-up response.
-    //
-    // The proper fix is to serve a production build, as the e2e harness now does
-    // (`next build && next start`, playwright.config.ts) — then there are no cold compiles to
-    // warm at all. That is a bigger change to the one gate everyone runs locally; this removes
-    // the class of flake in the meantime.
-    const warmed = new Set();
-    for (const check of CONTROL_PLANE_CHECKS) {
-      const key = `${check.host ?? ""}${check.path}`;
-      if (warmed.has(key)) continue;
-      warmed.add(key);
-      await rawGet(check.path, check.host, check.cookie, 120_000).catch(() => {});
-    }
-    // The apex marketing pages are fetched by URL rather than through rawGet, so warm the
-    // heaviest one the same way.
-    await fetch(`${BASE}/home`, { signal: AbortSignal.timeout(120_000) }).catch(() => {});
     for (const check of CHECKS) {
       const before = failures.length;
       const url = `${BASE}/${check.slug}`;
@@ -931,13 +951,24 @@ async function run() {
       try {
         const res = await fetch(`${BASE}/media`, { signal: AbortSignal.timeout(30_000) });
         const html = await res.text();
-        const href = html.match(/href="([^"]+\.css[^"]*)"/)?.[1];
-        if (!href) {
+        // EVERY linked stylesheet, not just the first. A production build splits CSS into
+        // per-route chunks, so the safelisted utilities land in whichever chunk carries the
+        // docs styles while the first <link> may be something else entirely — reading only
+        // that one reported `aspect-video` as purged when it was present all along, three
+        // chunks over. `next dev` served a single stylesheet, which is why the assumption
+        // held for as long as this gate ran against it.
+        const hrefs = [...html.matchAll(/href="([^"]+\.css[^"]*)"/g)].map((m) => m[1]);
+        if (hrefs.length === 0) {
           failures.push(`[${tag}] no stylesheet linked from /media`);
         } else {
-          const css = await (
-            await fetch(new URL(href, BASE), { signal: AbortSignal.timeout(30_000) })
-          ).text();
+          const sheets = await Promise.all(
+            hrefs.map((href) =>
+              fetch(new URL(href, BASE), { signal: AbortSignal.timeout(30_000) }).then((r) =>
+                r.text(),
+              ),
+            ),
+          );
+          const css = sheets.join("\n");
           for (const cls of ["aspect-video", "object-cover", "h-96"]) {
             if (!css.includes(cls)) {
               failures.push(`[${tag}] ".${cls}" purged — tenant MDX using it renders unstyled`);
@@ -1047,10 +1078,10 @@ async function run() {
         method: "POST",
         headers: { "content-type": "application/json", accept: "application/json, text/event-stream" },
         body: JSON.stringify(body),
-        // 120s: the FIRST request cold-compiles the /mcp route (+ MCP SDK) under
-        // `next dev`, which blows a 30s budget on CI runners — the long-standing
-        // "[mcp] request failed: aborted due to timeout" red. Healthy responses are
-        // sub-second; this only tolerates compile latency, a real hang still fails.
+        // 120s, kept from the dev-server era: this used to cold-compile the /mcp route
+        // (+ MCP SDK) on first request and blow a 30s budget on CI — the long-standing
+        // "[mcp] request failed: aborted due to timeout" red. A served build answers in
+        // well under a second, so the headroom now only covers a genuinely slow tool call.
         signal: AbortSignal.timeout(120_000),
       });
     {
@@ -1196,6 +1227,57 @@ async function run() {
         failures.push(`[llms.txt] request failed: ${e.message}`);
       }
       log(`  ${failures.length === before ? "✓" : "✗"} llms.txt index (sections, .md links, noindex held)`);
+    }
+
+    // sitemap.xml + robots.txt for a DOCS SITE (SPEC §2). This gate runs in single-repo mode,
+    // which is the same code path a tenant subdomain, a custom domain and `papervine serve`
+    // take — so it covers the case that shipped broken: `/sitemap.xml` used to be looked up as
+    // a docs page called "sitemap", miss, and return the site's own not-found HTML under a 200.
+    // The pages come from the nav walk `/llms.txt` uses, so the `noindex` exclusions above must
+    // hold here too, and they are asserted rather than assumed.
+    {
+      const before = failures.length;
+      try {
+        const res = await fetch(`${BASE}/sitemap.xml`, { signal: AbortSignal.timeout(30_000) });
+        const body = await res.text();
+        const ct = res.headers.get("content-type") ?? "";
+        if (res.status !== 200) failures.push(`[sitemap.xml] expected 200, got ${res.status}`);
+        if (!ct.includes("xml")) failures.push(`[sitemap.xml] expected XML, got "${ct}"`);
+        for (const needle of [
+          "<urlset",
+          `<loc>${BASE}</loc>`, // the index page is the origin itself, not /index
+          `<loc>${BASE}/components</loc>`,
+        ]) {
+          if (!body.includes(needle)) failures.push(`[sitemap.xml] missing "${needle}"`);
+        }
+        // Same opt-out, both paths in: a listed page with `noindex` and an unlisted one that
+        // `seo.indexing: "all"` would otherwise sweep up.
+        for (const forbidden of ["llms-noindex", "search-noindex"]) {
+          if (body.includes(forbidden)) {
+            failures.push(`[sitemap.xml] noindex page leaked: "${forbidden}"`);
+          }
+        }
+      } catch (e) {
+        failures.push(`[sitemap.xml] request failed: ${e.message}`);
+      }
+      try {
+        const res = await fetch(`${BASE}/robots.txt`, { signal: AbortSignal.timeout(30_000) });
+        const body = await res.text();
+        if (res.status !== 200) failures.push(`[robots.txt] expected 200, got ${res.status}`);
+        // Its OWN sitemap, on its own origin — never the platform's. That leak is the whole
+        // reason these routes answer per host.
+        if (!body.includes(`Sitemap: ${BASE}/sitemap.xml`)) {
+          failures.push(`[robots.txt] missing its own Sitemap line`);
+        }
+        if (/papervine\.io/.test(body)) {
+          failures.push(`[robots.txt] advertised the platform's host on a docs site`);
+        }
+      } catch (e) {
+        failures.push(`[robots.txt] request failed: ${e.message}`);
+      }
+      log(
+        `  ${failures.length === before ? "✓" : "✗"} sitemap.xml + robots.txt describe THIS docs site (noindex held, no platform leak)`,
+      );
     }
 
     // llms-full.txt inlines every page body after the same index. The risk it guards is the
@@ -1345,12 +1427,7 @@ async function run() {
           signal: AbortSignal.timeout(30_000),
         });
       try {
-        let res = await deliver();
-        // Retried once on 404, and only on 404: against `next dev` a route's FIRST request
-        // can land before the route is compiled and come back 404 (observed on a cold
-        // .next). The route file's existence isn't in question here — the signature gate
-        // is — so a single warm-up retry keeps the gate about behavior, not compile timing.
-        if (res.status === 404) res = await deliver();
+        const res = await deliver();
         if (res.status !== 401) {
           failures.push(`[slack-events] expected 401 for a bad signature, got ${res.status}`);
         }
@@ -1360,20 +1437,47 @@ async function run() {
       log(`  ${failures.length === before ? "✓" : "✗"} slack events rejects an unsigned delivery (401)`);
     }
 
+    // Nango connection webhook signature gate (SPEC §10.2 connectors). Same shape and
+    // reasoning as the two above: an unsigned delivery is rejected 401 before the route
+    // parses the body or writes a connection row, so it runs with no Postgres and no
+    // Nango account. This one matters more than most — the webhook is what grants an org
+    // agent access to a connected Drive, so forging one must not be possible.
+    {
+      const before = failures.length;
+      const deliver = () =>
+        fetch(`${BASE}/api/nango/webhook`, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-nango-hmac-sha256": "deadbeef", // not a valid HMAC of the body
+          },
+          body: JSON.stringify({ type: "auth", operation: "creation", connectionId: "c1" }),
+          signal: AbortSignal.timeout(30_000),
+        });
+      try {
+        const res = await deliver();
+        if (res.status !== 401) {
+          failures.push(`[nango-webhook] expected 401 for a bad signature, got ${res.status}`);
+        }
+      } catch (e) {
+        failures.push(`[nango-webhook] request failed: ${e.message}`);
+      }
+      log(`  ${failures.length === before ? "✓" : "✗"} nango webhook rejects an unsigned delivery (401)`);
+    }
+
     for (const check of CONTROL_PLANE_CHECKS) {
       const before = failures.length;
       const tag = `control-plane ${check.host ? `${check.host}` : ""}${check.path}`;
       try {
         // rawGet (not fetch) so a check can address the `app.` host via a real Host header.
         //
-        // Retried once on timeout, and only on timeout. This gate runs against `next dev`, so the
-        // FIRST request to any route is also its compile — and on CI hardware (~4× slower than a
-        // dev machine) a route with its own bundle can take longer than the 30s budget just to
-        // compile. `/device` did: 30.0s and out, while `/login?stale=1` right behind it took
-        // exactly 30s and passed by luck. A timed-out request doesn't cancel the compile, so the
-        // retry lands on a warm route and answers in milliseconds. Two timeouts in a row is a
-        // route that is actually hanging, which is the thing this check should catch — and a
-        // 60s budget still catches it. Same lesson as widget-settings: not flaky, over budget.
+        // Retried once on timeout, and only on timeout. This predates the production build
+        // and was aimed at cold compiles — a route's first request used to BE its compile,
+        // which on CI hardware could outlast the 30s budget on its own (`/device` did:
+        // 30.0s and out, while `/login?stale=1` behind it took exactly 30s and passed by
+        // luck). Serving a finished build removes that cause, so the retry should now
+        // almost never fire; it's kept because two timeouts in a row still means a route
+        // that genuinely hangs, which is exactly what this gate should catch.
         const res = await rawGet(check.path, check.host, check.cookie).catch(async (err) => {
           if (!/timeout/.test(String(err?.message))) throw err;
           return rawGet(check.path, check.host, check.cookie);
@@ -1437,6 +1541,19 @@ async function run() {
   if (failures.length) {
     log(`\n✗ ${failures.length} failure(s):`);
     for (const f of failures) log("  - " + f);
+    // The server's own output, which until now was printed only for a FATAL. A check that
+    // reports "expected 401, got 500" says nothing about WHY, and the one place the reason
+    // exists is this log — on CI, where you can't reproduce by hand, that difference cost a
+    // full push-and-wait cycle to recover (the answer was one line: BetterAuthError, using
+    // the default secret). Errors only, so a passing-but-chatty server doesn't bury it.
+    const serverErrors = serverLog
+      .split("\n")
+      .filter((l) => /error|warn|⨯/i.test(l))
+      .slice(-12);
+    if (serverErrors.length) {
+      log("\n--- server errors (may explain a 500) ---");
+      for (const line of serverErrors) log("  " + line.slice(0, 300));
+    }
     process.exit(1);
   }
   log(

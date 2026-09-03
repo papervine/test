@@ -6,6 +6,7 @@
 // window.location.assign(): Checkout/Portal are cross-origin, and the dashboard's own
 // return paths ride the app-host Host-rewrite that a server-action redirect() would skip
 // (the repo's hard-navigation gotcha).
+import { randomUUID } from "node:crypto";
 import { headers } from "next/headers";
 import { getSession, listOrganizations, getMemberRole } from "@/lib/session";
 import { canSee } from "@/lib/features";
@@ -76,10 +77,15 @@ export async function changePlan(
   });
 
   const base = await appOrigin();
+  // The return URL says WHAT was bought and identifies THIS checkout. Both exist for the
+  // Google Ads purchase conversion (SPEC §10 Billing): the plan gives the event its value,
+  // and the id is what Google dedupes on, so a refresh of the return URL cannot count twice.
+  // Minted here rather than on the page because it has to survive the round trip through
+  // Stripe and be identical on every load of the page it comes back to.
   const res = await attachPlan({
     organizationId: ctx.org.id,
     planId,
-    successUrl: `${base}/${orgSlug}/billing?checkout=success`,
+    successUrl: `${base}/${orgSlug}/billing?checkout=success&plan=${encodeURIComponent(planId)}&t=${randomUUID()}`,
   });
   if (!res.ok) return { ok: false, error: res.error ?? "Could not change the plan." };
   return res.checkoutUrl

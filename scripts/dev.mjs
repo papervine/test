@@ -42,6 +42,61 @@ const PORT = process.env.PORT ?? "3000";
 const has = (name) => !!process.env[name]?.trim();
 const onPath = (bin) => spawnSync("which", [bin], { stdio: "ignore" }).status === 0;
 
+// The https tunnel Slack needs, as {cmd, args} — or null when this stack has no tunnel
+// to run.
+//
+// The HOSTNAME picks the tunnel. SLACK_REDIRECT_URI already names the public host (the
+// app reads it for the same reason — src/lib/slack.ts), and each provider's host shape is
+// unambiguous, so there's nothing further to declare and no way for the tunnel and the app
+// to disagree about the hostname. Slack rejects such a mismatch outright.
+//
+// Both supported providers give a STABLE host, which is the real requirement: Slack stores
+// the URL in the app config, so a hostname that changed per restart would mean re-editing
+// the app every boot. That's also why `cloudflared tunnel --url` (random *.trycloudflare.com
+// per run) isn't wired up — it needs a Cloudflare-hosted domain to be stable, and then it's
+// a named tunnel, which DEV_TUNNEL_CMD already covers.
+function tunnelCommand() {
+  // Any other tunnel, verbatim (a cloudflared named tunnel, an ssh reverse tunnel, …).
+  const custom = process.env.DEV_TUNNEL_CMD?.trim();
+  if (custom) return { cmd: "sh", args: ["-c", custom] };
+
+  const redirect = process.env.SLACK_REDIRECT_URI?.trim();
+  if (!redirect) return null;
+  let host;
+  try {
+    host = new URL(redirect).host;
+  } catch {
+    return null; // malformed — the app's own config gate reports it
+  }
+  // A localhost value was set by hand for some non-tunnelled flow: nothing to tunnel.
+  if (!host || /(^|\.)localhost(:|$)|^127\.|^\[?::1\]?/.test(host)) return null;
+
+  // Tailscale Funnel: the host is the machine's own tailnet name, so there is no domain
+  // to pass — Funnel serves whatever it is. Free, stable, and no interstitial (ngrok's
+  // free tier shows one for browser HTML, which the OAuth redirect is).
+  if (/\.ts\.net$/i.test(host) && onPath("tailscale")) {
+    return { cmd: "tailscale", args: ["funnel", PORT] };
+  }
+  // ngrok, pinned to the reserved static domain (one per free account).
+  //
+  // The flag was renamed: current ngrok documents `--url https://host` (which is what the
+  // dashboard hands you) and older builds only know `--domain=host`. Neither is safe to
+  // assume, and picking wrong fails with an unknown-flag error at the least helpful
+  // moment, so ask the binary which it speaks.
+  if (/\.ngrok(-free)?\.(app|io|dev)$/i.test(host) && onPath("ngrok")) {
+    const help = spawnSync("ngrok", ["http", "--help"], { encoding: "utf8" });
+    const flag = `${help.stdout ?? ""}${help.stderr ?? ""}`.includes("--url")
+      ? ["--url", `https://${host}`]
+      : [`--domain=${host}`];
+    return { cmd: "ngrok", args: ["http", ...flag, PORT] };
+  }
+  return null;
+}
+
+// Resolved once: the manifest needs the command at construction time and when() needs the
+// same answer later, and re-deciding could report a different one.
+const TUNNEL = tunnelCommand();
+
 // --- the manifest -----------------------------------------------------------------
 // when() decides whether the layer belongs in THIS developer's stack; hint() (optional)
 // returns a one-line nudge printed when the layer is skipped but looks half-configured.
@@ -104,6 +159,48 @@ const LAYERS = [
         "can't reach you: pushes won't auto-sync, and publishing from Studio will commit " +
         "but leave the site stale until a manual Re-sync. Start a channel at https://smee.io, " +
         "set it as the App's webhook URL, and put it in .env.local."
+      );
+    },
+  },
+  {
+    tag: "tunnel",
+    color: BLUE,
+    // Slack app delivery (SPEC §10.2 Agent). Slack accepts only **https** URLs — for the
+    // OAuth redirect AND the events endpoint — so unlike the GitHub App's Setup URL
+    // (a browser redirect, which reaches http://app.localhost fine) neither Slack URL can
+    // point at localhost at all. A tunnel is the only way to exercise the install flow or
+    // a mention locally.
+    //
+    // No new env var: the host is parsed out of SLACK_REDIRECT_URI, which you already set
+    // to the tunnel's URL for the flow to work (src/lib/slack.ts explains why the derived
+    // app-host value can't reach a tunnel). That also means the tunnel and the app can't
+    // disagree about the hostname — a mismatch Slack rejects outright.
+    //
+    // Requires a STABLE hostname, because Slack's app config holds the URL: ngrok grants
+    // one free static domain per account, which is what `--domain` pins. For any other
+    // tunnel (cloudflared, a named ngrok config, an ssh reverse tunnel), set
+    // DEV_TUNNEL_CMD to the full command and that runs instead.
+    when: () => !!TUNNEL,
+    // Unused when TUNNEL is null — when() gates the spawn.
+    cmd: TUNNEL?.cmd ?? "",
+    args: TUNNEL?.args ?? [],
+    hint: () => {
+      if (!has("SLACK_CLIENT_ID")) return null; // no Slack work — stay quiet
+      if (!has("SLACK_REDIRECT_URI")) {
+        return (
+          "SLACK_CLIENT_ID is set but SLACK_REDIRECT_URI isn't, so Slack can't reach you: " +
+          "it requires https for both the install redirect and the events endpoint, so " +
+          "neither works against localhost. Easiest is Tailscale Funnel — `tailscale funnel " +
+          "3000` publishes a STABLE https host (your machine's *.ts.net name), which is what " +
+          "Slack's stored app config needs. Point a DEV Slack app's two URLs at it and set " +
+          "SLACK_REDIRECT_URI=https://<host>/api/slack/oauth in .env.local — see .env.example."
+        );
+      }
+      return (
+        "SLACK_REDIRECT_URI is set but no tunnel matched its host. A *.ts.net host runs " +
+        "Tailscale Funnel and an ngrok domain runs ngrok — both need that CLI installed. " +
+        "For anything else (a cloudflared named tunnel, ssh -R), set DEV_TUNNEL_CMD to the " +
+        "full command."
       );
     },
   },

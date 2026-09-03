@@ -60,3 +60,28 @@ describe("botTokenFor", () => {
     expect(botTokenFor(row("ZmFrZQ=="))).toBeNull();
   });
 });
+
+// The two causes of a null token need OPPOSITE remedies. The first live prod run told the
+// operator to "reconnect the workspace" when the real problem was that the executor (which
+// runs in Trigger.dev's cloud and does not inherit Vercel's env) had no encryption key —
+// reconnecting would have re-encrypted with the web app's key and changed nothing.
+describe("botTokenFailureReason", () => {
+  it("names the missing executor key, and says reconnecting won't help", async () => {
+    const { botTokenFailureReason } = await loadModule();
+    const reason = botTokenFailureReason(undefined);
+    expect(reason).toContain("PAPERVINE_ENCRYPTION_KEY");
+    expect(reason).toMatch(/will not help/i);
+  });
+
+  it("tells you to reconnect only when a key IS configured but won't decrypt", async () => {
+    const { botTokenFailureReason } = await loadModule();
+    const reason = botTokenFailureReason("a-configured-key");
+    expect(reason).toMatch(/reconnect the workspace/i);
+    expect(reason).not.toContain("PAPERVINE_ENCRYPTION_KEY");
+  });
+
+  it("treats an empty key as unconfigured, not as a rotated one", async () => {
+    const { botTokenFailureReason } = await loadModule();
+    expect(botTokenFailureReason("")).toContain("PAPERVINE_ENCRYPTION_KEY");
+  });
+});

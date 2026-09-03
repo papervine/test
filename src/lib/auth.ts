@@ -1,4 +1,4 @@
-import { isDevLike } from "@/lib/env";
+import { deploymentOrigin, isDevLike } from "@/lib/env";
 import { betterAuth } from "better-auth";
 import { APIError } from "better-auth/api";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
@@ -29,8 +29,10 @@ import {
 // Better Auth rejects any request whose Origin isn't trusted (CSRF protection →
 // "Invalid origin"). The control plane (signup/login/dashboard) serves on the app host
 // `app.papervine.io` (SPEC §10) — covered by the `*.papervine.io` wildcard; the apex
-// entry stays for the marketing host. BETTER_AUTH_URL adds this deploy's own origin
-// too — covering Vercel preview URLs.
+// entry stays for the marketing host. `deploymentOrigin()` adds this deploy's own origin
+// too: BETTER_AUTH_URL where it's set, else the per-deployment VERCEL_URL — which is what
+// makes a PREVIEW work, since its hostname is generated and no static value can name it
+// (src/lib/env.ts).
 //
 // Dev trusts localhost on ANY port: `next dev` auto-picks 3001/3002… when :3000 is busy
 // (multiple worktrees coexist by design), and a hardcoded `app.localhost:3000` entry
@@ -44,7 +46,7 @@ import {
 const trustedOrigins = [
   "https://papervine.io",
   "https://*.papervine.io",
-  ...(process.env.BETTER_AUTH_URL ? [process.env.BETTER_AUTH_URL] : []),
+  ...(deploymentOrigin() ? [deploymentOrigin()!] : []),
   ...(isDevLike()
     ? ["http://localhost:*", "http://*.localhost:*", "http://127.0.0.1:*"]
     : []),

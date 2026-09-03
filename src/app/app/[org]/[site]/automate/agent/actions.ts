@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { findSite } from "@/lib/dashboard-context";
 import { siteRoute } from "@/lib/dashboard-nav";
 import { disconnectSlackWorkspace } from "@/lib/slack-workspaces";
+import { disconnectConnection } from "@/lib/integrations/nango";
 
 export type SiteRef = { org: string; site: string };
 
@@ -16,5 +17,15 @@ export async function disconnectSlack(ref: SiteRef): Promise<void> {
   const active = await findSite(ref.org, ref.site);
   if (!active) return;
   await disconnectSlackWorkspace(active.organizationId);
+  revalidatePath(siteRoute(ref.org, ref.site, "automate/agent"));
+}
+
+// Disconnect a connected source (SPEC §10.2). Revokes the grant at Nango first, then
+// drops our row — so the agent loses the tools on its very next run, and we're never
+// left holding a live grant we've forgotten about. findSite is the auth guard, as above.
+export async function disconnectSource(ref: SiteRef, provider: string): Promise<void> {
+  const active = await findSite(ref.org, ref.site);
+  if (!active) return;
+  await disconnectConnection(active.organizationId, provider);
   revalidatePath(siteRoute(ref.org, ref.site, "automate/agent"));
 }

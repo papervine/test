@@ -202,7 +202,8 @@ npm run dev                 # the whole stack: docker services, the app, and the
                             # worker (cron ticks and runs execute only while it's connected).
                             # Peripheral layers attach when you've configured them — Stripe
                             # GitHub webhook forwarding (smee) only if GITHUB_APP_ID and
-                            # GITHUB_APP_WEBHOOK_PROXY_URL are.
+                            # GITHUB_APP_WEBHOOK_PROXY_URL are; the Slack https tunnel only
+                            # if SLACK_REDIRECT_URI is (or DEV_TUNNEL_CMD, for a non-ngrok one).
                             # Every layer degrades independently: no docker → no-DB mode, no
                             # Trigger.dev login → automations just don't execute.
 npm run dev:app             # just the Next server (renderer-only work)

@@ -16,11 +16,11 @@ export default async function WidgetSettingsPage({
   params: Promise<{ org: string; site: string }>;
 }) {
   const { org: orgSlug, site: siteSlug } = await params;
-  const { site, org } = await requireSite(orgSlug, siteSlug);
+  const { site, org, session } = await requireSite(orgSlug, siteSlug);
   const siteRef = { org: orgSlug, site: siteSlug };
   // Plan gate — before minting a widget id, which an org without the entitlement has no use
   // for. Same card as the Automate pages, this surface's copy.
-  const unlock = await getUnlock(org.id, "widget");
+  const unlock = await getUnlock(org.id, "widget", { actorEmail: session.user.email });
   if (unlock.locked) {
     return (
       <div className="px-4 sm:px-6 lg:px-8 py-6">

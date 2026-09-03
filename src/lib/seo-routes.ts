@@ -21,11 +21,11 @@ import { PRICES_CHECKED } from "./marketing-alternatives";
  * tarball (§10.6): the packaging boundary is about dependencies, and this one arrives by
  * *serving*.
  *
- * Tenant hosts are deliberately NOT given a sitemap here. Generating one from a tenant's
- * `docs.json` is a real feature (their pages, their `lastmod`, their gated pages excluded) and
- * belongs with the renderer, not bolted onto the marketing sitemap. Today they reach neither
- * route — the middleware rewrites their whole path space — and the neutral branches below are
- * belt-and-braces for the day one of them does.
+ * Tenant hosts get their OWN sitemap, not ours: the pages are enumerated by the renderer
+ * (`packages/renderer/lib/sitemap.ts`, the same walk `/llms.txt` uses, so gated and `noindex`
+ * pages are already excluded) and `robots.txt` on that host points at it. What must never
+ * happen is the other thing — advertising the MARKETING sitemap on a customer's domain, or
+ * listing our pages inside theirs — and that is still what the host check below prevents.
  */
 
 export interface RobotsPolicy {
@@ -50,12 +50,36 @@ export interface HostContext {
 export function isMarketingHost(ctx: HostContext): boolean {
   if (ctx.singleRepo) return false;
   const { host } = ctx;
+  if (isDocsLabelHost(host)) return false;
   return (
     isPlatformHost(host) && !isAppHost(host) && resolveTenantSlug(host) === null
   );
 }
 
-export function robotsPolicyFor(ctx: HostContext): RobotsPolicy {
+/**
+ * `docs.{platform}` — reserved from slug resolution (nothing of ours serves it) yet claimable
+ * as a CUSTOM DOMAIN, which is exactly what the dogfood site does with `docs.papervine.io`.
+ * That combination made it look like the marketing apex to a host-only check: not the app
+ * host, and no tenant slug. Harmless while the middleware rewrote its whole path space, and
+ * not harmless the moment the crawler files started answering for themselves — it served the
+ * MARKETING sitemap on the docs host and pointed robots.txt at the marketing sitemap.
+ *
+ * The authoritative answer is the site row (`docsSite` below), which a pure function can't
+ * read. This is the second layer: whatever the database says, `docs.{platform}` is not our
+ * marketing site, so a DB outage degrades to "no sitemap" rather than to the wrong one.
+ */
+export function isDocsLabelHost(host: string | null): boolean {
+  return Boolean(host) && isPlatformHost(host) && /^docs\./i.test(host as string);
+}
+
+export function robotsPolicyFor(ctx: HostContext & { docsSite?: boolean }): RobotsPolicy {
+  // A resolved site row beats every host heuristic: it is how a customer's own domain is
+  // recognised, and how `docs.{platform}` is recognised as the docs site rather than the apex.
+  if (ctx.docsSite) {
+    const origin = docsOriginFor(ctx.host);
+    return origin ? { allow: true, sitemap: `${origin}/sitemap.xml` } : { allow: true };
+  }
+
   // The control plane is an authenticated app. There is nothing on it worth indexing, and
   // its `/login` and `/signup` are the only pages a crawler can even reach — thin duplicates
   // of pages the marketing apex already ranks for.
@@ -69,8 +93,23 @@ export function robotsPolicyFor(ctx: HostContext): RobotsPolicy {
   }
 
   // A tenant's docs site, a custom domain, or a repo being served by the CLI. Crawling is
-  // fine and none of our business; advertising our sitemap on their domain is not.
-  return { allow: true };
+  // fine, and the sitemap to point at is the one THIS host serves — built from their pages,
+  // on their origin. Relative would be legal in robots.txt but is widely mishandled, so the
+  // origin is taken from the request: unlike the marketing case there is no canonical host to
+  // hardcode, and a custom domain must advertise itself rather than the subdomain behind it.
+  const origin = docsOriginFor(ctx.host);
+  return origin ? { allow: true, sitemap: `${origin}/sitemap.xml` } : { allow: true };
+}
+
+/**
+ * The absolute origin a docs site is being served on, from the request Host. `https` unless
+ * the host is plainly local — a dev server on `localhost:3000` or `{slug}.localhost` would
+ * otherwise advertise an `https` sitemap it cannot serve.
+ */
+export function docsOriginFor(host: string | null): string | null {
+  if (!host) return null;
+  const local = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/.test(host) || /\.localhost(:\d+)?$/.test(host);
+  return `${local ? "http" : "https"}://${host}`;
 }
 
 export interface SitemapEntry {

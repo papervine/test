@@ -56,6 +56,27 @@ One nuance for impersonation: it's powered by an `admin` role on the user record
 the next sign-in of anyone no longer listed). The env var remains the source of truth — the role
 column is plumbing, never something you set by hand.
 
+## What being an operator changes elsewhere
+
+An allowlisted account isn't limited to `/admin`. Two kinds of gate lift for it everywhere:
+
+- **Plan gates.** Surfaces that would show an upgrade prompt are simply available, and AI
+  requests are never refused for entitlement or credit reasons. An unlock card in front of the
+  feature you're being asked to debug helps nobody.
+- **Release gates.** Surfaces still hidden behind a launch flag are visible, including ones dark
+  to everyone else — the operator is precisely who needs to see what hasn't shipped.
+
+**What does not change is permission.** Viewing another organization's dashboard stays read-only:
+you can see its surfaces working, but every action that writes still requires real membership, so
+an operator can't edit a customer's content or settings by virtue of the allowlist. Operator AI
+usage is also still **metered** against the organization it ran for — not being blocked isn't the
+same as spending invisibly, and usage you can't see is how a bill becomes a surprise.
+
+One boundary worth knowing: this applies to **you, acting**. A scheduled automation or an agent
+answering in Slack has no acting user, so it's gated normally even in your own organization. To
+lift plan limits for an organization's background runs, grant it a plan from
+[Admin → Billing](/control-plane/platform-admin) instead.
+
 ## Reserved organization slugs
 
 Because `/admin` (and a few other control-plane paths) live beside the `/:org` dashboard URLs,
